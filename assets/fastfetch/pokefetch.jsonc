@@ -1,0 +1,85 @@
+{
+  "display": {
+    "size": {
+      "binaryPrefix": "iec",
+      "ndigits": 2,
+      "spaceBeforeUnit": "never"
+    }
+  },
+  "modules": [
+    {
+      "type": "title",
+      "format": "\u001b[1m\u001b[31m{user-name}\u001b[97m@\u001b[31m{host-name}\u001b[0m"
+    },
+    {
+      "type": "custom",
+      "format": "\u001b[97m------------------\u001b[0m"
+    },
+    {
+      "type": "os",
+      "format": "{2} {9}",
+      "keyColor": "red"
+    },
+    {
+      "type": "kernel",
+      "format": "{2}",
+      "keyColor": "red"
+    },
+    {
+      "type": "uptime",
+      "keyColor": "red"
+    },
+    {
+      "type": "shell",
+      "keyColor": "red"
+    },
+    {
+      "type": "theme",
+      "keyColor": "red"
+    },
+    {
+      "type": "icons",
+      "keyColor": "red"
+    },
+    {
+      "type": "font",
+      "keyColor": "red"
+    },
+    {
+      "type": "cpu",
+      "format": "{name} @ {freq-max}",
+      "keyColor": "red"
+    },
+    {
+      "type": "gpu",
+      "format": "{name}",
+      "keyColor": "red"
+    },
+    {
+      "type": "memory",
+      "format": "{used} / {total}",
+      "key": "Memory",
+      "keyColor": "red"
+    },
+    {
+      "type": "memory",
+      "format": "{percentage}",
+      "key": "Memory Usage",
+      "keyColor": "red"
+    },
+    {
+      "type": "disk",
+      "format": "{size-used} / {size-total}",
+      "folders": "/",
+      "key": "Disk (/)",
+      "keyColor": "red"
+    },
+    {
+      "type": "disk",
+      "format": "{size-percentage}",
+      "folders": "/",
+      "key": "Disk Usage",
+      "keyColor": "red"
+    }
+  ]
+}
