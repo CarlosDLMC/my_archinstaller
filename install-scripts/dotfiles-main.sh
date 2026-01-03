@@ -16,22 +16,25 @@ if ! source "$(dirname "$(readlink -f "$0")")/Global_functions.sh"; then
   exit 1
 fi
 
-# Check if Hyprland-Dots exists
-printf "${NOTE} Cloning and Installing ${SKY_BLUE}KooL's Hyprland Dots${RESET}....\n"
+# Install customized Hyprland-Dots from local directory
+printf "${NOTE} Installing ${SKY_BLUE}Customized Hyprland Dots${RESET}....\n"
 
 if [ -d Hyprland-Dots ]; then
-  cd Hyprland-Dots
-  git stash && git pull
-  chmod +x copy.sh
-  ./copy.sh 
-else
-  if git clone --depth=1 https://github.com/JaKooLit/Hyprland-Dots; then
-    cd Hyprland-Dots || exit 1
+  cd Hyprland-Dots || exit 1
+
+  # Check if copy.sh exists
+  if [ -f copy.sh ]; then
     chmod +x copy.sh
-    ./copy.sh 
+    ./copy.sh
+    echo -e "${OK} Customized dotfiles installed successfully!"
   else
-    echo -e "$ERROR Can't download ${YELLOW}KooL's Hyprland-Dots${RESET} . Check your internet connection"
+    echo -e "${ERROR} copy.sh not found in Hyprland-Dots directory"
+    exit 1
   fi
+else
+  echo -e "${ERROR} Hyprland-Dots directory not found. Cannot install dotfiles."
+  echo -e "${NOTE} Please ensure the Hyprland-Dots folder exists in the installation directory."
+  exit 1
 fi
 
 printf "\n%.0s" {1..2}
