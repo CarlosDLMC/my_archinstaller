@@ -11,13 +11,15 @@ packages=(
   swaync
   swww
   wallust
-  waybar
+  quickshell
   wl-clipboard
   wlogout
-  kitty
+  foot
   hypridle
   hyprlock
   hyprland
+  hyprpolkitagent
+  xdg-desktop-portal-hyprland
 )
 
 # Local packages that should be in /usr/local/bin/
