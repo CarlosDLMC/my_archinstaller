@@ -22,6 +22,8 @@ hypr_package=(
   gvfs
   gvfs-mtp
   gvfs-smb
+  gvfs-nfs
+  gvfs-dnssd
   hyprsunset
   hyprpolkitagent
   imagemagick
