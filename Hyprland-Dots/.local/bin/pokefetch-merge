@@ -1,0 +1,82 @@
+#!/usr/bin/env python3
+import sys
+import re
+import shutil
+
+# Read pokemon and system info from stdin (separated by delimiter)
+input_data = sys.stdin.read()
+parts = input_data.split('\n---DELIMITER---\n')
+pokemon_output = parts[0]
+neofetch_output = parts[1] if len(parts) > 1 else ""
+
+# Strip ANSI codes for width calculation
+ansi_escape = re.compile(r'\x1b(\[[0-9;]*[mGKHfA-Z]|\][0-9];[^\x07]*\x07)')
+
+def visual_width(line):
+    return len(ansi_escape.sub('', line))
+
+def truncate_line(line, max_length):
+    """Truncate line to max_length visual characters, preserving ANSI codes"""
+    if visual_width(line) <= max_length:
+        return line
+
+    result = []
+    visual_len = 0
+    i = 0
+
+    while i < len(line) and visual_len < max_length:
+        # Check for ANSI escape sequence
+        if line[i:i+1] == '\033':
+            # Find the end of the escape sequence
+            match = ansi_escape.match(line[i:])
+            if match:
+                result.append(match.group(0))
+                i += len(match.group(0))
+                continue
+
+        # Regular character
+        result.append(line[i])
+        visual_len += 1
+        i += 1
+
+    return ''.join(result)
+
+# Split into lines
+pokemon_lines = pokemon_output.split('\n')
+neofetch_lines = neofetch_output.split('\n')
+
+# Calculate max width of pokemon
+max_width = max((visual_width(line) for line in pokemon_lines), default=0)
+
+# Normalize pokemon lines to same width
+normalized_pokemon = []
+for line in pokemon_lines:
+    width = visual_width(line)
+    padding = ' ' * (max_width - width)
+    normalized_pokemon.append(line + padding)
+
+# Vertical centering
+pokemon_count = len(normalized_pokemon)
+neofetch_count = len(neofetch_lines)
+
+if pokemon_count < neofetch_count:
+    # Center pokemon vertically
+    total_padding = neofetch_count - pokemon_count
+    top_padding = total_padding // 2
+    bottom_padding = total_padding - top_padding
+
+    empty_line = ' ' * max_width
+    normalized_pokemon = [empty_line] * top_padding + normalized_pokemon + [empty_line] * bottom_padding
+elif neofetch_count < pokemon_count:
+    # Pad neofetch
+    neofetch_lines.extend([''] * (pokemon_count - neofetch_count))
+
+# Get terminal width
+term_width = shutil.get_terminal_size().columns
+
+# Merge side by side with truncation
+for i in range(max(len(normalized_pokemon), len(neofetch_lines))):
+    poke_line = normalized_pokemon[i] if i < len(normalized_pokemon) else ' ' * max_width
+    neo_line = neofetch_lines[i] if i < len(neofetch_lines) else ''
+    full_line = f"{poke_line}  {neo_line}"
+    print(truncate_line(full_line, term_width))

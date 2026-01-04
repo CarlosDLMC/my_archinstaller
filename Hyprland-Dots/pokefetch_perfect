@@ -1,0 +1,48 @@
+#!/bin/bash
+# Display Pokemon with neofetch side-by-side
+
+# Get pokemon WITH title (use -r for random, or pass name as argument)
+if [ -z "$1" ]; then
+    pokemon_full_output=$(pokemon-colorscripts -r 1-4)
+else
+    pokemon_full_output=$(pokemon-colorscripts -n "$1")
+fi
+
+# Extract pokemon name from first line and capitalize it (using bash built-ins)
+IFS=$'\n' lines=($pokemon_full_output)
+pokemon_name="${lines[0]^}"  # Capitalize first letter
+pokemon_output="${pokemon_full_output#*$'\n'}"  # Remove first line
+
+# Get fastfetch info
+neofetch_output=$(fastfetch --config ~/.config/fastfetch/pokefetch.jsonc --logo none --pipe false)
+
+# Inject Pokemon name after the separator line (using bash instead of awk)
+pokemon_line=$'\033[m\033[1m\033[31mPokemon\033[m: \033[m'"$pokemon_name"$'\033[m'
+neofetch_output="${neofetch_output/------------------/------------------$'\n'$pokemon_line}"
+
+# Process output to clean up CPU and GPU names (single sed for speed)
+neofetch_output=$(echo "$neofetch_output" | sed -E '
+  # CPU Intel: Extract model name and clean up frequency
+  s/Intel\(R\) Core\(TM\) (i[0-9]-[0-9]+[A-Z]*) @ ([0-9.]+) GHz/\1 \2GHz/
+  # CPU AMD: Shorten Ryzen output
+  s/AMD Ryzen [0-9] ([0-9]+) @ ([0-9.]+) GHz/Ryzen \1 \2GHz/
+  # GPU NVIDIA GTX: Extract model numbers
+  s/GeForce (GTX [0-9]+)[^a-zA-Z0-9]*.*$/\1/
+  # GPU NVIDIA RTX: Extract model numbers
+  s/GeForce (RTX [0-9]+)[^a-zA-Z0-9]*.*$/\1/
+  # GPU Intel: Extract model numbers
+  s/UHD Graphics ([0-9]+).*$/UHD \1/
+  # GPU AMD: Extract model numbers
+  s/(AMD )?Radeon (RX [0-9]+ ?[A-Z]*)[^a-zA-Z0-9]*.*$/\2/
+  # Font, Theme, Icons: Remove parentheses content first
+  s/ \([^)]*\)//g
+  # Font, Theme, Icons: Remove everything before and including bracketed part with comma
+  s/: [^:]+ \[[^]]+\], /: /
+  # Icons, Theme, Font: Remove remaining [GTK2/3/4] suffix (if no comma)
+  s/ \[GTK[0-9/]+\]//g
+  # Disk: Change GiB to G
+  s/GiB/G/g
+')
+
+# Use Python helper for fast padding and merging (10x faster than bash)
+printf '%s\n---DELIMITER---\n%s' "$pokemon_output" "$neofetch_output" | ~/.local/bin/pokefetch-merge
