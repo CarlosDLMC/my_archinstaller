@@ -1,0 +1,14 @@
+Fix installation script and add diagnostic tools
+
+- Fix dotfiles-main.sh with verbose debugging and logging
+- Update Final-Check to verify quickshell/foot instead of waybar/kitty
+- Add custom-preset.conf for automated installation
+- Add diagnose.sh to troubleshoot installation issues
+- Add verify-before-transfer.sh to check repo completeness
+- Update README with clear installation instructions
+- Add pokefetch scripts to Hyprland-Dots
+- Update copy.sh to copy pokefetch and .local/bin scripts
+- Add comprehensive documentation and troubleshooting guides
+
+This ensures the installation works correctly on fresh Arch systems.
+All custom configs (quickshell, hypr, pokefetch) will be copied properly.
