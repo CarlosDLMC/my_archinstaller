@@ -670,7 +670,7 @@ Item {
                 color: Qt.rgba(Theme.colMuted.r, Theme.colMuted.g, Theme.colMuted.b, 0.6)
                 font.pixelSize: Theme.fontSize - 2
                 font.family: Theme.fontFamily
-                elide: Text.ElideRight
+                wrapMode: Text.WordWrap
                 visible: centerInfo.weatherLocation !== ""
             }
 
