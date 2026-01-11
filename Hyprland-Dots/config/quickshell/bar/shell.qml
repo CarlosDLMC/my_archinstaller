@@ -119,6 +119,7 @@ ShellRoot {
                     Separator {}
 
                     BatteryWidget {
+                        barWindow: barWindow
                         Layout.rightMargin: 8
                     }
 

@@ -65,4 +65,12 @@ Item {
         repeat: false
         onTriggered: statusProc.running = true
     }
+
+    // Periodic timer to keep status in sync across multiple monitors
+    Timer {
+        interval: 2000  // Check every 2 seconds
+        running: true
+        repeat: true
+        onTriggered: statusProc.running = true
+    }
 }
