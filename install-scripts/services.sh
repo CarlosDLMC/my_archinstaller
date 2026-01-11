@@ -29,4 +29,13 @@ else
   echo "${WARN} NetworkManager failed to start. Network connectivity may not work." | tee -a "$LOG"
 fi
 
+# Enable power-profiles-daemon
+printf "\n${NOTE} Enabling ${SKY_BLUE}power-profiles-daemon${RESET}...\n" | tee -a "$LOG"
+sudo systemctl enable --now power-profiles-daemon.service 2>&1 | tee -a "$LOG"
+if systemctl is-active --quiet power-profiles-daemon.service; then
+  echo "${OK} power-profiles-daemon is running." | tee -a "$LOG"
+else
+  echo "${WARN} power-profiles-daemon failed to start. Power profile management may not work." | tee -a "$LOG"
+fi
+
 printf "\n%.0s" {1..2}

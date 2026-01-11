@@ -38,6 +38,7 @@ hypr_package=(
   pamixer
   pavucontrol
   playerctl
+  power-profiles-daemon
   python-requests
   python-pyquery
   qt5ct
