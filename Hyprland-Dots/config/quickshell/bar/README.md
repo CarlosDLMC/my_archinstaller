@@ -2,13 +2,6 @@
 
 A modern, feature-rich status bar for Hyprland built with [Quickshell](https://quickshell.outfoxxed.me/). Features a clean design with notch-style dropdown popups, weather integration, system monitoring, and more.
 
-![Quickshell Bar](https://img.shields.io/badge/Hyprland-Ready-blue)
-![QML](https://img.shields.io/badge/Built%20with-QML-green)
-
-## Preview
-
-![Bar Preview](screenshots/bar-preview.png)
-
 ## Features
 
 - **Workspaces**: Pill-shaped indicators with workspace numbers and app icons
@@ -90,19 +83,27 @@ shell.qml              # Main entry point
 Theme.qml              # Color/font theme singleton
 qmldir                 # QML module definition
 components/
-  ├── DropdownWidget.qml    # Base for dropdown widgets (with notch design)
-  ├── WorkspaceBar.qml      # Workspace indicators
-  ├── WindowInfo.qml        # Active window title
-  ├── CenterInfo.qml        # Date, DND, weather
-  ├── SystemStats.qml       # System monitoring
-  ├── Clock.qml             # Time display
-  ├── WifiWidget.qml        # WiFi with speeds
-  ├── BluetoothWidget.qml   # Bluetooth status
-  ├── PowerProfileWidget.qml # Power profiles
-  ├── PowerWidget.qml       # Power menu
-  ├── SlackWidget.qml       # Slack indicator
-  ├── WhatsAppWidget.qml    # WhatsApp indicator
-  └── Separator.qml         # Visual separator
+├── BluetoothWidget.qml
+├── CalendarPopup.qml
+├── CenterInfo.qml
+├── Clock.qml
+├── CpuWidget.qml
+├── DiskWidget.qml
+├── DropdownWidget.qml
+├── KeyboardLayoutWidget.qml
+├── MemoryWidget.qml
+├── NightLightWidget.qml
+├── PowerProfileWidget.qml
+├── PowerWidget.qml
+├── Separator.qml
+├── SlackWidget.qml
+├── VolumeWidget.qml
+├── VpnWidget.qml
+├── WeatherStatItem.qml
+├── WhatsAppWidget.qml
+├── WifiWidget.qml
+├── WindowInfo.qml
+└── WorkspaceBar.qml
 ```
 
 ## Key Patterns
