@@ -1,6 +1,8 @@
 # My Arch Installer
 
 Automated Arch Linux installation with custom Hyprland setup.
+Some things such as the calendar starting on Sunday or Monday, the 24 or 12 hour time etc are decided by the locales.
+Please select a locale that suits you 
 
 ## Features
 
