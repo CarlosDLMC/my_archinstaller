@@ -164,4 +164,12 @@ DropdownWidget {
             }
         }
     }
+
+    // Periodic timer to keep profile in sync across multiple monitors
+    Timer {
+        interval: 3000  // Check every 3 seconds
+        running: true
+        repeat: true
+        onTriggered: profileGetProc.running = true
+    }
 }
