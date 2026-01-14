@@ -3,7 +3,7 @@
 # This is for changing kb_layouts. Set kb_layouts in $settings_file
 
 layout_file="$HOME/.cache/kb_layout"
-settings_file="$HOME/.config/hypr/UserConfigs/UserSettings.conf"
+settings_file="$HOME/.config/hypr/configs/SystemSettings.conf"
 notif_icon="$HOME/.config/swaync/images/ja.png"
 
 # Refined ignore list with patterns or specific device names
@@ -97,7 +97,7 @@ if ! change_layout; then
     echo "Layout change failed." >&2
     exit 1
 else
-    notify-send -u low -i "$notif_icon" " kb_layout: $new_layout"
+    notify-send -u low -i "$notif_icon" "kb_layout: ${new_layout^^}"
     echo "Layout change notification sent."
 fi
 
