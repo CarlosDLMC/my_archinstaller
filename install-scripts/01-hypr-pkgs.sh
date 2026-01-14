@@ -53,6 +53,7 @@ hypr_package=(
   unzip # needed later
   wallust
   wget
+  wf-recorder
   wireguard-tools
   wl-clipboard
   wlogout
