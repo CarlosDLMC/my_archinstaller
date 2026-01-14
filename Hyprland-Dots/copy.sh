@@ -29,6 +29,20 @@ if [ -d "$SCRIPT_DIR/.local/bin" ]; then
     chmod +x "$HOME/.local/bin/"* 2>/dev/null
 fi
 
+# Copy XDG user directories configuration
+printf "\n${INFO} Copying XDG user directories configuration...\n"
+for file in user-dirs.dirs user-dirs.locale; do
+    if [ -f "$SCRIPT_DIR/config/$file" ]; then
+        cp "$SCRIPT_DIR/config/$file" "$HOME/.config/" 2>/dev/null && echo "  ${OK} Copied $file"
+    fi
+done
+
+# Create XDG user directories with proper icons
+if command -v xdg-user-dirs-update &> /dev/null; then
+    printf "${INFO} Creating XDG user directories...\n"
+    xdg-user-dirs-update 2>/dev/null && echo "  ${OK} Created user directories (Documents, Downloads, Videos, etc.)"
+fi
+
 # Copy config directories
 printf "\n${INFO} Copying configuration directories...\n"
 mkdir -p "$HOME/.config"
@@ -52,6 +66,7 @@ config_dirs=(
     "qt5ct"
     "qt6ct"
     "Thunar"
+    "xfce4"
 )
 
 for dir in "${config_dirs[@]}"; do
