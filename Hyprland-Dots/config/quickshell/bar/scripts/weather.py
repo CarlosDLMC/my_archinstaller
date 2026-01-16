@@ -62,7 +62,6 @@ temp = html_data("span[data-testid='TemperatureValue']").eq(0).text()
 
 # current status phrase
 status = html_data("div[data-testid='wxPhrase']").text()
-status = f"{status[:16]}.." if len(status) > 17 else status
 
 # status code - get from weather icon SVG name attribute
 wx_icon = html_data("svg[class*='CurrentConditions--wxIcon']").attr("name")
