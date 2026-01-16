@@ -3,19 +3,46 @@ import QtQuick.Layouts
 import Quickshell.Io
 import ".."
 
-Text {
+RowLayout {
     id: cpuWidget
+    spacing: 4
 
     property int cpuUsage: 0
+    property int cpuTemp: 0
     property var lastCpuIdle: 0
     property var lastCpuTotal: 0
 
-    text: cpuUsage + "% 󰍛"
-    color: Theme.colCpu
-    font.pixelSize: Theme.fontSize
-    font.family: Theme.fontFamily
-    font.bold: true
+    // Temperature
+    Text {
+        text: cpuWidget.cpuTemp + "ºC "
+        color: Theme.colCpu
+        font.pixelSize: Theme.fontSize
+        font.family: Theme.fontFamily
+        font.bold: true
+        Layout.alignment: Qt.AlignVCenter
+    }
 
+    // Icon
+    Text {
+        text: "󰍛 "
+        color: Theme.colCpu
+        font.pixelSize: Theme.fontSize
+        font.family: Theme.fontFamily
+        font.bold: true
+        Layout.alignment: Qt.AlignVCenter
+    }
+
+    // Usage percentage
+    Text {
+        text: cpuWidget.cpuUsage + "%"
+        color: Theme.colCpu
+        font.pixelSize: Theme.fontSize
+        font.family: Theme.fontFamily
+        font.bold: true
+        Layout.alignment: Qt.AlignVCenter
+    }
+
+    // CPU usage process
     Process {
         id: cpuProc
         command: ["sh", "-c", "head -1 /proc/stat"]
@@ -48,10 +75,29 @@ Text {
         Component.onCompleted: running = true
     }
 
+    // CPU temperature process
+    Process {
+        id: tempProc
+        command: ["sh", "-c", "cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null | head -1"]
+        stdout: SplitParser {
+            onRead: data => {
+                if (!data) return
+                var temp = parseInt(data.trim())
+                if (!isNaN(temp)) {
+                    cpuWidget.cpuTemp = Math.round(temp / 1000)
+                }
+            }
+        }
+        Component.onCompleted: running = true
+    }
+
     Timer {
         interval: 5000
         running: true
         repeat: true
-        onTriggered: cpuProc.running = true
+        onTriggered: {
+            cpuProc.running = true
+            tempProc.running = true
+        }
     }
 }

@@ -545,7 +545,7 @@ Item {
         anchor.window: barWindow
         anchor.rect.x: centerInfo.x + centerText.x + weatherPill.x + weatherPill.width/2 - width/2
         anchor.rect.y: 32
-        implicitWidth: 280
+        implicitWidth: 320
         implicitHeight: contentColumn.implicitHeight + 12 + 32
         color: "transparent"
 
@@ -653,12 +653,22 @@ Item {
             }
 
             // Condition
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: centerInfo.weatherCondition
-                color: Theme.colMuted
-                font.pixelSize: Theme.fontSize
-                font.family: Theme.fontFamily
+            Item {
+                width: parent.width
+                height: conditionText.implicitHeight
+
+                Text {
+                    id: conditionText
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: parent.width - 20
+                    horizontalAlignment: Text.AlignHCenter
+                    text: centerInfo.weatherCondition
+                    color: Theme.colMuted
+                    font.pixelSize: Theme.fontSize
+                    font.family: Theme.fontFamily
+                    wrapMode: Text.WordWrap
+                    elide: Text.ElideNone
+                }
             }
 
             // Location
