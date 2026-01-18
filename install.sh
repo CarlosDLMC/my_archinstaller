@@ -211,8 +211,8 @@ if check_services_running; then
     active_list=$(printf "%s\n" "${active_services[@]}")
 
     # Display the active login manager(s) in the whiptail message box
-    whiptail --title "Active non-SDDM login manager(s) detected" \
-        --msgbox "The following login manager(s) are active:\n\n$active_list\n\nIf you want to install SDDM and SDDM theme, stop and disable the active services above, reboot before running this script\n\nYour option to install SDDM and SDDM theme has now been removed\n\n- Ja " 23 80
+    whiptail --title "Active login manager(s) detected" \
+        --msgbox "The following login manager(s) are active:\n\n$active_list\n\nIf you want to install ly display manager, stop and disable the active services above, reboot before running this script\n\nYour option to install ly has now been removed\n\n- Ja " 23 80
 fi
 
 # Check if NVIDIA GPU is detected
@@ -249,11 +249,10 @@ if [ "$input_group_detected" == "true" ]; then
     )
 fi
 
-# Conditionally add SDDM and SDDM theme options if no active login manager is found
+# Conditionally add ly display manager option if no active login manager is found
 if ! check_services_running; then
     options_command+=(
-        "sddm" "Install & configure SDDM login manager?" "OFF"
-        "sddm_theme" "Download & Install Additional SDDM theme?" "OFF"
+        "ly" "Install & configure ly display manager?" "ON"
     )
 fi
 
@@ -378,14 +377,15 @@ IFS=' ' read -r -a options <<< "$selected_options"
 # Loop through selected options
 for option in "${options[@]}"; do
     case "$option" in
-        sddm)
+        ly)
             if check_services_running; then
                 active_list=$(printf "%s\n" "${active_services[@]}")
-                whiptail --title "Error" --msgbox "One of the following login services is running:\n$active_list\n\nPlease stop & disable it or DO not choose SDDM." 12 60
-                exec "$0"  
+                whiptail --title "Error" --msgbox "One of the following login services is running:\n$active_list\n\nPlease stop & disable it or DO not choose ly." 12 60
+                exec "$0"
             else
-                echo "${INFO} Installing and configuring ${SKY_BLUE}SDDM...${RESET}" | tee -a "$LOG"
-                execute_script "sddm.sh"
+                echo "${INFO} Installing and configuring ${SKY_BLUE}ly display manager...${RESET}" | tee -a "$LOG"
+                execute_script "ly.sh"
+                execute_script "ly_config.sh"
             fi
             ;;
         nvidia)
@@ -420,10 +420,6 @@ for option in "${options[@]}"; do
             echo "${INFO} Installing ${SKY_BLUE}Thunar file manager...${RESET}" | tee -a "$LOG"
             execute_script "thunar.sh"
             execute_script "thunar_default.sh"
-            ;;
-        sddm_theme)
-            echo "${INFO} Downloading & Installing ${SKY_BLUE}Additional SDDM theme...${RESET}" | tee -a "$LOG"
-            execute_script "sddm_theme.sh"
             ;;
         zsh)
             echo "${INFO} Installing ${SKY_BLUE}zsh with Oh-My-Zsh...${RESET}" | tee -a "$LOG"

@@ -5,7 +5,7 @@
 set -euo pipefail
 
 # 1) Try Quickshell via IPC (works if QS is running and listening)
-if pgrep -x quickshell >/dev/null 2>&1; then
+if pgrep -f "qs -c overview" >/dev/null 2>&1; then
   if qs ipc -c overview call overview toggle >/dev/null 2>&1; then
     exit 0
   fi
