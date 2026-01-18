@@ -12,7 +12,7 @@ Please select a locale that suits you
 - **Night Light Toggle** with hyprsunset
 - **VPN Selector** with WireGuard configurations
 - **Custom Terminal** setup with pokefetch and zsh
-- **SDDM Login Manager** with theme
+- **ly Display Manager** (lightweight TUI login screen with large font)
 - **All Essential Packages** pre-configured
 
 ## Quick Install (Fresh Arch System)
@@ -44,13 +44,13 @@ Please select a locale that suits you
    # Answer 'y' to reboot now
    ```
 
-4. **Done!** After reboot, log in through SDDM and enjoy your custom Hyprland setup.
+4. **Done!** After reboot, log in through ly and enjoy your custom Hyprland setup.
 
 ## What Gets Installed
 
 ### Core System
 - Hyprland, hypridle, hyprlock
-- SDDM with theme
+- ly display manager with large font
 - PipeWire audio
 - NetworkManager
 
@@ -100,7 +100,7 @@ See `Hyprland-Dots/config/hypr/configs/Keybinds.conf` for all keybindings.
 ### Before Installation
 
 Edit `custom-preset.conf` to enable/disable components:
-- SDDM login manager
+- ly display manager
 - Bluetooth
 - GTK themes
 - zsh with Oh-My-Zsh
@@ -158,7 +158,7 @@ chmod +x install.sh
 **Important:** Make sure to select:
 - ✅ quickshell
 - ✅ dots (Download and install pre-configured Hyprland dotfiles)
-- ✅ sddm (if you want login manager)
+- ✅ ly (lightweight TUI display manager)
 - ✅ gtk_themes (for Dark/Light mode)
 - ✅ bluetooth (if you need it)
 - ✅ xdph (for screen sharing)
