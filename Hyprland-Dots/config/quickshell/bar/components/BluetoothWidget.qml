@@ -110,11 +110,31 @@ DropdownWidget {
         command: ["bluetoothctl", "disconnect"]
     }
 
-    // Bluetooth power toggle
+    // Bluetooth power toggle - combined script to handle service + rfkill
     Process {
         id: btPowerProc
         property bool powerOn: true
-        command: ["bluetoothctl", "power", powerOn ? "on" : "off"]
+        command: ["sh", "-c", powerOn ?
+            "sudo rfkill unblock bluetooth && sudo systemctl start bluetooth && sleep 0.5 && bluetoothctl power on" :
+            "bluetoothctl power off && sudo systemctl stop bluetooth && sudo rfkill block bluetooth"
+        ]
+        onRunningChanged: {
+            if (!running) {
+                // Immediately check status after toggle completes
+                btStatusProc.running = true
+                btConnectedProc.running = true
+            }
+        }
+    }
+
+    // Open blueman-manager for scanning/pairing
+    Process {
+        id: btManagerProc
+        command: ["sh", "-c",
+            "if ! systemctl is-active --quiet bluetooth; then " +
+            "sudo rfkill unblock bluetooth && sudo systemctl start bluetooth && sleep 1; " +
+            "fi && blueman-manager"
+        ]
     }
 
     // Event-based monitoring using dbus-monitor
@@ -188,7 +208,11 @@ DropdownWidget {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            btPowerProc.powerOn = !btWidget.btPowered
+                            // Optimistically update UI immediately for instant feedback
+                            var newState = !btWidget.btPowered
+                            btWidget.btPowered = newState
+
+                            btPowerProc.powerOn = newState
                             btPowerProc.running = true
                         }
                     }
@@ -201,13 +225,43 @@ DropdownWidget {
                 color: Theme.colMuted
             }
 
-            // Paired devices header
-            Text {
-                text: "Paired Devices"
-                color: Theme.colMuted
-                font.pixelSize: Theme.fontSize - 2
-                font.family: Theme.fontFamily
+            // Paired devices header with manager button
+            RowLayout {
+                width: parent.width
                 visible: btWidget.btPowered
+
+                Text {
+                    text: "Paired Devices"
+                    color: Theme.colMuted
+                    font.pixelSize: Theme.fontSize - 2
+                    font.family: Theme.fontFamily
+                    Layout.fillWidth: true
+                }
+
+                Rectangle {
+                    width: 60
+                    height: 20
+                    radius: 4
+                    color: btManagerMouseArea.containsMouse ? Theme.colBluetooth : Qt.rgba(Theme.colBluetooth.r, Theme.colBluetooth.g, Theme.colBluetooth.b, 0.3)
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "Scan"
+                        color: Theme.colFg
+                        font.pixelSize: Theme.fontSize - 3
+                        font.family: Theme.fontFamily
+                    }
+
+                    MouseArea {
+                        id: btManagerMouseArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            btManagerProc.running = true
+                        }
+                    }
+                }
             }
 
             // Device list
