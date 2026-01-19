@@ -102,7 +102,7 @@ fi
 printf "\n${INFO} Checking essential packages...\n"
 essential_packages=(
     "hyprpolkitagent"
-    "swaync"
+    "mako"
     "xdg-desktop-portal-hyprland"
     "quickshell"
     "foot"

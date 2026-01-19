@@ -1,0 +1,11 @@
+# Mako notification daemon configuration
+
+# Default timeout in milliseconds (5 seconds)
+default-timeout=5000
+
+# Keep critical notifications visible until dismissed
+[urgency=critical]
+default-timeout=0
+
+# Ignore timeout on actions (notifications with buttons)
+ignore-timeout=1

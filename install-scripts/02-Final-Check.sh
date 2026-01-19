@@ -8,7 +8,7 @@ packages=(
   kvantum
   rofi-wayland
   imagemagick
-  swaync
+  mako
   swww
   wallust
   quickshell

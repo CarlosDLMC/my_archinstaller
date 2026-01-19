@@ -3,7 +3,7 @@
 
 # Modified version of Refresh.sh but waybar wont refresh
 # Used by automatic wallpaper change
-# Modified inorder to refresh rofi background, Wallust, SwayNC only
+# Modified inorder to refresh rofi background, Wallust, mako only
 
 SCRIPTSDIR=$HOME/.config/hypr/scripts
 UserScripts=$HOME/.config/hypr/UserScripts
@@ -35,8 +35,8 @@ pkill qs && sleep 0.3 && qs -c bar & qs -c overview &
 ${SCRIPTSDIR}/WallustSwww.sh
 sleep 0.2
 
-# reload swaync
-swaync-client --reload-config
+# reload mako
+makoctl reload >/dev/null 2>&1
 
 # Relaunching rainbow borders if the script exists
 sleep 1
