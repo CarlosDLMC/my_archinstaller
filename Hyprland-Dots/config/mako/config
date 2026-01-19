@@ -9,3 +9,7 @@ default-timeout=0
 
 # Ignore timeout on actions (notifications with buttons)
 ignore-timeout=1
+
+# DND mode - hide all notifications
+[mode=dnd]
+invisible=1
