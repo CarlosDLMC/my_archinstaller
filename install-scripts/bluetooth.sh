@@ -32,7 +32,12 @@ printf "${NOTE} Installing ${SKY_BLUE}Bluetooth${RESET} Packages...\n"
    install_package "$BLUE" "$LOG"
   done
 
-printf " Activating ${YELLOW}Bluetooth${RESET} Services...\n"
-sudo systemctl enable --now bluetooth.service 2>&1 | tee -a "$LOG"
+printf " Bluetooth service will be ${YELLOW}disabled${RESET} by default (saves battery)...\n"
+printf " You can enable it from the bar widget when needed.\n"
+
+# Add sudoers rule for passwordless bluetooth control
+printf " Setting up ${YELLOW}passwordless bluetooth control${RESET}...\n"
+echo "$USER ALL=(ALL) NOPASSWD: /usr/bin/rfkill, /usr/bin/systemctl start bluetooth, /usr/bin/systemctl stop bluetooth" | sudo tee /etc/sudoers.d/bluetooth-toggle 2>&1 | tee -a "$LOG"
+sudo chmod 440 /etc/sudoers.d/bluetooth-toggle 2>&1 | tee -a "$LOG"
 
 printf "\n%.0s" {1..2}
