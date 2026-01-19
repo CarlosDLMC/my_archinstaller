@@ -47,7 +47,7 @@ hypr_package=(
   rofi
   slurp
   swappy
-  swaync
+  mako
   swww
   systemd-resolvconf
   unzip # needed later
@@ -87,7 +87,7 @@ uninstall=(
   aylurs-gtk-shell
   dunst
   cachyos-hyprland-settings
-  mako
+  swaync
   rofi
   wallust-git
   rofi-lbonn-wayland
