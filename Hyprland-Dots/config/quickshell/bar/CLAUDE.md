@@ -78,7 +78,7 @@ components/         # Modular widget components
 - `nmcli` for WiFi scanning/connecting
 - `bluetoothctl` for Bluetooth management
 - `powerprofilesctl` for power profile management
-- `swaync-client` for DND (Do Not Disturb) toggle
+- `makoctl` for DND (Do Not Disturb) toggle
 - `wpctl` / `pactl` for volume control and audio sink detection
 - `hyprctl` for workspace/window data
 - `jq` for JSON parsing

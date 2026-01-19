@@ -35,10 +35,10 @@ Item {
     // DND status check
     Process {
         id: dndStatusProc
-        command: ["swaync-client", "-D"]
+        command: ["makoctl", "mode"]
         stdout: SplitParser {
             onRead: data => {
-                if (data) centerInfo.dndEnabled = data.trim() === "true"
+                if (data) centerInfo.dndEnabled = data.trim() === "dnd"
             }
         }
         Component.onCompleted: running = true
@@ -47,7 +47,7 @@ Item {
     // DND toggle process
     Process {
         id: dndToggleProc
-        command: ["swaync-client", "-d"]
+        command: ["makoctl", "mode", "-t", "dnd"]
         onRunningChanged: {
             if (!running) dndStatusProc.running = true
         }
