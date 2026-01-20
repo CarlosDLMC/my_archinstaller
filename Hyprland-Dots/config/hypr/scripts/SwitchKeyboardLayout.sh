@@ -91,14 +91,11 @@ change_layout() {
     return 0
 }
 
-# Execute layout change and notify
+# Execute layout change
 if ! change_layout; then
-    notify-send -u low -t 2000 'kb_layout' " Error:" " Layout change failed"
     echo "Layout change failed." >&2
     exit 1
-else
-    notify-send -u low -i "$notif_icon" "kb_layout: ${new_layout^^}"
-    echo "Layout change notification sent."
 fi
 
+# Update layout file
 echo "$new_layout" > "$layout_file"
