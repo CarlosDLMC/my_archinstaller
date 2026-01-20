@@ -1,0 +1,62 @@
+[global]
+    origin = top-center
+    offset = (0, 0)
+    width = 600
+    height = (0, 400)
+    font = JetBrainsMono Nerd Font 18
+    alignment = center
+    corner_radius = 10
+    frame_width = 2
+    frame_color = "#8be9fd"
+    background = "#00000044"
+    foreground = "#f8f8f2"
+    timeout = 0
+    gap_size = 5
+    notification_limit = 5
+    show_age_threshold = -1
+
+    # Enable actions
+    enable_posix_regex = true
+
+    # Icon settings
+    icon_position = left
+    min_icon_size = 48
+    max_icon_size = 80
+
+    # Progress bar
+    progress_bar = true
+    progress_bar_height = 10
+
+    # Format
+    format = "<b>%s</b>\n%b"
+
+    # Layer - keep on top
+    layer = overlay
+
+    # Mouse actions
+    mouse_left_click = close_current
+    mouse_middle_click = close_all
+    mouse_right_click = do_action
+
+    # History settings
+    sticky_history = yes
+    history_length = 20
+
+    # Pause timeout when user is active (hovering/interacting)
+    idle_threshold = 120
+
+[urgency_low]
+    background = "#00000044"
+    foreground = "#f8f8f2"
+#    timeout = 5
+
+[urgency_normal]
+    background = "#00000044"
+    foreground = "#f8f8f2"
+#    timeout = 5
+
+[urgency_critical]
+    background = "#ff555544"
+    foreground = "#f8f8f2"
+    frame_color = "#ff5555"
+#    timeout = 0

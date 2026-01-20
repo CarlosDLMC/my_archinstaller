@@ -36,7 +36,7 @@ ${SCRIPTSDIR}/WallustSwww.sh
 sleep 0.2
 
 # reload mako
-makoctl reload >/dev/null 2>&1
+killall -SIGUSR1 dunst >/dev/null 2>&1
 
 # Relaunching rainbow borders if the script exists
 sleep 1

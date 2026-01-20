@@ -5,6 +5,7 @@
 blue=(
   bluez
   bluez-utils
+  bluez-obex
   blueman
 )
 
@@ -39,5 +40,10 @@ printf " You can enable it from the bar widget when needed.\n"
 printf " Setting up ${YELLOW}passwordless bluetooth control${RESET}...\n"
 echo "$USER ALL=(ALL) NOPASSWD: /usr/bin/rfkill, /usr/bin/systemctl start bluetooth, /usr/bin/systemctl stop bluetooth" | sudo tee /etc/sudoers.d/bluetooth-toggle 2>&1 | tee -a "$LOG"
 sudo chmod 440 /etc/sudoers.d/bluetooth-toggle 2>&1 | tee -a "$LOG"
+
+# Disable blueman auto-start to save RAM (bar widget handles bluetooth)
+printf " Disabling ${YELLOW}blueman auto-start${RESET} (saves ~130MB RAM)...\n"
+sudo rm -f /etc/xdg/autostart/blueman.desktop 2>&1 | tee -a "$LOG"
+systemctl --user mask blueman-applet.service 2>&1 | tee -a "$LOG"
 
 printf "\n%.0s" {1..2}

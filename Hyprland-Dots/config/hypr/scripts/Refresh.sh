@@ -40,7 +40,7 @@ sleep 0.1
 
 # reload mako
 sleep 0.3
-makoctl reload >/dev/null 2>&1
+killall -SIGUSR1 dunst >/dev/null 2>&1
 
 # Relaunching rainbow borders if the script exists
 sleep 1
