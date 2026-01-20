@@ -47,7 +47,7 @@ hypr_package=(
   rofi
   slurp
   swappy
-  mako
+  dunst
   swww
   systemd-resolvconf
   unzip # needed later
