@@ -78,7 +78,7 @@ ShellRoot {
                     // Window info (layout + title)
                     WindowInfo {
                         Layout.preferredHeight: parent.height
-                        Layout.preferredWidth: 450
+                        Layout.preferredWidth: 375
                     }
 
                     // Center: Time, DND and Weather (fills available space)
