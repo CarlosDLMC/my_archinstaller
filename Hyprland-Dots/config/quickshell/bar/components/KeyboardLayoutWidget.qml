@@ -9,7 +9,7 @@ Rectangle {
 
     property string currentLayout: "us"
 
-    implicitWidth: kbText.implicitWidth + 16
+    implicitWidth: kbText.implicitWidth
     implicitHeight: parent.height
     color: mouseArea.containsMouse ? Qt.rgba(255, 255, 255, 0.1) : "transparent"
     radius: 6

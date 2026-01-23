@@ -81,46 +81,32 @@ ShellRoot {
                         Layout.preferredWidth: 300
                     }
 
-                    // Left spacer
-                    Item { Layout.fillWidth: true }
-
-                    // Center: Time, DND and Weather
+                    // Center: Time, DND and Weather (fills available space)
                     CenterInfo {
                         id: centerInfo
                         barWindow: barWindow
+                        Layout.fillWidth: true
                     }
-
-                    // Right spacer
-                    Item { Layout.fillWidth: true }
 
                     // System stats
-                    CpuWidget {
-                        Layout.rightMargin: 8
-                    }
+                    CpuWidget {}
 
                     Separator {}
 
-                    MemoryWidget {
-                        Layout.rightMargin: 8
-                    }
+                    MemoryWidget {}
 
                     Separator {}
 
-                    //DiskWidget {
-                    //    Layout.rightMargin: 8
-                    //}
+                    //DiskWidget {}
 
                     //Separator {}
 
-                    VolumeWidget {
-                        Layout.rightMargin: 8
-                    }
+                    VolumeWidget {}
 
                     Separator {}
 
                     BatteryWidget {
                         barWindow: barWindow
-                        Layout.rightMargin: 8
                     }
 
                     Separator {}
@@ -135,15 +121,19 @@ ShellRoot {
                     // Bluetooth indicator
                     BluetoothWidget {
                         barWindow: barWindow
+                        Layout.rightMargin: 8
                     }
 
                     // Power profile
                     PowerProfileWidget {
                         barWindow: barWindow
+                        Layout.rightMargin: 8
                     }
 
                     // Night light toggle
-                    NightLightWidget {}
+                    NightLightWidget {
+                        Layout.leftMargin: 8
+                    }
 
                     Separator {}
 

@@ -8,7 +8,7 @@ Item {
 
     property bool isOn: false
 
-    implicitWidth: nightLightText.implicitWidth + 16
+    implicitWidth: nightLightText.implicitWidth
     implicitHeight: parent.height
 
     Text {
