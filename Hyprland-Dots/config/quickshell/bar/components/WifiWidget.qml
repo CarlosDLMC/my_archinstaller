@@ -177,6 +177,12 @@ DropdownWidget {
         Component.onCompleted: running = true
     }
 
+    // Process to open nm-connection-editor
+    Process {
+        id: nmEditorProc
+        command: ["nm-connection-editor"]
+    }
+
     // Icon content
     Text {
         id: wifiText
@@ -190,6 +196,16 @@ DropdownWidget {
         font.pixelSize: Theme.fontSize + 4
         font.family: Theme.fontFamily
         font.bold: true
+
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.RightButton
+            onClicked: function(mouse) {
+                if (mouse.button === Qt.RightButton) {
+                    nmEditorProc.running = true
+                }
+            }
+        }
     }
 
     // Popup content
