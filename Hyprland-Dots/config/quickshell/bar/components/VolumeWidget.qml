@@ -32,7 +32,54 @@ Text {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        onClicked: volumeControlProc.running = true
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        onClicked: function(mouse) {
+            if (mouse.button === Qt.RightButton) {
+                volumeControlProc.running = true
+            } else if (mouse.button === Qt.LeftButton) {
+                muteToggleProc.running = true
+            }
+        }
+        onWheel: function(wheel) {
+            if (wheel.angleDelta.y > 0) {
+                volumeUpProc.running = true
+            } else if (wheel.angleDelta.y < 0) {
+                volumeDownProc.running = true
+            }
+        }
+    }
+
+    // Mute toggle process
+    Process {
+        id: muteToggleProc
+        command: ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"]
+        onRunningChanged: {
+            if (!running) {
+                volProc.running = true
+            }
+        }
+    }
+
+    // Volume up process
+    Process {
+        id: volumeUpProc
+        command: ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%+"]
+        onRunningChanged: {
+            if (!running) {
+                volProc.running = true
+            }
+        }
+    }
+
+    // Volume down process
+    Process {
+        id: volumeDownProc
+        command: ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%-"]
+        onRunningChanged: {
+            if (!running) {
+                volProc.running = true
+            }
+        }
     }
 
     function updateVolume() {
