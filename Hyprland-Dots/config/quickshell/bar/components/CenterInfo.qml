@@ -7,7 +7,6 @@ import ".."
 
 Item {
     id: centerInfo
-    implicitWidth: centerText.implicitWidth
     implicitHeight: parent.height
 
     required property var barWindow
@@ -164,27 +163,42 @@ Item {
         }
     }
 
-    Row {
-        id: centerText
-        anchors.centerIn: parent
-        spacing: 0
+    // Weather text parts extracted from weatherText (format: "icon temp° location")
+    property string barIcon: {
+        if (!weatherText) return ""
+        var match = weatherText.match(/^(\S+)\s/)
+        return match ? match[1] : ""
+    }
+    property string barTemp: {
+        if (!weatherText) return ""
+        var match = weatherText.match(/-?\d+°/)
+        return match ? match[0] : ""
+    }
+    property string barLocation: {
+        if (!weatherText) return ""
+        var match = weatherText.match(/-?\d+°\s*(.+)$/)
+        return match ? match[1] : ""
+    }
 
-        // Weather text parts extracted from weatherText (format: "icon temp° location")
-        property string barIcon: {
-            if (!weatherText) return ""
-            var match = weatherText.match(/^(\S+)\s/)
-            return match ? match[1] : ""
-        }
-        property string barTemp: {
-            if (!weatherText) return ""
-            var match = weatherText.match(/-?\d+°/)
-            return match ? match[0] : ""
-        }
-        property string barLocation: {
-            if (!weatherText) return ""
-            var match = weatherText.match(/-?\d+°\s*(.+)$/)
-            return match ? match[1] : ""
-        }
+    // Separator at exact screen center
+    Text {
+        id: separator
+        x: barWindow.width / 2 - centerInfo.x - width / 2
+        anchors.verticalCenter: parent.verticalCenter
+        visible: weatherText !== ""
+        text: "|"
+        color: Theme.colMuted
+        font.pixelSize: Theme.fontSize
+        font.family: Theme.fontFamily
+    }
+
+    // Left side: DND + Weather (anchored to left of separator)
+    Row {
+        id: leftContent
+        anchors.right: separator.left
+        anchors.rightMargin: 8
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: 0
 
         // DND toggle
         Text {
@@ -218,8 +232,8 @@ Item {
                 spacing: 0
 
                 Text {
-                    visible: centerText.barIcon !== ""
-                    text: centerText.barIcon + " "
+                    visible: centerInfo.barIcon !== ""
+                    text: centerInfo.barIcon + " "
                     color: getTempColor(weatherText)
                     font.pixelSize: Theme.fontSize
                     font.family: Theme.fontFamily
@@ -228,8 +242,8 @@ Item {
                 }
 
                 Text {
-                    visible: centerText.barTemp !== ""
-                    text: centerText.barTemp
+                    visible: centerInfo.barTemp !== ""
+                    text: centerInfo.barTemp
                     color: getTempColor(weatherText)
                     font.pixelSize: Theme.fontSize
                     font.family: Theme.fontFamily
@@ -238,8 +252,8 @@ Item {
                 }
 
                 Text {
-                    visible: centerText.barLocation !== ""
-                    text: " " + centerText.barLocation
+                    visible: centerInfo.barLocation !== ""
+                    text: " " + centerInfo.barLocation
                     color: Theme.colFg
                     font.pixelSize: Theme.fontSize
                     font.family: Theme.fontFamily
@@ -257,44 +271,44 @@ Item {
                 }
             }
         }
+    }
 
-        // Separator with spacing
+    // Right side: Time (anchored to right of separator)
+    Rectangle {
+        id: timePill
+        anchors.left: separator.right
+        anchors.leftMargin: 8
+        anchors.verticalCenter: parent.verticalCenter
+        color: calendarVisible ? Theme.colBg : "transparent"
+        radius: 8
+        height: 26
+        width: timeText.implicitWidth + 16
+
         Text {
-            visible: weatherText !== ""
-            text: " | "
-            color: Theme.colMuted
+            id: timeText
+            anchors.centerIn: parent
+            text: centerTime
+            color: Theme.colFg
             font.pixelSize: Theme.fontSize
             font.family: Theme.fontFamily
-            anchors.verticalCenter: parent.verticalCenter
+            font.bold: true
         }
 
-        Rectangle {
-            id: timePill
-            color: calendarVisible ? Theme.colBg : "transparent"
-            radius: 8
-            height: 26
-            width: timeText.implicitWidth + 16
-            anchors.verticalCenter: parent.verticalCenter
-
-            Text {
-                id: timeText
-                anchors.centerIn: parent
-                text: centerTime
-                color: Theme.colFg
-                font.pixelSize: Theme.fontSize
-                font.family: Theme.fontFamily
-                font.bold: true
-            }
-
-            MouseArea {
-                id: timeArea
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    centerInfo.calendarVisible = !centerInfo.calendarVisible
-                }
+        MouseArea {
+            id: timeArea
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+                centerInfo.calendarVisible = !centerInfo.calendarVisible
             }
         }
+    }
+
+    // For popup positioning compatibility
+    Item {
+        id: centerText
+        x: leftContent.x
+        width: leftContent.width + separator.width + 16 + timePill.width
     }
 
     // Weather process - fetch full JSON using wrapper script

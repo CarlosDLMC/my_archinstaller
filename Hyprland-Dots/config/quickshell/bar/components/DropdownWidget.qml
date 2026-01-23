@@ -9,7 +9,6 @@ Item {
     id: root
     Layout.preferredWidth: iconContainer.width
     Layout.preferredHeight: parent.height
-    Layout.rightMargin: 8
 
     required property var barWindow
     property int popupWidth: 200
