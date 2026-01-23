@@ -39,7 +39,7 @@ RowLayout {
         font.family: Theme.fontFamily
         font.bold: true
         Layout.leftMargin: 8
-        Layout.maximumWidth: 450
+        Layout.maximumWidth: 375
         elide: Text.ElideRight
         maximumLineCount: 1
         visible: activeWindow.length > 0
