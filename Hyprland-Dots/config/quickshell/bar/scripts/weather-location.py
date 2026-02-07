@@ -69,10 +69,14 @@ url = f"https://weather.com/en-PH/weather/today/l/{latitude},{longitude}"
 try:
     html_data = PyQuery(url=url)
 
-    # Location name
-    location = html_data("h1[class*='CurrentConditions--location']").text()
-    location_parts = location.split(",") if location else []
-    location_short = location_parts[1].split()[0] if len(location_parts) > 1 else location_parts[0] if location_parts else ""
+    # Location name - use argument if provided, otherwise parse from HTML
+    if city_arg and city_arg in VPN_LOCATIONS:
+        location = city_arg.capitalize()
+        location_short = location
+    else:
+        location = html_data("h1[class*='CurrentConditions--location']").text()
+        location_parts = location.split(",") if location else []
+        location_short = location_parts[1].split()[0] if len(location_parts) > 1 else location_parts[0] if location_parts else ""
 
     # Current temperature
     temp = html_data("span[data-testid='TemperatureValue']").eq(0).text()
