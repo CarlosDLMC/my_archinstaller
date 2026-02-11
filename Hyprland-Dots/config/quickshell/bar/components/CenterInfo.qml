@@ -789,7 +789,7 @@ Item {
         id: calendarPopup
         barWindow: centerInfo.barWindow
         isOpen: centerInfo.calendarVisible
-        anchorX: centerInfo.x + centerText.x + timePill.x + timePill.width/2
+        anchorX: centerInfo.x + timePill.x + timePill.width/2
         onClosed: {
             centerInfo.calendarVisible = false
         }

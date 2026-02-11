@@ -129,14 +129,19 @@ shotactive() {
 }
 
 shotswappy() {
-	tmpfile=$(mktemp)
-	grim -g "$(slurp)" - >"$tmpfile" 
+	local res
+	res=$(hyprctl monitors -j | jq -r '.[] | select(.focused==true) | "\(.width / .scale | floor)x\(.height / .scale | floor)"')
+	local w h
+	w=$(echo "$res" | cut -dx -f1)
+	h=$(echo "$res" | cut -dx -f2)
+	w=$(( w * 80 / 100 ))
+	h=$(( h * 80 / 100 ))
 
-  # Copy without saving
-  if [[ -s "$tmpfile" ]]; then
-		wl-copy <"$tmpfile"
-    notify_view "swappy"
-  fi
+	grim -g "$(slurp)" - | satty -f - \
+		--output-filename "$(xdg-user-dir PICTURES)/Screenshots/Screenshot_%Y%m%d_%H%M%S.png" \
+		--copy-command wl-copy \
+		--resize "${w}x${h}" \
+		--early-exit
 }
 
 if [[ ! -d "$dir" ]]; then
