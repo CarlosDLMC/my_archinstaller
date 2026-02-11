@@ -43,6 +43,12 @@ if command -v xdg-user-dirs-update &> /dev/null; then
     xdg-user-dirs-update 2>/dev/null && echo "  ${OK} Created user directories (Documents, Downloads, Videos, etc.)"
 fi
 
+# Copy mimeapps.list
+printf "\n${INFO} Copying MIME type associations...\n"
+if [ -f "$SCRIPT_DIR/config/mimeapps.list" ]; then
+    cp "$SCRIPT_DIR/config/mimeapps.list" "$HOME/.config/" 2>/dev/null && echo "  ${OK} Copied mimeapps.list"
+fi
+
 # Copy config directories
 printf "\n${INFO} Copying configuration directories...\n"
 mkdir -p "$HOME/.config"
