@@ -1,0 +1,12 @@
+[Default Applications]
+inode/directory=thunar.desktop
+application/x-wayland-gnome-saved-search=thunar.desktop
+text/html=librewolf.desktop
+x-scheme-handler/http=librewolf.desktop
+x-scheme-handler/https=librewolf.desktop
+x-scheme-handler/about=librewolf.desktop
+x-scheme-handler/unknown=librewolf.desktop
+
+[Added Associations]
+image/jpeg=org.gnome.Loupe.desktop;
+image/png=org.gnome.Loupe.desktop;
