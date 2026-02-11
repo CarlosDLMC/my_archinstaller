@@ -46,6 +46,7 @@ hypr_package=(
   qt6-svg
   rofi
   slurp
+  satty
   swappy
   dunst
   swww
