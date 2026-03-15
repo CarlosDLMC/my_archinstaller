@@ -36,22 +36,40 @@ VPN_LOCATIONS = {
 # Get location
 def get_location():
     """Get location from IP address"""
+    # Try ip-api.com first (more generous rate limits: 45/minute for non-commercial)
+    try:
+        response = requests.get("http://ip-api.com/json/?fields=lat,lon,city,status,message", timeout=5)
+        data = response.json()
+        if data.get("status") == "success":
+            return float(data["lat"]), float(data["lon"]), data.get("city", "")
+        else:
+            print(f"ip-api.com error: {data.get('message', 'Unknown error')}", file=sys.stderr)
+    except Exception as e:
+        print(f"ip-api.com error: {e}", file=sys.stderr)
+
+    # Fallback to ipinfo.io (stricter rate limits but HTTPS)
     try:
         response = requests.get("https://ipinfo.io", timeout=5)
         data = response.json()
-        loc = data["loc"].split(",")
-        return float(loc[0]), float(loc[1])
-    except:
-        return None, None
+        if "loc" in data:
+            loc = data["loc"].split(",")
+            return float(loc[0]), float(loc[1]), data.get("city", "")
+        else:
+            print(f"ipinfo.io error: {data.get('error', data)}", file=sys.stderr)
+    except Exception as e:
+        print(f"ipinfo.io error: {e}", file=sys.stderr)
+
+    return None, None, ""
 
 # Check for city argument
 city_arg = sys.argv[1].lower() if len(sys.argv) > 1 else None
 
 # Get coordinates
+ip_city = ""
 if city_arg and city_arg in VPN_LOCATIONS:
     latitude, longitude = VPN_LOCATIONS[city_arg]
 else:
-    latitude, longitude = get_location()
+    latitude, longitude, ip_city = get_location()
     if latitude is None:
         # Fallback to cached data if available
         cache_path = os.path.expanduser("~/.cache/quickshell/weather.json")
@@ -77,6 +95,11 @@ try:
         location = html_data("h1[class*='CurrentConditions--location']").text()
         location_parts = location.split(",") if location else []
         location_short = location_parts[1].split()[0] if len(location_parts) > 1 else location_parts[0] if location_parts else ""
+        # Fallback to IP geolocation city if weather.com didn't return one
+        if not location_short and ip_city:
+            location_short = ip_city
+        if not location and ip_city:
+            location = ip_city
 
     # Current temperature
     temp = html_data("span[data-testid='TemperatureValue']").eq(0).text()
@@ -180,14 +203,29 @@ try:
         "tooltip": tooltip_text,
         "class": status_code,
     }
-    print(json.dumps(out_data))
+    output_json = json.dumps(out_data)
+    print(output_json)
+
+    # Save to cache for offline use
+    try:
+        cache_path = os.path.expanduser("~/.cache/quickshell/weather.json")
+        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+        with open(cache_path, "w") as f:
+            f.write(output_json)
+    except Exception as e:
+        print(f"Warning: Failed to write cache: {e}", file=sys.stderr)
 
 except Exception as e:
     # On error, try to use cached data
+    print(f"Weather fetch error: {e}", file=sys.stderr)
+    import traceback
+    traceback.print_exc(file=sys.stderr)
     cache_path = os.path.expanduser("~/.cache/quickshell/weather.json")
     if os.path.exists(cache_path):
+        print("Using cached weather data", file=sys.stderr)
         with open(cache_path, "r") as f:
             print(f.read())
     else:
+        print("No cache available", file=sys.stderr)
         print(json.dumps({"text": "", "alt": "", "tooltip": "", "class": ""}))
     sys.exit(1)
