@@ -9,7 +9,6 @@ pidfile="/tmp/wf-recorder.pid"
 
 iDIR="$HOME/.config/swaync/icons"
 iDoR="$HOME/.config/swaync/images"
-sDIR="$HOME/.config/hypr/scripts"
 
 notify_cmd_base="notify-send -t 5000 -h string:x-canonical-private-synchronous:record-notify"
 notify_cmd_rec="${notify_cmd_base} -i ${iDIR}/video.png"
@@ -19,12 +18,16 @@ notify_cmd_NOT="notify-send -u low -i ${iDoR}/note.png"
 is_recording() {
     if [[ -f "$pidfile" ]]; then
         pid=$(cat "$pidfile")
-        if ps -p "$pid" > /dev/null 2>&1; then
+        if kill -0 "$pid" 2>/dev/null; then
             return 0
         else
-            rm "$pidfile"
-            return 1
+            rm -f "$pidfile"
         fi
+    fi
+    # Fallback: detect orphaned wf-recorder
+    if pgrep -x wf-recorder > /dev/null 2>&1; then
+        pgrep -x wf-recorder | head -1 > "$pidfile"
+        return 0
     fi
     return 1
 }
@@ -33,13 +36,23 @@ is_recording() {
 stop_recording() {
     if is_recording; then
         pid=$(cat "$pidfile")
-        kill -INT "$pid"
-        rm "$pidfile"
-        "${sDIR}/Sounds.sh" --screenshot 2>/dev/null || true
+        kill -INT "$pid" 2>/dev/null
+        rm -f "$pidfile"
+        # Clean up any orphans
+        pkill -x wf-recorder 2>/dev/null
         ${notify_cmd_rec} "Recording Stopped" "Saved to ${dir}"
     else
         ${notify_cmd_NOT} "No Recording" "No active recording found"
     fi
+}
+
+# Start wf-recorder and save its PID
+start_recorder() {
+    # Kill any orphans before starting fresh
+    pkill -x wf-recorder 2>/dev/null
+    rm -f "$pidfile"
+    wf-recorder "$@" &
+    echo $! > "$pidfile"
 }
 
 # Record fullscreen
@@ -49,11 +62,9 @@ record_fullscreen() {
         return
     fi
 
-    "${sDIR}/Sounds.sh" --screenshot 2>/dev/null || true
     ${notify_cmd_rec} "Recording Started" "Fullscreen recording"
 
-    wf-recorder -f "${dir}/${file}" &
-    echo $! > "$pidfile"
+    start_recorder -f "${dir}/${file}"
 }
 
 # Record selected area
@@ -69,11 +80,9 @@ record_area() {
         return
     fi
 
-    "${sDIR}/Sounds.sh" --screenshot 2>/dev/null || true
     ${notify_cmd_rec} "Recording Started" "Area recording"
 
-    wf-recorder -g "$geometry" -f "${dir}/${file}" &
-    echo $! > "$pidfile"
+    start_recorder -g "$geometry" -f "${dir}/${file}"
 }
 
 # Record active window
@@ -88,11 +97,9 @@ record_active() {
     w_size=$(hyprctl activewindow | grep 'size:' | cut -d':' -f2 | tr -d ' ' | tail -n1 | sed s/,/x/g)
     geometry="${w_pos} ${w_size}"
 
-    "${sDIR}/Sounds.sh" --screenshot 2>/dev/null || true
     ${notify_cmd_rec} "Recording Started" "Recording ${active_window_class}"
 
-    wf-recorder -g "$geometry" -f "${dir}/${file}" &
-    echo $! > "$pidfile"
+    start_recorder -g "$geometry" -f "${dir}/${file}"
 }
 
 # Toggle recording (for simple keybind)
