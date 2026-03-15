@@ -16,6 +16,7 @@ DropdownWidget {
     property var vpnConfigs: []
     property bool isConnecting: false
     property int statusCheckCounter: 0
+    property bool initialCheckDone: false
 
     function updateVpnStatus() {
         statusCheckCounter++
@@ -38,14 +39,22 @@ DropdownWidget {
             if (running) {
                 output = ""
             } else {
-                // Process completed, check output
                 var trimmed = output.trim()
+                var wasActive = vpnWidget.activeVpn !== ""
                 if (!trimmed || trimmed === "") {
                     vpnWidget.activeVpn = ""
+                    // VPN dropped unexpectedly — reset timezone/weather to local
+                    if (wasActive) {
+                        vpnResetProc.running = true
+                    } else if (!vpnWidget.initialCheckDone) {
+                        // First check after startup: reset if stale cache exists
+                        staleCacheCheckProc.running = true
+                    }
                 } else {
                     var interfaces = trimmed.split(/\s+/)
                     vpnWidget.activeVpn = interfaces[0] || ""
                 }
+                vpnWidget.initialCheckDone = true
             }
         }
     }
@@ -138,6 +147,26 @@ DropdownWidget {
                     centerInfoRef.refreshTimezone()
                     centerInfoRef.refreshWeather()
                 }
+            }
+        }
+    }
+
+    // Check if stale city cache exists (startup only)
+    Process {
+        id: staleCacheCheckProc
+        property string output: ""
+        command: ["sh", "-c", "cat ~/.cache/quickshell/weather_city 2>/dev/null"]
+        stdout: SplitParser {
+            onRead: data => {
+                if (data) staleCacheCheckProc.output += data
+            }
+        }
+        onRunningChanged: {
+            if (running) {
+                output = ""
+            } else if (output.trim()) {
+                // Stale city cache exists with no VPN — reset
+                vpnResetProc.running = true
             }
         }
     }
