@@ -25,10 +25,10 @@ done
 
 
 # Initialize swww if needed
-swww query || swww-daemon --format xrgb
+awww query || awww-daemon --format argb
 
 # Set swww options
-swww="swww img"
+awww="awww img"
 effect="--transition-bezier .43,1.19,1,.4 --transition-fps 60 --transition-type grow --transition-pos 0.925,0.977 --transition-duration 2"
 
 # Determine current theme mode
@@ -95,7 +95,7 @@ else
 fi
 
 # Update wallpaper using swww command
-$swww "${next_wallpaper}" $effect
+$awww "${next_wallpaper}" $effect
 
 
 # Set Kvantum Manager theme & QT5/QT6 settings
