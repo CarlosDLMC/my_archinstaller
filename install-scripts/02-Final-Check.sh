@@ -9,7 +9,7 @@ packages=(
   rofi-wayland
   imagemagick
   mako
-  swww
+  awww
   wallust
   quickshell
   wl-clipboard

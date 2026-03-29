@@ -49,7 +49,7 @@ hypr_package=(
   satty
   swappy
   dunst
-  swww
+  awww
   systemd-resolvconf
   unzip # needed later
   wallust

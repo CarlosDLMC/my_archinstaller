@@ -60,7 +60,7 @@ Please select a locale that suits you
 - rofi (launcher)
 - wlogout (power menu)
 - swaync (notifications)
-- swww (wallpaper daemon)
+- awww (wallpaper daemon)
 - wallust (color scheme generator)
 
 ### Custom Features
