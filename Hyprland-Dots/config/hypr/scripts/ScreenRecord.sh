@@ -46,13 +46,31 @@ stop_recording() {
     fi
 }
 
-# Start wf-recorder and save its PID
+# Start wf-recorder and save its PID. Returns 0 if it's still alive after a
+# brief grace period, 1 if it died on startup (bad geometry, wrong output, etc.)
 start_recorder() {
     # Kill any orphans before starting fresh
     pkill -x wf-recorder 2>/dev/null
     rm -f "$pidfile"
     wf-recorder "$@" &
-    echo $! > "$pidfile"
+    local pid=$!
+    echo "$pid" > "$pidfile"
+    sleep 0.4
+    if kill -0 "$pid" 2>/dev/null; then
+        return 0
+    fi
+    rm -f "$pidfile"
+    return 1
+}
+
+# Pick the output (monitor) whose bounds contain the given x,y point.
+output_for_point() {
+    local x=$1 y=$2
+    hyprctl -j monitors | jq -r --argjson x "$x" --argjson y "$y" '
+        .[] | select(
+            $x >= .x and $x < (.x + .width) and
+            $y >= .y and $y < (.y + .height)
+        ) | .name' | head -1
 }
 
 # Record fullscreen
@@ -62,9 +80,11 @@ record_fullscreen() {
         return
     fi
 
-    ${notify_cmd_rec} "Recording Started" "Fullscreen recording"
-
-    start_recorder -f "${dir}/${file}"
+    if start_recorder -f "${dir}/${file}"; then
+        ${notify_cmd_rec} "Recording Started" "Fullscreen recording"
+    else
+        ${notify_cmd_NOT} "Recording Failed" "wf-recorder exited immediately"
+    fi
 }
 
 # Record selected area
@@ -74,15 +94,22 @@ record_area() {
         return
     fi
 
-    geometry=$(slurp)
-    if [[ -z "$geometry" ]]; then
+    # Ask slurp for the output name alongside the geometry so wf-recorder
+    # records the correct monitor on multi-monitor setups.
+    selection=$(slurp -f "%o %x,%y %wx%h")
+    if [[ -z "$selection" ]]; then
         ${notify_cmd_NOT} "Recording Cancelled" "No area selected"
         return
     fi
 
-    ${notify_cmd_rec} "Recording Started" "Area recording"
+    output=$(awk '{print $1}' <<< "$selection")
+    geometry=$(cut -d' ' -f2- <<< "$selection")
 
-    start_recorder -g "$geometry" -f "${dir}/${file}"
+    if start_recorder -o "$output" -g "$geometry" -f "${dir}/${file}"; then
+        ${notify_cmd_rec} "Recording Started" "Area recording on ${output}"
+    else
+        ${notify_cmd_NOT} "Recording Failed" "wf-recorder exited immediately"
+    fi
 }
 
 # Record active window
@@ -97,9 +124,22 @@ record_active() {
     w_size=$(hyprctl activewindow | grep 'size:' | cut -d':' -f2 | tr -d ' ' | tail -n1 | sed s/,/x/g)
     geometry="${w_pos} ${w_size}"
 
-    ${notify_cmd_rec} "Recording Started" "Recording ${active_window_class}"
+    # Resolve which monitor this window sits on so wf-recorder targets it.
+    win_x=${w_pos%,*}
+    win_y=${w_pos#*,}
+    output=$(output_for_point "$win_x" "$win_y")
 
-    start_recorder -g "$geometry" -f "${dir}/${file}"
+    if [[ -n "$output" ]]; then
+        start_recorder -o "$output" -g "$geometry" -f "${dir}/${file}"
+    else
+        start_recorder -g "$geometry" -f "${dir}/${file}"
+    fi
+
+    if [[ $? -eq 0 ]]; then
+        ${notify_cmd_rec} "Recording Started" "Recording ${active_window_class}"
+    else
+        ${notify_cmd_NOT} "Recording Failed" "wf-recorder exited immediately"
+    fi
 }
 
 # Toggle recording (for simple keybind)
