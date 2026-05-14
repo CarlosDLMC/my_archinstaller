@@ -13,6 +13,7 @@ Please select a locale that suits you
 - **VPN Selector** with WireGuard configurations
 - **Custom Terminal** setup with pokefetch and zsh
 - **ly Display Manager** (lightweight TUI login screen with large font)
+- **Offline Speech-to-Text** with Handy (toggle via SUPER + CTRL + F8)
 - **All Essential Packages** pre-configured
 
 ## Quick Install (Fresh Arch System)
@@ -77,6 +78,7 @@ Please select a locale that suits you
 - btop, cava, fastfetch
 - mpv, pavucontrol
 - swappy (screenshot editor)
+- Handy (offline speech-to-text — Parakeet V3, auto-detects 25 languages)
 
 ## Configuration
 
@@ -91,9 +93,27 @@ All configurations are stored in `Hyprland-Dots/config/` and will be copied to `
 - `SUPER + SPACE` - Switch keyboard layout (US → ES → RU)
 - `SUPER + SHIFT + SPACE` - Float current window
 - `SUPER + CTRL + ALT + B` - Toggle quickshell bar
+- `SUPER + CTRL + F8` - Handy: toggle speech-to-text (press once to start recording, press again to stop and transcribe into the focused field)
 - `CTRL + ALT + P` - Power menu (wlogout)
 
 See `Hyprland-Dots/config/hypr/configs/Keybinds.conf` for all keybindings.
+
+### Speech-to-Text (Handy)
+
+Handy is offline speech-to-text — no audio leaves your machine. `wtype` injects the transcription into whatever window has focus.
+
+**Workflow:**
+1. Focus a text field.
+2. Press `SUPER + CTRL + F8` — a notification confirms recording started.
+3. Speak.
+4. Press `SUPER + CTRL + F8` again — recording stops, transcription runs, text is typed into the field.
+
+**First login on a fresh install:**
+- Handy opens automatically so you can pick a model. Choose **Parakeet V3** (CPU-friendly, auto-detects 25 languages including English, Spanish, German, Russian) and let it download (~30s).
+- **Ignore the "Shortcut" field inside Handy's UI** — Wayland blocks apps from registering global shortcuts, so it doesn't work. The Hyprland keybind in `UserKeybinds.conf` is what actually fires the toggle.
+- Once you've selected a model, Handy starts hidden on every subsequent login. The keybind keeps working in the background.
+
+This behavior is implemented by `~/.config/hypr/UserScripts/handy-start.sh`, which opens Handy visibly while `selected_model` is empty and switches to `--start-hidden` once it's set.
 
 ## Customization
 
@@ -162,6 +182,7 @@ chmod +x install.sh
 - ✅ gtk_themes (for Dark/Light mode)
 - ✅ bluetooth (if you need it)
 - ✅ xdph (for screen sharing)
+- ✅ handy (offline speech-to-text, SUPER + CTRL + F8)
 
 ## Verification
 
