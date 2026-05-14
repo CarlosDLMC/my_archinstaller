@@ -136,6 +136,7 @@ dots="OFF"
 input_group="OFF"
 nvidia="OFF"
 nouveau="OFF"
+handy="OFF"
 
 # Function to load preset file
 load_preset() {
@@ -267,6 +268,7 @@ options_command+=(
     "pokemon" "Add Pokemon color scripts to your terminal?" "OFF"
     "rog" "Are you installing on Asus ROG laptops?" "OFF"
     "dots" "Download and install pre-configured KooL Hyprland dotfiles?" "OFF"
+    "handy" "Install Handy speech-to-text (CTRL+SUPER+F8 toggle)?" "OFF"
 )
 
 # Capture the selected options before the while loop starts
@@ -436,6 +438,10 @@ for option in "${options[@]}"; do
         dots)
             echo "${INFO} Installing pre-configured ${SKY_BLUE}KooL Hyprland dotfiles...${RESET}" | tee -a "$LOG"
             execute_script "dotfiles-main.sh"
+            ;;
+        handy)
+            echo "${INFO} Installing ${SKY_BLUE}Handy speech-to-text...${RESET}" | tee -a "$LOG"
+            execute_script "handy.sh"
             ;;
         *)
             echo "Unknown option: $option" | tee -a "$LOG"

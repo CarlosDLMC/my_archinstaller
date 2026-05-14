@@ -1,5 +1,17 @@
 ## CHANGELOGS
 
+## May 2026
+
+Added:
+
+- `handy.sh` install script for Handy offline speech-to-text
+  - Installs `handy-bin` (AUR), `wtype`, `gtk-layer-shell`
+  - Appends `CTRL+SUPER+F8` toggle keybind to `UserConfigs/UserKeybinds.conf` (idempotent — uses `notify-send` for feedback, then `handy --toggle-transcription`)
+  - Writes `UserScripts/handy-start.sh` launcher that opens Handy visibly until a model is selected, then `--start-hidden` on subsequent logins (so the user sees the model picker on first login without the UI re-opening every boot)
+  - Appends `exec-once = ~/.config/hypr/UserScripts/handy-start.sh` to `UserConfigs/Startup_Apps.conf`
+  - Must run after `dotfiles-main.sh` (depends on KooL `UserConfigs/` files existing)
+  - Wired into `install.sh` whiptail menu and `custom-preset.conf` (default `ON`)
+
 ## Dec 2025
 
 Added:
