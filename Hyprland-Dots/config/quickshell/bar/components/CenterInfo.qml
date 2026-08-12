@@ -187,7 +187,7 @@ Item {
     Text {
         id: separator
         x: {
-            var centerX = barWindow.width / 2 - centerInfo.x - width / 2
+            var centerX = barWindow.designWidth / 2 - centerInfo.x - width / 2
             var timeBlockW = 8 + (timeText.implicitWidth + 16) + 12  // leftMargin + time pill + safety gap
             var maxX = centerInfo.width - width - timeBlockW
             return Math.min(centerX, Math.max(0, maxX))
@@ -565,8 +565,8 @@ Item {
         id: weatherPopup
         visible: centerInfo.popupVisible && centerInfo.weatherText
         anchor.window: barWindow
-        anchor.rect.x: centerInfo.x + centerText.x + weatherPill.x + weatherPill.width/2 - width/2
-        anchor.rect.y: 32
+        anchor.rect.x: (centerInfo.x + centerText.x + weatherPill.x + weatherPill.width/2) * barWindow.uiScale - width/2
+        anchor.rect.y: barWindow.designHeight * barWindow.uiScale + 2
         implicitWidth: 320
         implicitHeight: contentColumn.implicitHeight + 12 + 32
         color: "transparent"
@@ -797,7 +797,7 @@ Item {
         id: calendarPopup
         barWindow: centerInfo.barWindow
         isOpen: centerInfo.calendarVisible
-        anchorX: centerInfo.x + timePill.x + timePill.width/2
+        anchorX: (centerInfo.x + timePill.x + timePill.width/2) * barWindow.uiScale
         onClosed: {
             centerInfo.calendarVisible = false
         }

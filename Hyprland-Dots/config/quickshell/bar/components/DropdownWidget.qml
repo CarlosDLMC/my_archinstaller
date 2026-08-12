@@ -59,7 +59,7 @@ Item {
         visible: dropdownOpen
         anchor.window: barWindow
         anchor.rect.x: {
-            var iconCenter = root.x + iconContainer.x + iconContainer.width/2
+            var iconCenter = (root.x + iconContainer.x + iconContainer.width/2) * barWindow.uiScale
             if (stemAlignment === "right") {
                 return iconCenter - popupWidth + cardRect.stemWidth/2 + 10
             } else if (stemAlignment === "left") {
@@ -68,7 +68,7 @@ Item {
                 return iconCenter - popupWidth/2
             }
         }
-        anchor.rect.y: 32
+        anchor.rect.y: barWindow.designHeight * barWindow.uiScale + 2
         implicitWidth: popupWidth
         implicitHeight: popupHeight
         color: "transparent"
