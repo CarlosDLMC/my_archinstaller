@@ -1,70 +1,79 @@
 #!/usr/bin/env bash
 # /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  ##
+# Quick Cheat Sheet — generated LIVE from the actual Hyprland keybind configs,
+# so it never drifts out of date. Every descriptive bind (bindd/binded/bindlnd/
+# bindmd/...) is listed; non-descriptive binds (bind/binde) are picked up from
+# their trailing "# comment". Add a keybind -> it shows here automatically.
 
 # GDK BACKEND. Change to either wayland or x11 if having issues
 BACKEND=wayland
 
-# Check if rofi or yad is running and kill them if they are
-if pidof rofi > /dev/null; then
-  pkill rofi
-fi
+# Kill any running rofi/yad instance
+pidof rofi >/dev/null && pkill rofi
+pidof yad  >/dev/null && pkill yad
 
-if pidof yad > /dev/null; then
-  pkill yad
-fi
+hypr_dir="$HOME/.config/hypr"
 
-# Launch yad with calculated width and height
+# Keybind files in source order (see hyprland.conf), as "path:section label"
+files=(
+  "$hypr_dir/configs/Keybinds.conf:Default keybinds"
+  "$hypr_dir/configs/Laptops.conf:Laptop keys (default)"
+  "$hypr_dir/UserConfigs/Laptops.conf:Laptop keys (user)"
+  "$hypr_dir/UserConfigs/UserKeybinds.conf:Your keybinds"
+)
+
+# Glyph shown in place of the SUPER modifier (Nerd Font "penguin", U+EBC6)
+super_glyph=$''
+
+# Emit "keys<TAB>action" for every bind in a file
+parse() {
+  awk -v sk="$super_glyph" '
+    function trim(s){ gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
+    /^[ \t]*bind[a-z]*[ \t]*=/ {
+      line=$0
+      # header token (e.g. "bindd") -> flags after "bind"; a "d" flag = has description
+      hdr=line; sub(/[ \t]*=.*$/, "", hdr); sub(/^[ \t]*/, "", hdr)
+      flags=hdr; sub(/^bind/, "", flags)
+      hasdesc = (flags ~ /d/)
+      # peel a trailing " # comment" (Hyprland inline comment) for non-descriptive binds
+      comment=""
+      if (match(line, /[ \t]#/)) { comment=trim(substr(line, RSTART+2)); line=substr(line,1,RSTART-1) }
+      n=split(line, a, ",")
+      mods=a[1]; sub(/^[ \t]*bind[a-z]*[ \t]*=[ \t]*/, "", mods); mods=trim(mods)
+      key=trim(a[2])
+      if (hasdesc) { desc=trim(a[3]); cs=4 } else { desc=comment; cs=3 }
+      # fall back to the dispatcher/command when there is no description at all
+      if (desc=="") { cmd=""; for(i=cs;i<=n;i++) cmd=cmd (i>cs?",":"") a[i]; desc=trim(cmd) }
+      gsub(/\$mainMod/, sk, mods)
+      keys = (mods=="" ? key : mods " " key)
+      printf "%s\t%s\n", keys, desc
+    }
+  ' "$1"
+}
+
+rows=( "ESC" "close this cheat sheet" )
+rows+=( "SUPER SHIFT K" "searchable keybinds (rofi)" )
+
+for entry in "${files[@]}"; do
+  f="${entry%%:*}"; label="${entry#*:}"
+  [ -f "$f" ] || continue
+  mapfile -t parsed < <(parse "$f")
+  [ "${#parsed[@]}" -eq 0 ] && continue
+  rows+=( "──────────" "$label" )
+  for l in "${parsed[@]}"; do
+    IFS=$'\t' read -r k d <<< "$l"
+    rows+=( "$k" "$d" )
+  done
+done
+
+rows+=( "──────────" "wiki: github.com/JaKooLit/Hyprland-Dots/wiki" )
+
 GDK_BACKEND=$BACKEND yad \
-    --width=1200 --height=1000 \
+    --width=1100 --height=1000 \
     --center \
     --title="KooL Quick Cheat Sheet" \
     --no-buttons \
     --list \
-    --column=Key: \
-    --column=Description: \
-    --column=Command: \
-    --timeout-indicator=bottom \
-"ESC" "close this app" "" " = " "SUPER KEY (Windows Key Button)" "(SUPER KEY)" \
-" SHIFT K" "Searchable Keybinds" "(Search all Keybinds via rofi)" \
-" SHIFT E" "KooL Hyprland Settings Menu" "" \
-"" "" "" \
-" enter" "Terminal" "(foot)" \
-" SHIFT enter" "DropDown Terminal" " Q to close" \
-" B" "Launch Browser" "(Default browser)" \
-" A" "Desktop Overview" "(AGS - if opted to install)" \
-" D" "Application Launcher" "(rofi-wayland)" \
-" E" "Open File Manager" "(Thunar)" \
-" S" "Google Search using rofi" "(rofi)" \
-" Q" "close active window" "(not kill)" \
-" Shift Q " "kills an active window" "(kill)" \
-" ALT mouse scroll up/down   " "Desktop Zoom" "Desktop Magnifier" \
-" Alt V" "Clipboard Manager" "(cliphist)" \
-" W" "Choose wallpaper" "(Wallpaper Menu)" \
-" Shift W" "Choose wallpaper effects" "(imagemagick + swww)" \
-"CTRL ALT W" "Random wallpaper" "(via awww)" \
-" ALT R" "Reload Quickshell swaync Rofi" "CHECK NOTIFICATION FIRST!!!" \
-" SHIFT N" "Launch Notification Panel" "swaync Notification Center" \
-" Print" "screenshot" "(grim)" \
-" Shift Print" "screenshot region" "(grim + slurp)" \
-" Shift S" "screenshot region" "(swappy)" \
-" CTRL Print" "screenshot timer 5 secs " "(grim)" \
-" CTRL SHIFT Print" "screenshot timer 10 secs " "(grim)" \
-"ALT Print" "Screenshot active window" "active window only" \
-"CTRL ALT P" "power-menu" "(wlogout)" \
-"CTRL ALT L" "screen lock" "(hyprlock)" \
-"CTRL ALT Del" "Hyprland Exit" "(NOTE: Hyprland Will exit immediately)" \
-" SHIFT F" "Fullscreen" "Toggles to full screen" \
-" CTL F" "Fake Fullscreen" "Toggles to fake full screen" \
-" ALT L" "Toggle Dwindle | Master Layout" "Hyprland Layout" \
-" SPACEBAR" "Toggle float" "single window" \
-" ALT SPACEBAR" "Toggle all windows to float" "all windows" \
-" ALT O" "Toggle Blur" "normal or less blur" \
-" CTRL O" "Toggle Opaque ON or OFF" "on active window only" \
-" Shift A" "Animations Menu" "Choose Animations via rofi" \
-" CTRL R" "Rofi Themes Menu" "Choose Rofi Themes via rofi" \
-" CTRL Shift R" "Rofi Themes Menu v2" "Choose Rofi Themes via Theme Selector (modified)" \
-" SHIFT G" "Gamemode! All animations OFF or ON" "toggle" \
-" ALT E" "Rofi Emoticons" "Emoticon" \
-" H" "Launch this Quick Cheat Sheet" "" \
-"" "" "" \
-"More tips:" "https://github.com/JaKooLit/Hyprland-Dots/wiki" ""\
+    --column=Keys: \
+    --column=Action: \
+    "${rows[@]}"
