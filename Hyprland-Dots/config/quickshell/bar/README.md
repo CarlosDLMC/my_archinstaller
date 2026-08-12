@@ -11,7 +11,7 @@ A modern, feature-rich status bar for Hyprland built with [Quickshell](https://q
 - **Network**: WiFi status with real-time upload/download speeds
 - **Bluetooth**: Device status with connection indicator
 - **Power Profiles**: Quick switching between power modes
-- **DND Toggle**: Do Not Disturb mode via swaync
+- **DND Toggle**: Do Not Disturb mode via dunst (`dunstctl`)
 - **Power Menu**: Lock, logout, reboot, and shutdown options
 - **Notch Design**: Elegant dropdown popups with concave corner notches connecting to the bar
 
@@ -22,7 +22,7 @@ A modern, feature-rich status bar for Hyprland built with [Quickshell](https://q
 - `nmcli` - WiFi management
 - `bluetoothctl` - Bluetooth management
 - `powerprofilesctl` - Power profile switching
-- `swaync` / `swaync-client` - Notification daemon with DND support
+- `dunst` / `dunstctl` - Notification daemon with DND support
 - `wpctl` / `pactl` - Audio control
 - `hyprctl` - Hyprland IPC
 - `jq` - JSON parsing
