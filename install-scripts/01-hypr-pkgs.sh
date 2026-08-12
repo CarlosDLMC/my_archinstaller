@@ -34,7 +34,7 @@ hypr_package=(
   libspng
   nano
   networkmanager
-  network-manager-applet
+  nm-connection-editor
   pamixer
   pavucontrol
   playerctl
