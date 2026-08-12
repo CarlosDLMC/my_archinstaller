@@ -25,6 +25,7 @@ declare -A VPN_MAP=(
     ["es-mad"]="madrid:Europe/Madrid:+01:00"
     ["ua-iev"]="kyiv:Europe/Kiev:+02:00"
     ["lt-vno"]="vilnius:Europe/Vilnius:+02:00"
+    ["id-jak"]="jakarta:Asia/Jakarta:+07:00"
 )
 
 # Get mapping for this VPN

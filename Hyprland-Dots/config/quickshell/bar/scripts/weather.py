@@ -25,10 +25,25 @@ weather_icons = {
 
 # Get current location based on IP address
 def get_location():
-    response = requests.get("https://ipinfo.io")
-    data = response.json()
-    loc = data["loc"].split(",")
-    return float(loc[0]), float(loc[1])
+    # Try ip-api.com first (more generous rate limits: 45/minute for non-commercial)
+    try:
+        response = requests.get("http://ip-api.com/json/?fields=lat,lon,status,message", timeout=5)
+        data = response.json()
+        if data.get("status") == "success":
+            return float(data["lat"]), float(data["lon"])
+    except:
+        pass
+    # Fallback to ipinfo.io
+    try:
+        response = requests.get("https://ipinfo.io", timeout=5)
+        data = response.json()
+        if "loc" in data:
+            loc = data["loc"].split(",")
+            return float(loc[0]), float(loc[1])
+    except:
+        pass
+    # If both fail, return None (will cause script to fail)
+    raise Exception("Could not determine location from IP")
 
 
 # Get latitude and longitude
