@@ -187,7 +187,7 @@ DropdownWidget {
         color: vpnWidget.activeVpn ? Theme.colNetwork : Theme.colMuted
         font.pixelSize: Theme.fontSize + 4
         font.family: Theme.fontFamily
-        font.bold: true
+        font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
     }
 
     // Popup content
@@ -205,7 +205,7 @@ DropdownWidget {
                     color: Theme.colFg
                     font.pixelSize: Theme.fontSize
                     font.family: Theme.fontFamily
-                    font.bold: true
+                    font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
                     Layout.fillWidth: true
                 }
 
@@ -324,6 +324,7 @@ DropdownWidget {
                                 if (name.includes("es")) return "🇪🇸"
                                 if (name.includes("ua")) return "🇺🇦"
                                 if (name.includes("lt")) return "🇱🇹"
+                                if (name.includes("id")) return "🇮🇩"
                                 return ""
                             }
                             font.pixelSize: Theme.fontSize + 2

@@ -73,7 +73,7 @@ Item {
             color: whatsappRunning ? Theme.colWhatsapp : Theme.colMuted
             font.pixelSize: Theme.fontSize + 4
             font.family: Theme.fontFamily
-            font.bold: true
+            font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
         }
 
         // Unread badge
@@ -93,7 +93,7 @@ Item {
                 color: "white"
                 font.pixelSize: 9
                 font.family: Theme.fontFamily
-                font.bold: true
+                font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
             }
         }
     }

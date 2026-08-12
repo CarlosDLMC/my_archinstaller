@@ -64,7 +64,7 @@ DropdownWidget {
         color: batteryWidget.averageLevel <= 15 ? "#f53c3c" : "#32CD32"
         font.pixelSize: Theme.fontSize
         font.family: Theme.fontFamily
-        font.bold: true
+        font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
     }
 
     // Popup content
@@ -78,7 +78,7 @@ DropdownWidget {
                 color: Theme.colFg
                 font.pixelSize: Theme.fontSize + 2
                 font.family: Theme.fontFamily
-                font.bold: true
+                font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
                 anchors.horizontalCenter: parent.horizontalCenter
             }
 
@@ -119,7 +119,7 @@ DropdownWidget {
                             color: Theme.colFg
                             font.pixelSize: Theme.fontSize
                             font.family: Theme.fontFamily
-                            font.bold: true
+                            font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
                         }
 
                         Text {

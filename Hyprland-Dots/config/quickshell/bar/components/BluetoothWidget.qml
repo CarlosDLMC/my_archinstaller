@@ -127,6 +127,18 @@ DropdownWidget {
         }
     }
 
+    // Kill blueman-applet and blueman-tray
+    Process {
+        id: btKillAppletProc
+        command: ["sh", "-c", "killall blueman-applet blueman-tray 2>/dev/null || true"]
+    }
+
+    // Start blueman-applet
+    Process {
+        id: btStartAppletProc
+        command: ["blueman-applet"]
+    }
+
     // Open blueman-manager for scanning/pairing
     Process {
         id: btManagerProc
@@ -163,7 +175,7 @@ DropdownWidget {
                btConnected ? "#50fa7b" : Theme.colBluetooth
         font.pixelSize: Theme.fontSize + 4
         font.family: Theme.fontFamily
-        font.bold: true
+        font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
     }
 
     // Popup content
@@ -181,7 +193,7 @@ DropdownWidget {
                     color: Theme.colFg
                     font.pixelSize: Theme.fontSize
                     font.family: Theme.fontFamily
-                    font.bold: true
+                    font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
                     Layout.fillWidth: true
                 }
 
@@ -214,6 +226,15 @@ DropdownWidget {
 
                             btPowerProc.powerOn = newState
                             btPowerProc.running = true
+
+                            // Start or stop blueman-applet based on power state
+                            if (newState) {
+                                // Turning on - start blueman-applet
+                                btStartAppletProc.running = true
+                            } else {
+                                // Turning off - kill blueman-applet
+                                btKillAppletProc.running = true
+                            }
                         }
                     }
                 }

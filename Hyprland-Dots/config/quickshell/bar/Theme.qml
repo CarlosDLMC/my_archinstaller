@@ -22,6 +22,6 @@ QtObject {
     readonly property color colKernel: "#f38ba8"       // Red/pink for kernel
 
     // Font
-    readonly property string fontFamily: "JetBrainsMono Nerd Font"
-    readonly property int fontSize: 20
+    readonly property string fontFamily: "Terminess Nerd Font"
+    readonly property int fontSize: 22
 }

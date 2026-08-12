@@ -18,7 +18,7 @@ Item {
     signal closed()
 
     function weekStartJs() {
-        return Qt.locale().firstDayOfWeek % 7
+    	return Qt.locale().firstDayOfWeek 
     }
 
     function startOfWeek(dateObj) {
@@ -154,7 +154,7 @@ Item {
                     font.pixelSize: Theme.fontSize + 2
                     color: Theme.colFg
                     font.family: Theme.fontFamily
-                    font.bold: true
+                    font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -214,7 +214,7 @@ Item {
                             font.pixelSize: Theme.fontSize - 3
                             color: Qt.rgba(Theme.colFg.r, Theme.colFg.g, Theme.colFg.b, 0.6)
                             font.family: Theme.fontFamily
-                            font.bold: true
+                            font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
                         }
                     }
                 }
