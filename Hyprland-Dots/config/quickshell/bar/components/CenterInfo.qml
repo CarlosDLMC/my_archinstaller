@@ -237,11 +237,11 @@ Item {
             Row {
                 id: weatherRow
                 anchors.centerIn: parent
-                spacing: 0
+                spacing: 5
 
                 Text {
                     visible: centerInfo.barIcon !== ""
-                    text: centerInfo.barIcon + " "
+                    text: centerInfo.barIcon
                     color: getTempColor(weatherText)
                     font.pixelSize: Theme.fontSize
                     font.family: Theme.fontFamily
@@ -261,7 +261,7 @@ Item {
 
                 Text {
                     visible: centerInfo.barLocation !== ""
-                    text: " " + centerInfo.barLocation
+                    text: centerInfo.barLocation
                     color: Theme.colFg
                     font.pixelSize: Theme.fontSize
                     font.family: Theme.fontFamily

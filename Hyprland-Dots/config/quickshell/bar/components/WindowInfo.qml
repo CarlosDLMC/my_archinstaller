@@ -38,7 +38,7 @@ RowLayout {
         font.pixelSize: Theme.fontSize
         font.family: Theme.fontFamily
         font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
-        Layout.leftMargin: 8
+        Layout.leftMargin: 0
         Layout.maximumWidth: 375
         elide: Text.ElideRight
         maximumLineCount: 1
