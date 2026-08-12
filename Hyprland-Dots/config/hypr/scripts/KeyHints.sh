@@ -15,6 +15,7 @@ fi
 
 # Launch yad with calculated width and height
 GDK_BACKEND=$BACKEND yad \
+    --width=1200 --height=1000 \
     --center \
     --title="KooL Quick Cheat Sheet" \
     --no-buttons \
