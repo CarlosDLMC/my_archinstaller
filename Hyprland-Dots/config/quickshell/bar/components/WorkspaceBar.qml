@@ -5,7 +5,7 @@ import ".."
 
 RowLayout {
     id: workspaceBar
-    spacing: 3
+    spacing: 0
 
     property int maxWorkspaceWithWindows: {
         var max = 0
@@ -25,32 +25,30 @@ RowLayout {
         Rectangle {
             id: wsRect
             Layout.preferredHeight: 28
-            Layout.preferredWidth: wsNumber.implicitWidth + 16
+            Layout.preferredWidth: wsNumber.implicitWidth
             Layout.alignment: Qt.AlignVCenter
-            color: isActive ? Qt.rgba(Theme.colWorkspaceActive.r, Theme.colWorkspaceActive.g, Theme.colWorkspaceActive.b, 0.15) :
-                   wsMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.05) : "transparent"
-            radius: 8
-            border.width: isActive ? 1 : 0
-            border.color: Qt.rgba(Theme.colWorkspaceActive.r, Theme.colWorkspaceActive.g, Theme.colWorkspaceActive.b, 0.3)
+            // No pill for active anymore — the [brackets] mark the selection.
+            // Keep only a faint hover hint.
+            color: wsMouse.containsMouse && !isActive ? Qt.rgba(255, 255, 255, 0.05) : "transparent"
+            radius: 4
 
             property int wsId: index + 1
             property var workspace: Hyprland.workspaces.values.find(ws => ws.id === wsId) ?? null
             property bool isActive: workspaceBar.activeWorkspaceId === wsId
             property bool hasWindows: workspace !== null
 
-            Behavior on color {
-                ColorAnimation { duration: 150 }
-            }
-
             Text {
                 id: wsNumber
                 anchors.centerIn: parent
-                text: wsRect.wsId
+                // Active -> [N] bold; inactive -> space-padded N (same monospace width, no jump)
+                text: wsRect.isActive ? "[" + wsRect.wsId + "]" : " " + wsRect.wsId + " "
                 color: wsRect.isActive ? Theme.colWorkspaceActive :
                        wsRect.hasWindows ? Theme.colFg : Theme.colMuted
                 font.pixelSize: Theme.fontSize
                 font.family: Theme.fontFamily
                 font.bold: wsRect.isActive
+                style: Text.Outline
+                styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
             }
 
             MouseArea {

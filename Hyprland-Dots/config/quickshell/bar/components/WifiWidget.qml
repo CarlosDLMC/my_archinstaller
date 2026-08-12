@@ -195,7 +195,7 @@ DropdownWidget {
         color: wifiConnected ? Theme.colNetwork : Theme.colMuted
         font.pixelSize: Theme.fontSize + 4
         font.family: Theme.fontFamily
-        font.bold: true
+        font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
 
         MouseArea {
             anchors.fill: parent
@@ -224,7 +224,7 @@ DropdownWidget {
                     color: Theme.colFg
                     font.pixelSize: Theme.fontSize
                     font.family: Theme.fontFamily
-                    font.bold: true
+                    font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
                     width: parent.width - (disconnectBtn.visible ? disconnectBtn.width + 4 : 0)
                     elide: Text.ElideRight
                 }
@@ -336,7 +336,7 @@ DropdownWidget {
                             color: "#1e1e2e"
                             font.pixelSize: Theme.fontSize - 2
                             font.family: Theme.fontFamily
-                            font.bold: true
+                            font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
                         }
 
                         MouseArea {

@@ -8,11 +8,11 @@ Text {
 
     property string memUsage: "0G"
 
-    text: memUsage + " 󰾆"
+    text: "MEM " + memUsage
     color: Theme.colMem
     font.pixelSize: Theme.fontSize
     font.family: Theme.fontFamily
-    font.bold: true
+    font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
 
     Process {
         id: memProc

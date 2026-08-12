@@ -39,7 +39,7 @@ ShellRoot {
                 right: true
             }
 
-            implicitHeight: 34
+            implicitHeight: 30
             color: Theme.colBg
 
             margins {
@@ -66,14 +66,7 @@ ShellRoot {
                     }
 
                     // Separator
-                    Rectangle {
-                        Layout.preferredWidth: 1
-                        Layout.preferredHeight: 16
-                        Layout.alignment: Qt.AlignVCenter
-                        Layout.leftMargin: 8
-                        Layout.rightMargin: 8
-                        color: Theme.colMuted
-                    }
+                    Separator {}
 
                     // Window info (layout + title)
                     WindowInfo {
@@ -158,7 +151,7 @@ ShellRoot {
                         color: Theme.colFg
                         font.pixelSize: Theme.fontSize
                         font.family: Theme.fontFamily
-                        font.bold: true
+                        font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
                         anchors.verticalCenter: parent.verticalCenter
 
                         Timer {

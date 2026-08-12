@@ -34,10 +34,10 @@ Item {
     // DND status check
     Process {
         id: dndStatusProc
-        command: ["makoctl", "mode"]
+        command: ["dunstctl", "is-paused"]
         stdout: SplitParser {
             onRead: data => {
-                if (data) centerInfo.dndEnabled = data.trim() === "dnd"
+                if (data) centerInfo.dndEnabled = data.trim() === "true"
             }
         }
         Component.onCompleted: running = true
@@ -46,7 +46,7 @@ Item {
     // DND toggle process
     Process {
         id: dndToggleProc
-        command: ["makoctl", "mode", "-t", "dnd"]
+        command: ["dunstctl", "set-paused", "toggle"]
         onRunningChanged: {
             if (!running) dndStatusProc.running = true
         }
@@ -180,10 +180,18 @@ Item {
         return match ? match[1] : ""
     }
 
-    // Separator at exact screen center
+    // Separator at exact screen center — but clamped so the time (to its right)
+    // never overflows past CenterInfo's right edge into the CPU widget.
+    // Wide screens: uses true screen center (unchanged). Narrow screens (laptop):
+    // shifts left just enough to keep the clock clear of CPU.
     Text {
         id: separator
-        x: barWindow.width / 2 - centerInfo.x - width / 2
+        x: {
+            var centerX = barWindow.width / 2 - centerInfo.x - width / 2
+            var timeBlockW = 8 + (timeText.implicitWidth + 16) + 12  // leftMargin + time pill + safety gap
+            var maxX = centerInfo.width - width - timeBlockW
+            return Math.min(centerX, Math.max(0, maxX))
+        }
         anchors.verticalCenter: parent.verticalCenter
         visible: weatherText !== ""
         text: "|"
@@ -206,7 +214,7 @@ Item {
             color: dndEnabled ? "#ff5555" : Theme.colMuted
             font.pixelSize: Theme.fontSize
             font.family: Theme.fontFamily
-            font.bold: true
+            font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
             anchors.verticalCenter: parent.verticalCenter
 
             MouseArea {
@@ -237,7 +245,7 @@ Item {
                     color: getTempColor(weatherText)
                     font.pixelSize: Theme.fontSize
                     font.family: Theme.fontFamily
-                    font.bold: true
+                    font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
                     anchors.verticalCenter: parent.verticalCenter
                 }
 
@@ -247,7 +255,7 @@ Item {
                     color: getTempColor(weatherText)
                     font.pixelSize: Theme.fontSize
                     font.family: Theme.fontFamily
-                    font.bold: true
+                    font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
                     anchors.verticalCenter: parent.verticalCenter
                 }
 
@@ -257,7 +265,7 @@ Item {
                     color: Theme.colFg
                     font.pixelSize: Theme.fontSize
                     font.family: Theme.fontFamily
-                    font.bold: true
+                    font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }
@@ -291,7 +299,7 @@ Item {
             color: Theme.colFg
             font.pixelSize: Theme.fontSize
             font.family: Theme.fontFamily
-            font.bold: true
+            font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
         }
 
         MouseArea {
@@ -663,7 +671,7 @@ Item {
                 color: getTempColor(centerInfo.weatherText)
                 font.pixelSize: 32
                 font.family: Theme.fontFamily
-                font.bold: true
+                font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
             }
 
             // Condition
@@ -776,7 +784,7 @@ Item {
                                 color: Theme.colFg
                                 font.pixelSize: 9
                                 font.family: Theme.fontFamily
-                                font.bold: true
+                                font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
                             }
                         }
                     }

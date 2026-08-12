@@ -12,33 +12,33 @@ RowLayout {
     property var lastCpuIdle: 0
     property var lastCpuTotal: 0
 
-    // Temperature
+    // Label
     Text {
-        text: cpuWidget.cpuTemp + "ºC "
+        text: "CPU "
         color: Theme.colCpu
         font.pixelSize: Theme.fontSize
         font.family: Theme.fontFamily
-        font.bold: true
-        Layout.alignment: Qt.AlignVCenter
-    }
-
-    // Icon
-    Text {
-        text: "󰍛 "
-        color: Theme.colCpu
-        font.pixelSize: Theme.fontSize
-        font.family: Theme.fontFamily
-        font.bold: true
+        font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
         Layout.alignment: Qt.AlignVCenter
     }
 
     // Usage percentage
     Text {
-        text: cpuWidget.cpuUsage + "%"
+        text: cpuWidget.cpuUsage + "% "
         color: Theme.colCpu
         font.pixelSize: Theme.fontSize
         font.family: Theme.fontFamily
-        font.bold: true
+        font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+        Layout.alignment: Qt.AlignVCenter
+    }
+
+    // Temperature
+    Text {
+        text: cpuWidget.cpuTemp + "ºC"
+        color: Theme.colCpu
+        font.pixelSize: Theme.fontSize
+        font.family: Theme.fontFamily
+        font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
         Layout.alignment: Qt.AlignVCenter
     }
 
