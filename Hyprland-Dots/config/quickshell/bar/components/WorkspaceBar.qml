@@ -11,7 +11,7 @@ RowLayout {
         var max = 0
         for (var i = 0; i < Hyprland.workspaces.values.length; i++) {
             var ws = Hyprland.workspaces.values[i]
-            if (ws.id > max && ws.id <= 9) max = ws.id
+            if (ws.id > max) max = ws.id
         }
         return max
     }

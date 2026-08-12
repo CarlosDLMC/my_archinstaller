@@ -92,7 +92,7 @@ ShellRoot {
                     }
 
                     // Separator
-                    Separator {}
+                    Separator { Layout.leftMargin: 2; Layout.rightMargin: 2 }
 
                     // Window info (layout + title)
                     WindowInfo {
