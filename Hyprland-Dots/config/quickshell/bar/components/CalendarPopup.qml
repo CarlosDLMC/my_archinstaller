@@ -51,7 +51,7 @@ Item {
         visible: root.isOpen
         anchor.window: barWindow
         anchor.rect.x: root.anchorX - 200
-        anchor.rect.y: 32
+        anchor.rect.y: barWindow.designHeight * barWindow.uiScale + 2
         implicitWidth: 400
         implicitHeight: calendarContent.implicitHeight + 12 + 32
         color: "transparent"

@@ -22,6 +22,19 @@ ShellRoot {
 
             signal closeAllPopups()
 
+            // The bar scales down on narrower screens so the layout never crowds,
+            // but the scale is floored (minScale) so text stays readable instead
+            // of shrinking to a literal pixel-copy of the wide monitor. The design
+            // width then adapts to the scale so content always fills the screen
+            // exactly (no clipping), with the fillWidth center absorbing the slack.
+            // Bigger minScale = bigger text, but less room in the center — raise it
+            // until CPU starts crowding the clock again, then back off.
+            readonly property real referenceWidth: 2560   // your external monitor's width
+            readonly property real minScale: 0.90         // readability floor (~20px font on the laptop)
+            readonly property real designHeight: 30
+            readonly property real uiScale: Math.max(minScale, Math.min(1.0, width / referenceWidth))
+            readonly property real designWidth: width / uiScale
+
             // Listen to Hyprland events to close popups when focus changes
             Connections {
                 target: Hyprland
@@ -39,7 +52,7 @@ ShellRoot {
                 right: true
             }
 
-            implicitHeight: 30
+            implicitHeight: designHeight * uiScale
             color: Theme.colBg
 
             margins {
@@ -48,6 +61,19 @@ ShellRoot {
                 left: 0
                 right: 0
             }
+
+            // Content is laid out at the reference (external) size, then scaled
+            // down to the actual screen width via the Scale transform below.
+            Item {
+                id: barContent
+                width: barWindow.designWidth
+                height: barWindow.designHeight
+                transform: Scale {
+                    origin.x: 0
+                    origin.y: 0
+                    xScale: barWindow.uiScale
+                    yScale: barWindow.uiScale
+                }
 
             Rectangle {
                 anchors.fill: parent
@@ -182,6 +208,7 @@ ShellRoot {
                         mouse.accepted = false
                     }
                 }
+            }
             }
         }
     }
