@@ -31,7 +31,7 @@ weather_icons = {
     "rainyNight": "󰖖",       # nf-md-weather_rainy
     "snowyIcyDay": "󰼴",      # nf-md-weather_snowy
     "snowyIcyNight": "󰼴",    # nf-md-weather_snowy
-    "severe": "󰼺",           # nf-md-weather_lightning
+    "severe": "󰖓",           # nf-md-weather_lightning (U+F0593, plain bolt)
     "default": "󰖐",          # nf-md-weather_cloudy (fallback)
 }
 
