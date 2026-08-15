@@ -74,16 +74,26 @@ else
   echo "${WARN} $USER_KEYBINDS not found — install KooL dotfiles first to get the keybind." | tee -a "$LOG"
 fi
 
-# Autostart through the launcher: visible until a model is picked, hidden after
+# Autostart DISABLED by default to save RAM (~460MB: Handy + its embedded WebKit
+# processes). Handy is rarely used, so it's launched on demand via CTRL+SUPER+F8
+# instead. The line below is written commented-out so it's easy to re-enable:
+# uncomment it in ~/.config/hypr/UserConfigs/Startup_Apps.conf. The launcher's
+# visible-then-hidden logic is preserved in $HANDY_LAUNCHER for when you do.
+# NOTE: with autostart off, the first-login model picker won't open automatically —
+# run `handy` once manually to pick a model (Parakeet V3).
 if [ -f "$STARTUP_APPS" ]; then
   if [ -x "$HANDY_LAUNCHER" ]; then
-    AUTOSTART_LINE="exec-once = $HANDY_LAUNCHER"
+    AUTOSTART_LINE="# exec-once = $HANDY_LAUNCHER"
   else
-    AUTOSTART_LINE="exec-once = handy --start-hidden"
+    AUTOSTART_LINE="# exec-once = handy --start-hidden"
   fi
   if ! grep -qE "exec-once *= *(handy|.*handy-start\.sh)" "$STARTUP_APPS"; then
-    echo "$AUTOSTART_LINE" >> "$STARTUP_APPS"
-    echo "${OK} Added Handy autostart to Startup_Apps.conf" | tee -a "$LOG"
+    {
+      echo ""
+      echo "# Handy autostart disabled by default to save RAM — uncomment to enable (launch on demand via CTRL+SUPER+F8)"
+      echo "$AUTOSTART_LINE"
+    } >> "$STARTUP_APPS"
+    echo "${OK} Added Handy autostart (commented/disabled) to Startup_Apps.conf" | tee -a "$LOG"
   else
     echo "${INFO} Handy autostart already present in Startup_Apps.conf, skipping." | tee -a "$LOG"
   fi
@@ -91,5 +101,5 @@ else
   echo "${WARN} $STARTUP_APPS not found — autostart not added." | tee -a "$LOG"
 fi
 
-printf "\n${NOTE} ${SKY_BLUE}Handy${RESET} installed. On first login it will open automatically — pick a model (${MAGENTA}Parakeet V3${RESET} recommended, auto-detects 25 languages) and let it download. After that it autostarts hidden, and ${YELLOW}CTRL+SUPER+F8${RESET} toggles transcription.\n"
+printf "\n${NOTE} ${SKY_BLUE}Handy${RESET} installed. Autostart is ${YELLOW}disabled${RESET} to save RAM — run ${MAGENTA}handy${RESET} once manually to pick a model (${MAGENTA}Parakeet V3${RESET} recommended, auto-detects 25 languages) and let it download. Afterwards, ${YELLOW}CTRL+SUPER+F8${RESET} launches it on demand and toggles transcription. To autostart it again, uncomment the exec-once line in ${SKY_BLUE}Startup_Apps.conf${RESET}.\n"
 printf "\n%.0s" {1..2}

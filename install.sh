@@ -451,6 +451,11 @@ done
 
 sleep 1
 
+# Install Docker with socket activation (on-demand daemon, no boot autostart)
+echo "${INFO} Installing ${SKY_BLUE}Docker (socket-activated)...${RESET}" | tee -a "$LOG"
+sleep 1
+execute_script "docker.sh"
+
 # Enable essential system services
 echo "${INFO} Enabling ${SKY_BLUE}essential system services...${RESET}" | tee -a "$LOG"
 sleep 1
