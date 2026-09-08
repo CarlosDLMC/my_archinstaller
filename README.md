@@ -13,6 +13,7 @@ Please select a locale that suits you
 - **VPN Selector** with WireGuard configurations
 - **Custom Terminal** setup with pokefetch and zsh
 - **ly Display Manager** (lightweight TUI login screen with large font)
+- **Soviet TUI Lock Screen** matching ly, auto-sized to any display (720p → 4K)
 - **Offline Speech-to-Text** with Handy (toggle via SUPER + CTRL + F8)
 - **All Essential Packages** pre-configured
 
@@ -94,6 +95,7 @@ All configurations are stored in `Hyprland-Dots/config/` and will be copied to `
 - `SUPER + SHIFT + SPACE` - Float current window
 - `SUPER + CTRL + ALT + B` - Toggle quickshell bar
 - `SUPER + CTRL + F8` - Handy: toggle speech-to-text (press once to start recording, press again to stop and transcribe into the focused field)
+- `CTRL + ALT + L` - Lock screen (Soviet TUI)
 - `CTRL + ALT + P` - Power menu (wlogout)
 
 See `Hyprland-Dots/config/hypr/configs/Keybinds.conf` for all keybindings.
@@ -114,6 +116,51 @@ Handy is offline speech-to-text — no audio leaves your machine. `wtype` inject
 - Once you've selected a model, Handy starts hidden on every subsequent login. The keybind keeps working in the background.
 
 This behavior is implemented by `~/.config/hypr/UserScripts/handy-start.sh`, which opens Handy visibly while `selected_model` is empty and switches to `--start-hidden` once it's set.
+
+### Lock Screen (Soviet TUI)
+
+The lock screen is built to match the **ly** login screen, so logging in and unlocking
+look like the same machine: pure black, a single monospace face, a block-glyph clock,
+and Russian labels (`ГРАЖДАНИН`, `КОД ДОСТУПА`). A wrong password gives ly's own
+`НЕВЕРНЫЙ КОД ДОСТУПА`.
+
+Everything sits in one bordered TUI panel: date, kernel, uptime, load, memory, AC state,
+every battery pack, keyboard layout, and weather.
+
+**Keys and mouse:**
+- `ENTER` submit · `ESC` or `CTRL + U` clear the password
+- `ALT + SHIFT` or `SUPER + SPACE` — switch keyboard layout (these work while locked)
+- Click the `РАСКЛАДКА` value — also switches layout
+
+**Works on any display.** `hyprlock.conf` contains no geometry at all — it sources
+`hyprlock-monitors.conf`, regenerated before every lock by `scripts/SovietLockGen.py`
+from `hyprctl monitors`. It emits one widget set *per attached monitor*, so a 1080p
+laptop and a 2K external are each sized correctly at the same time. Chosen font size:
+
+- `1280x720` → 8
+- `1920x1080` → 13
+- `2560x1440` → 18
+- `3840x2160` → 27
+
+Verified by rendering at all four. HiDPI scaling, ultrawide and rotated panels are
+handled too (a 4K at scale 2 is laid out as 1080p, which is what hyprlock actually uses).
+
+**Stays lit while plugged in.** hypridle otherwise blanks the screen 30s after locking.
+`scripts/IdleDpms.sh` skips that while locked *and* on AC, so the panel stays readable
+at the desk but still blanks on battery.
+
+**Files** (in `~/.config/hypr/`, from `Hyprland-Dots/config/hypr/`):
+- `hyprlock.conf` — colours and background only
+- `hyprlock-monitors.conf` — generated, do not edit
+- `scripts/SovietLock.py` — draws the panel, clock, date, footer
+- `scripts/SovietLockGen.py` — sizes the widgets per monitor
+- `scripts/IdleDpms.sh` — idle blanking policy
+- `hypridle.conf` — calls `IdleDpms.sh`; regenerates widgets before idle-lock
+
+**Customizing:** panel contents and wording in `SovietLock.py`; colours via `$ink` /
+`$dim` in `hyprlock.conf`; sizing via `HEIGHT_BUDGET` / `WIDTH_BUDGET` in
+`SovietLockGen.py`. Set `hide_cursor = true` for a keyboard-only, ly-pure screen
+(layout switching still works from the keyboard).
 
 ## Customization
 
