@@ -18,8 +18,22 @@ PanelWindow {
     property bool shown: false          // drives the fade
     property bool windowVisible: false  // stays true through the fade-out
 
-    readonly property int visibleMs: 1300
-    readonly property int fadeMs: 200
+    readonly property int visibleMs: LayoutState.osdVisibleMs
+    readonly property int fadeMs: LayoutState.osdFadeMs
+
+    // Overall size of the popup. Every dimension below scales from this one
+    // number, so resizing is a single edit.
+    readonly property real uiScale: 1.4
+
+    readonly property int tileSize:    Math.round(76 * uiScale)
+    readonly property int tileRadius:  Math.round(12 * uiScale)
+    readonly property int codeSize:    Math.round(34 * uiScale)
+    readonly property int nameSize:    Math.round(13 * uiScale)
+    readonly property int nameWidth:   Math.round(96 * uiScale)
+    readonly property int itemSpacing: Math.round(6  * uiScale)
+    readonly property int rowSpacing:  Math.round(10 * uiScale)
+    readonly property int panelPad:    Math.round(32 * uiScale)
+    readonly property int panelRadius: Math.round(18 * uiScale)
 
     readonly property var items: LayoutState.switcherItems
     readonly property int selected: LayoutState.selectedPos
@@ -64,9 +78,9 @@ PanelWindow {
     Rectangle {
         id: panel
         anchors.centerIn: parent
-        width: row.width + 32
-        height: row.height + 32
-        radius: 18
+        width: row.width + osd.panelPad
+        height: row.height + osd.panelPad
+        radius: osd.panelRadius
         color: Qt.rgba(Theme.colBg.r, Theme.colBg.g, Theme.colBg.b, 0.92)
         border.width: 1
         border.color: Qt.rgba(Theme.colFg.r, Theme.colFg.g, Theme.colFg.b, 0.12)
@@ -79,7 +93,7 @@ PanelWindow {
         Row {
             id: row
             anchors.centerIn: parent
-            spacing: 10
+            spacing: osd.rowSpacing
 
             Repeater {
                 model: osd.items
@@ -89,13 +103,13 @@ PanelWindow {
                     required property int index
 
                     readonly property bool isSelected: index === osd.selected
-                    spacing: 6
+                    spacing: osd.itemSpacing
 
                     // Short code in a tile, like GNOME's styled bin.
                     Rectangle {
-                        width: 76
-                        height: 76
-                        radius: 12
+                        width: osd.tileSize
+                        height: osd.tileSize
+                        radius: osd.tileRadius
                         color: parent.isSelected
                                ? Qt.rgba(Theme.colFg.r, Theme.colFg.g, Theme.colFg.b, 0.16)
                                : "transparent"
@@ -112,21 +126,21 @@ PanelWindow {
                             color: Theme.colFg
                             opacity: parent.parent.isSelected ? 1.0 : 0.55
                             font.family: Theme.fontFamily
-                            font.pixelSize: 34
+                            font.pixelSize: osd.codeSize
                             font.bold: true
                         }
                     }
 
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        width: 96
+                        width: osd.nameWidth
                         horizontalAlignment: Text.AlignHCenter
                         elide: Text.ElideRight
                         text: modelData.name || ""
                         color: Theme.colFg
                         opacity: parent.isSelected ? 0.85 : 0.4
                         font.family: Theme.fontFamily
-                        font.pixelSize: 13
+                        font.pixelSize: osd.nameSize
                     }
                 }
             }
