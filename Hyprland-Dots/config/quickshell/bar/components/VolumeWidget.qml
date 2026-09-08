@@ -1,14 +1,32 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell.Io
+import Quickshell.Services.Pipewire
 import ".."
 
 Text {
     id: volumeWidget
 
-    property int volumeLevel: 0
-    property bool volumeMuted: false
-    property string audioSink: "speaker"  // speaker, headphone, hdmi, bluetooth
+    // Default sink straight from the PipeWire service. Tracking it keeps its
+    // volume/mute properties live, so there is nothing to poll and no
+    // `pactl subscribe` child to outlive the bar.
+    readonly property var sink: Pipewire.defaultAudioSink
+    readonly property bool sinkReady: sink !== null && sink.audio !== null
+
+    PwObjectTracker { objects: volumeWidget.sink ? [volumeWidget.sink] : [] }
+
+    property int volumeLevel: sinkReady ? Math.round(sink.audio.volume * 100) : 0
+    property bool volumeMuted: sinkReady ? sink.audio.muted : false
+
+    // speaker, headphone, hdmi, bluetooth
+    property string audioSink: {
+        if (!sink) return "speaker"
+        var s = ((sink.name || "") + " " + (sink.description || "") + " " + (sink.nickname || "")).toLowerCase()
+        if (s.includes("headphone") || s.includes("headset")) return "headphone"
+        if (s.includes("hdmi") || s.includes("displayport")) return "hdmi"
+        if (s.includes("bluez") || s.includes("bluetooth")) return "bluetooth"
+        return "speaker"
+    }
 
     property string volumeIcon: {
         if (volumeMuted) return "󰖁"
@@ -28,6 +46,16 @@ Text {
     font.family: Theme.fontFamily
     font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
 
+    function adjustVolume(delta) {
+        if (!sinkReady) return
+        sink.audio.volume = Math.max(0, Math.min(1, sink.audio.volume + delta))
+    }
+
+    function toggleMute() {
+        if (!sinkReady) return
+        sink.audio.muted = !sink.audio.muted
+    }
+
     MouseArea {
         anchors.fill: parent
         hoverEnabled: true
@@ -37,115 +65,21 @@ Text {
             if (mouse.button === Qt.RightButton) {
                 volumeControlProc.running = true
             } else if (mouse.button === Qt.LeftButton) {
-                muteToggleProc.running = true
+                volumeWidget.toggleMute()
             }
         }
         onWheel: function(wheel) {
             if (wheel.angleDelta.y > 0) {
-                volumeUpProc.running = true
+                volumeWidget.adjustVolume(0.05)
             } else if (wheel.angleDelta.y < 0) {
-                volumeDownProc.running = true
+                volumeWidget.adjustVolume(-0.05)
             }
         }
     }
 
-    // Mute toggle process
-    Process {
-        id: muteToggleProc
-        command: ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"]
-        onRunningChanged: {
-            if (!running) {
-                volProc.running = true
-            }
-        }
-    }
-
-    // Volume up process
-    Process {
-        id: volumeUpProc
-        command: ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%+"]
-        onRunningChanged: {
-            if (!running) {
-                volProc.running = true
-            }
-        }
-    }
-
-    // Volume down process
-    Process {
-        id: volumeDownProc
-        command: ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%-"]
-        onRunningChanged: {
-            if (!running) {
-                volProc.running = true
-            }
-        }
-    }
-
-    function updateVolume() {
-        volProc.running = true
-        sinkProc.running = true
-    }
-
-    // Volume level (wpctl for PipeWire)
-    Process {
-        id: volProc
-        command: ["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"]
-        stdout: SplitParser {
-            onRead: data => {
-                if (!data) return
-                var match = data.match(/Volume:\s*([\d.]+)/)
-                if (match) {
-                    volumeWidget.volumeLevel = Math.round(parseFloat(match[1]) * 100)
-                }
-                volumeWidget.volumeMuted = data.includes("[MUTED]")
-            }
-        }
-        Component.onCompleted: running = true
-    }
-
-    // Audio sink type detection
-    Process {
-        id: sinkProc
-        command: ["pactl", "get-default-sink"]
-        stdout: SplitParser {
-            onRead: data => {
-                if (!data) return
-                var sink = data.toLowerCase()
-                if (sink.includes("headphone") || sink.includes("headset")) {
-                    volumeWidget.audioSink = "headphone"
-                } else if (sink.includes("hdmi") || sink.includes("displayport")) {
-                    volumeWidget.audioSink = "hdmi"
-                } else if (sink.includes("bluez") || sink.includes("bluetooth")) {
-                    volumeWidget.audioSink = "bluetooth"
-                } else {
-                    volumeWidget.audioSink = "speaker"
-                }
-            }
-        }
-        Component.onCompleted: running = true
-    }
-
-    // Volume control launcher
+    // Volume control launcher. One-shot: it exits on its own, so it cannot leak.
     Process {
         id: volumeControlProc
         command: ["pavucontrol"]
-    }
-
-    // Event-based listener - only updates when volume actually changes
-    Process {
-        id: eventListener
-        command: ["pactl", "subscribe"]
-        running: true
-        stdout: SplitParser {
-            onRead: data => {
-                if (!data) return
-                // Listen for sink events (volume changes, mute, device changes)
-                if (data.includes("sink") || data.includes("'change'")) {
-                    volumeWidget.updateVolume()
-                }
-            }
-        }
-        Component.onCompleted: running = true
     }
 }
