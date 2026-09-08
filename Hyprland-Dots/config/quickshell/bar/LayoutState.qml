@@ -30,6 +30,12 @@ Singleton {
 
     readonly property bool ready: layouts.length > 0
 
+    // OSD timings live here so the commit can be sequenced against them: the
+    // MRU reorder must land only after the popup has fully faded, otherwise
+    // the squares visibly reshuffle on screen.
+    readonly property int osdVisibleMs: 1300
+    readonly property int osdFadeMs: 200
+
     // What the switcher renders: every layout, in MRU order.
     readonly property var switcherItems: {
         var out = []
@@ -74,12 +80,14 @@ Singleton {
         commitTimer.restart()
     }
 
-    // Settle the session: whatever is selected becomes most-recently-used.
+    // Settle the session once the popup is off screen. Promoting currentIndex
+    // covers both paths: after activate() the activelayout event has already
+    // pointed it at whatever layout ended up in effect.
     Timer {
         id: commitTimer
-        interval: 1300
+        interval: root.osdVisibleMs + root.osdFadeMs + 250
         onTriggered: {
-            root.mru = root.moveToFront(root.mru, root.mru[root.sessionPos])
+            root.mru = root.moveToFront(root.mru, root.currentIndex)
             root.sessionActive = false
             root.sessionPos = 0
         }
@@ -136,9 +144,11 @@ Singleton {
             root.currentIndex = idx
             if (!root.sessionActive) {
                 // Switched by something other than our shortcut (bar widget,
-                // per-window switch): promote it and show the OSD anyway.
-                root.mru = root.moveToFront(root.mru, idx)
+                // per-window switch). Show the OSD and let commitTimer do the
+                // promotion later, so this path cannot reshuffle a visible
+                // popup either.
                 root.showOsd()
+                commitTimer.restart()
             }
         }
     }
