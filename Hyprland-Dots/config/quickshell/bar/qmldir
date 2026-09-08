@@ -1,2 +1,3 @@
 module QuickshellBar
 singleton Theme 1.0 Theme.qml
+singleton LayoutState 1.0 LayoutState.qml
