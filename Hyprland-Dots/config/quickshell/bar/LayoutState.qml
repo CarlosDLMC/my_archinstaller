@@ -53,6 +53,32 @@ Singleton {
     }
 
     signal showOsd()
+    signal hideOsd()
+
+    // While the pointer is over the popup it stays put: the auto-hide and the
+    // MRU commit are both suspended, so it cannot vanish or reshuffle under
+    // the cursor.
+    property bool osdHeld: false
+
+    function holdOsd() {
+        osdHeld = true
+        commitTimer.stop()
+    }
+
+    function releaseOsd() {
+        osdHeld = false
+        commitTimer.restart()
+    }
+
+    // Clicking an entry in the popup picks it directly.
+    function selectPos(pos) {
+        if (!ready || pos < 0 || pos >= mru.length) return
+        sessionActive = true
+        sessionPos = pos
+        activate(mru[pos])
+        hideOsd()
+        releaseOsd()
+    }
 
     function moveToFront(list, value) {
         var out = [value]
