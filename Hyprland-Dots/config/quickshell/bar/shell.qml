@@ -212,4 +212,11 @@ ShellRoot {
             }
         }
     }
+
+    // Centred keyboard-layout OSD, one per screen (it shows itself only on
+    // the focused monitor). Driven by Hyprland's activelayout event.
+    Variants {
+        model: Quickshell.screens
+        LayoutOsd {}
+    }
 }

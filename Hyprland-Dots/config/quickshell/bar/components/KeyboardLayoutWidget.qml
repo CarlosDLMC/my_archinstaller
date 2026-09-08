@@ -41,12 +41,7 @@ Rectangle {
         stdout: SplitParser {
             onRead: data => {
                 if (!data) return
-                var layout = data.trim().toLowerCase()
-                // Map full names to short codes
-                if (layout.includes("english")) kbWidget.currentLayout = "us"
-                else if (layout.includes("spanish")) kbWidget.currentLayout = "es"
-                else if (layout.includes("russian")) kbWidget.currentLayout = "ru"
-                else kbWidget.currentLayout = layout.substring(0, 2)
+                kbWidget.applyLayoutName(data)
             }
         }
         Component.onCompleted: running = true
@@ -55,21 +50,32 @@ Rectangle {
     // Switch to next layout
     Process {
         id: switchProc
-        command: ["sh", "-c", "hyprctl switchxkblayout at-translated-set-2-keyboard next"]
+        command: ["hyprctl", "switchxkblayout", "all", "next"]
         onExited: {
             // Update layout after switching
             layoutProc.running = true
         }
     }
 
-    // Listen to Hyprland events - specifically for layout changes
+    function applyLayoutName(name) {
+        var layout = name.trim().toLowerCase()
+        if (layout.includes("english")) kbWidget.currentLayout = "us"
+        else if (layout.includes("spanish")) kbWidget.currentLayout = "es"
+        else if (layout.includes("russian")) kbWidget.currentLayout = "ru"
+        else kbWidget.currentLayout = layout.substring(0, 2)
+    }
+
+    // Listen to Hyprland events - specifically for layout changes.
+    // The event payload is "<device>,<Layout Name>", so the name is read
+    // straight off it instead of shelling out to hyprctl+jq for every one of
+    // the ten per-keyboard events Hyprland fires on each switch.
     Connections {
         target: Hyprland
         function onRawEvent(event) {
-            // Hyprland sends "activelayout" event when keyboard layout changes
-            if (event.name === "activelayout") {
-                layoutProc.running = true
-            }
+            if (event.name !== "activelayout") return
+            var i = event.data.indexOf(",")
+            if (i < 0) return
+            kbWidget.applyLayoutName(event.data.substring(i + 1))
         }
     }
 }
