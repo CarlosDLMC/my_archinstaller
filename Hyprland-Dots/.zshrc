@@ -23,10 +23,11 @@ source $ZSH/oh-my-zsh.sh
 #pokemon-colorscripts --no-title -s -r | fastfetch -c $HOME/.config/fastfetch/config-pokemon.jsonc --logo-type file-raw --logo-height 10 --logo-width 5 --logo -
 ~/pokefetch_perfect
 
-# API keys - Add your own keys here (not tracked in git for security)
-# export ANTHROPIC_API_KEY="your-key-here"
-# export CLOUDFLARE_EMAIL="your-email-here"
-# export CLOUDFLARE_API_KEY="your-key-here"
+# Machine-local credentials live outside the dotfiles repo, in
+# ~/.config/zsh/secrets.zsh (chmod 600). Create it on a new machine with the
+# exports this shell needs, e.g. ANTHROPIC_API_KEY, CLOUDFLARE_API_KEY,
+# BITBUCKET_TOKEN. Absent, the shell just starts without them.
+[ -r "$HOME/.config/zsh/secrets.zsh" ] && . "$HOME/.config/zsh/secrets.zsh"
 
 # fastfetch. Will be disabled if above colorscript was chosen to install
 #fastfetch -c $HOME/.config/fastfetch/config-compact.jsonc
@@ -45,3 +46,20 @@ HISTFILE=~/.zsh_history
 HISTSIZE=10000
 SAVEHIST=10000
 setopt appendhistory
+eval "$(fnm env --use-on-cd)"
+
+# The next line updates PATH for the Google Cloud SDK.
+if [ -f '/home/mentefria/Downloads/google-cloud-sdk/path.zsh.inc' ]; then . '/home/mentefria/Downloads/google-cloud-sdk/path.zsh.inc'; fi
+
+# The next line enables shell command completion for gcloud.
+if [ -f '/home/mentefria/Downloads/google-cloud-sdk/completion.zsh.inc' ]; then . '/home/mentefria/Downloads/google-cloud-sdk/completion.zsh.inc'; fi
+
+# Ruby gems
+export PATH="$HOME/.local/share/gem/ruby/3.4.0/bin:$PATH"
+
+# Homebrew
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+export PATH="/opt/homebrew/opt/libpq/bin:$PATH"
+
+. "$HOME/.local/bin/env"
+. "$HOME/.cargo/env"
