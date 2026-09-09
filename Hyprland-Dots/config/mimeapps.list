@@ -1,12 +1,21 @@
 [Default Applications]
 inode/directory=thunar.desktop
 application/x-wayland-gnome-saved-search=thunar.desktop
+x-scheme-handler/postman=Postman.desktop
 text/html=librewolf.desktop
 x-scheme-handler/http=librewolf.desktop
 x-scheme-handler/https=librewolf.desktop
 x-scheme-handler/about=librewolf.desktop
 x-scheme-handler/unknown=librewolf.desktop
+x-scheme-handler/viber=viber.desktop
+x-scheme-handler/claude-cli=claude-code-url-handler.desktop
+x-scheme-handler/jetbrains=jetbrainsd.desktop
 
 [Added Associations]
-image/jpeg=org.gnome.Loupe.desktop;
-image/png=org.gnome.Loupe.desktop;
+text/csv=libreoffice-calc.desktop;
+application/pdf=libreoffice-draw.desktop;chromium.desktop;
+text/x-qml=org.gnome.gedit.desktop;
+text/plain=org.gnome.gedit.desktop;
+application/x-shellscript=org.gnome.gedit.desktop;
+image/jpeg=org.gnome.Loupe.desktop;satty.desktop;chromium.desktop;
+image/png=org.gnome.Loupe.desktop;satty.desktop;
