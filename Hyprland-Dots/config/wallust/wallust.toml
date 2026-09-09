@@ -46,8 +46,10 @@ rofi.target = '~/.config/rofi/wallust/colors-rofi.rasi'
 waybar.template = 'colors-waybar.css'
 waybar.target = '~/.config/wallust/output/colors-waybar.css'
 
-kitty.template = 'colors-kitty.conf'
-kitty.target = '~/.config/kitty/kitty-themes/01-Wallust.conf'
+# kitty removed from this machine 2025-12-20; the target was still being
+# regenerated on every wallust run. Uncomment if kitty comes back.
+#kitty.template = 'colors-kitty.conf'
+#kitty.target = '~/.config/kitty/kitty-themes/01-Wallust.conf'
 
 quickshell.template = 'qml_color.json'
 quickshell.target = '~/.config/quickshell/qml_color.json'
