@@ -11,10 +11,11 @@
 #
 # Run before locking; hyprlock.conf sources the file this writes.
 #
-# Font metrics for JetBrainsMono Nerd Font Mono, measured at scale 1 by
-# rendering and reading back pixel extents:
-#     cell width = 0.7917 * font_size      row pitch = 1.7360 * font_size
-# font_size is points, so those constants already include the 4/3 px-per-pt.
+# Text metrics come from Pango, the engine hyprlock renders with - see
+# metrics() below. They are deliberately NOT computed as a ratio of font_size:
+# Pango rounds line height to whole pixels, so the real ratio wanders, and
+# assuming a constant one put the overlaid password and layout widgets up to
+# 11px off their row at larger font sizes.
 
 import json
 import os
