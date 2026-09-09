@@ -5,7 +5,7 @@ OK="$(tput setaf 2)[OK]$(tput sgr0)"
 ERROR="$(tput setaf 1)[ERROR]$(tput sgr0)"
 
 # Set the name of the log file to include the current date and time
-SLOG="install-$(date +%d-%H%M%S)_themes.log"
+SLOG="install-$(date +%Y%m%d-%H%M%S)_themes.log"
 
 # Function to extract files with overwrite option
 extract_files() {

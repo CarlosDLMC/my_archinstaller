@@ -25,7 +25,7 @@ if [ ! -d Install-Logs ]; then
 fi
 
 # Set the name of the log file to include the current date and time
-LOG="Install-Logs/01-Hyprland-Install-Scripts-$(date +%d-%H%M%S).log"
+LOG="Install-Logs/01-Hyprland-Install-Scripts-$(date +%Y%m%d-%H%M%S).log"
 
 # Check if running as root. If root, script will exit
 if [[ $EUID -eq 0 ]]; then
@@ -36,7 +36,7 @@ fi
 
 # Check if PulseAudio package is installed
 if pacman -Qq | grep -qw '^pulseaudio$'; then
-    echo "$ERROR PulseAudio is detected as installed. Uninstall it first or edit install.sh on line 211 (execute_script 'pipewire.sh')." | tee -a "$LOG"
+    echo "$ERROR PulseAudio is detected as installed. Uninstall it first, or comment out the execute_script 'pipewire.sh' call in install.sh." | tee -a "$LOG"
     printf "\n%.0s" {1..2} 
     exit 1
 fi
@@ -51,7 +51,7 @@ else
         echo "👌 ${OK} base-devel has been installed successfully." | tee -a "$LOG"
     else
         echo "❌ $ERROR base-devel not found nor cannot be installed."  | tee -a "$LOG"
-        echo "$ACTION Please install base-devel manually before running this script... Exiting" | tee -a "$LOG"
+        echo "$CAT Please install base-devel manually before running this script... Exiting" | tee -a "$LOG"
         exit 1
     fi
 fi

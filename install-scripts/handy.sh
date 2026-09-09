@@ -24,7 +24,7 @@ if ! source "$(dirname "$(readlink -f "$0")")/Global_functions.sh"; then
 fi
 
 # Set the name of the log file to include the current date and time
-LOG="Install-Logs/install-$(date +%d-%H%M%S)_handy.log"
+LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_handy.log"
 
 # Install packages (handy-bin is AUR; wtype + gtk-layer-shell are repo)
 printf "\n%s - Installing ${SKY_BLUE}Handy speech-to-text${RESET} packages .... \n" "${NOTE}"
