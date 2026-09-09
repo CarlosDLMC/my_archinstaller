@@ -2,6 +2,13 @@
 
 A modern, feature-rich status bar for Hyprland built with [Quickshell](https://quickshell.outfoxxed.me/). Features a clean design with notch-style dropdown popups, weather integration, system monitoring, and more.
 
+![Quickshell Bar](https://img.shields.io/badge/Hyprland-Ready-blue)
+![QML](https://img.shields.io/badge/Built%20with-QML-green)
+
+## Preview
+
+![Bar Preview](screenshots/bar-preview.png)
+
 ## Features
 
 - **Workspaces**: Pill-shaped indicators with workspace numbers and app icons
@@ -79,31 +86,41 @@ See `CLAUDE.md` for detailed documentation on the architecture and how to create
 ## File Structure
 
 ```
-shell.qml              # Main entry point
-Theme.qml              # Color/font theme singleton
+shell.qml              # Main entry point, assembles the bar and scales it
+Theme.qml              # Colour/font theme singleton
+LayoutState.qml        # Keyboard-layout MRU state (GNOME-style switching)
 qmldir                 # QML module definition
 components/
-├── BluetoothWidget.qml
-├── CalendarPopup.qml
-├── CenterInfo.qml
-├── Clock.qml
-├── CpuWidget.qml
-├── DiskWidget.qml
-├── DropdownWidget.qml
-├── KeyboardLayoutWidget.qml
-├── MemoryWidget.qml
-├── NightLightWidget.qml
-├── PowerProfileWidget.qml
-├── PowerWidget.qml
-├── Separator.qml
-├── SlackWidget.qml
-├── VolumeWidget.qml
-├── VpnWidget.qml
-├── WeatherStatItem.qml
-├── WhatsAppWidget.qml
-├── WifiWidget.qml
-├── WindowInfo.qml
-└── WorkspaceBar.qml
+  ├── DropdownWidget.qml     # Base for dropdown widgets (notch design)
+  ├── WorkspaceBar.qml       # Workspace indicators ([N] marks the active one)
+  ├── WindowInfo.qml         # Active window title
+  ├── CenterInfo.qml         # Clock, DND toggle, weather
+  ├── CalendarPopup.qml      # Calendar, opened from the clock
+  ├── WeatherStatItem.qml    # Stat row inside the weather popup
+  ├── CpuWidget.qml          # CPU usage and temperature
+  ├── MemoryWidget.qml       # Memory used, in GB
+  ├── DiskWidget.qml         # Disk usage (not currently in the bar)
+  ├── VolumeWidget.qml       # Volume/mute via Pipewire
+  ├── BatteryWidget.qml      # Battery average, per-pack detail in dropdown
+  ├── WifiWidget.qml         # WiFi status, scanning and connecting
+  ├── BluetoothWidget.qml    # Bluetooth status and device management
+  ├── PowerProfileWidget.qml # Power profiles
+  ├── NightLightWidget.qml   # hyprsunset toggle
+  ├── KeyboardLayoutWidget.qml # Current keyboard layout
+  ├── LayoutOsd.qml          # Centred layout-switcher OSD, one per screen
+  ├── VpnWidget.qml          # VPN selector; syncs clock and weather
+  ├── PowerWidget.qml        # Power menu
+  ├── Clock.qml              # Time display
+  ├── SlackWidget.qml        # Slack indicator
+  ├── WhatsAppWidget.qml     # WhatsApp indicator
+  └── Separator.qml          # Pipe divider
+scripts/
+  ├── weather-fetch.sh       # Picks the city, falls back to IP location
+  ├── weather-location.py    # Weather fetch for a named city
+  ├── weather.py             # Original IP-based weather fetch
+  ├── layouts.py             # Keyboard layout enumeration
+  ├── vpn-sync.sh            # Point clock/weather at the VPN exit
+  └── vpn-reset.sh           # Restore local timezone and weather
 ```
 
 ## Key Patterns

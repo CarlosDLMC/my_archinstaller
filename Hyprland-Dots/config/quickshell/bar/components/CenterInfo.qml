@@ -30,15 +30,29 @@ Item {
     property bool popupVisible: false
     property bool calendarVisible: false
     property bool dndEnabled: false
+    // False when dunstctl cannot reach the daemon. Kept distinct from
+    // dndEnabled so the icon can show "unknown" rather than silently
+    // reporting the last good state as if it were current.
+    property bool dndAvailable: true
 
     // DND status check
     Process {
         id: dndStatusProc
         command: ["dunstctl", "is-paused"]
+        // Buffered rather than applied on read: a non-zero exit has to be able
+        // to discard the output, and stdout arrives before exited().
+        property string pending: ""
         stdout: SplitParser {
             onRead: data => {
-                if (data) centerInfo.dndEnabled = data.trim() === "true"
+                if (data) dndStatusProc.pending = data.trim()
             }
+        }
+        onExited: (exitCode, exitStatus) => {
+            const ok = exitCode === 0
+                && (dndStatusProc.pending === "true" || dndStatusProc.pending === "false")
+            centerInfo.dndAvailable = ok
+            if (ok) centerInfo.dndEnabled = dndStatusProc.pending === "true"
+            dndStatusProc.pending = ""
         }
         Component.onCompleted: running = true
     }
@@ -47,8 +61,10 @@ Item {
     Process {
         id: dndToggleProc
         command: ["dunstctl", "set-paused", "toggle"]
-        onRunningChanged: {
-            if (!running) dndStatusProc.running = true
+        onExited: (exitCode, exitStatus) => {
+            // Mark unavailable immediately; the re-poll below confirms or clears it.
+            if (exitCode !== 0) centerInfo.dndAvailable = false
+            dndStatusProc.running = true
         }
     }
 
@@ -210,8 +226,9 @@ Item {
 
         // DND toggle
         Text {
-            text: dndEnabled ? "󰂛  " : "󰂚  "
-            color: dndEnabled ? "#ff5555" : Theme.colMuted
+            // Hollow bell in peach = dunstctl failed, so the real state is unknown.
+            text: !dndAvailable ? "󰂜  " : (dndEnabled ? "󰂛  " : "󰂚  ")
+            color: !dndAvailable ? "#fab387" : (dndEnabled ? "#ff5555" : Theme.colMuted)
             font.pixelSize: Theme.fontSize
             font.family: Theme.fontFamily
             font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
