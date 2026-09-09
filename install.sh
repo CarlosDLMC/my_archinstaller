@@ -137,6 +137,7 @@ input_group="OFF"
 nvidia="OFF"
 nouveau="OFF"
 handy="OFF"
+ly="OFF"
 
 # Function to load preset file
 load_preset() {
@@ -144,13 +145,19 @@ load_preset() {
         echo "✅ Loading preset: $1"
         source "$1"
     else
-        echo "⚠️ Preset file not found: $1. Using default values."
+        # Do not fall through to the defaults here: they are all "OFF", so a
+        # mistyped preset path would run a fully non-interactive install that
+        # installs nothing and looks like it succeeded.
+        echo "❌ Preset file not found: $1"
+        exit 1
     fi
 }
 
 # Check if --preset argument is passed
+preset_mode="false"
 if [[ "$1" == "--preset" && -n "$2" ]]; then
     load_preset "$2"
+    preset_mode="true"
 fi
 
 # Check if yay or paru is installed
@@ -271,6 +278,56 @@ options_command+=(
     "handy" "Install Handy speech-to-text (CTRL+SUPER+F8 toggle)?" "OFF"
 )
 
+# With a preset, skip the menu entirely and derive the selection from the
+# variables the preset set. Previously the preset was sourced and then ignored -
+# the checklist below hardcodes "OFF" for every entry and never consulted these
+# variables - so --preset presented an all-unticked menu and installed nothing
+# unless the user re-selected everything by hand.
+if [ "$preset_mode" == "true" ]; then
+    selected_options=""
+    for _opt in ly nvidia nouveau input_group gtk_themes bluetooth thunar \
+                quickshell xdph zsh pokemon rog dots handy; do
+        [ "${!_opt}" == "ON" ] || continue
+
+        # Respect the same conditions the interactive menu applies before it
+        # offers an option, so a preset cannot ask for something nonsensical.
+        case "$_opt" in
+            nvidia|nouveau)
+                if [ "$nvidia_detected" != "true" ]; then
+                    echo "${NOTE} Preset asks for '$_opt' but no NVIDIA GPU was detected. Skipping." | tee -a "$LOG"
+                    continue
+                fi
+                ;;
+            input_group)
+                if [ "$input_group_detected" != "true" ]; then
+                    echo "${NOTE} Preset asks for 'input_group' but you are already in it. Skipping." | tee -a "$LOG"
+                    continue
+                fi
+                ;;
+            ly)
+                if check_services_running; then
+                    echo "${WARN} Preset asks for 'ly' but another login manager is active: ${active_services[*]}" | tee -a "$LOG"
+                    echo "${NOTE} Skipping ly. Disable the active manager and re-run if you want it." | tee -a "$LOG"
+                    continue
+                fi
+                ;;
+        esac
+        selected_options+="$_opt "
+    done
+
+    if [ -z "$selected_options" ]; then
+        echo "${ERROR} Preset enabled no installable options. Nothing to do." | tee -a "$LOG"
+        exit 1
+    fi
+
+    echo "${INFO} Preset mode - installing:" | tee -a "$LOG"
+    for _opt in $selected_options; do echo "   - $_opt" | tee -a "$LOG"; done
+    if [[ " $selected_options " != *" dots "* ]]; then
+        echo "${WARN} 'dots' is not enabled, so none of the configs in Hyprland-Dots will be installed." | tee -a "$LOG"
+    fi
+    printf "\n%.0s" {1..1}
+else
+
 # Capture the selected options before the while loop starts
 while true; do
     selected_options=$("${options_command[@]}" 3>&1 1>&2 2>&3)
@@ -335,6 +392,7 @@ while true; do
     echo "👌 ${OK} You confirmed your choices. Proceeding with ${SKY_BLUE}KooL 🇵🇭 Hyprland Installation...${RESET}" | tee -a "$LOG"
     break  
 done
+fi
 
 printf "\n%.0s" {1..1}
 
@@ -382,6 +440,12 @@ for option in "${options[@]}"; do
         ly)
             if check_services_running; then
                 active_list=$(printf "%s\n" "${active_services[@]}")
+                if [ "$preset_mode" == "true" ]; then
+                    # exec "$0" would drop the --preset arguments and restart
+                    # into an interactive run - or loop forever. Just skip.
+                    echo "${WARN} Skipping ly, login manager active: $active_list" | tee -a "$LOG"
+                    continue
+                fi
                 whiptail --title "Error" --msgbox "One of the following login services is running:\n$active_list\n\nPlease stop & disable it or DO not choose ly." 12 60
                 exec "$0"
             else
