@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 # /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
-# Generate the 8-bit waving Soviet flag that ly plays as its login animation.
-# Writes a durdraw .dur (gzipped JSON); config.ini sets animation = dur_file
-# and dur_file_path to point at it, and ly_config.sh installs it to /etc/ly.
+# Generate the 8-bit Soviet flag that ly draws behind its login screen.
+# Writes two durdraw .dur files (gzipped JSON) from the same traced art:
+# soviet-flag-animated.dur, where the cloth waves, and soviet-flag-static.dur,
+# a single still frame of it. config.ini sets animation = dur_file and points
+# dur_file_path at one of them; ly_config.sh installs both to /etc/ly, so
+# switching is a one-line config edit. Run with no arguments to write both, or
+# name a variant to write just that one.
 #
 # RESOLUTION
 # A console cell is 16x32 px. latarcyrheb-sun32 - the font ly loads via
@@ -32,6 +36,7 @@
 import gzip
 import json
 import math
+import os
 import sys
 
 # --- artwork ---------------------------------------------------------------
@@ -120,9 +125,15 @@ FLAG_ART = [
 # leftmost yellow is at x = 14, so this separates them cleanly.
 STATIC_MAX_X = 8
 
+# ly's dur palette is its own thing, and fg and bg are indexed differently.
+# Measured off /dev/fb0 with a probe frame (fg i as an upper half-block over
+# bg 12): the fg table is shifted one step, so fg 0 and 1 are both #AAAAAA and
+# there is NO black foreground at all. That rules out drawing the cloth's edge
+# as black-on-red; fg 5 happens to be exactly the field red, so the edge cells
+# are drawn red-on-black instead. Using a black fg here paints them cyan.
 RED_BG = 12            # #AA0000, the field
+RED_FG = 5             # #AA0000, same red as a foreground
 GOLD_FG = 15           # #FFFF55, the emblem
-BLACK_FG = 4           # #000000, for half-cells at the cloth's edge
 VOID_BG = 0            # #000000, outside the cloth - matches ly's bg
 
 BLOCK = "\u2588"       # full block
@@ -213,16 +224,16 @@ def build(px_w=120, px_h=66, frames=8, amp=2.0):
 
 
 # Every pair of stacked art pixels, and the single cell that renders it.
-# Red is background-only and yellow foreground-only, which is why the black
-# foreground is needed for the cloth's edge cells.
+# Cells that are part cloth and part void invert: they use the red foreground
+# over the void background, because the palette has no black foreground.
 PAIRS = {
     ("R", "R"): (" ", GOLD_FG, RED_BG),
     ("Y", "Y"): (BLOCK, GOLD_FG, RED_BG),
     (None, None): (" ", GOLD_FG, VOID_BG),
     ("Y", "R"): (UPPER, GOLD_FG, RED_BG),
     ("R", "Y"): (LOWER, GOLD_FG, RED_BG),
-    (None, "R"): (UPPER, BLACK_FG, RED_BG),
-    ("R", None): (LOWER, BLACK_FG, RED_BG),
+    (None, "R"): (LOWER, RED_FG, VOID_BG),
+    ("R", None): (UPPER, RED_FG, VOID_BG),
     (None, "Y"): (LOWER, GOLD_FG, VOID_BG),
     ("Y", None): (UPPER, GOLD_FG, VOID_BG),
 }
@@ -252,18 +263,42 @@ def to_dur(grids, px_w, rows, framerate=None):
         "extra": None, "frames": frames}}
 
 
-if __name__ == "__main__":
-    grids, w, rows = build()
-    dur = to_dur(grids, w, rows)
-    out = sys.argv[1] if len(sys.argv) > 1 else "soviet-flag.dur"
-    # mtime=0 and no embedded filename, so regenerating identical art gives an
-    # identical file instead of a phantom git diff.
+# Two files, so config.ini can point at either one without regenerating
+# anything: the waving flag, and a single still frame of it. The still frame is
+# just build() with the wave switched off, which keeps both in lockstep with
+# FLAG_ART instead of letting a hand-placed copy drift out of sync.
+VARIANTS = {
+    "soviet-flag-animated.dur": {"frames": 8, "amp": 2.0, "framerate": FRAMERATE},
+    "soviet-flag-static.dur": {"frames": 1, "amp": 0.0, "framerate": 1.0},
+}
+
+
+def write_dur(out, frames, amp, framerate):
+    grids, w, rows = build(frames=frames, amp=amp)
+    dur = to_dur(grids, w, rows, framerate=framerate)
+    # Reproducible output: identical art must give a byte-identical file, or
+    # every regeneration shows up as a phantom git diff. mtime=0 kills the
+    # timestamp, and filename="" is required too - GzipFile infers the gzip
+    # FNAME field from fileobj.name, so without it the output path itself ends
+    # up inside the file.
     with open(out, "wb") as raw:
-        with gzip.GzipFile(fileobj=raw, mode="wb", compresslevel=9, mtime=0) as fh:
+        with gzip.GzipFile(fileobj=raw, mode="wb", compresslevel=9, mtime=0,
+                           filename="") as fh:
             fh.write(json.dumps(dur).encode())
     d = dur["DurMovie"]
-    print(f"wrote {out}: {d['sizeX']}x{d['sizeY']} cells "
+    print(f"wrote {os.path.basename(out)}: {d['sizeX']}x{d['sizeY']} cells "
           f"({w}x{rows} art pixels), {len(d['frames'])} frames")
+
+
+if __name__ == "__main__":
+    # Written next to this script, not into the cwd, so the paths ly_config.sh
+    # installs from are the same whatever directory this is run from.
+    here = os.path.dirname(os.path.abspath(__file__))
+    wanted = sys.argv[1:] or list(VARIANTS)
+    for name in wanted:
+        if name not in VARIANTS:
+            sys.exit(f"unknown variant {name!r}; choose from {', '.join(VARIANTS)}")
+        write_dur(os.path.join(here, name), **VARIANTS[name])
 
 
 # --- preview ---------------------------------------------------------------
