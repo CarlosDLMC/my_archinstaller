@@ -41,13 +41,39 @@ Please select a locale that suits you
    ./install.sh --preset custom-preset.conf
    ```
 
+   With `--preset`, the installer runs **non-interactively**: the component
+   menu is skipped and the selection comes from `custom-preset.conf`. Run
+   `./install.sh` with no arguments to pick components from a menu instead.
+
 3. **Reboot when prompted:**
    ```bash
    # The script will ask if you want to reboot
    # Answer 'y' to reboot now
    ```
 
-4. **Done!** After reboot, log in through ly and enjoy your custom Hyprland setup.
+4. **Recreate your machine-local secrets:**
+   ```bash
+   mkdir -p ~/.config/zsh
+   chmod 600 ~/.config/zsh/secrets.zsh   # after creating it
+   ```
+
+   API keys and tokens are deliberately **not** in this repo. `.zshrc` sources
+   `~/.config/zsh/secrets.zsh` if it exists and starts fine without it, so the
+   shell will work immediately - but anything needing a key will not. Add the
+   exports you use, for example:
+
+   ```bash
+   export ANTHROPIC_API_KEY="..."
+   export CLOUDFLARE_EMAIL="..."
+   export CLOUDFLARE_API_KEY="..."
+   export BITBUCKET_TOKEN="..."
+   ```
+
+5. **Optional per-machine tooling.** The installer does not install `fnm`,
+   `uv`, `rustup` or Homebrew. `.zshrc` guards each of their hooks, so their
+   absence is silent - install whichever you need.
+
+6. **Done!** After reboot, log in through ly and enjoy your custom Hyprland setup.
 
 ## What Gets Installed
 
