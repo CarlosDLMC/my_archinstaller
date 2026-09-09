@@ -10,10 +10,23 @@
     frame_color = "#8be9fd"
     background = "#00000044"
     foreground = "#f8f8f2"
-    timeout = 0
     gap_size = 5
-    notification_limit = 5
     show_age_threshold = -1
+
+    # Notifications stay until dismissed - see the [never_expire] rule at the
+    # bottom, which is what actually enforces it. This only covers clients that
+    # leave the expire timeout unset.
+    timeout = 0
+
+    # Never let a client close its own notification. Without this an
+    # application can withdraw a notification before it has been read, which
+    # defeats the point of an infinite timeout.
+    ignore_dbusclose = true
+
+    # Default (20). Notifications past the limit are queued, not dropped - but
+    # with nothing timing out they would only surface as earlier ones are
+    # clicked away, so keep this generous.
+    notification_limit = 20
 
     # Enable actions
     enable_posix_regex = true
@@ -33,7 +46,7 @@
     # Layer - keep on top
     layer = overlay
 
-    # Mouse actions
+    # Mouse actions. Left click is the dismiss gesture.
     mouse_left_click = close_current
     mouse_middle_click = close_all
     mouse_right_click = do_action
@@ -42,21 +55,39 @@
     sticky_history = yes
     history_length = 20
 
-    # Pause timeout when user is active (hovering/interacting)
+    # Moot while timeout = 0, kept so the stock behaviour returns intact if the
+    # never_expire rule is ever disabled.
     idle_threshold = 120
+
+[experimental]
+    pause_on_mouse_over = true
 
 [urgency_low]
     background = "#00000044"
     foreground = "#f8f8f2"
-#    timeout = 5
 
 [urgency_normal]
     background = "#00000044"
     foreground = "#f8f8f2"
-#    timeout = 5
 
 [urgency_critical]
     background = "#ff555544"
     foreground = "#f8f8f2"
     frame_color = "#ff5555"
-#    timeout = 0
+
+# Nothing disappears on its own; a notification stays until it is clicked.
+#
+# The global `timeout = 0` is not sufficient on its own. A client that asks for
+# its own duration - `notify-send -t`, which several scripts in this repo use -
+# takes precedence over `timeout`, so the dbus value has to be overridden
+# explicitly: override_dbus_timeout beats timeout. And a client can mark a
+# notification transient to expire regardless, which set_transient = no blocks.
+#
+# The pattern is a POSIX ERE, because enable_posix_regex = true above, so
+# match-anything is ".*" and NOT "*" (which is not a valid ERE).
+#
+# Disable temporarily with: dunstctl rule never_expire disable
+[never_expire]
+    summary = ".*"
+    override_dbus_timeout = 0
+    set_transient = no
