@@ -5,10 +5,13 @@
 # and assets/ly/lang/soviet.ini) so the login and lock screens match.
 #
 # Modes:
-#   --clock   big block-digit clock (ly bigclock), refresh every 1s
 #   --date    uppercase Russian date line
 #   --panel   the bordered status panel, refresh every 30s
 #   --footer  ly-style key hint row
+#
+# The bigclock is deliberately NOT here - it lives in SovietClock.sh, because
+# it is the one widget hyprlock re-runs every second per monitor and Python's
+# startup dominated its cost. Nothing in this file refreshes faster than 30s.
 #
 # hyprlock only renders multi-line text when it arrives via cmd[...], and it
 # ignores literal \n in a `text =` field, so every block here is emitted with
@@ -74,21 +77,6 @@ BATTERY_RU = {
     "Discharging": "РАЗРЯД",
     "Not charging": "НЕ ЗАРЯЖАЕТСЯ",
     "Unknown": "НЕИЗВЕСТНО",
-}
-
-# 4x5 block digits, ly bigclock style. '#' is ink.
-GLYPHS = {
-    "0": ["####", "#  #", "#  #", "#  #", "####"],
-    "1": ["  ##", "   #", "   #", "   #", "   #"],
-    "2": ["####", "   #", "####", "#   ", "####"],
-    "3": ["####", "   #", "####", "   #", "####"],
-    "4": ["#  #", "#  #", "####", "   #", "   #"],
-    "5": ["####", "#   ", "####", "   #", "####"],
-    "6": ["####", "#   ", "####", "#  #", "####"],
-    "7": ["####", "   #", "   #", "   #", "   #"],
-    "8": ["####", "#  #", "####", "#  #", "####"],
-    "9": ["####", "#  #", "####", "   #", "   #"],
-    ":": ["  ", "# ", "  ", "# ", "  "],
 }
 
 
@@ -272,44 +260,6 @@ def split_row(left, right):
 # ---------------------------------------------------------------------- modes
 
 
-def mode_clock():
-    """ly-style bigclock in block glyphs.
-
-    Two things have to hold or the clock misbehaves:
-
-    1. Every row must be the exact same rendered width. hyprlock centres each
-       line of a multi-line label independently and Pango trims trailing
-       whitespace before measuring, so padding with plain spaces shears the
-       digits apart. NBSP is not trimmed and shares the monospace advance.
-
-    2. The *ink* must be centred, not the character box. Glyphs like "1" do
-       not reach the edges of their 4-cell box, so a label centred on the box
-       drifts sideways whenever such a digit lands first or last - once an
-       hour, and once a second for the trailing digit. Balancing the blank
-       columns on each side pins the ink to the centre whatever the time."""
-    stamp = datetime.now().strftime("%H:%M:%S")
-    rows = ["" for _ in range(5)]
-    for idx, ch in enumerate(stamp):
-        glyph = GLYPHS.get(ch)
-        if not glyph:
-            continue
-        for r in range(5):
-            rows[r] += glyph[r]
-            if idx != len(stamp) - 1:
-                rows[r] += " "
-
-    width = len(rows[0])
-    inked = [c for c in range(width) if any(row[c] == "#" for row in rows)]
-    if inked:
-        left, right = inked[0], width - 1 - inked[-1]
-        pad = max(left, right)
-        rows = [
-            " " * (pad - left) + row + " " * (pad - right) for row in rows
-        ]
-
-    print("\n".join(row.replace("#", "\u2588").replace(" ", "\u00a0") for row in rows))
-
-
 def mode_date():
     stamp = datetime.now().strftime("%A, %-d %B %Y")
     print(stamp.upper())
@@ -377,7 +327,6 @@ def mode_panel():
 
 
 MODES = {
-    "--clock": mode_clock,
     "--date": mode_date,
     "--panel": mode_panel,
     "--footer": mode_footer,

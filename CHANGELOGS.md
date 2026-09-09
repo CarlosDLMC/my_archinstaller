@@ -1,5 +1,42 @@
 ## CHANGELOGS
 
+## September 2026
+
+Added:
+
+- Soviet-brutalist TUI lock screen, replacing the stock blurred-wallpaper hyprlock
+  - Deliberately matches the **ly** login screen (`assets/ly/config.ini` with `lang = soviet`), so login and unlock look like the same machine: pure black, one monospace face, block-glyph clock, Russian labels
+  - `config/hypr/scripts/SovietLock.py` — draws the bordered status panel, the Russian date line and the key-hint footer, emitted as one block with real newlines (hyprlock ignores literal `\n` in a `text =` field and only renders multi-line output from `cmd[...]`)
+  - `config/hypr/scripts/SovietClock.sh` — the ly-style bigclock in block glyphs
+  - Panel carries everything the old screen showed plus kernel, load, memory and AC state; wrong password gives ly's own `НЕВЕРНЫЙ КОД ДОСТУПА · ПОПЫТКА N` in red
+  - Keyboard layout is shown on its own panel row and is clickable, dispatching `global quickshell:layoutNext` so the bar's MRU ordering and OSD stay in sync
+- Per-monitor widget generation — the lock screen sizes itself to any display
+  - `config/hypr/scripts/SovietLockGen.py` rewrites `config/hypr/hyprlock-monitors.conf` from `hyprctl monitors` before every lock, emitting one widget set per attached monitor, so a 1080p laptop and a 2K external each get their own font size from one file
+  - `hyprlock.conf` holds no geometry at all (183 → 53 lines), only colours, background and cursor, and `source`s the generated file
+  - Font size is searched, not solved: the largest that keeps the stack inside 85% of height and the panel inside 40% of width. Verified by rendering at 720p, 1080p, 1440p and 4K, with every overlaid widget landing 0px off its panel row
+  - Text metrics come from Pango, the engine hyprlock renders with, with an exact metrics table baked in for fonts 8–44 so no `python-gobject` dependency is added — output is byte-identical either way
+  - A machine-agnostic seed of the generated file ships in the repo, because a missing `source =` target makes hyprlock render a blank screen on a fresh machine
+- `config/hypr/scripts/IdleDpms.sh` — idle-blanking policy: the screen stays lit while locked *and* on AC, and blanks as before in every other case
+- `config/hypr/scripts/LockRun.sh` — hypridle's `lock_cmd`; records hyprlock's output and exit code to `~/.cache/hypr-logs/hyprlock.log`, keeping one previous generation. The exit code is what distinguishes hyprlock crashing from hyprlock choosing to quit
+- `config/hypr/scripts/SessionLogKeep.sh` — mirrors ly's session log, which ly truncates at every login, so a failed session leaves evidence
+
+Changed:
+
+- The bigclock moved from `SovietLock.py --clock` to `SovietClock.sh`. It is the one widget hyprlock re-runs every second per monitor, and Python's interpreter startup dominated its cost: ~45 ms a run became ~5 ms, so a locked two-monitor session costs ~1% of a core instead of ~9%. The shell version forks nothing (the time comes from bash's `printf` builtin, not `date`) and its output is byte-identical for all 86,400 times of day
+- `SHIFT_L+ALT_L` in `configs/Keybinds.conf` now dispatches `global quickshell:layoutNext` like its `ALT_L+SHIFT_L` counterpart, so ALT+SHIFT switches layout whichever modifier is pressed first
+
+Fixed:
+
+- `hyprlock.conf` — stray `}` left behind when an `image {` block was commented out, which made hyprlock log "Stray category close" on every lock
+- `general:grace` does not exist in hyprlock 0.9.6 and was silently ignored, so there was never a grace period; it is set via `--grace` in `hypridle.conf` instead
+- The battery row was printed twice on a two-battery machine, because `Battery.sh` loops `BAT0`–`BAT3` and prints a line per match. Each pack now gets its own row
+- Clock digits sheared apart at some times: hyprlock centres each line of a multi-line label independently and Pango trims trailing whitespace before measuring, so rows are padded with non-breaking spaces. The clock also centres on its own ink rather than its character box, so a `1` in the first or last position no longer drifts the whole clock sideways
+
+Removed:
+
+- `config/hypr/hyprlock-2k.conf` — superseded by the generator, which covers every resolution and cannot drift out of sync with the 1080p file
+- `config/hypr/scripts/Tak0-Per-Window-Switch.sh` and its keybind — it read `kb_layout` from `UserConfigs/UserSettings.conf` while this setup defines it in `configs/SystemSettings.conf`, so it exited immediately and had been dead since the quickshell layout switcher superseded it. Its focus listener also required `socat`, which this installer does not ship, and its single-listener guard could never match, so it leaked a listener per keypress
+
 ## May 2026
 
 Added:
