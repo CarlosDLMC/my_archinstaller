@@ -75,6 +75,11 @@ HAMMER_SICKLE = [
 # the bigclock's gaps - which ly paints with bg - disappear into the cloth,
 # and is why the flag now fills the screen: with a red background there is no
 # longer anywhere for a transparent edge to sit.
+# Frames per second ly plays the animation at. 8 frames make one full
+# wave, so this is also the cycle time: 4.0 -> a two-second wave, which
+# reads as cloth moving rather than flapping.
+FRAMERATE = 4.0
+
 RED_BG = 12        # #AA0000, the field
 LIT_FG = 13        # #FF5555 - a lighter red. NOT used: shading the
                    # field with several reds was tried and rejected,
@@ -139,7 +144,7 @@ def build(px_w=56, px_h=28, frames=8, pad=2, emb_x=1, emb_y=1):
     return out, px_w, rows_total
 
 
-def to_dur(grids, px_w, rows, framerate=8.0):
+def to_dur(grids, px_w, rows, framerate=None):
     cell_w = px_w * 2                      # 2 cells per square pixel
     frames = []
     for n, g in enumerate(grids, 1):
@@ -162,7 +167,8 @@ def to_dur(grids, px_w, rows, framerate=8.0):
     return {"DurMovie": {
         "formatVersion": 7, "colorFormat": "16", "preferredFont": "fixed",
         "encoding": "utf-8", "name": "soviet-flag", "artist": "",
-        "framerate": framerate, "sizeX": cell_w, "sizeY": rows,
+        "framerate": FRAMERATE if framerate is None else framerate,
+        "sizeX": cell_w, "sizeY": rows,
         "extra": None, "frames": frames}}
 
 
