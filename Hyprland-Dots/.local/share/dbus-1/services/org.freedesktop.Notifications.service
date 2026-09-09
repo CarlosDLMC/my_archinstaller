@@ -1,0 +1,15 @@
+# Pins D-Bus activation of org.freedesktop.Notifications to dunst.
+#
+# Any notification daemon may claim this name, and dbus-broker keeps only the
+# first service file it finds for it. A second daemon installed alongside dunst
+# can therefore win the name and, if its unit is masked or broken, every
+# notify-send on the system fails with NameHasNoOwner - silently, since nothing
+# surfaces the error. That happened here with mako (since removed).
+#
+# ~/.local/share/dbus-1/services outranks /usr/share, so this file wins
+# regardless of what else is installed. It is also named after the D-Bus name,
+# which dunst's own service file is not - that mismatch is what dbus-broker
+# warns about at every session start.
+[D-BUS Service]
+Name=org.freedesktop.Notifications
+Exec=/usr/bin/dunst

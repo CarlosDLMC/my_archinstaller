@@ -29,6 +29,13 @@ if [ -d "$SCRIPT_DIR/.local/bin" ]; then
     chmod +x "$HOME/.local/bin/"* 2>/dev/null
 fi
 
+# Copy .local/share data files (D-Bus service overrides, etc.)
+printf "\n${INFO} Copying .local/share data files...\n"
+if [ -d "$SCRIPT_DIR/.local/share" ]; then
+    mkdir -p "$HOME/.local/share"
+    cp -r "$SCRIPT_DIR/.local/share/." "$HOME/.local/share/" 2>/dev/null && echo "  ${OK} Copied .local/share data files"
+fi
+
 # Copy XDG user directories configuration
 printf "\n${INFO} Copying XDG user directories configuration...\n"
 for file in user-dirs.dirs user-dirs.locale; do
