@@ -162,7 +162,8 @@ I've improved the installation scripts to prevent this in the future:
 2. **copy.sh** - More verbose, reports each directory being copied
 3. **diagnose.sh** - New script to identify exactly what went wrong
 4. **02-Final-Check.sh** - Now checks for quickshell/foot instead of waybar/kitty
-5. **custom-preset.conf** - Enabled SDDM and SDDM theme to match your system
+5. **custom-preset.conf** - Enabled ly display manager to match your system
+   (this originally said SDDM; the setup moved to ly and the preset has no SDDM entries)
 6. **README-CUSTOM.md** - Added clear instructions about transferring the entire directory
 
 ## Summary
