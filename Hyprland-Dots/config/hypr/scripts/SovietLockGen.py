@@ -303,7 +303,7 @@ def widgets(mon, rows, cols, pw_row, lay_row, codes):
 # ══ {m}  ({W:.0f}x{H:.0f} logical, font {fs}, clock {clock_fs}) ══
 label {{
     monitor = {m}
-    text = cmd[update:1000] $SL --clock
+    text = cmd[update:1000] $BIGCLOCK
     color = $ink
     font_size = {clock_fs}
     font_family = $mono

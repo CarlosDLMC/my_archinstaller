@@ -152,10 +152,17 @@ at the desk but still blanks on battery.
 **Files** (in `~/.config/hypr/`, from `Hyprland-Dots/config/hypr/`):
 - `hyprlock.conf` — colours and background only
 - `hyprlock-monitors.conf` — generated, do not edit
-- `scripts/SovietLock.py` — draws the panel, clock, date, footer
+- `scripts/SovietLock.py` — draws the panel, date, footer
+- `scripts/SovietClock.sh` — draws the block-glyph clock
 - `scripts/SovietLockGen.py` — sizes the widgets per monitor
 - `scripts/IdleDpms.sh` — idle blanking policy
-- `hypridle.conf` — calls `IdleDpms.sh`; regenerates widgets before idle-lock
+- `scripts/LockRun.sh` — starts hyprlock, logs its output and exit code
+- `hypridle.conf` — calls `LockRun.sh` and `IdleDpms.sh`
+
+The clock is shell rather than another `SovietLock.py` mode because it is the one
+widget hyprlock re-runs every second per monitor, and Python's startup dominated
+its cost: ~45 ms a run became ~5 ms, so a two-monitor lock costs ~1% of a core
+instead of ~9%. Its output is byte-identical to the Python version it replaced.
 
 **Customizing:** panel contents and wording in `SovietLock.py`; colours via `$ink` /
 `$dim` in `hyprlock.conf`; sizing via `HEIGHT_BUDGET` / `WIDTH_BUDGET` in
