@@ -130,6 +130,13 @@ and Russian labels (`ГРАЖДАНИН`, `КОД ДОСТУПА`). A wrong pass
 Everything sits in one bordered TUI panel: date, kernel, uptime, load, memory, AC state,
 every battery pack, keyboard layout, and weather.
 
+**Weather comes from the bar**, `~/.cache/quickshell/weather.json`, so the lock screen
+and the bar always show the same reading. If that file is missing (a machine without
+quickshell) it falls back to the legacy `~/.cache/.weather_cache`. Either way, a reading
+older than two hours is labelled with its age in the section header
+(`╠═ ПОГОДА · 3 Ч НАЗАД ═╣`) rather than shown as if it were current — weather fetchers
+here have broken silently before.
+
 **Keys and mouse:**
 - `ENTER` submit · `ESC` or `CTRL + U` clear the password
 - `ALT + SHIFT` or `SUPER + SPACE` — switch keyboard layout (these work while locked)
@@ -148,9 +155,15 @@ laptop and a 2K external are each sized correctly at the same time. Chosen font 
 Verified by rendering at all four. HiDPI scaling, ultrawide and rotated panels are
 handled too (a 4K at scale 2 is laid out as 1080p, which is what hyprlock actually uses).
 
-**Stays lit while plugged in.** hypridle otherwise blanks the screen 30s after locking.
-`scripts/IdleDpms.sh` skips that while locked *and* on AC, so the panel stays readable
-at the desk but still blanks on battery.
+**Going idle does not lock.** The lock screen is only ever raised deliberately, with
+`CTRL + ALT + L`. hypridle's screenlock listener is commented out in `hypridle.conf`;
+uncomment it to get a 10-minute auto-lock back. Idle still blanks the display after
+10.5 minutes — it just leaves the session unlocked. The session is also locked before
+suspend (`before_sleep_cmd`), which is separate from idle.
+
+**Stays lit while plugged in.** When you *have* locked, `scripts/IdleDpms.sh` skips the
+idle blank while locked *and* on AC, so the panel stays readable at the desk but still
+blanks on battery.
 
 **Files** (in `~/.config/hypr/`, from `Hyprland-Dots/config/hypr/`):
 - `hyprlock.conf` — colours and background only
@@ -164,8 +177,14 @@ at the desk but still blanks on battery.
 
 The clock is shell rather than another `SovietLock.py` mode because it is the one
 widget hyprlock re-runs every second per monitor, and Python's startup dominated
-its cost: ~45 ms a run became ~5 ms, so a two-monitor lock costs ~1% of a core
-instead of ~9%. Its output is byte-identical to the Python version it replaced.
+its cost: ~45 ms a run became ~5 ms. Measured end-to-end as hyprlock's own CPU
+over a 60s lock — which includes re-reading and re-rendering the label, not just
+running the command — that is **7.4% → 2.4% of one core per monitor**, so a
+two-monitor lock costs ~4.7% instead of ~14.8%. With every widget static hyprlock
+uses no measurable CPU at all, so the clock is the whole cost of a locked screen.
+Most of what remains is hyprlock's own per-tick work (~18 ms), not the script
+(~5 ms) — dropping seconds from the clock is the only way to cut it much further.
+Output is byte-identical to the Python version it replaced.
 
 **Customizing:** panel contents and wording in `SovietLock.py`; colours via `$ink` /
 `$dim` in `hyprlock.conf`; sizing via `HEIGHT_BUDGET` / `WIDTH_BUDGET` in
