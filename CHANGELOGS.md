@@ -19,6 +19,12 @@ Added:
 - `config/hypr/scripts/IdleDpms.sh` — idle-blanking policy: the screen stays lit while locked *and* on AC, and blanks as before in every other case
 - `config/hypr/scripts/LockRun.sh` — hypridle's `lock_cmd`; records hyprlock's output and exit code to `~/.cache/hypr-logs/hyprlock.log`, keeping one previous generation. The exit code is what distinguishes hyprlock crashing from hyprlock choosing to quit
 - `config/hypr/scripts/SessionLogKeep.sh` — mirrors ly's session log, which ly truncates at every login, so a failed session leaves evidence
+- Whole-workspace move — `$mainMod ALT + <1-0>` sends *every* window of the current workspace to that workspace and follows it there, with the tiling layout rebuilt window for window
+  - `config/hypr/UserScripts/MoveWorkspaceWindows.py` — Hyprland exposes no way to read or write the dwindle tree, so the layout is recovered from the window rectangles: they always form a guillotine partition, and a recursive cut search turns them back into the split tree that produced them
+  - The tree is replayed in the target workspace as a pre-order sequence of `focuswindow` + `layoutmsg preselect r|d` + `movetoworkspace`, then the split ratios are restored with `resizewindowpixel exact` (`splitratio` no longer exists in 0.56.2). Verified at 0px position and size error on a five-window mixed tree with hand-mangled ratios, down to a 94px-wide sliver
+  - Naive moves are cursor-dependent, which is what made the layout look scrambled: with `dwindle:force_split = 0` dwindle takes both the split side and the node to split from the pointer, so the same move gave a different layout depending on where the mouse sat. The script pins `dwindle:force_split` and `animations:enabled` for the duration and restores both in a `finally`, so the rebuild is invisible and mouse-independent
+  - Floating windows keep their exact geometry, a fullscreen window keeps its state *and* the tile hidden underneath it, and merging into a populated workspace scales the incoming tree into the slot it receives instead of squeezing it to 61px slivers. Grouped/tabbed windows fall back to a plain batch move, and a cross-monitor move (2560x1440 → 1920x1080) keeps the proportions within 0.8%
+  - Takes ~1s for five windows; `--simple` skips the reconstruction, `--follow` is what the binds pass, and a source workspace can be named explicitly (`MoveWorkspaceWindows.py 2 5` moves 5 into 2 without leaving the current workspace)
 
 Changed:
 

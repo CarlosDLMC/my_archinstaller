@@ -15,6 +15,7 @@ Please select a locale that suits you
 - **ly Display Manager** (lightweight TUI login screen with large font)
 - **Soviet TUI Lock Screen** matching ly, auto-sized to any display (720p → 4K)
 - **Offline Speech-to-Text** with Handy (toggle via SUPER + CTRL + F8)
+- **Whole-Workspace Move** with SUPER + ALT + number, rebuilding the tiling layout window for window
 - **All Essential Packages** pre-configured
 
 ## Quick Install (Fresh Arch System)
@@ -72,6 +73,7 @@ Please select a locale that suits you
 - Custom pokefetch terminal greeting
 - Event-based system monitoring
 - Battery, WiFi, Bluetooth, Volume widgets
+- Whole-workspace move that preserves the dwindle layout
 
 ### Applications
 - LibreWolf (browser)
@@ -95,6 +97,7 @@ All configurations are stored in `Hyprland-Dots/config/` and will be copied to `
 - `SUPER + SHIFT + SPACE` - Float current window
 - `SUPER + CTRL + ALT + B` - Toggle quickshell bar
 - `SUPER + CTRL + F8` - Handy: toggle speech-to-text (press once to start recording, press again to stop and transcribe into the focused field)
+- `SUPER + ALT + <1-0>` - Move *every* window of the current workspace to that workspace, keeping the tiling layout intact (`SUPER + CTRL + <1-0>` still moves one window silently)
 - `CTRL + ALT + L` - Lock screen (Soviet TUI)
 - `CTRL + ALT + P` - Power menu (wlogout)
 
