@@ -12,7 +12,7 @@ plugins=(
     zsh-syntax-highlighting
 )
 
-source $ZSH/oh-my-zsh.sh
+[ -r "$ZSH/oh-my-zsh.sh" ] && source "$ZSH/oh-my-zsh.sh"
 
 # Check archlinux plugin commands here
 # https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/archlinux
@@ -21,7 +21,11 @@ source $ZSH/oh-my-zsh.sh
 # Project page: https://gitlab.com/phoneybadger/pokemon-colorscripts#on-other-distros-and-macos
 #pokemon-colorscripts --no-title -s -r #without fastfetch
 #pokemon-colorscripts --no-title -s -r | fastfetch -c $HOME/.config/fastfetch/config-pokemon.jsonc --logo-type file-raw --logo-height 10 --logo-width 5 --logo -
-~/pokefetch_perfect
+[ -x "$HOME/pokefetch_perfect" ] && ~/pokefetch_perfect
+
+# Every external-tool hook below is guarded: this file is deployed verbatim
+# onto fresh machines by the installer, where fnm/brew/cargo/uv are absent
+# and an unguarded eval or source errors on every shell start.
 
 # Machine-local credentials live outside the dotfiles repo, in
 # ~/.config/zsh/secrets.zsh (chmod 600). Create it on a new machine with the
@@ -40,13 +44,13 @@ alias lla='ls -la'
 alias lt='ls --tree'
 
 # Set-up FZF key bindings (CTRL R for fuzzy history finder)
-source <(fzf --zsh)
+command -v fzf >/dev/null && source <(fzf --zsh)
 
 HISTFILE=~/.zsh_history
 HISTSIZE=10000
 SAVEHIST=10000
 setopt appendhistory
-eval "$(fnm env --use-on-cd)"
+command -v fnm >/dev/null && eval "$(fnm env --use-on-cd)"
 
 # The next line updates PATH for the Google Cloud SDK.
 if [ -f '/home/mentefria/Downloads/google-cloud-sdk/path.zsh.inc' ]; then . '/home/mentefria/Downloads/google-cloud-sdk/path.zsh.inc'; fi
@@ -58,8 +62,8 @@ if [ -f '/home/mentefria/Downloads/google-cloud-sdk/completion.zsh.inc' ]; then 
 export PATH="$HOME/.local/share/gem/ruby/3.4.0/bin:$PATH"
 
 # Homebrew
-eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+[ -x /home/linuxbrew/.linuxbrew/bin/brew ] && eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 export PATH="/opt/homebrew/opt/libpq/bin:$PATH"
 
-. "$HOME/.local/bin/env"
-. "$HOME/.cargo/env"
+[ -r "$HOME/.local/bin/env" ] && . "$HOME/.local/bin/env"
+[ -r "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
