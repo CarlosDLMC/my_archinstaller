@@ -25,8 +25,15 @@ done
 printf "\n${INFO} Copying custom scripts...\n"
 if [ -d "$SCRIPT_DIR/.local/bin" ]; then
     mkdir -p "$HOME/.local/bin"
-    cp -r "$SCRIPT_DIR/.local/bin/"* "$HOME/.local/bin/" 2>/dev/null && echo "  ${OK} Copied .local/bin scripts"
-    chmod +x "$HOME/.local/bin/"* 2>/dev/null
+    # chmod only what we copied. A blanket chmod +x on ~/.local/bin/* would also
+    # flip the mode of unrelated things already installed there (uv, aws, claude).
+    for _src in "$SCRIPT_DIR/.local/bin/"*; do
+        [ -e "$_src" ] || continue
+        if cp "$_src" "$HOME/.local/bin/"; then
+            chmod +x "$HOME/.local/bin/$(basename "$_src")"
+            echo "  ${OK} Copied $(basename "$_src")"
+        fi
+    done
 fi
 
 # Copy .local/share data files (D-Bus service overrides, etc.)
@@ -68,6 +75,10 @@ config_dirs=(
     "wallust"
     "foot"
     "rofi"
+    "dunst"
+    # swaync is NOT the notification daemon here (dunst is), but ~/.config/swaync
+    # is the icon/image asset store that 25 of the hypr scripts point at
+    # (iDIR="$HOME/.config/swaync/icons"). Dropping it kills notification icons.
     "swaync"
     "swappy"
     "fastfetch"
@@ -82,12 +93,33 @@ config_dirs=(
     "xfce4"
 )
 
+# One stamp for the whole run, so a single invocation's backups group together.
+BACKUP_STAMP="$(date +%Y%m%d-%H%M%S)"
+
 for dir in "${config_dirs[@]}"; do
     if [ -d "$SCRIPT_DIR/config/$dir" ]; then
-        # Backup existing config if it exists
+        # Back up to a timestamped name. A fixed "$dir.backup" target breaks on
+        # re-run: the second run moves the config *inside* the existing backup,
+        # and the third fails outright with "Directory not empty" - silently,
+        # since the error was discarded - leaving the old config in place to be
+        # merged over rather than replaced.
         if [ -d "$HOME/.config/$dir" ]; then
-            printf "  ${NOTE} Backing up existing $dir to $dir.backup\n"
-            mv "$HOME/.config/$dir" "$HOME/.config/$dir.backup" 2>/dev/null
+            # The stamp only has second resolution, so two runs inside the same
+            # second would collide and mv would nest again. Find a free name.
+            backup="$HOME/.config/$dir.backup-$BACKUP_STAMP"
+            _n=1
+            while [ -e "$backup" ]; do
+                backup="$HOME/.config/$dir.backup-$BACKUP_STAMP-$_n"
+                _n=$((_n + 1))
+            done
+            # -T: treat the target as a name, never as a directory to move into,
+            # so a lost race fails loudly instead of silently nesting.
+            if mv -T "$HOME/.config/$dir" "$backup"; then
+                printf "  ${NOTE} Backed up existing $dir to $(basename "$backup")\n"
+            else
+                echo "  ${ERROR} Could not back up existing $dir - skipping it rather than merging over it"
+                continue
+            fi
         fi
 
         printf "  ${INFO} Copying $dir from $SCRIPT_DIR/config/$dir to $HOME/.config/\n"
