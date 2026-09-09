@@ -7,7 +7,7 @@ pkg="paru-bin"
 
 ## WARNING: DO NOT EDIT BEYOND THIS LINE IF YOU DON'T KNOW WHAT YOU ARE DOING! ##
 # Set the name of the log file to include the current date and time
-LOG="install-$(date +%d-%H%M%S)_yay.log"
+LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_paru.log"
 
 # Set some colors for output messages
 OK="$(tput setaf 2)[OK]$(tput sgr0)"

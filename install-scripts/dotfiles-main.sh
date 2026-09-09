@@ -36,7 +36,7 @@ if [ -d Hyprland-Dots ]; then
 
     printf "${NOTE} Running copy.sh script...\n"
     printf "======================================\n"
-    ./copy.sh 2>&1 | tee -a "$PARENT_DIR/Install-Logs/dotfiles-copy-$(date +%d-%H%M%S).log"
+    ./copy.sh 2>&1 | tee -a "$PARENT_DIR/Install-Logs/dotfiles-copy-$(date +%Y%m%d-%H%M%S).log"
 
     if [ ${PIPESTATUS[0]} -eq 0 ]; then
       printf "======================================\n"

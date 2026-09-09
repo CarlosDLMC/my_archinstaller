@@ -18,7 +18,7 @@ fi
 
 
 # Set the name of the log file to include the current date and time
-LOG="Install-Logs/install-$(date +%d-%H%M%S)_zsh_pokemon.log"
+LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_zsh_pokemon.log"
 
 printf "${NOTE} Removing any traces of ${SKY_BLUE}Pokemon Color Scripts${RESET}\n"
 

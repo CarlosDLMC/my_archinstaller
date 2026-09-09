@@ -23,7 +23,7 @@ fi
 
 
 # Set the name of the log file to include the current date and time
-LOG="Install-Logs/install-$(date +%d-%H%M%S)_xdph.log"
+LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_xdph.log"
 
 # XDG-DESKTOP-PORTAL-HYPRLAND
 printf "${NOTE} Installing ${SKY_BLUE}xdg-desktop-portal-hyprland${RESET}\n" 

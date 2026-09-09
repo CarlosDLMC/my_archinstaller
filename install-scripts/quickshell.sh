@@ -28,7 +28,7 @@ if ! source "$(dirname "$(readlink -f "$0")")/Global_functions.sh"; then
 fi
 
 # Set the name of the log file to include the current date and time
-LOG="Install-Logs/install-$(date +%d-%H%M%S)_quick.log"
+LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_quick.log"
 
 # Installation of main components
 printf "\n%s - Installing ${SKY_BLUE}Quick Shell ${RESET} for Desktop Overview \n" "${NOTE}"

@@ -28,7 +28,7 @@ cd "$PARENT_DIR" || { echo "${ERROR} Failed to change directory to $PARENT_DIR";
 source "$(dirname "$(readlink -f "$0")")/Global_functions.sh"
 
 # Set the name of the log file to include the current date and time
-LOG="Install-Logs/install-$(date +%d-%H%M%S)_pipewire.log"
+LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_pipewire.log"
 
 # Disabling pulseaudio to avoid conflicts and logging output
 echo -e "${NOTE} Disabling pulseaudio to avoid conflicts..."

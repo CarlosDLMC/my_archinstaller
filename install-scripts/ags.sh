@@ -42,8 +42,8 @@ fi
 set -eo pipefail
 
 # Set the name of the log file to include the current date and time
-LOG="Install-Logs/install-$(date +%d-%H%M%S)_ags.log"
-MLOG="install-$(date +%d-%H%M%S)_ags2.log"
+LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_ags.log"
+MLOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_ags2.log"
 
 # NOTE: We intentionally do NOT run `ags -v` here, because a broken AGS
 # installation (missing GUtils, etc.) would crash gjs and spam errors
