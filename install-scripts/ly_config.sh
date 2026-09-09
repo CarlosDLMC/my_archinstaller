@@ -25,6 +25,11 @@ printf "${NOTE} Installing ly start script...\n"
 sudo cp "$PARENT_DIR/assets/ly/start.sh" /etc/ly/start.sh 2>&1 | tee -a "$LOG"
 sudo chmod +x /etc/ly/start.sh 2>&1 | tee -a "$LOG"
 
+printf "${NOTE} Installing 8-bit soviet flag animation...\n"
+# config.ini sets animation = dur_file and points dur_file_path here, so the
+# flag has to land in /etc/ly or ly draws nothing at all.
+sudo cp "$PARENT_DIR/assets/ly/soviet-flag.dur" /etc/ly/soviet-flag.dur 2>&1 | tee -a "$LOG"
+
 printf "${NOTE} Installing custom soviet language...\n"
 sudo cp "$PARENT_DIR/assets/ly/lang/soviet.ini" /etc/ly/lang/soviet.ini 2>&1 | tee -a "$LOG"
 
