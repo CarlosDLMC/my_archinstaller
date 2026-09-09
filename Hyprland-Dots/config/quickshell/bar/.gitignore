@@ -1,0 +1,5 @@
+# JetBrains project files
+.idea/
+
+# Local backups of scripts kept while iterating
+*.bak
