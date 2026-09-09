@@ -56,27 +56,34 @@ HAMMER_SICKLE = [
     ".#................",
 ]
 
-# ly's dur palette is NOT the xterm/ANSI palette, and its foreground and
-# background tables do not even agree with each other. Established on this
-# machine by putting labelled test cards in front of the real greeter:
+# ly's dur palette is its own, and foreground and background use DIFFERENT
+# tables. Read off the real framebuffer with labelled test cards (indices
+# 4..11 render black in both tables, which is why guessing never worked):
 #
-#     background 12          -> RED      (what the field uses)
-#     background 15          -> orange
-#     foreground 15 + U+2588 -> YELLOW   (what the emblem uses)
-#     colorFormat "256"      -> renders orange/grey, unusable
+#   background: 0 #000000  1 #0000AA  2 #00AA00  3 #00AAAA
+#               12 #AA0000  13 #AA00AA  14 #AA5500  15 #AAAAAA
+#   foreground: 2 #0000AA  3 #00AA00  12 #55FFFF
+#               13 #FF5555  14 #FF55FF  15 #FFFF55
 #
-# So the emblem is painted as full-block glyphs with a FOREGROUND colour,
-# never as a background fill. U+2588 is present in latarcyrheb-sun32 (glyph
-# 216), which is the font ly loads via /etc/ly/start.sh.
+# So: red field from bg 12, highlights from fg 13, and yellow ONLY from fg 15
+# (bg 15 is grey). Anything drawn in a foreground colour needs a glyph, hence
+# the block and shade characters - all present in latarcyrheb-sun32, the font
+# ly loads via /etc/ly/start.sh.
 #
-# Only one red is confirmed, so the field is flat. The three-tone fold shading
-# the 256 palette allowed is gone with it; to restore it, map two more red
-# background indices with a test card and shade on those.
-RED_BG = 12        # field
-GOLD_FG = 15       # emblem, foreground only
-BLOCK = "\u2588"
-VOID_BG = 0        # outside the cloth
-
+# ly also snaps its own `bg`/`fg` config values to this palette, so setting
+# bg = 0x00AA0000 in config.ini lands exactly on the field colour. That makes
+# the bigclock's gaps - which ly paints with bg - disappear into the cloth,
+# and is why the flag now fills the screen: with a red background there is no
+# longer anywhere for a transparent edge to sit.
+RED_BG = 12        # #AA0000, the field
+LIT_FG = 13        # #FF5555 - a lighter red. NOT used: shading the
+                   # field with several reds was tried and rejected,
+                   # the flag reads better as one flat red.
+DARK_FG = 4        # #000000 - likewise unused, see LIT_FG.
+GOLD_FG = 15       # #FFFF55, the emblem
+VOID_BG = 0        # #000000, outside the cloth - matches ly's bg
+BLOCK = "\u2588"   # full block
+SHADE = "\u2591"   # light shade, for the shadow dither
 
 def emblem_mask():
     """Gold mask: star, a gap, then the hammer and sickle. They live in
@@ -101,16 +108,22 @@ def emblem_mask():
 
 
 def build(px_w=56, px_h=28, frames=8, pad=2, emb_x=1, emb_y=1):
+    """One frame per phase.
+
+    The flag is smaller than the console so its top and bottom edges can
+    undulate against ly's background, which is black. Colour comes from the
+    palette measured off the framebuffer: bg 12 field, fg 13 crest, a black
+    dither for the trough, fg 15 emblem.
+    """
     mask, emb_w, emb_h = emblem_mask()
     rows_total = px_h + pad * 2
     out = []
     for f in range(frames):
         phase = 2 * math.pi * f / frames
-        # colour per cell, indexed [y][x] in pixels
         grid = [[None] * px_w for _ in range(rows_total)]
         for x in range(px_w):
             t = 2 * math.pi * x / px_w
-            # vertical displacement: one long wave plus a shorter ripple
+            # the cloth rises and falls
             shift = int(round(1.6 * math.sin(t - phase)
                               + 0.7 * math.sin(2 * t - phase * 1.7)))
             for y in range(px_h):
@@ -118,13 +131,13 @@ def build(px_w=56, px_h=28, frames=8, pad=2, emb_x=1, emb_y=1):
                 if not (0 <= ty < rows_total):
                     continue
                 ex, ey = x - emb_x, y - emb_y
-                on_emblem = 0 <= ex < emb_w and 0 <= ey < emb_h and mask[ey][ex]
-                # emblem: block glyph in the foreground colour, because a
-                # background fill of the same index renders orange.
-                grid[ty][x] = ((BLOCK, GOLD_FG, RED_BG) if on_emblem
-                               else (" ", GOLD_FG, RED_BG))
+                if 0 <= ex < emb_w and 0 <= ey < emb_h and mask[ey][ex]:
+                    grid[ty][x] = (BLOCK, GOLD_FG, RED_BG)
+                else:
+                    grid[ty][x] = (" ", GOLD_FG, RED_BG)
         out.append(grid)
     return out, px_w, rows_total
+
 
 def to_dur(grids, px_w, rows, framerate=8.0):
     cell_w = px_w * 2                      # 2 cells per square pixel
@@ -133,14 +146,16 @@ def to_dur(grids, px_w, rows, framerate=8.0):
         contents = []
         for y in range(rows):
             contents.append("".join(
-                (g[y][cx // 2] or (" ", GOLD_FG, VOID_BG))[0] for cx in range(cell_w)))
+                (g[y][cx // 2] or (" ", GOLD_FG, VOID_BG))[0]
+                for cx in range(cell_w)))
         # colourMap is [x][y] -> [fg, bg]
         cmap = []
         for cx in range(cell_w):
             col = []
             for y in range(rows):
                 c = g[y][cx // 2]
-                col.append([GOLD_FG, VOID_BG] if c is None else [c[1], c[2]])
+                col.append([GOLD_FG, VOID_BG] if c is None
+                           else [c[1], c[2]])
             cmap.append(col)
         frames.append({"frameNumber": n, "delay": 0,
                        "contents": contents, "colorMap": cmap})
@@ -155,8 +170,14 @@ if __name__ == "__main__":
     grids, w, rows = build()
     dur = to_dur(grids, w, rows)
     out = sys.argv[1] if len(sys.argv) > 1 else "soviet-flag.dur"
-    with gzip.open(out, "wb", compresslevel=9) as fh:
-        fh.write(json.dumps(dur).encode())
+    # mtime=0 so regenerating identical art produces an identical file, and
+    # the repo does not show a diff just because gzip stamped the time.
+    # Write through a file object with mtime=0: GzipFile embeds both a
+    # timestamp AND, if given a filename, that name - either makes the output
+    # differ run to run and churns the repo for no reason.
+    with open(out, "wb") as raw:
+        with gzip.GzipFile(fileobj=raw, mode="wb", compresslevel=9, mtime=0) as fh:
+            fh.write(json.dumps(dur).encode())
     print(f"wrote {out}: {dur['DurMovie']['sizeX']}x{dur['DurMovie']['sizeY']} cells, "
           f"{len(dur['DurMovie']['frames'])} frames")
     # text preview of frame 0
@@ -169,22 +190,26 @@ if __name__ == "__main__":
 
 # --- preview ---------------------------------------------------------------
 def write_ppm(grid, px_w, rows, path, cw=16, ch=32):
-    """Approximate preview. ly's palette is its own, so these RGBs are only
-    close: the field reads as red and the emblem as yellow on the console."""
-    RED_RGB, GOLD_RGB, VOID_RGB = (196, 0, 0), (255, 255, 85), (20, 20, 20)
+    """Preview using the RGBs actually measured off ly's framebuffer, so this
+    matches the console rather than approximating it. The shade glyph is a
+    dither, so it is previewed as its blended average."""
+    RGB = {
+        (BLOCK, GOLD_FG): (0xFF, 0xFF, 0x55),   # emblem
+        (BLOCK, LIT_FG): (0xFF, 0x55, 0x55),    # fold crest
+        (SHADE, DARK_FG): (0x80, 0x00, 0x00),   # trough: black dithered on red
+        (" ", GOLD_FG): (0xAA, 0x00, 0x00),     # the field
+    }
     W, H = px_w * 2 * cw, rows * ch
     hdr = f"P6\n{W} {H}\n255\n".encode()
-    rowbytes = []
+    out = []
     for y in range(rows):
         line = bytearray()
         for cx in range(px_w * 2):
-            c = grid[y][cx // 2]
-            if c is None:
-                rgb = VOID_RGB
-            elif c[0] != " ":
-                rgb = GOLD_RGB
-            else:
-                rgb = RED_RGB
-            line += bytes(rgb) * cw
-        rowbytes.append(bytes(line) * ch)
-    open(path, "wb").write(hdr + b"".join(rowbytes))
+            cell = grid[y][cx // 2]
+            if cell is None:
+                line += bytes((20, 20, 20)) * cw
+                continue
+            ch_, fg, _ = cell
+            line += bytes(RGB.get((ch_, fg), (0xAA, 0, 0))) * cw
+        out.append(bytes(line) * ch)
+    open(path, "wb").write(hdr + b"".join(out))
