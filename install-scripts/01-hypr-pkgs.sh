@@ -86,7 +86,9 @@ hypr_package_2=(
 # List of packages to uninstall as it conflicts some packages
 uninstall=(
   aylurs-gtk-shell
-  dunst
+  # dunst deliberately NOT listed here: it is the notification daemon this
+  # setup uses and is installed above. It was in both arrays, so every run
+  # removed it and immediately reinstalled it.
   cachyos-hyprland-settings
   swaync
   rofi
@@ -111,7 +113,7 @@ fi
 
 
 # Set the name of the log file to include the current date and time
-LOG="Install-Logs/install-$(date +%d-%H%M%S)_hypr-pkgs.log"
+LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_hypr-pkgs.log"
 
 # conflicting packages removal
 overall_failed=0
