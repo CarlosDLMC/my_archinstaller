@@ -13,19 +13,20 @@
     gap_size = 5
     show_age_threshold = -1
 
-    # Notifications stay until dismissed - see the [never_expire] rule at the
-    # bottom, which is what actually enforces it. This only covers clients that
-    # leave the expire timeout unset.
-    timeout = 0
+    # Default lifetime, in seconds, for a notification that does not ask for
+    # one of its own. This is what the toggle scripts in this repo get - a
+    # touchpad or gamemode toast is acknowledging something you just did, so
+    # it has no business staying on screen. A client that does ask (the
+    # `notify-send -t` in ScreenShot.sh, ScreenRecord.sh, handy) is honoured
+    # as sent, and messages are held open by the [messages] rule below.
+    timeout = 5
 
     # Never let a client close its own notification. Without this an
     # application can withdraw a notification before it has been read, which
-    # defeats the point of an infinite timeout.
+    # defeats the point of the never-expiring rules below.
     ignore_dbusclose = true
 
-    # Default (20). Notifications past the limit are queued, not dropped - but
-    # with nothing timing out they would only surface as earlier ones are
-    # clicked away, so keep this generous.
+    # Default (20). Notifications past the limit are queued, not dropped.
     notification_limit = 20
 
     # Enable actions
@@ -55,8 +56,9 @@
     sticky_history = yes
     history_length = 20
 
-    # Moot while timeout = 0, kept so the stock behaviour returns intact if the
-    # never_expire rule is ever disabled.
+    # Nothing times out while the session has been idle this long, so stepping
+    # away does not cost you the notifications that arrived while you were
+    # gone. They resume counting down on your first keypress.
     idle_threshold = 120
 
 [experimental]
@@ -75,19 +77,90 @@
     foreground = "#f8f8f2"
     frame_color = "#ff5555"
 
-# Nothing disappears on its own; a notification stays until it is clicked.
+# ------------------------------------------------------------------
+# One second: the toasts that only confirm an action you just took.
 #
-# The global `timeout = 0` is not sufficient on its own. A client that asks for
-# its own duration - `notify-send -t`, which several scripts in this repo use -
-# takes precedence over `timeout`, so the dbus value has to be overridden
-# explicitly: override_dbus_timeout beats timeout. And a client can mark a
-# notification transient to expire regardless, which set_transient = no blocks.
+# A screenshot, a recording starting or stopping, the handy
+# transcription toggle. You already know what you did - the toast is
+# read at a glance or not at all. The scripts ask for far longer
+# (ScreenShot.sh 10s, ScreenRecord.sh 5s, the handy bind 1.5s), so
+# the request has to be overridden rather than left to `timeout`.
+# `set_transient = yes` lets them expire while the session is idle
+# too, so none of them survive to greet you when you come back.
 #
-# The pattern is a POSIX ERE, because enable_posix_regex = true above, so
-# match-anything is ".*" and NOT "*" (which is not a valid ERE).
+# A rule's filters are ANDed, so each field needs its own rule. They
+# all sit above [messages] on purpose: a chat notification that
+# happens to say "Recording" is still held open by the rules below.
+# ------------------------------------------------------------------
+[flash_screenshot]
+    stack_tag = "^shot-notify$"
+    override_dbus_timeout = 1s
+    set_transient = yes
+
+# The "NOT Saved" paths send no stack tag.
+[flash_screenshot_untagged]
+    summary = "Screenshot"
+    override_dbus_timeout = 1s
+    set_transient = yes
+
+[flash_recording]
+    stack_tag = "^record-notify$"
+    override_dbus_timeout = 1s
+    set_transient = yes
+
+# Covers "Recording Started/Stopped/Failed/Cancelled", "No Recording"
+# and "Already Recording", which are sent without a stack tag.
+[flash_recording_untagged]
+    summary = "Recording"
+    override_dbus_timeout = 1s
+    set_transient = yes
+
+# The screenshot annotation tool confirming its own save.
+[flash_satty]
+    appname = "^satty$"
+    override_dbus_timeout = 1s
+    set_transient = yes
+
+# Matched on the body, not the summary: handy-start.sh sends its
+# first-run "pick a model" hint under the same "Handy" summary, and
+# that one is worth reading.
+[flash_handy_toggle]
+    body = "^Toggling transcription$"
+    override_dbus_timeout = 1s
+    set_transient = yes
+
+# The other end: what a person sent you waits until it is clicked (left click
+# dismisses one, middle click dismisses all).
 #
-# Disable temporarily with: dunstctl rule never_expire disable
-[never_expire]
-    summary = ".*"
+# `override_dbus_timeout = 0` is what actually enforces the waiting: a client's
+# own requested duration beats the `timeout` setting, so it has to be
+# overridden explicitly. `set_transient = no` stops a client marking a
+# notification transient, which would expire it regardless.
+#
+# Patterns are POSIX EREs, because enable_posix_regex = true above, so `.*` is
+# match-anything and `*` alone is not valid.
+#
+# Matching is on appname because that is the field that separates the two
+# classes here: every script in this repo notifies through `notify-send` and
+# says so, while a chat client reports its own name. `dunstctl history` prints
+# the appname of anything you want to add to this list.
+#
+# Disable temporarily with: dunstctl rule messages disable
+[messages]
+    appname = "^([Ss]lack|[Dd]iscord|[Tt]elegram.*|[Ss]ignal.*|Element|[Tt]hunderbird|[Ww]hats[Aa]pp|Beeper|Ferdium|Evolution|[Gg]eary)$"
+    override_dbus_timeout = 0
+    set_transient = no
+
+# The same, for any client that labels its notification as a message using the
+# freedesktop categories, so a chat app not named above is still covered.
+[messages_by_category]
+    category = "^(im|im\.received|email|email\.arrived)$"
+    override_dbus_timeout = 0
+    set_transient = no
+
+# An error or a warning is not feedback you can afford to miss, whichever tool
+# raised it. Last rule, so it wins over everything above.
+[critical_never_expires]
+    msg_urgency = critical
     override_dbus_timeout = 0
     set_transient = no
