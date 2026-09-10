@@ -131,7 +131,7 @@ QtObject {
     readonly property color colDim: atLeast(palDim, 0.59)
     readonly property color colMuted: atLeast(palMuted, 0.57)
     readonly property color colFaint: atLeast(palFaint, 0.56)
-    readonly property color colSeparator: palMuted            // decoration, unfloored
+    readonly property color colSeparator: colGrey             // neutral, same grey as idle widgets
     readonly property color colBorder: palBorder
 
     readonly property color colAccent: palAccent  // active, connected, on
