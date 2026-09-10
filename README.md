@@ -113,6 +113,33 @@ Please select a locale that suits you
 
 All configurations are stored in `Hyprland-Dots/config/` and will be copied to `~/.config/` during installation.
 
+### Fonts
+
+`install-scripts/fonts.sh` installs the font packages, and then verifies by name
+that the families the configs actually reference are present — fontconfig
+substitutes silently on a miss, so a missing font is otherwise invisible until
+the desktop just looks wrong.
+
+The ones that matter:
+
+| Family | Package | Used by |
+| --- | --- | --- |
+| `Terminess Nerd Font` | `ttf-terminus-nerd` | **the quickshell bar** — `bar/Theme.qml` |
+| `JetBrainsMono Nerd Font Mono` | `ttf-jetbrains-mono-nerd` | foot, hyprlock, `SovietLockGen.py` |
+| `Fira Code` | `ttf-fira-code` | dunst, `gtk-3.0/settings.ini` |
+
+To change the bar's font, edit `fontFamily` in
+`Hyprland-Dots/config/quickshell/bar/Theme.qml` — every widget renders through
+it — and add the package to `fonts.sh` and the family to `required_families`
+in the same file.
+
+Two places name fonts that are **not** installed and have never been:
+`config/rofi/themes/KooL_LonerOrZ.rasi` asks for `Iosevka`, and the quickshell
+*overview* config (`config.json` / `modules/common/Appearance.qml`, not the bar,
+and not autostarted) asks for `Open Sans` and `FiraConde Nerd Font`. Both render
+substituted here already, so this is inherited from upstream rather than
+something the install broke.
+
 ### Wallpapers
 
 `Hyprland-Dots/wallpapers/` is copied to `~/Pictures/wallpapers/`, which is the
