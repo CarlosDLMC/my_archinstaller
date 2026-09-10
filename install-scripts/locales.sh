@@ -41,12 +41,6 @@ wanted_locales=(
   "ru_RU.UTF-8 UTF-8"
 )
 
-# Locales to explicitly comment back out. de_DE used to provide LC_TIME here
-# before the switch to ru_RU; nothing references it any more.
-unwanted_locales=(
-  "de_DE.UTF-8 UTF-8"
-)
-
 printf "\n${NOTE} Generating ${SKY_BLUE}locales${RESET}...\n"
 
 if [ ! -f "$LOCALE_GEN" ]; then
@@ -76,14 +70,10 @@ for _locale in "${wanted_locales[@]}"; do
   fi
 done
 
-for _locale in "${unwanted_locales[@]}"; do
-  _escaped=$(printf '%s' "$_locale" | sed 's/[][\.*^$/]/\\&/g')
-  if grep -qE "^${_escaped}\s*$" "$LOCALE_GEN"; then
-    sudo sed -i -E "s/^${_escaped}\s*$/#${_escaped}/" "$LOCALE_GEN"
-    echo "${NOTE} Disabled $_locale (no longer used)" | tee -a "$LOG"
-    changed=1
-  fi
-done
+# This script only ever *enables* locales. It deliberately does not disable any:
+# /etc/locale.conf may point LANG at one it does not know about, and removing a
+# locale that LANG names drops the whole session back to C. An extra generated
+# locale costs a few seconds of locale-gen and nothing else.
 
 # locale-gen rebuilds every enabled locale, so only run it if something moved.
 if [ "$changed" -eq 1 ]; then
