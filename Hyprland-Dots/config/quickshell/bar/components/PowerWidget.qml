@@ -40,11 +40,17 @@ DropdownWidget {
             id: powerIcon
             anchors.centerIn: parent
             text: ""
-            // Same wallust slot Hyprland uses for col.active_border
-            // (color12), so the logo and the focused window's border are
-            // literally the same colour.
-            color: Theme.colBorder
-            font.pixelSize: Theme.fontSize + 2
+            // color14, the vivid red in the palette. color12 (the literal
+            // border colour) measured 1.62:1 on the bar and read as a
+            // shadow of a logo; this is the same red family with presence.
+            color: Theme.colAlert
+            // Sized off the BAR, not the text. barContent is laid out at
+            // designHeight and then scaled by uiScale as one unit, so a
+            // single multiplier fills the bar height at every resolution -
+            // 34px on the 2560 monitor, ~31px on the 1920 laptop, and
+            // whatever is right on anything else. The 1.09 accounts for the
+            // glyph's ink being ~92% of its em box.
+            font.pixelSize: Math.round(barWindow.designHeight * 1.09)
             font.family: Theme.fontFamily
         }
     }
