@@ -197,13 +197,13 @@ Item {
                     // at the top, out of line with the month name.
                     anchors.verticalCenter: parent.verticalCenter
                     radius: 6
-                    color: prevMonthArea.containsMouse ? Qt.rgba(Theme.colFg.r, Theme.colFg.g, Theme.colFg.b, 0.12) : "transparent"
+                    color: prevMonthArea.containsMouse ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.12) : "transparent"
 
                     Text {
                         anchors.centerIn: parent
                         text: "󰅁"
                         font.pixelSize: 24
-                        color: Theme.colFg
+                        color: Theme.colWhite
                         font.family: Theme.fontFamily
                     }
 
@@ -230,7 +230,7 @@ Item {
                                                           Locale.LongFormat)
                           + " " + root.displayDate.getFullYear()
                     font.pixelSize: Theme.fontSize + 10
-                    color: Theme.colFg
+                    color: Theme.colWhite
                     font.family: Theme.fontFamily
                     font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
                     horizontalAlignment: Text.AlignHCenter
@@ -242,13 +242,13 @@ Item {
                     height: 36
                     anchors.verticalCenter: parent.verticalCenter
                     radius: 6
-                    color: nextMonthArea.containsMouse ? Qt.rgba(Theme.colFg.r, Theme.colFg.g, Theme.colFg.b, 0.12) : "transparent"
+                    color: nextMonthArea.containsMouse ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.12) : "transparent"
 
                     Text {
                         anchors.centerIn: parent
                         text: "󰅂"
                         font.pixelSize: 24
-                        color: Theme.colFg
+                        color: Theme.colWhite
                         font.family: Theme.fontFamily
                     }
 
@@ -288,7 +288,7 @@ Item {
                             anchors.centerIn: parent
                             text: modelData
                             font.pixelSize: Theme.fontSize - 3
-                            color: Qt.rgba(Theme.colFg.r, Theme.colFg.g, Theme.colFg.b, 0.6)
+                            color: Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.6)
                             font.family: Theme.fontFamily
                             font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
                         }
@@ -330,7 +330,7 @@ Item {
                             anchors.centerIn: parent
                             width: Math.min(parent.width - 4, parent.height - 4, 42)
                             height: width
-                            color: isToday ? Qt.rgba(Theme.colFg.r, Theme.colFg.g, Theme.colFg.b, 0.12) : dayArea.containsMouse ? Qt.rgba(Theme.colFg.r, Theme.colFg.g, Theme.colFg.b, 0.08) : "transparent"
+                            color: isToday ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.12) : dayArea.containsMouse ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.08) : "transparent"
                             radius: 6
 
                             Text {
@@ -338,7 +338,7 @@ Item {
                                 text: dayDate.getDate()
                                 font.pixelSize: Theme.fontSize
                                 font.family: Theme.fontFamily
-                                color: isToday ? Theme.colFg : isCurrentMonth ? Theme.colFg : Qt.rgba(Theme.colFg.r, Theme.colFg.g, Theme.colFg.b, 0.4)
+                                color: isToday ? Theme.colWhite : isCurrentMonth ? Theme.colWhite : Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.4)
                                 font.bold: isToday
                             }
                         }

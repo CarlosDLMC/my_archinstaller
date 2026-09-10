@@ -38,7 +38,7 @@ Text {
     }
 
     text: volumeIcon + " " + volumeLevel + "%"
-    color: volumeMuted ? Theme.colAlert : Theme.colFg
+    color: volumeMuted ? Theme.colGrey : Theme.colWhite
     font.pixelSize: Theme.fontSize
     font.family: Theme.fontFamily
     font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow

@@ -4,7 +4,7 @@ import ".."
 Text {
     id: clockText
     text: Qt.formatDateTime(new Date(), "HH:mm")
-    color: Theme.colClock
+    color: Theme.colCenter
     font.pixelSize: Theme.fontSize
     font.family: Theme.fontFamily
     font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow

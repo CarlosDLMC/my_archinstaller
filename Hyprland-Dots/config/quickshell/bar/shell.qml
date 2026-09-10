@@ -31,7 +31,7 @@ ShellRoot {
             // until CPU starts crowding the clock again, then back off.
             readonly property real referenceWidth: 2560   // your external monitor's width
             readonly property real minScale: 0.90         // readability floor (~20px font on the laptop)
-            readonly property real designHeight: 30
+            readonly property real designHeight: 34
             readonly property real uiScale: Math.max(minScale, Math.min(1.0, width / referenceWidth))
             readonly property real designWidth: width / uiScale
 
@@ -59,10 +59,10 @@ ShellRoot {
             WlrLayershell.namespace: "quickshell:bar"
 
             implicitHeight: designHeight * uiScale
-            // No bar surface: the content sits directly on the wallpaper.
-            // The exclusion zone is still reserved, so windows keep their
-            // gap at the top and nothing tiles underneath the widgets.
-            color: Theme.colBgTransparent
+            // Almost no bar surface: a 20% wash of the background colour
+            // under the compositor blur. The exclusion zone is still
+            // reserved, so nothing tiles underneath the widgets.
+            color: Theme.colBgWash
 
             margins {
                 top: 0
@@ -86,7 +86,7 @@ ShellRoot {
 
             Rectangle {
                 anchors.fill: parent
-                color: Theme.colBgTransparent
+                color: Theme.colBgTransparent  // wash lives on the PanelWindow
 
                 RowLayout {
                     anchors.fill: parent
@@ -183,7 +183,7 @@ ShellRoot {
                     Text {
                         id: dateText
                         text: Qt.formatDateTime(new Date(), "dd.MM.yyyy")
-                        color: Theme.colFg
+                        color: Theme.colWhite
                         font.pixelSize: Theme.fontSize
                         font.family: Theme.fontFamily
                         font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow

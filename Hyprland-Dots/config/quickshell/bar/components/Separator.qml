@@ -5,7 +5,7 @@ import ".."
 // TUI-style pipe divider
 Text {
     text: "│"
-    color: Theme.colMuted
+    color: Theme.colSeparator
     font.family: Theme.fontFamily
     font.pixelSize: Theme.fontSize + 4
     Layout.alignment: Qt.AlignVCenter

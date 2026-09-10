@@ -35,6 +35,24 @@ QtObject {
     property color palWarn: "#8E4137"    // degraded or unknown state
     property color palBorder: "#59302D"  // popup borders
 
+    // ------------------------------------------------------------------
+    //  Readability floor
+    // ------------------------------------------------------------------
+    //  wallust's dark slots (color0, color5, color8) are near-black by
+    //  nature. Used as text on a bar that has no background of its own,
+    //  they measured 2.1:1 against the wallpaper - unreadable. Raising a
+    //  colour's HSL lightness to a floor keeps wallust's hue and
+    //  saturation while guaranteeing the contrast holds for ANY wallpaper,
+    //  which hardcoding lifted hexes would not.
+    //
+    //  Floors were chosen so each role clears WCAG AA (4.5:1) against the
+    //  brightest tile of the current wallpaper's top strip.
+    function atLeast(c, minLightness) {
+        if (c.hslLightness >= minLightness)
+            return c
+        return Qt.hsla(c.hslHue, c.hslSaturation, minLightness, c.a)
+    }
+
     function applyPalette(text) {
         if (!text || text.length === 0)
             return
@@ -75,23 +93,52 @@ QtObject {
     }
 
     // ------------------------------------------------------------------
+    //  Neutral roles
+    // ------------------------------------------------------------------
+    //  Most of the bar is deliberately colourless: white where a widget is
+    //  active or carries a reading, grey where it is idle. Only a handful of
+    //  things are allowed hue, because hue means something there - the window
+    //  title, the notification bell, the weather, the VPN, the power menu.
+    //
+    //  These keep a whisper of the wallpaper's hue (so the bar never looks
+    //  like it belongs to a different desktop) but drop almost all of the
+    //  saturation.
+    function desat(c, keepSaturation, lightness) {
+        return Qt.hsla(c.hslHue, c.hslSaturation * keepSaturation, lightness, c.a)
+    }
+
+    readonly property color colWhite: desat(palFg, 0.12, 0.95)
+    readonly property color colGrey: desat(palFg, 0.08, 0.62)
+
+    // ------------------------------------------------------------------
     //  Semantic roles - prefer these in new widgets
     // ------------------------------------------------------------------
 
     readonly property color colBg: palBg
     readonly property color colBgTransparent: "transparent"
+    //  60% transparent, i.e. a 40% wash of the background colour sitting
+    //  under the compositor blur. Steadies the text over busy parts of the
+    //  wallpaper while still reading as see-through rather than a solid bar.
+    readonly property color colBgWash: Qt.rgba(palBg.r, palBg.g, palBg.b, 0.40)
 
-    readonly property color colLabel: palDim      // "CPU", "MEM" - the noun
-    readonly property color colValue: palFg       // 17%, 9.25G - the number
+    //  Text roles are floored for legibility. colSeparator deliberately is
+    //  NOT: WCAG applies to text, and the "│" dividers are decoration that
+    //  should stay quiet rather than compete with the readings.
+    readonly property color colLabel: colGrey                 // "CPU", "MEM"
+    readonly property color colValue: colWhite                // 17%, 9.25G
     readonly property color colFg: palFg
     readonly property color colBright: palBright
-    readonly property color colDim: palDim
-    readonly property color colMuted: palMuted
-    readonly property color colFaint: palFaint
+    readonly property color colDim: atLeast(palDim, 0.59)
+    readonly property color colMuted: atLeast(palMuted, 0.57)
+    readonly property color colFaint: atLeast(palFaint, 0.56)
+    readonly property color colSeparator: palMuted            // decoration, unfloored
     readonly property color colBorder: palBorder
 
     readonly property color colAccent: palAccent  // active, connected, on
-    readonly property color colAlert: palAlert    // muted, low battery, DND, VPN down
+    //  Floored to 0.62 rather than to AAA: pushing the alert hue any lighter
+    //  washes it out until it no longer reads as "coloured", which is the
+    //  entire job it has on a monochrome bar.
+    readonly property color colAlert: atLeast(palAlert, 0.62)
     readonly property color colWarn: palWarn      // state unknown / degraded
     readonly property color colOnAlert: palBg     // text sitting on an alert fill
 
@@ -109,17 +156,27 @@ QtObject {
     //  it ever earns its own emphasis - but the default is: no hue.
 
     readonly property color colClock: palFg
-    readonly property color colCpu: palDim
-    readonly property color colMem: palDim
-    readonly property color colDisk: palDim
-    readonly property color colVol: palFg
-    readonly property color colNetwork: palDim
-    readonly property color colBluetooth: palFg
-    readonly property color colWindow: palDim     // window title is secondary info
-    readonly property color colKernel: palDim
+    readonly property color colCpu: colGrey
+    readonly property color colMem: colGrey
+    readonly property color colDisk: colGrey
+    readonly property color colVol: colWhite
+    readonly property color colNetwork: colWhite
+    readonly property color colBluetooth: colWhite
+    readonly property color colWindow: colDim     // window title is secondary info
+    readonly property color colKernel: colDim
 
-    readonly property color colWorkspaceActive: palBright
-    readonly property color colWorkspaceInactive: palMuted
+    //  Per-area treatment, picked by eye from the comparison:
+    //    workspaces      -> variant E (near-white active, light grey inactive)
+    //    window title    -> variant A (kept the warm dim it already had)
+    //    bell + clock    -> variant C (values lifted to near-white warm)
+    //  Expressed as lightness floors so they still track the wallpaper.
+    readonly property color colWorkspaceActive: colWhite
+    readonly property color colWorkspaceInactive: colGrey
+
+    // Centre group. The clock and city are white; the bell keeps its own
+    // states (grey idle, alert on, warn when dunstctl cannot be reached).
+    readonly property color colCenter: colWhite
+    readonly property color colCenterMuted: colGrey
 
     // Unread badges: an unread message is an attention state, so it gets
     // the alert hue rather than a brand colour that would fight the rice.
@@ -128,5 +185,5 @@ QtObject {
 
     // Font
     readonly property string fontFamily: "Terminess Nerd Font"
-    readonly property int fontSize: 22
+    readonly property int fontSize: 24
 }

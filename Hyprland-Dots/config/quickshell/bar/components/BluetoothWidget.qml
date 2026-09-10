@@ -172,7 +172,7 @@ DropdownWidget {
         text: !btPowered ? "󰂲" :
               btConnected ? "󰂱" : "󰂯"
         color: !btPowered ? Theme.colMuted :
-               btConnected ? Theme.colAccent : Theme.colMuted
+               btConnected ? Theme.colWhite : Theme.colGrey
         font.pixelSize: Theme.fontSize + 4
         font.family: Theme.fontFamily
         font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow

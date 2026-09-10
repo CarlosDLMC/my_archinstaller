@@ -18,7 +18,7 @@ Rectangle {
         id: kbText
         anchors.centerIn: parent
         text: currentLayout.toUpperCase()
-        color: Theme.colFg
+        color: Theme.colWhite
         font.pixelSize: Theme.fontSize
         font.family: Theme.fontFamily
         font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow

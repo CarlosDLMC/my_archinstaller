@@ -25,10 +25,12 @@ DropdownWidget {
 
     function getProfileColor(profile) {
         switch(profile) {
-            case "performance": return Theme.colAlert  // drawing power
-            case "balanced": return Theme.colFg       // nominal
-            case "power-saver": return Theme.colDim   // holding back
-            default: return Theme.colFg
+            // The three glyphs already differ, so colour only separates
+            // "holding back" from the rest.
+            case "performance": return Theme.colWhite
+            case "balanced": return Theme.colWhite
+            case "power-saver": return Theme.colGrey
+            default: return Theme.colWhite
         }
     }
 
