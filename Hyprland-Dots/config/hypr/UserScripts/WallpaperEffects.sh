@@ -7,7 +7,6 @@ terminal=foot
 wallpaper_current="$HOME/.config/hypr/wallpaper_effects/.wallpaper_current"
 wallpaper_output="$HOME/.config/hypr/wallpaper_effects/.wallpaper_modified"
 SCRIPTSDIR="$HOME/.config/hypr/scripts"
-focused_monitor=$(hyprctl monitors -j | jq -r '.[] | select(.focused) | .name')
 rofi_theme="$HOME/.config/rofi/config-wallpaper-effect.rasi"
 
 # Directory for swaync
@@ -45,7 +44,7 @@ declare -A effects=(
 
 # Function to apply no effects
 no-effects() {
-    awww img -o "$focused_monitor" "$wallpaper_current" $SWWW_PARAMS &&
+    awww img "$wallpaper_current" $SWWW_PARAMS &&
     wait $!
     wallust run "$wallpaper_current" -s &&
     wait $!
@@ -83,7 +82,7 @@ main() {
             done
 
             sleep 1
-            awww img -o "$focused_monitor" "$wallpaper_output" $SWWW_PARAMS &
+            awww img "$wallpaper_output" $SWWW_PARAMS &
 
             sleep 2
   
