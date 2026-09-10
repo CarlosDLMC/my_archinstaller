@@ -38,4 +38,26 @@ else
   echo "${WARN} power-profiles-daemon failed to start. Power profile management may not work." | tee -a "$LOG"
 fi
 
+# Wire nss-mdns into /etc/nsswitch.conf.
+#
+# thunar.sh enables avahi-daemon, but enabling the daemon is only half of it:
+# glibc never asks Avahi unless "mdns_minimal [NOTFOUND=return]" sits in the
+# hosts: line, ahead of dns. Without it .local hostnames simply do not resolve
+# and nothing reports an error - the name just fails to look up.
+printf "\n${NOTE} Wiring ${SKY_BLUE}nss-mdns${RESET} into /etc/nsswitch.conf...\n" | tee -a "$LOG"
+if ! pacman -Qi nss-mdns &>/dev/null; then
+  echo "${WARN} nss-mdns is not installed. Skipping .local name resolution." | tee -a "$LOG"
+elif grep -q 'mdns_minimal' /etc/nsswitch.conf; then
+  echo "${OK} nsswitch.conf already resolves .local names." | tee -a "$LOG"
+else
+  sudo cp /etc/nsswitch.conf /etc/nsswitch.conf.bak-"$(date +%Y%m%d-%H%M%S)"
+  # Insert before "dns" so mDNS is consulted first, and keep the rest intact.
+  sudo sed -i -E '/^hosts:/ s/\bdns\b/mdns_minimal [NOTFOUND=return] dns/' /etc/nsswitch.conf
+  if grep -q 'mdns_minimal' /etc/nsswitch.conf; then
+    echo "${OK} .local name resolution enabled." | tee -a "$LOG"
+  else
+    echo "${WARN} Could not edit nsswitch.conf. .local names will not resolve." | tee -a "$LOG"
+  fi
+fi
+
 printf "\n%.0s" {1..2}

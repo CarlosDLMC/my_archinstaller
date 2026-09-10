@@ -426,6 +426,10 @@ echo "${INFO} Installing ${SKY_BLUE}KooL Hyprland additional packages...${RESET}
 sleep 1
 execute_script "01-hypr-pkgs.sh"
 
+echo "${INFO} Installing ${SKY_BLUE}GPU drivers...${RESET}" | tee -a "$LOG"
+sleep 1
+execute_script "graphics.sh"
+
 echo "${INFO} Installing ${SKY_BLUE}pipewire and pipewire-audio...${RESET}" | tee -a "$LOG"
 sleep 1
 execute_script "pipewire.sh"
