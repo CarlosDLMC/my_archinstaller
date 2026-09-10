@@ -150,29 +150,30 @@ for dir in "${config_dirs[@]}"; do
     fi
 done
 
-# Install the secrets template, and seed the real file only if absent
+# Deploy secrets.zsh, but only if the user does not already have one
 #
-# NOTE: "zsh" is deliberately NOT in config_dirs above. That loop backs up and
-# *replaces* the whole directory, which would move a filled-in secrets.zsh out
-# from under the user on every re-run. This block only ever adds.
+# Two things here are load-bearing:
+#
+#   - "zsh" is deliberately NOT in config_dirs above. That loop backs up and
+#     *replaces* whole directories, which would move a filled-in secrets.zsh
+#     out from under the user on every re-run.
+#
+#   - The copy is guarded by a -e test. The tracked copy of this file holds
+#     placeholder values, so overwriting a real one would silently replace live
+#     credentials with "sk-ant-1234" - and the only symptom would be every
+#     authenticated tool failing at once, with nothing pointing at the cause.
+#     Create when missing, never overwrite.
 printf "\n${INFO} Setting up machine-local secrets...\n"
-if [ -f "$SCRIPT_DIR/config/zsh/secrets.zsh.example" ]; then
+if [ -f "$SCRIPT_DIR/config/zsh/secrets.zsh" ]; then
     mkdir -p "$HOME/.config/zsh"
 
-    # The template itself is always refreshed - it is documentation, not data.
-    cp "$SCRIPT_DIR/config/zsh/secrets.zsh.example" "$HOME/.config/zsh/secrets.zsh.example"
-    echo "  ${OK} Copied secrets.zsh.example"
-
-    # The real file is created from the template ONLY when missing. Never
-    # overwrite it: it holds live credentials that exist nowhere else, and this
-    # script is expected to be re-run.
     if [ -e "$HOME/.config/zsh/secrets.zsh" ]; then
-        echo "  ${NOTE} secrets.zsh already exists - left untouched"
+        echo "  ${NOTE} ~/.config/zsh/secrets.zsh already exists - left untouched"
     else
-        cp "$SCRIPT_DIR/config/zsh/secrets.zsh.example" "$HOME/.config/zsh/secrets.zsh"
+        cp "$SCRIPT_DIR/config/zsh/secrets.zsh" "$HOME/.config/zsh/secrets.zsh"
         chmod 600 "$HOME/.config/zsh/secrets.zsh"
-        echo "  ${OK} Created ~/.config/zsh/secrets.zsh from the template (mode 600)"
-        echo "  ${NOTE} It holds placeholder values - edit it and put your real keys in"
+        echo "  ${OK} Created ~/.config/zsh/secrets.zsh (mode 600)"
+        echo "  ${NOTE} Every value in it is a placeholder - edit it and add your real keys"
     fi
 fi
 
