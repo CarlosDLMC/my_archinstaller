@@ -178,7 +178,11 @@ apply_image_wallpaper() {
     awww-daemon --format argb &
   fi
 
-  awww img -o "$focused_monitor" "$image_path" $SWWW_PARAMS
+  # No -o here on purpose: `awww img` without --outputs sets the image on
+  # every output, which is what changing "the wallpaper" should mean. It used
+  # to pass -o "$focused_monitor", so on a multi-monitor setup only the screen
+  # you happened to be on changed and the others kept the old wallpaper.
+  awww img "$image_path" $SWWW_PARAMS
 
   # Run additional scripts (pass the image path to avoid cache race conditions)
   "$SCRIPTSDIR/WallustSwww.sh" "$image_path"
