@@ -6,6 +6,15 @@
 
 [general]
 
+# Watch this file and re-read it when it changes, instead of only reading it
+# once at startup. This whole file is a wallust target: every wallpaper change
+# regenerates it (template ~/.config/wallust/templates/colors-cava, wired up as
+# cava.target in wallust.toml), so without this a cava that is already running
+# keeps the old palette while every other app recolours, and only picks up the
+# new one when you restart it. cava's own shipped default has this commented
+# out as `; live-config = 0`; this template had dropped the line entirely.
+live-config = 1
+
 # Smoothing mode. Can be 'normal', 'scientific' or 'waves'. DEPRECATED as of 0.6.0
 ; mode = normal
 
