@@ -61,7 +61,7 @@ DropdownWidget {
     Text {
         anchors.verticalCenter: parent.verticalCenter
         text: batteryWidget.getBatteryIcon(batteryWidget.averageLevel, batteryWidget.isCharging) + " " + batteryWidget.averageLevel + "%"
-        color: batteryWidget.averageLevel <= 15 ? Theme.colAlert : Theme.colFg
+        color: batteryWidget.averageLevel <= 15 ? Theme.colAlert : Theme.colWhite
         font.pixelSize: Theme.fontSize
         font.family: Theme.fontFamily
         font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
@@ -104,7 +104,7 @@ DropdownWidget {
 
                     Text {
                         text: batteryWidget.getBatteryIcon(parent.batteryData.level, parent.batteryData.charging)
-                        color: parent.batteryData.level <= 15 ? Theme.colAlert : Theme.colFg
+                        color: parent.batteryData.level <= 15 ? Theme.colAlert : Theme.colWhite
                         font.pixelSize: Theme.fontSize + 4
                         font.family: Theme.fontFamily
                         anchors.verticalCenter: parent.verticalCenter

@@ -42,8 +42,10 @@ RowLayout {
                 anchors.centerIn: parent
                 // Active -> [N] bold; inactive -> space-padded N (same monospace width, no jump)
                 text: wsRect.isActive ? "[" + wsRect.wsId + "]" : " " + wsRect.wsId + " "
-                color: wsRect.isActive ? Theme.colWorkspaceActive :
-                       wsRect.hasWindows ? Theme.colFg : Theme.colMuted
+                // White when the workspace holds something, grey when empty.
+                // The [brackets] mark which one is focused, not the colour.
+                color: (wsRect.isActive || wsRect.hasWindows) ? Theme.colWhite
+                                                              : Theme.colGrey
                 font.pixelSize: Theme.fontSize
                 font.family: Theme.fontFamily
                 font.bold: wsRect.isActive

@@ -187,12 +187,11 @@ DropdownWidget {
     Text {
         id: wifiText
         anchors.verticalCenter: parent.verticalCenter
-        text: !wifiConnected ? "󰤭" :
-              wifiSignal >= 80 ? "󰤨" :
-              wifiSignal >= 60 ? "󰤥" :
-              wifiSignal >= 40 ? "󰤢" :
-              wifiSignal >= 20 ? "󰤟" : "󰤯"
-        color: wifiConnected ? Theme.colNetwork : Theme.colMuted
+        // Arc-style nf-md-wifi rather than the cone-style strength ramp.
+        // Signal strength is no longer in the glyph shape - it is still in
+        // the dropdown, and the icon dims when the link is down.
+        text: wifiConnected ? "󰖩" : "󰖪"
+        color: wifiConnected ? Theme.colWhite : Theme.colGrey
         font.pixelSize: Theme.fontSize + 4
         font.family: Theme.fontFamily
         font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow

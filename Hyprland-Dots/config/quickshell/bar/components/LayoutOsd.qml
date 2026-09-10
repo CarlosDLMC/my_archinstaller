@@ -102,7 +102,7 @@ PanelWindow {
         radius: osd.panelRadius
         color: Qt.rgba(Theme.colBg.r, Theme.colBg.g, Theme.colBg.b, 0.92)
         border.width: 1
-        border.color: Qt.rgba(Theme.colFg.r, Theme.colFg.g, Theme.colFg.b, 0.12)
+        border.color: Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.12)
 
         opacity: osd.shown ? 1.0 : 0.0
         scale: osd.shown ? 1.0 : 0.94
@@ -135,19 +135,19 @@ PanelWindow {
                         height: osd.tileSize
                         radius: osd.tileRadius
                         color: entry.isSelected
-                               ? Qt.rgba(Theme.colFg.r, Theme.colFg.g, Theme.colFg.b, 0.16)
+                               ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.16)
                                : "transparent"
                         border.width: entry.isSelected ? 2 : 1
                         border.color: entry.isSelected
-                               ? Theme.colFg
-                               : Qt.rgba(Theme.colFg.r, Theme.colFg.g, Theme.colFg.b, 0.18)
+                               ? Theme.colWhite
+                               : Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.18)
 
                         Behavior on color { ColorAnimation { duration: 120 } }
 
                         Text {
                             anchors.centerIn: parent
                             text: (entry.modelData.short || "").toUpperCase()
-                            color: Theme.colFg
+                            color: Theme.colWhite
                             opacity: entry.isSelected ? 1.0 : 0.55
                             font.family: Theme.fontFamily
                             font.pixelSize: osd.codeSize
@@ -160,7 +160,7 @@ PanelWindow {
                         horizontalAlignment: Text.AlignHCenter
                         elide: Text.ElideRight
                         text: entry.modelData.name || ""
-                        color: Theme.colFg
+                        color: Theme.colWhite
                         opacity: entry.isSelected ? 0.85 : 0.4
                         font.family: Theme.fontFamily
                         font.pixelSize: osd.nameSize
