@@ -24,7 +24,11 @@ RESET="$(tput sgr0)"
 # HTTPS on purpose: a freshly installed machine has no SSH key yet.
 Distro="my_archinstaller"
 Github_URL="https://github.com/CarlosDLMC/$Distro.git"
-Distro_DIR="$HOME/$Distro"
+# ~/Documents/my_archinstaller, matching the path the README tells you to clone
+# to and the one diagnose.sh and the troubleshooting steps print. Cloning to
+# $HOME instead left two copies of the repo on the machine, and any fix applied
+# to the documented path had no effect on the one that actually ran.
+Distro_DIR="$HOME/Documents/$Distro"
 
 printf "\n%.0s" {1..1}
 
@@ -61,6 +65,7 @@ else
     echo "${MAGENTA}$Distro_DIR does not exist. Cloning the repository...${RESET}"
     # No --depth=1: this is a working config repo, and its history is the record
     # of why things are the way they are.
+    mkdir -p "$(dirname "$Distro_DIR")"
     if ! git clone "$Github_URL" "$Distro_DIR"; then
         echo "${ERROR} Failed to clone $Github_URL. Exiting."
         exit 1
@@ -69,4 +74,9 @@ else
 fi
 
 chmod +x install.sh
-./install.sh
+
+# Drive the install from the preset, exactly as the README documents. Without
+# --preset, install.sh opens the interactive checklist with every option
+# unticked, so an "auto" install would sit waiting for input and then install
+# a bare Hyprland with none of the customisations in this repo.
+./install.sh --preset custom-preset.conf

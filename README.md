@@ -113,6 +113,36 @@ Please select a locale that suits you
 
 All configurations are stored in `Hyprland-Dots/config/` and will be copied to `~/.config/` during installation.
 
+### Wallpapers
+
+`Hyprland-Dots/wallpapers/` is copied to `~/Pictures/wallpapers/`, which is the
+directory `WallpaperSelect.sh`, `WallpaperRandom.sh` and the rofi picker all read.
+The default wallpaper is set by `DEFAULT_WALLPAPER` near the bottom of
+`Hyprland-Dots/copy.sh` — currently `sovietpunk/sovietpunk_2k_2560x1440.png`.
+copy.sh seeds it into `~/.config/hypr/wallpaper_effects/.wallpaper_current`, which
+is what `initial-boot.sh` loads on first login and what wallust derives the bar
+and terminal colours from.
+
+Those two `.wallpaper_current` / `.wallpaper_modified` files are runtime state — a
+copy of whatever wallpaper is active — so they are deliberately **not** tracked.
+Change the default by editing `DEFAULT_WALLPAPER`, not by committing an image
+over them.
+
+### What is deliberately NOT in this repo
+
+These are machine-specific, so a fresh install starts without them:
+
+- **`~/.config/zsh/secrets.zsh`** — API keys and tokens. See installation step 4.
+- **`~/.config/hypr/monitors.conf`** — the repo ships a generic template. This
+  machine's copy also carries a patched-EDID setup for a 2560x1440@75 Samsung
+  over HDMI, which additionally needs a blob in `/usr/lib/firmware/edid/`, a
+  `FILES=` entry in `/etc/mkinitcpio.conf` and a `drm.edid_firmware=` kernel
+  parameter — none of which live under `~`. Use `nwg-displays` to lay out
+  whatever monitors the new machine has.
+- **Applications** beyond the desktop itself (browsers, editors, chat, language
+  toolchains). The installer builds the Hyprland environment, not the full
+  workstation.
+
 ### Key Bindings (Some Important Ones)
 
 - `SUPER + Return` - Open terminal (foot)
@@ -140,11 +170,17 @@ Handy is offline speech-to-text — no audio leaves your machine. `wtype` inject
 4. Press `SUPER + CTRL + F8` again — recording stops, transcription runs, text is typed into the field.
 
 **First login on a fresh install:**
-- Handy opens automatically so you can pick a model. Choose **Parakeet V3** (CPU-friendly, auto-detects 25 languages including English, Spanish, German, Russian) and let it download (~30s).
+- Handy does **not** autostart — it is launched on demand by the keybind, to save the RAM of an idle daemon. So on first use, press `SUPER + CTRL + F8` and Handy comes up.
+- Pick a model: choose **Parakeet V3** (CPU-friendly, auto-detects 25 languages including English, Spanish, German, Russian) and let it download (~30s).
 - **Ignore the "Shortcut" field inside Handy's UI** — Wayland blocks apps from registering global shortcuts, so it doesn't work. The Hyprland keybind in `UserKeybinds.conf` is what actually fires the toggle.
-- Once you've selected a model, Handy starts hidden on every subsequent login. The keybind keeps working in the background.
 
-This behavior is implemented by `~/.config/hypr/UserScripts/handy-start.sh`, which opens Handy visibly while `selected_model` is empty and switches to `--start-hidden` once it's set.
+**If you would rather have it resident**, uncomment this line in `~/.config/hypr/UserConfigs/Startup_Apps.conf`:
+
+```
+# exec-once = $UserScripts/handy-start.sh
+```
+
+`handy-start.sh` opens Handy visibly while `selected_model` is empty — so you get the model picker on a fresh machine — and switches to `--start-hidden` once a model is set.
 
 ### Lock Screen (Soviet TUI)
 
@@ -235,6 +271,8 @@ All configs are in `~/.config/`. Main files to edit:
 - `~/.config/quickshell/bar/` - Custom bar configuration
 - `~/.config/foot/` - Terminal configuration
 - `~/.zshrc` - Shell configuration
+- `~/.config/gtk-3.0/settings.ini` - GTK font, cursor and dark-mode preference
+- `~/.config/environment.d/locale.conf` - `LC_TIME`, i.e. the clock and calendar format
 
 ## Troubleshooting
 
@@ -299,8 +337,12 @@ cd ~/Documents/my_archinstaller
 
 - The installation will backup existing configs to `~/.config/<app>.backup`
 - Event-based monitoring reduces CPU usage significantly
-- All scripts are logged to `Install-Logs/`
-- First boot runs `initial-boot.sh` to set up themes and wallpapers
+- All scripts are logged to `Install-Logs/` (untracked - they are per-run output)
+- First boot runs `initial-boot.sh` to set the wallpaper, run wallust, and apply
+  the GTK, icon, cursor and Kvantum themes. It runs exactly once, guarded by
+  `~/.config/hypr/.initial_startup_done`. That marker is gitignored on purpose:
+  if it is ever committed, copy.sh deploys it to the new machine and the whole
+  first-boot setup silently skips itself.
 
 ## Credits
 

@@ -5,6 +5,7 @@
 OK="$(tput setaf 2)[OK]$(tput sgr0)"
 ERROR="$(tput setaf 1)[ERROR]$(tput sgr0)"
 NOTE="$(tput setaf 3)[NOTE]$(tput sgr0)"
+WARN="$(tput setaf 1)[WARN]$(tput sgr0)"
 INFO="$(tput setaf 4)[INFO]$(tput sgr0)"
 RESET="$(tput sgr0)"
 
@@ -91,6 +92,16 @@ config_dirs=(
     "qt6ct"
     "Thunar"
     "xfce4"
+    # GTK font, cursor theme/size and prefer-dark. initial-boot.sh sets the
+    # theme names over gsettings, but GTK3 itself reads this file, and without
+    # it the font drops to the default 11pt Cantarell.
+    "gtk-3.0"
+    # LC_TIME for the whole graphical session - the 24-hour clock and
+    # Monday-first calendar the README's opening paragraph is about.
+    "environment.d"
+    # nwg-displays' own settings (view scale, snap threshold). It is referenced
+    # 17 times across the dots as the monitor-layout tool.
+    "nwg-displays"
 )
 
 # One stamp for the whole run, so a single invocation's backups group together.
@@ -133,5 +144,48 @@ for dir in "${config_dirs[@]}"; do
         printf "  ${WARN} $dir not found in $SCRIPT_DIR/config/, skipping\n"
     fi
 done
+
+# Copy the wallpaper library
+#
+# The dots hardcode $HOME/Pictures/wallpapers in WallpaperSelect.sh,
+# WallpaperRandom.sh and Startup_Apps.conf, so an empty directory there means
+# the wallpaper picker opens with nothing in it.
+printf "\n${INFO} Copying wallpapers...\n"
+if [ -d "$SCRIPT_DIR/wallpapers" ]; then
+    mkdir -p "$HOME/Pictures/wallpapers"
+    # No backup/replace dance here: wallpapers are additive. Overwriting only
+    # the ones we ship leaves anything the user added themselves alone.
+    if cp -r "$SCRIPT_DIR/wallpapers/." "$HOME/Pictures/wallpapers/"; then
+        echo "  ${OK} Copied $(find "$SCRIPT_DIR/wallpapers" -type f | wc -l) wallpapers to ~/Pictures/wallpapers"
+    else
+        echo "  ${ERROR} Failed to copy wallpapers"
+    fi
+fi
+
+# Seed the active wallpaper
+#
+# initial-boot.sh loads $HOME/.config/hypr/wallpaper_effects/.wallpaper_current
+# and does nothing at all if that file is missing - no wallpaper, and no wallust
+# run to colour the bar from it. The file is a copy of the active wallpaper
+# rather than a path, so it is runtime state and is not tracked; this is where
+# the default gets chosen.
+DEFAULT_WALLPAPER="sovietpunk/sovietpunk_2k_2560x1440.png"
+
+printf "\n${INFO} Setting default wallpaper...\n"
+_default_src="$SCRIPT_DIR/wallpapers/$DEFAULT_WALLPAPER"
+if [ -f "$_default_src" ]; then
+    mkdir -p "$HOME/.config/hypr/wallpaper_effects"
+    # .wallpaper_modified is the WallpaperEffects.sh output and the background
+    # of the rofi effect picker. Seed it with the unmodified image so the picker
+    # has something to show before any effect has been applied.
+    if cp "$_default_src" "$HOME/.config/hypr/wallpaper_effects/.wallpaper_current" &&
+       cp "$_default_src" "$HOME/.config/hypr/wallpaper_effects/.wallpaper_modified"; then
+        echo "  ${OK} Default wallpaper set to $DEFAULT_WALLPAPER"
+    else
+        echo "  ${ERROR} Failed to set default wallpaper"
+    fi
+else
+    echo "  ${ERROR} Default wallpaper $DEFAULT_WALLPAPER not found - first boot will have no wallpaper"
+fi
 
 printf "\n${OK} Dotfiles installation complete!\n\n"

@@ -41,6 +41,17 @@ hypr_package=(
   power-profiles-daemon
   python-requests
   python-pyquery
+  # SovietLockGen.py imports gi/Pango (python-gobject) and cairo (python-cairo)
+  # to measure text before it sizes the lock screen widgets. It runs from
+  # Startup_Apps.conf on every login, and without these it fails silently -
+  # hyprlock-monitors.conf is then never regenerated and the lock screen keeps
+  # whatever geometry the committed file was built for.
+  python-gobject
+  python-cairo
+  # notify-send. 82 call sites across the hypr scripts, and previously it was
+  # only listed in battery-monitor.sh / disk-monitor.sh / temp-monitor.sh, none
+  # of which install.sh ever calls.
+  libnotify
   qt5ct
   qt6ct
   qt6-svg

@@ -76,19 +76,27 @@ if command -v zsh >/dev/null; then
   fi
   
   # Copying the preconfigured zsh themes and profile
-  cp -r 'assets/.zshrc' ~/
-  cp -r 'assets/.zprofile' ~/
+  #
+  # These come from Hyprland-Dots/, which is the single source for every shell
+  # file: it is what copy.sh deploys, so it is the version that actually ends up
+  # on the machine. assets/ used to carry a second copy of .zshrc that drifted -
+  # it kept the unguarded `source $ZSH/oh-my-zsh.sh` and `source <(fzf --zsh)`
+  # and never sourced ~/.config/zsh/secrets.zsh - and this script copied *that*
+  # one. Nothing broke only because the option loop happens to run dots after
+  # zsh, so copy.sh overwrote it a few seconds later.
+  cp -r 'Hyprland-Dots/.zshrc' ~/
+  cp -r 'Hyprland-Dots/.zprofile' ~/
 
   # Copy custom pokefetch_perfect script and dependencies
-  if [ -f 'assets/pokefetch_perfect' ]; then
-      cp 'assets/pokefetch_perfect' ~/
+  if [ -f 'Hyprland-Dots/pokefetch_perfect' ]; then
+      cp 'Hyprland-Dots/pokefetch_perfect' ~/
       chmod +x ~/pokefetch_perfect
   fi
 
   # Copy pokefetch-merge python helper to ~/.local/bin/
-  if [ -f 'assets/pokefetch-merge' ]; then
+  if [ -f 'Hyprland-Dots/.local/bin/pokefetch-merge' ]; then
       mkdir -p ~/.local/bin
-      cp 'assets/pokefetch-merge' ~/.local/bin/
+      cp 'Hyprland-Dots/.local/bin/pokefetch-merge' ~/.local/bin/
       chmod +x ~/.local/bin/pokefetch-merge
   fi
 

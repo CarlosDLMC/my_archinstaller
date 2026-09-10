@@ -11,3 +11,23 @@ __pycache__/
 # Local backups kept while iterating on a script/config
 *.bak
 *.bak-*
+
+# First-boot marker. If this is ever committed, copy.sh deploys it onto the new
+# machine and initial-boot.sh skips itself: no wallpaper, no GTK/icon/cursor
+# theme, no Kvantum theme, no wallust run, no keyboard-layout init.
+Hyprland-Dots/config/hypr/.initial_startup_done
+
+# Wallpaper runtime state, not config. .wallpaper_current is a copy of whatever
+# wallpaper is active and .wallpaper_modified is the effects output, so both are
+# large binaries that churn on every wallpaper change. copy.sh seeds them from
+# the default wallpaper instead.
+Hyprland-Dots/config/hypr/wallpaper_effects/.wallpaper_current
+Hyprland-Dots/config/hypr/wallpaper_effects/.wallpaper_modified
+
+# Install logs are per-run output. Tracking them meant every install left the
+# working tree dirty, which auto-install.sh then refuses to pull over.
+Install-Logs/
+
+# auto-extract.sh writes its log next to itself on every run.
+GTK-themes-icons/*.log
+*.backup
