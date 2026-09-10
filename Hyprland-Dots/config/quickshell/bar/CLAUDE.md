@@ -47,7 +47,8 @@ components/         # Modular widget components
 
 ### Key Components
 
-- **Theme.qml**: Singleton pragma provides `Theme.colBg`, `Theme.fontSize`, etc. to all components
+- **Theme.qml**: Singleton pragma provides `Theme.colBg`, `Theme.fontSize`, etc. to all components.
+  Colours are **not** hardcoded here — see Theming below.
 - **WorkspaceBar.qml**: Pill-shaped workspace indicators with numbers and deduplicated app icons (max 3). Hover effects and active state highlighting
 - **CenterInfo.qml**: DND toggle + date + weather. Click shows popup with notch design connecting to bar. Displays location, temperature, condition, feels-like, min/max, and hourly rain forecast bars. Weather icon/temp colored by temperature. Caches weather data for offline use.
 - **CpuWidget.qml / MemoryWidget.qml / DiskWidget.qml**: Simple percentage displays with themed colors
@@ -56,6 +57,48 @@ components/         # Modular widget components
 - **WifiWidget.qml**: WiFi status with network speed display (upload/download), dropdown for network selection
 - **BluetoothWidget.qml**: Bluetooth status with dropdown. Icon turns green when device connected
 - **Widget components**: Each has its own Process components for data fetching and PopupWindow for dropdowns
+
+### Theming
+
+The bar is **monochrome by design**. The desktop it sits on is a two-hue
+composition (warm near-black + crimson), so any stray hue in the bar becomes
+the loudest thing on screen. Widgets are distinguished by *brightness* and by
+their text label, never by hue.
+
+Colour flows one way:
+
+```
+wallpaper
+  -> wallust  (~/.config/wallust/templates/bar-colors.json)
+  -> ~/.config/quickshell/bar/wallust-colors.json   (generated, gitignored)
+  -> Theme.qml  (FileView + watchChanges, hot-reloads)
+  -> components use Theme.col*
+```
+
+Change the wallpaper and the bar recolours itself; no restart, no edits.
+`Theme.qml` holds the sovietpunk palette as *fallbacks* only, used when the
+generated file is missing or malformed (it logs a warning and keeps the last
+good palette rather than rendering blank).
+
+**Never put a hex literal in a component.** Use a semantic role:
+
+| Role | Use for |
+|---|---|
+| `colValue` / `colFg` | numbers, primary text |
+| `colLabel` / `colDim` | `CPU`, `MEM` — the noun, and secondary info |
+| `colBright` | emphasis (active workspace, hot temp) |
+| `colMuted` | separators, inactive, "off" states |
+| `colAccent` | active / connected / on |
+| `colAlert` | **needs attention**: muted, low battery, DND on, VPN down, storm |
+| `colWarn` | state unknown or degraded (e.g. `dunstctl` failed) |
+| `colOnAlert` | text sitting on an alert-filled shape |
+
+`colAlert` is the only real hue in the bar. Spend it only on states worth
+looking at — if everything is an alert, nothing is.
+
+Ordinal data (temperature, load) is encoded as a brightness ramp, with
+`colAlert` reserved for genuine extremes. See `getTempColor()` in
+`CenterInfo.qml`.
 
 ### Key Patterns
 

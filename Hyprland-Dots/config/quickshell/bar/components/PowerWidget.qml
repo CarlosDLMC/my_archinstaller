@@ -40,7 +40,7 @@ DropdownWidget {
             id: powerIcon
             anchors.centerIn: parent
             text: "󰐥"
-            color: dropdownOpen ? "#ff5555" : Theme.colFg
+            color: dropdownOpen ? Theme.colAlert : Theme.colFg
             font.pixelSize: Theme.fontSize
             font.family: Theme.fontFamily
         }
@@ -143,7 +143,7 @@ DropdownWidget {
 
                     Text {
                         text: "󰜉"
-                        color: "#ffb86c"
+                        color: Theme.colDim
                         font.pixelSize: Theme.fontSize
                         font.family: Theme.fontFamily
                     }
@@ -182,7 +182,7 @@ DropdownWidget {
 
                     Text {
                         text: "󰐥"
-                        color: "#ff5555"
+                        color: Theme.colAlert
                         font.pixelSize: Theme.fontSize
                         font.family: Theme.fontFamily
                     }

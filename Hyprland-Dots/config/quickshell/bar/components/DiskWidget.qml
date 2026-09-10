@@ -12,7 +12,7 @@ Text {
     color: Theme.colDisk
     font.pixelSize: Theme.fontSize
     font.family: Theme.fontFamily
-    font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+    font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
 
     Process {
         id: diskProc

@@ -52,8 +52,17 @@ ShellRoot {
                 right: true
             }
 
+            // Own namespace, matching the quickshell:<config> convention the
+            // overview uses. A Hyprland layerrule blurs this namespace; since
+            // the bar has no background of its own, that blurs the wallpaper
+            // behind the whole strip - which is the effect being asked for.
+            WlrLayershell.namespace: "quickshell:bar"
+
             implicitHeight: designHeight * uiScale
-            color: Theme.colBg
+            // No bar surface: the content sits directly on the wallpaper.
+            // The exclusion zone is still reserved, so windows keep their
+            // gap at the top and nothing tiles underneath the widgets.
+            color: Theme.colBgTransparent
 
             margins {
                 top: 0
@@ -77,7 +86,7 @@ ShellRoot {
 
             Rectangle {
                 anchors.fill: parent
-                color: Theme.colBg
+                color: Theme.colBgTransparent
 
                 RowLayout {
                     anchors.fill: parent
@@ -177,8 +186,8 @@ ShellRoot {
                         color: Theme.colFg
                         font.pixelSize: Theme.fontSize
                         font.family: Theme.fontFamily
-                        font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
-                        anchors.verticalCenter: parent.verticalCenter
+                        font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
+                        Layout.alignment: Qt.AlignVCenter
 
                         Timer {
                             interval: 60000

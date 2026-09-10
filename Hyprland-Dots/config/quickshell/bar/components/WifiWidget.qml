@@ -195,7 +195,7 @@ DropdownWidget {
         color: wifiConnected ? Theme.colNetwork : Theme.colMuted
         font.pixelSize: Theme.fontSize + 4
         font.family: Theme.fontFamily
-        font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+        font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
 
         MouseArea {
             anchors.fill: parent
@@ -224,7 +224,7 @@ DropdownWidget {
                     color: Theme.colFg
                     font.pixelSize: Theme.fontSize
                     font.family: Theme.fontFamily
-                    font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+                    font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
                     width: parent.width - (disconnectBtn.visible ? disconnectBtn.width + 4 : 0)
                     elide: Text.ElideRight
                 }
@@ -233,7 +233,7 @@ DropdownWidget {
                     id: disconnectBtn
                     visible: wifiWidget.wifiConnected && !wifiWidget.passwordMode
                     text: "󰅖"
-                    color: disconnectMouse.containsMouse ? "#ff5555" : Theme.colMuted
+                    color: disconnectMouse.containsMouse ? Theme.colAlert : Theme.colMuted
                     font.pixelSize: Theme.fontSize
                     font.family: Theme.fontFamily
 
@@ -333,10 +333,10 @@ DropdownWidget {
                         Text {
                             anchors.centerIn: parent
                             text: "Connect"
-                            color: "#1e1e2e"
+                            color: Theme.colOnAlert
                             font.pixelSize: Theme.fontSize - 2
                             font.family: Theme.fontFamily
-                            font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+                            font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
                         }
 
                         MouseArea {

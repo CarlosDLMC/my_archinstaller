@@ -48,7 +48,7 @@ RowLayout {
                 font.family: Theme.fontFamily
                 font.bold: wsRect.isActive
                 style: Text.Outline
-                styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+                styleColor: Theme.colTextShadow
             }
 
             MouseArea {

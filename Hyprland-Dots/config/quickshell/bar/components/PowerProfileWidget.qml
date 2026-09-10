@@ -25,9 +25,9 @@ DropdownWidget {
 
     function getProfileColor(profile) {
         switch(profile) {
-            case "performance": return "#f9e2af"  // yellow
-            case "balanced": return "#cdd6f4"     // white
-            case "power-saver": return "#a6e3a1"  // green
+            case "performance": return Theme.colAlert  // drawing power
+            case "balanced": return Theme.colFg       // nominal
+            case "power-saver": return Theme.colDim   // holding back
             default: return Theme.colFg
         }
     }
@@ -81,7 +81,7 @@ DropdownWidget {
         color: getProfileColor(currentProfile)
         font.pixelSize: Theme.fontSize + 2
         font.family: Theme.fontFamily
-        font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+        font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
     }
 
     // Popup content
@@ -95,7 +95,7 @@ DropdownWidget {
                 color: Theme.colFg
                 font.pixelSize: Theme.fontSize
                 font.family: Theme.fontFamily
-                font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+                font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
                 width: parent.width
             }
 

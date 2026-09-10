@@ -184,10 +184,15 @@ DropdownWidget {
         id: vpnText
         anchors.verticalCenter: parent.verticalCenter
         text: vpnWidget.activeVpn ? "󰖂" : "󰖂"
-        color: vpnWidget.activeVpn ? Theme.colNetwork : Theme.colMuted
+        // Colour is the only on/off signal, so the two ends differ in both
+        // hue and lightness: neutral grey when down, the one saturated
+        // colour in the palette when up. This is the single place the alert
+        // hue is used for something that is not a problem - a live tunnel is
+        // worth seeing at a glance.
+        color: vpnWidget.activeVpn ? Theme.colAlert : Theme.colFaint
         font.pixelSize: Theme.fontSize + 4
         font.family: Theme.fontFamily
-        font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+        font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
     }
 
     // Popup content
@@ -205,7 +210,7 @@ DropdownWidget {
                     color: Theme.colFg
                     font.pixelSize: Theme.fontSize
                     font.family: Theme.fontFamily
-                    font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+                    font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
                     Layout.fillWidth: true
                 }
 

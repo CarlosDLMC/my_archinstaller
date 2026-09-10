@@ -17,6 +17,69 @@ Item {
     signal dateClicked(var clickedDate)
     signal closed()
 
+    // Re-seed the dates every time the popup opens. CenterInfo only toggles
+    // isOpen - the popup itself is never destroyed - so without this displayDate
+    // stayed on whatever month was last paged to, and currentDate stayed on the
+    // date the bar process was started. The visible effects were that reopening
+    // the calendar showed the old month instead of this one, and that on a bar
+    // that had been running past midnight "today" was highlighted on the wrong
+    // cell. Separate Date objects on purpose, so no later in-place mutation of
+    // one can move the others.
+    onIsOpenChanged: {
+        if (!isOpen)
+            return
+        currentDate = new Date()
+        displayDate = new Date()
+        selectedDate = new Date()
+    }
+
+    // One place that moves the calendar a month, used by both arrows and the
+    // wheel. The setDate(1) is the load-bearing part: setMonth() keeps the
+    // day-of-month, so stepping forward from a 31st into a shorter month
+    // overflows and JS silently normalises it into the month after that -
+    // 31 Jan + 1 month becomes 3 March, skipping February outright. Anchoring
+    // to the 1st first makes every step exactly one month. This was previously
+    // hard to hit because displayDate was only ever set when the bar started;
+    // now that it is re-seeded from today on every open, any 29th/30th/31st
+    // reaches it.
+    function stepMonth(delta) {
+        const d = new Date(root.displayDate)
+        d.setDate(1)
+        d.setMonth(d.getMonth() + delta)
+        root.displayDate = d
+    }
+
+    // Wheel scrolling: up for earlier months, down for later.
+    //
+    // This is wired to onWheel on every MouseArea that is front-most over some
+    // part of the popup - the day cells, the two arrows, and the full-size
+    // MouseArea behind the content - rather than to one WheelHandler covering
+    // everything. A WheelHandler on the content Column was tried first and never
+    // fired: the day cells' own MouseAreas sit in front of it and consume the
+    // wheel event, so it never reached the handler behind them. Each MouseArea
+    // handling its own region is the pattern VolumeWidget already uses here, and
+    // it works because each one is the front-most item where it matters.
+    //
+    // The accumulator lives on root, so it is shared no matter which MouseArea
+    // the pointer happens to be over.
+    property real wheelAccumulated: 0
+
+    function wheelStep(wheel) {
+        // A mouse notch is 120 units (eighths of a degree), so a real wheel steps
+        // immediately. Trackpads send much smaller deltas, so accumulate rather
+        // than treating each event as a month - otherwise one gentle two-finger
+        // swipe flies through a year.
+        root.wheelAccumulated += wheel.angleDelta.y
+        while (root.wheelAccumulated >= 120) {
+            root.wheelAccumulated -= 120
+            root.stepMonth(-1)
+        }
+        while (root.wheelAccumulated <= -120) {
+            root.wheelAccumulated += 120
+            root.stepMonth(1)
+        }
+    }
+
     function weekStartJs() {
     	return Qt.locale().firstDayOfWeek 
     }
@@ -105,11 +168,13 @@ Item {
 
         MouseArea {
             anchors.fill: parent
+            onWheel: function (wheel) { root.wheelStep(wheel) }
         }
 
         Column {
             id: calendarContent
             anchors.fill: cardRect
+
             anchors.topMargin: cardRect.stemHeight + 16
             anchors.leftMargin: 16
             anchors.rightMargin: 16
@@ -118,11 +183,19 @@ Item {
 
             Row {
                 width: parent.width
-                height: 36
+                // 48 rather than the label's own 32px line height: the taller
+                // label would technically still fit the old 36px row, but with
+                // only 4px to spare it sat visually flush against the week-day
+                // header below it. This keeps the month name breathing.
+                height: 48
 
                 Rectangle {
                     width: 36
                     height: 36
+                    // The row is now taller than the buttons, and a Row only
+                    // positions its children horizontally - without this they sit
+                    // at the top, out of line with the month name.
+                    anchors.verticalCenter: parent.verticalCenter
                     radius: 6
                     color: prevMonthArea.containsMouse ? Qt.rgba(Theme.colFg.r, Theme.colFg.g, Theme.colFg.b, 0.12) : "transparent"
 
@@ -139,22 +212,27 @@ Item {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            let newDate = new Date(root.displayDate)
-                            newDate.setMonth(newDate.getMonth() - 1)
-                            root.displayDate = newDate
-                        }
+                        onClicked: root.stepMonth(-1)
+                        onWheel: function (wheel) { root.wheelStep(wheel) }
                     }
                 }
 
                 Text {
                     width: parent.width - 72
-                    height: 36
-                    text: root.displayDate.toLocaleDateString(Qt.locale(), "MMMM yyyy")
-                    font.pixelSize: Theme.fontSize + 2
+                    height: parent.height
+                    // standaloneMonthName, not a "MMMM" format string: in Russian -
+                    // and in every language with grammatical case - MMMM gives the
+                    // genitive form used *inside* a full date ("10 сентября 2026"),
+                    // so a bare month heading came out as "сентября 2026". The
+                    // standalone form is the nominative "сентябрь" a heading wants.
+                    // The month index is 0-based, same as Date.getMonth().
+                    text: Qt.locale().standaloneMonthName(root.displayDate.getMonth(),
+                                                          Locale.LongFormat)
+                          + " " + root.displayDate.getFullYear()
+                    font.pixelSize: Theme.fontSize + 10
                     color: Theme.colFg
                     font.family: Theme.fontFamily
-                    font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+                    font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -162,6 +240,7 @@ Item {
                 Rectangle {
                     width: 36
                     height: 36
+                    anchors.verticalCenter: parent.verticalCenter
                     radius: 6
                     color: nextMonthArea.containsMouse ? Qt.rgba(Theme.colFg.r, Theme.colFg.g, Theme.colFg.b, 0.12) : "transparent"
 
@@ -178,11 +257,8 @@ Item {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            let newDate = new Date(root.displayDate)
-                            newDate.setMonth(newDate.getMonth() + 1)
-                            root.displayDate = newDate
-                        }
+                        onClicked: root.stepMonth(1)
+                        onWheel: function (wheel) { root.wheelStep(wheel) }
                     }
                 }
             }
@@ -214,7 +290,7 @@ Item {
                             font.pixelSize: Theme.fontSize - 3
                             color: Qt.rgba(Theme.colFg.r, Theme.colFg.g, Theme.colFg.b, 0.6)
                             font.family: Theme.fontFamily
-                            font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+                            font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
                         }
                     }
                 }
@@ -272,6 +348,7 @@ Item {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
+                            onWheel: function (wheel) { root.wheelStep(wheel) }
                             onClicked: {
                                 root.selectedDate = dayDate
                                 root.dateClicked(dayDate)
