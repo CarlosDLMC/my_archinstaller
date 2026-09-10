@@ -8,7 +8,7 @@ DropdownWidget {
     id: powerWidget
     popupWidth: 140
     popupHeight: 165
-    stemAlignment: "right"
+    stemAlignment: "left"   // widget now sits at the bar's left edge
 
     // Power actions
     Process {
@@ -39,9 +39,12 @@ DropdownWidget {
         Text {
             id: powerIcon
             anchors.centerIn: parent
-            text: "󰐥"
-            color: dropdownOpen ? Theme.colAlert : Theme.colFg
-            font.pixelSize: Theme.fontSize
+            text: ""
+            // Same wallust slot Hyprland uses for col.active_border
+            // (color12), so the logo and the focused window's border are
+            // literally the same colour.
+            color: Theme.colBorder
+            font.pixelSize: Theme.fontSize + 2
             font.family: Theme.fontFamily
         }
     }

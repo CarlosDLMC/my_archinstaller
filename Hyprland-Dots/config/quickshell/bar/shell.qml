@@ -95,6 +95,13 @@ ShellRoot {
                     // Left padding
                     Item { width: 12 }
 
+                    // Arch logo, doubling as the power menu. No separator after
+                    // it - the logo reads as a mark, not as another widget.
+                    PowerWidget {
+                        barWindow: barWindow
+                        Layout.rightMargin: 6
+                    }
+
                     // Workspaces
                     WorkspaceBar {
                         Layout.preferredHeight: parent.height
@@ -195,13 +202,6 @@ ShellRoot {
                             repeat: true
                             onTriggered: dateText.text = Qt.formatDateTime(new Date(), "dd.MM.yyyy")
                         }
-                    }
-
-                    Separator {}
-
-                    // Power menu
-                    PowerWidget {
-                        barWindow: barWindow
                     }
 
                     // Right padding
