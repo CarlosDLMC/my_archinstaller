@@ -73,7 +73,7 @@ Item {
             color: slackRunning ? Theme.colFg : Theme.colMuted
             font.pixelSize: Theme.fontSize + 4
             font.family: Theme.fontFamily
-            font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+            font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
         }
 
         // Unread badge
@@ -82,7 +82,7 @@ Item {
             width: 14
             height: 14
             radius: 7
-            color: "#e01e5a"
+            color: Theme.colSlack
             anchors.right: parent.right
             anchors.top: parent.top
             anchors.topMargin: 6
@@ -90,10 +90,10 @@ Item {
             Text {
                 anchors.centerIn: parent
                 text: slackUnread > 9 ? "+" : slackUnread
-                color: "white"
+                color: Theme.colOnAlert
                 font.pixelSize: 9
                 font.family: Theme.fontFamily
-                font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+                font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
             }
         }
     }

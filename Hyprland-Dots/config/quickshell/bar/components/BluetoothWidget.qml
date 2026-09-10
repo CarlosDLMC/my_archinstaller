@@ -172,10 +172,10 @@ DropdownWidget {
         text: !btPowered ? "󰂲" :
               btConnected ? "󰂱" : "󰂯"
         color: !btPowered ? Theme.colMuted :
-               btConnected ? "#50fa7b" : Theme.colBluetooth
+               btConnected ? Theme.colAccent : Theme.colMuted
         font.pixelSize: Theme.fontSize + 4
         font.family: Theme.fontFamily
-        font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+        font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
     }
 
     // Popup content
@@ -193,7 +193,7 @@ DropdownWidget {
                     color: Theme.colFg
                     font.pixelSize: Theme.fontSize
                     font.family: Theme.fontFamily
-                    font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+                    font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
                     Layout.fillWidth: true
                 }
 

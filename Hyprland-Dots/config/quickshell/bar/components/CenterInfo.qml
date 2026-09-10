@@ -81,24 +81,29 @@ Item {
         var match = tempStr.match(/-?\d+/)
         if (!match) return Theme.colFg
         var temp = parseInt(match[0])
-        if (temp <= 0) return "#8be9fd"      // Freezing - cyan
-        if (temp <= 10) return "#6db3f2"     // Cold - light blue
-        if (temp <= 18) return "#50fa7b"     // Cool - green
-        if (temp <= 25) return "#f1fa8c"     // Warm - yellow
-        if (temp <= 32) return "#ffb86c"     // Hot - orange
-        return "#ff5555"                      // Very hot - red
+        // Temperature is ordinal, so it is encoded as brightness rather
+        // than hue: dim when cold, bright when hot, and the alert colour
+        // only at the two extremes that are actually worth noticing.
+        if (temp <= 0) return Theme.colAlert    // freezing
+        if (temp <= 10) return Theme.colDim     // cold
+        if (temp <= 18) return Theme.colFg      // cool
+        if (temp <= 25) return Theme.colFg      // mild
+        if (temp <= 32) return Theme.colBright  // hot
+        return Theme.colAlert                    // very hot
     }
 
     // Get color based on weather condition
     function getConditionColor(condition) {
         var cond = condition.toLowerCase()
-        if (cond.includes("sun") || cond.includes("clear")) return "#f1fa8c"  // Yellow
-        if (cond.includes("cloud") || cond.includes("overcast")) return "#94a3b8"  // Gray
-        if (cond.includes("rain") || cond.includes("drizzle") || cond.includes("shower")) return "#8be9fd"  // Cyan
-        if (cond.includes("thunder") || cond.includes("storm")) return "#bd93f9"  // Purple
-        if (cond.includes("snow") || cond.includes("sleet") || cond.includes("ice")) return "#f8f8f2"  // White
-        if (cond.includes("fog") || cond.includes("mist") || cond.includes("haze")) return "#6272a4"  // Muted blue
-        if (cond.includes("wind")) return "#50fa7b"  // Green
+        // Same idea: clear/bright weather reads bright, murk reads dim,
+        // and only a storm gets the alert colour.
+        if (cond.includes("sun") || cond.includes("clear")) return Theme.colBright
+        if (cond.includes("cloud") || cond.includes("overcast")) return Theme.colDim
+        if (cond.includes("rain") || cond.includes("drizzle") || cond.includes("shower")) return Theme.colFg
+        if (cond.includes("thunder") || cond.includes("storm")) return Theme.colAlert
+        if (cond.includes("snow") || cond.includes("sleet") || cond.includes("ice")) return Theme.colBright
+        if (cond.includes("fog") || cond.includes("mist") || cond.includes("haze")) return Theme.colDim
+        if (cond.includes("wind")) return Theme.colFg
         return Theme.colFg
     }
 
@@ -228,10 +233,10 @@ Item {
         Text {
             // Hollow bell in peach = dunstctl failed, so the real state is unknown.
             text: !dndAvailable ? "󰂜  " : (dndEnabled ? "󰂛  " : "󰂚  ")
-            color: !dndAvailable ? "#fab387" : (dndEnabled ? "#ff5555" : Theme.colMuted)
+            color: !dndAvailable ? Theme.colWarn : (dndEnabled ? Theme.colAlert : Theme.colMuted)
             font.pixelSize: Theme.fontSize
             font.family: Theme.fontFamily
-            font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+            font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
             anchors.verticalCenter: parent.verticalCenter
 
             MouseArea {
@@ -262,7 +267,7 @@ Item {
                     color: getTempColor(weatherText)
                     font.pixelSize: Theme.fontSize
                     font.family: Theme.fontFamily
-                    font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+                    font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
                     anchors.verticalCenter: parent.verticalCenter
                 }
 
@@ -272,7 +277,7 @@ Item {
                     color: getTempColor(weatherText)
                     font.pixelSize: Theme.fontSize
                     font.family: Theme.fontFamily
-                    font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+                    font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
                     anchors.verticalCenter: parent.verticalCenter
                 }
 
@@ -282,7 +287,7 @@ Item {
                     color: Theme.colFg
                     font.pixelSize: Theme.fontSize
                     font.family: Theme.fontFamily
-                    font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+                    font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }
@@ -316,7 +321,7 @@ Item {
             color: Theme.colFg
             font.pixelSize: Theme.fontSize
             font.family: Theme.fontFamily
-            font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+            font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
         }
 
         MouseArea {
@@ -688,7 +693,7 @@ Item {
                 color: getTempColor(centerInfo.weatherText)
                 font.pixelSize: 32
                 font.family: Theme.fontFamily
-                font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+                font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
             }
 
             // Condition
@@ -801,7 +806,7 @@ Item {
                                 color: Theme.colFg
                                 font.pixelSize: 9
                                 font.family: Theme.fontFamily
-                                font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+                                font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
                             }
                         }
                     }

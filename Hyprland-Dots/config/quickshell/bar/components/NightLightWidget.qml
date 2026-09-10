@@ -15,7 +15,7 @@ Item {
         id: nightLightText
         anchors.centerIn: parent
         text: "☀"
-        color: isOn ? "#FFA500" : Theme.colFg  // Orange when on, normal when off
+        color: isOn ? Theme.colAccent : Theme.colDim  // bright when on, dim but legible when off
         font.pixelSize: Theme.fontSize + 4
         font.family: Theme.fontFamily
     }

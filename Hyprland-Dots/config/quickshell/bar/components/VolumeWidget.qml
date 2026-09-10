@@ -38,13 +38,10 @@ Text {
     }
 
     text: volumeIcon + " " + volumeLevel + "%"
-    color: volumeMuted ? Theme.colMuted :
-           audioSink === "headphone" ? "#f1fa8c" :
-           audioSink === "bluetooth" ? Theme.colBluetooth :
-           Theme.colVol
+    color: volumeMuted ? Theme.colAlert : Theme.colFg
     font.pixelSize: Theme.fontSize
     font.family: Theme.fontFamily
-    font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+    font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
 
     function adjustVolume(delta) {
         if (!sinkReady) return

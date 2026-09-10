@@ -61,10 +61,10 @@ DropdownWidget {
     Text {
         anchors.verticalCenter: parent.verticalCenter
         text: batteryWidget.getBatteryIcon(batteryWidget.averageLevel, batteryWidget.isCharging) + " " + batteryWidget.averageLevel + "%"
-        color: batteryWidget.averageLevel <= 15 ? "#f53c3c" : "#32CD32"
+        color: batteryWidget.averageLevel <= 15 ? Theme.colAlert : Theme.colFg
         font.pixelSize: Theme.fontSize
         font.family: Theme.fontFamily
-        font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+        font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
     }
 
     // Popup content
@@ -78,7 +78,7 @@ DropdownWidget {
                 color: Theme.colFg
                 font.pixelSize: Theme.fontSize + 2
                 font.family: Theme.fontFamily
-                font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+                font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
                 anchors.horizontalCenter: parent.horizontalCenter
             }
 
@@ -104,7 +104,7 @@ DropdownWidget {
 
                     Text {
                         text: batteryWidget.getBatteryIcon(parent.batteryData.level, parent.batteryData.charging)
-                        color: parent.batteryData.level <= 15 ? "#f53c3c" : "#32CD32"
+                        color: parent.batteryData.level <= 15 ? Theme.colAlert : Theme.colFg
                         font.pixelSize: Theme.fontSize + 4
                         font.family: Theme.fontFamily
                         anchors.verticalCenter: parent.verticalCenter
@@ -119,7 +119,7 @@ DropdownWidget {
                             color: Theme.colFg
                             font.pixelSize: Theme.fontSize
                             font.family: Theme.fontFamily
-                            font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+                            font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
                         }
 
                         Text {

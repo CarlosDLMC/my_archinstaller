@@ -54,6 +54,9 @@ waybar.target = '~/.config/wallust/output/colors-waybar.css'
 quickshell.template = 'qml_color.json'
 quickshell.target = '~/.config/quickshell/qml_color.json'
 
+bar.template = 'bar-colors.json'
+bar.target = '~/.config/quickshell/bar/wallust-colors.json'
+
 #swaync.template = 'colors-swaync.css'
 #swaync.target = '~/.config/swaync/wallust/colors-wallust.css'
 

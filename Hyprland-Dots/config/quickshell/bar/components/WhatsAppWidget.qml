@@ -73,7 +73,7 @@ Item {
             color: whatsappRunning ? Theme.colWhatsapp : Theme.colMuted
             font.pixelSize: Theme.fontSize + 4
             font.family: Theme.fontFamily
-            font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+            font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
         }
 
         // Unread badge
@@ -90,10 +90,10 @@ Item {
             Text {
                 anchors.centerIn: parent
                 text: whatsappUnread > 9 ? "+" : whatsappUnread
-                color: "white"
+                color: Theme.colOnAlert
                 font.pixelSize: 9
                 font.family: Theme.fontFamily
-                font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+                font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
             }
         }
     }

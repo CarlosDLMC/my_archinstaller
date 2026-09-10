@@ -3,16 +3,31 @@ import QtQuick.Layouts
 import Quickshell.Io
 import ".."
 
-Text {
+RowLayout {
     id: memWidget
+    spacing: 4
 
     property string memUsage: "0G"
 
-    text: "MEM " + memUsage
-    color: Theme.colMem
-    font.pixelSize: Theme.fontSize
-    font.family: Theme.fontFamily
-    font.bold: true; style: Text.Outline; styleColor: Qt.rgba(color.r, color.g, color.b, 0.3)
+    // Label — dim, same weight as the CPU label
+    Text {
+        text: "MEM "
+        color: Theme.colMem
+        font.pixelSize: Theme.fontSize
+        font.family: Theme.fontFamily
+        font.bold: true
+        Layout.alignment: Qt.AlignVCenter
+    }
+
+    // Value — steps up to full foreground
+    Text {
+        text: memWidget.memUsage
+        color: Theme.colValue
+        font.pixelSize: Theme.fontSize
+        font.family: Theme.fontFamily
+        font.bold: true
+        Layout.alignment: Qt.AlignVCenter
+    }
 
     Process {
         id: memProc
