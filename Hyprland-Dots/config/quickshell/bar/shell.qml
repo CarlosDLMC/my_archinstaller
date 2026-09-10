@@ -99,7 +99,7 @@ ShellRoot {
                     // it - the logo reads as a mark, not as another widget.
                     PowerWidget {
                         barWindow: barWindow
-                        Layout.rightMargin: 6
+                        Layout.rightMargin: -6
                     }
 
                     // Workspaces
@@ -107,13 +107,18 @@ ShellRoot {
                         Layout.preferredHeight: parent.height
                     }
 
-                    // Separator
-                    Separator { Layout.leftMargin: 2; Layout.rightMargin: 2 }
+                    // Separator. No margin override - every divider in the bar
+                    // uses the same spacing now.
+                    Separator {}
 
-                    // Window info (layout + title)
+                    // Window info (layout + title). The small left margin
+                    // balances the divider: the workspace cell to its left ends
+                    // with a glyph advance, so without this the rule sits ~15px
+                    // from the workspaces but only ~5px from the title.
                     WindowInfo {
                         Layout.preferredHeight: parent.height
                         Layout.preferredWidth: 375
+                        Layout.leftMargin: 5
                     }
 
                     // Center: Time, DND and Weather (fills available space)
