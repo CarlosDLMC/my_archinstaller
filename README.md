@@ -58,17 +58,18 @@ interfaces are in English and only dates and times are localised. See
 4. **Fill in your machine-local secrets.**
 
    The installer creates `~/.config/zsh/secrets.zsh` for you from
-   `Hyprland-Dots/config/zsh/secrets.zsh.example`, with **placeholder values**
-   and mode `600`. Open it and replace them with your real keys:
+   `Hyprland-Dots/config/zsh/secrets.zsh`, with **placeholder values** and mode
+   `600`. Open it and replace them with your real keys:
 
    ```bash
    ${EDITOR:-nano} ~/.config/zsh/secrets.zsh
    ```
 
-   API keys and tokens are deliberately **not** in this repo — anything
-   committed to git is recoverable from the history forever, and this repo is
-   pushed to GitHub. Only the `.example` template is tracked, and a real
-   `secrets.zsh` is blocked by `.gitignore` as a safety net.
+   The tracked copy in `Hyprland-Dots/config/zsh/secrets.zsh` is a template:
+   every value in it is fake, and it must stay that way. Anything committed to
+   git is recoverable from the history forever, even after a later commit
+   deletes it, and this repo is pushed to GitHub — so real keys only ever go in
+   the deployed copy under `~/.config/zsh/`, never in the repo.
 
    `.zshrc` sources it guarded, so a shell without it still starts normally and
    only the tools needing a key will fail:
