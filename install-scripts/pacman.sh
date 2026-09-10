@@ -48,6 +48,29 @@ else
     echo -e "${CAT} It seems ${YELLOW}ILoveCandy${RESET} already exists ${RESET} moving on.." 2>&1 | tee -a "$LOG"
 fi
 
+# Enable the multilib repo.
+#
+# Arch ships [multilib] commented out. This setup has 57 lib32-* packages
+# installed (lib32-mesa, lib32-vulkan-intel, lib32-glibc and their deps), and
+# none of them is installable at all while the repo is off - pacman just says
+# "target not found", which does not point at the cause.
+#
+# The stanza is two lines, the header and its Include, so uncommenting only the
+# header leaves an empty repo. Match the commented header and the commented
+# Include that follows it together.
+if grep -qE '^\[multilib\]' "$pacman_conf"; then
+    echo -e "${CAT} multilib is already enabled. ${RESET}" 2>&1 | tee -a "$LOG"
+elif grep -qE '^#\[multilib\]' "$pacman_conf"; then
+    sudo sed -i -E '/^#\[multilib\]/{s/^#//; n; s/^#(Include)/\1/}' "$pacman_conf"
+    if grep -qE '^\[multilib\]' "$pacman_conf"; then
+        echo -e "${CAT} Enabled ${MAGENTA}multilib${RESET} repo ${RESET}" 2>&1 | tee -a "$LOG"
+    else
+        echo -e "${WARN} Could not enable multilib - lib32-* packages will not install" 2>&1 | tee -a "$LOG"
+    fi
+else
+    echo -e "${WARN} No [multilib] stanza found in $pacman_conf" 2>&1 | tee -a "$LOG"
+fi
+
 echo -e "${CAT} ${MAGENTA}Pacman.conf${RESET} spicing up completed ${RESET}" 2>&1 | tee -a "$LOG"
 
 

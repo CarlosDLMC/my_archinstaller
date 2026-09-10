@@ -404,6 +404,14 @@ sleep 1
 execute_script "pacman.sh"
 sleep 1
 
+# Generate the locales the dots reference. Runs before the dotfiles are copied,
+# so that by the time environment.d/locale.conf and ENVariables.conf set
+# LC_TIME=ru_RU.UTF-8, that locale actually exists. Setting LC_TIME to an
+# ungenerated locale does not fail - glibc falls back to C in silence.
+echo "${INFO} Generating ${SKY_BLUE}locales${RESET}..." | tee -a "$LOG"
+execute_script "locales.sh"
+sleep 1
+
 # Execute AUR helper script after other installations if applicable
 if [ "$aur_helper" == "paru" ]; then
     execute_script "paru.sh"

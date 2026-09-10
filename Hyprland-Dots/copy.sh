@@ -96,12 +96,17 @@ config_dirs=(
     # theme names over gsettings, but GTK3 itself reads this file, and without
     # it the font drops to the default 11pt Cantarell.
     "gtk-3.0"
-    # LC_TIME for the whole graphical session - the 24-hour clock and
-    # Monday-first calendar the README's opening paragraph is about.
+    # LC_TIME for the whole graphical session: 24-hour clock, Monday-first
+    # calendar and Cyrillic month names. Needs install-scripts/locales.sh to
+    # have generated ru_RU.UTF-8, or glibc falls back to C in silence.
     "environment.d"
     # nwg-displays' own settings (view scale, snap threshold). It is referenced
     # 17 times across the dots as the monitor-layout tool.
     "nwg-displays"
+    # 99-no-ligatures.conf turns off liga/clig/calt/dlig and swaps JetBrains
+    # Mono and Fira Code for their no-ligature cuts. Without it a fresh machine
+    # gets ligatures everywhere - ->, =>, != rendered as single glyphs.
+    "fontconfig"
 )
 
 # One stamp for the whole run, so a single invocation's backups group together.
