@@ -96,6 +96,10 @@ config_dirs=(
     # theme names over gsettings, but GTK3 itself reads this file, and without
     # it the font drops to the default 11pt Cantarell.
     "gtk-3.0"
+    # GTK4 apps that do not link libadwaita (pavucontrol) ignore gsettings
+    # color-scheme, the xdg-desktop-portal appearance setting AND gtk-3.0's
+    # settings.ini. Without this they render in GTK4's built-in light Adwaita.
+    "gtk-4.0"
     # LC_TIME for the whole graphical session: 24-hour clock, Monday-first
     # calendar and Cyrillic month names. Needs install-scripts/locales.sh to
     # have generated ru_RU.UTF-8, or glibc falls back to C in silence.
