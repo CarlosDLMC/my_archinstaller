@@ -26,9 +26,14 @@
 #     starts normally. It just will not have the keys, so only the tools that
 #     actually need one will fail.
 #
-#  3. On a new machine, open ~/.config/zsh/secrets.zsh and replace the fake
-#     values below with the real ones from your password manager. Nothing in
-#     this repo can restore them for you - that is the whole point.
+#  3. On a new machine, open ~/.config/zsh/secrets.zsh, uncomment the keys you
+#     actually use, and replace the fake values with the real ones from your
+#     password manager. Nothing in this repo can restore them for you - that is
+#     the whole point.
+#
+#     Everything ships commented out on purpose. An exported bogus key is worse
+#     than no key at all: the tool finds a value, tries it, and fails with an
+#     authentication error, instead of failing with an obvious "not set".
 #
 #         ${EDITOR:-nano} ~/.config/zsh/secrets.zsh
 #
@@ -49,16 +54,16 @@
 # Claude Code does NOT read this. It authenticates by OAuth and keeps its own
 # token in ~/.claude/.credentials.json, so leaving this fake breaks nothing in
 # Claude Code itself.
-export ANTHROPIC_API_KEY="sk-ant-1234"
+# export ANTHROPIC_API_KEY="sk-ant-1234"
 
 # ── Cloudflare ─────────────────────────────────────────────────────────────
 # The email pairs with the global API key; both are needed together.
-export CLOUDFLARE_EMAIL="you@example.com"
-export CLOUDFLARE_API_KEY="cf-1234"
+# export CLOUDFLARE_EMAIL="you@example.com"
+# export CLOUDFLARE_API_KEY="cf-1234"
 
 # ── Bitbucket ──────────────────────────────────────────────────────────────
 # App password / access token, used for git over HTTPS and the API.
-export BITBUCKET_TOKEN="bb-1234"
+# export BITBUCKET_TOKEN="bb-1234"
 
 # ── Add your own below ─────────────────────────────────────────────────────
 # Examples of the shape, all commented out:

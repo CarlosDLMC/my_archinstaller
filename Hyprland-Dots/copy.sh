@@ -173,7 +173,8 @@ if [ -f "$SCRIPT_DIR/config/zsh/secrets.zsh" ]; then
         cp "$SCRIPT_DIR/config/zsh/secrets.zsh" "$HOME/.config/zsh/secrets.zsh"
         chmod 600 "$HOME/.config/zsh/secrets.zsh"
         echo "  ${OK} Created ~/.config/zsh/secrets.zsh (mode 600)"
-        echo "  ${NOTE} Every value in it is a placeholder - edit it and add your real keys"
+        echo "  ${NOTE} Everything in it is commented out - uncomment the keys you use and"
+        echo "  ${NOTE} replace the placeholder values with the real ones"
     fi
 fi
 
