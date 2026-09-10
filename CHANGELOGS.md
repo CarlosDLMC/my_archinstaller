@@ -47,6 +47,13 @@ Removed:
 
 - `config/hypr/hyprlock-2k.conf` — superseded by the generator, which covers every resolution and cannot drift out of sync with the 1080p file
 - `config/hypr/scripts/Tak0-Per-Window-Switch.sh` and its keybind — it read `kb_layout` from `UserConfigs/UserSettings.conf` while this setup defines it in `configs/SystemSettings.conf`, so it exited immediately and had been dead since the quickshell layout switcher superseded it. Its focus listener also required `socat`, which this installer does not ship, and its single-listener guard could never match, so it leaked a listener per keypress
+- `README-CUSTOM.md`, `INSTALLATION-ISSUE-SUMMARY.md`, `SETUP-COMPLETE-SUMMARY.md` and `commit-message.txt` — four scratch documents that only ever referenced each other, superseded by `README.md`
+  - `README-CUSTOM.md` and `INSTALLATION-ISSUE-SUMMARY.md` told you to `cd ~/Documents/Arch-Hyprland`, a directory that does not exist and never did under that name here — 15 references between them, 17 of the lines being commands you would paste, including the `./diagnose.sh` invocation offered as the fix for a broken install
+  - `SETUP-COMPLETE-SUMMARY.md` and `commit-message.txt` carried no wrong paths; they were session scratch ("I've updated your repo…", a staged commit message from 8 months ago) that was never meant to be committed
+  - They also documented a workflow the repo abandoned: transferring the directory by USB or `rsync` rather than `git clone`, and SDDM rather than **ly**, as the thing that starts on boot
+  - `INSTALLATION-ISSUE-SUMMARY.md` diagnosed a dotfiles-copy failure that has since been fixed, so the top-level docs of a public repo led with an unresolved bug report
+  - `README-CUSTOM.md` claimed the volume widget watches `pactl subscribe`; `VolumeWidget.qml` uses `Quickshell.Services.Pipewire` and its comment records the move away from a `pactl subscribe` child process
+  - Nothing outside the cluster linked to any of them, and `README.md` already carries the same troubleshooting steps with correct paths
 
 ## May 2026
 
