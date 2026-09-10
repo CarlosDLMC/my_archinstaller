@@ -138,6 +138,7 @@ nvidia="OFF"
 nouveau="OFF"
 handy="OFF"
 ly="OFF"
+nopasswd_sudo="OFF"
 
 # Function to load preset file
 load_preset() {
@@ -276,6 +277,7 @@ options_command+=(
     "rog" "Are you installing on Asus ROG laptops?" "OFF"
     "dots" "Download and install pre-configured KooL Hyprland dotfiles?" "OFF"
     "handy" "Install Handy speech-to-text (CTRL+SUPER+F8 toggle)?" "OFF"
+    "nopasswd_sudo" "Passwordless sudo for wheel? (needed by the bar's VPN widget)" "OFF"
 )
 
 # With a preset, skip the menu entirely and derive the selection from the
@@ -286,7 +288,7 @@ options_command+=(
 if [ "$preset_mode" == "true" ]; then
     selected_options=""
     for _opt in ly nvidia nouveau input_group gtk_themes bluetooth thunar \
-                quickshell xdph zsh pokemon rog dots handy; do
+                quickshell xdph zsh pokemon rog dots handy nopasswd_sudo; do
         [ "${!_opt}" == "ON" ] || continue
 
         # Respect the same conditions the interactive menu applies before it
@@ -506,6 +508,10 @@ for option in "${options[@]}"; do
         handy)
             echo "${INFO} Installing ${SKY_BLUE}Handy speech-to-text...${RESET}" | tee -a "$LOG"
             execute_script "handy.sh"
+            ;;
+        nopasswd_sudo)
+            echo "${INFO} Configuring ${SKY_BLUE}passwordless sudo for wheel...${RESET}" | tee -a "$LOG"
+            execute_script "sudoers_nopasswd.sh"
             ;;
         *)
             echo "Unknown option: $option" | tee -a "$LOG"
