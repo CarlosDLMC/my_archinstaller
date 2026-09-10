@@ -7,12 +7,17 @@ NOTE="$(tput setaf 3)[NOTE]$(tput sgr0)"
 INFO="$(tput setaf 4)[INFO]$(tput sgr0)"
 RESET="$(tput sgr0)"
 
-printf "\n${NOTE} Verifying Arch-Hyprland directory is ready for transfer...\n\n"
+# Resolve the repo and its name from this script's own location, rather than
+# hardcoding the upstream project's name.
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_NAME="$(basename "$REPO_DIR")"
+
+printf "\n${NOTE} Verifying $REPO_NAME directory is ready for transfer...\n\n"
 
 # Check if we're in the right directory
 if [ ! -f "install.sh" ]; then
-    printf "${ERROR} This script must be run from the Arch-Hyprland directory\n"
-    printf "${INFO} Run: cd ~/Documents/Arch-Hyprland && ./verify-before-transfer.sh\n"
+    printf "${ERROR} This script must be run from the $REPO_NAME directory\n"
+    printf "${INFO} Run: cd $REPO_DIR && ./verify-before-transfer.sh\n"
     exit 1
 fi
 
@@ -105,12 +110,12 @@ if [ "$all_good" = true ]; then
     printf "${OK} All critical files and directories are present!\n\n"
     printf "${INFO} Ready to transfer. Use one of these methods:\n\n"
     printf "1. USB Transfer:\n"
-    printf "   tar -czf ~/Arch-Hyprland.tar.gz -C ~/Documents Arch-Hyprland\n"
-    printf "   # Copy ~/Arch-Hyprland.tar.gz to USB\n\n"
+    printf "   tar -czf ~/$REPO_NAME.tar.gz -C $(dirname "$REPO_DIR") $REPO_NAME\n"
+    printf "   # Copy ~/$REPO_NAME.tar.gz to USB\n\n"
     printf "2. Network transfer (if both computers are networked):\n"
-    printf "   rsync -av ~/Documents/Arch-Hyprland/ user@newcomputer:~/Documents/Arch-Hyprland/\n\n"
+    printf "   rsync -av $REPO_DIR/ user@newcomputer:~/Documents/$REPO_NAME/\n\n"
     printf "3. On new computer after transfer:\n"
-    printf "   cd ~/Documents/Arch-Hyprland\n"
+    printf "   cd ~/Documents/$REPO_NAME\n"
     printf "   ./install.sh --preset custom-preset.conf\n\n"
 else
     printf "${ERROR} Some files are missing! Fix these before transferring.\n"
