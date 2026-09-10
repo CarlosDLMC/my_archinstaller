@@ -54,7 +54,7 @@ DropdownWidget {
             Rectangle {
                 width: parent.width
                 height: 32
-                color: lockMouse.containsMouse ? Qt.rgba(Theme.colFg.r, Theme.colFg.g, Theme.colFg.b, 0.1) : "transparent"
+                color: lockMouse.containsMouse ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.1) : "transparent"
                 radius: 6
 
                 Row {
@@ -71,7 +71,7 @@ DropdownWidget {
                     }
                     Text {
                         text: "Lock"
-                        color: Theme.colFg
+                        color: Theme.colWhite
                         font.pixelSize: Theme.fontSize
                         font.family: Theme.fontFamily
                     }
@@ -93,7 +93,7 @@ DropdownWidget {
             Rectangle {
                 width: parent.width
                 height: 32
-                color: logoutMouse.containsMouse ? Qt.rgba(Theme.colFg.r, Theme.colFg.g, Theme.colFg.b, 0.1) : "transparent"
+                color: logoutMouse.containsMouse ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.1) : "transparent"
                 radius: 6
 
                 Row {
@@ -110,7 +110,7 @@ DropdownWidget {
                     }
                     Text {
                         text: "Logout"
-                        color: Theme.colFg
+                        color: Theme.colWhite
                         font.pixelSize: Theme.fontSize
                         font.family: Theme.fontFamily
                     }
@@ -132,7 +132,7 @@ DropdownWidget {
             Rectangle {
                 width: parent.width
                 height: 32
-                color: rebootMouse.containsMouse ? Qt.rgba(Theme.colFg.r, Theme.colFg.g, Theme.colFg.b, 0.1) : "transparent"
+                color: rebootMouse.containsMouse ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.1) : "transparent"
                 radius: 6
 
                 Row {
@@ -143,13 +143,13 @@ DropdownWidget {
 
                     Text {
                         text: "󰜉"
-                        color: Theme.colDim
+                        color: "#ffb86c"
                         font.pixelSize: Theme.fontSize
                         font.family: Theme.fontFamily
                     }
                     Text {
                         text: "Reboot"
-                        color: Theme.colFg
+                        color: Theme.colWhite
                         font.pixelSize: Theme.fontSize
                         font.family: Theme.fontFamily
                     }
@@ -171,7 +171,7 @@ DropdownWidget {
             Rectangle {
                 width: parent.width
                 height: 32
-                color: shutdownMouse.containsMouse ? Qt.rgba(Theme.colFg.r, Theme.colFg.g, Theme.colFg.b, 0.1) : "transparent"
+                color: shutdownMouse.containsMouse ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.1) : "transparent"
                 radius: 6
 
                 Row {
@@ -182,13 +182,13 @@ DropdownWidget {
 
                     Text {
                         text: "󰐥"
-                        color: Theme.colAlert
+                        color: "#ff5555"
                         font.pixelSize: Theme.fontSize
                         font.family: Theme.fontFamily
                     }
                     Text {
                         text: "Shutdown"
-                        color: Theme.colFg
+                        color: Theme.colWhite
                         font.pixelSize: Theme.fontSize
                         font.family: Theme.fontFamily
                     }

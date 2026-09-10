@@ -214,7 +214,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         visible: weatherText !== ""
         text: "|"
-        color: Theme.colMuted
+        color: Theme.colSeparator
         font.pixelSize: Theme.fontSize
         font.family: Theme.fontFamily
     }
