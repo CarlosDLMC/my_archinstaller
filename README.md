@@ -1,8 +1,12 @@
 # My Arch Installer
 
 Automated Arch Linux installation with custom Hyprland setup.
-Some things such as the calendar starting on Sunday or Monday, the 24 or 12 hour time etc are decided by the locales.
-Please select a locale that suits you 
+
+Dates and times run on a Russian time locale (`LC_TIME=ru_RU.UTF-8`), which is
+what gives the 24-hour clock, the Monday-first calendar and the Cyrillic day and
+month names that match the Soviet theme. `LANG` stays `en_US.UTF-8`, so
+interfaces are in English and only dates and times are localised. See
+[Locales](#locales) to change it.
 
 ## Features
 
@@ -112,6 +116,29 @@ Please select a locale that suits you
 ## Configuration
 
 All configurations are stored in `Hyprland-Dots/config/` and will be copied to `~/.config/` during installation.
+
+### Locales
+
+`install-scripts/locales.sh` generates `en_US.UTF-8`, `es_US.UTF-8` and
+`ru_RU.UTF-8` (the last two pairing with the ES and RU keyboard layouts) and runs
+`locale-gen`. This is not optional bookkeeping: setting `LC_TIME` to a locale
+that was never generated **does not fail**, glibc just falls back to `C`. The
+symptom is a 12-hour clock, a Sunday-first calendar and an English lock-screen
+date, with nothing anywhere explaining why.
+
+Three places consume it, and all three want Russian:
+
+- `config/environment.d/locale.conf` — `LC_TIME` for the systemd user session
+- `config/hypr/configs/ENVariables.conf` — `LC_TIME` for everything Hyprland launches
+- `scripts/SovietLock.py` — calls `setlocale(LC_TIME, "ru_RU.utf8")` itself, so
+  the lock screen reads `Четверг, 10 сентября 2026`
+
+The bar's calendar picks up `firstDayOfWeek` and its `MMMM yyyy` heading from
+`Qt.locale()`. The bar's *clock* does not — `Clock.qml` formats `"HH:mm"`
+directly, so it is 24-hour regardless of locale.
+
+**To change it**, edit `LC_TIME` in both `locale.conf` and `ENVariables.conf`,
+add the locale to `wanted_locales` in `locales.sh`, and re-run it.
 
 ### Fonts
 
@@ -358,6 +385,7 @@ All configs are in `~/.config/`. Main files to edit:
 - `~/.zshrc` - Shell configuration
 - `~/.config/gtk-3.0/settings.ini` - GTK font, cursor and dark-mode preference
 - `~/.config/environment.d/locale.conf` - `LC_TIME`, i.e. the clock and calendar format
+- `~/.config/fontconfig/conf.d/99-no-ligatures.conf` - turns coding ligatures off
 
 ## Troubleshooting
 
