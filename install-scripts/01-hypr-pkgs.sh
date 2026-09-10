@@ -48,9 +48,10 @@ hypr_package=(
   # whatever geometry the committed file was built for.
   python-gobject
   python-cairo
-  # notify-send. 82 call sites across the hypr scripts, and previously it was
-  # only listed in battery-monitor.sh / disk-monitor.sh / temp-monitor.sh, none
-  # of which install.sh ever calls.
+  # notify-send. 82 call sites across the hypr scripts. It used to be listed
+  # only in three battery/disk/temp monitor scripts that install.sh never
+  # called, so it was never actually installed; those scripts have since been
+  # deleted and libnotify belongs here, in the list that always runs.
   libnotify
   qt5ct
   qt6ct
@@ -92,6 +93,10 @@ hypr_package_2=(
   pacman-contrib
   qalculate-gtk
   yt-dlp
+  # avahi is installed above and thunar.sh enables avahi-daemon, but the daemon
+  # alone does not make .local names resolve: glibc only asks it if nss-mdns is
+  # installed AND wired into /etc/nsswitch.conf. services.sh does the wiring.
+  nss-mdns
 )
 
 # List of packages to uninstall as it conflicts some packages
@@ -102,7 +107,9 @@ uninstall=(
   # removed it and immediately reinstalled it.
   cachyos-hyprland-settings
   swaync
-  rofi
+  # rofi deliberately NOT listed here: it is the launcher this setup uses and
+  # is installed above. Being in both arrays meant every re-run removed it and
+  # immediately reinstalled it - the same churn dunst used to have.
   wallust-git
   rofi-lbonn-wayland
   rofi-lbonn-wayland-git

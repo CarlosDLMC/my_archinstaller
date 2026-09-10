@@ -85,7 +85,8 @@ interfaces are in English and only dates and times are localised. See
 - Hyprland, hypridle, hyprlock
 - ly display manager with large font
 - PipeWire audio
-- NetworkManager
+- NetworkManager (plus `nss-mdns`, wired into `nsswitch.conf` for `.local` names)
+- GPU video-acceleration drivers, detected per machine (see [Graphics](#graphics))
 
 ### Desktop Environment
 - Quickshell (custom bar)
@@ -166,6 +167,33 @@ Two places name fonts that are **not** installed and have never been:
 and not autostarted) asks for `Open Sans` and `FiraConde Nerd Font`. Both render
 substituted here already, so this is inherited from upstream rather than
 something the install broke.
+
+### Graphics
+
+`install-scripts/graphics.sh` reads `lspci` and installs the VA-API and Vulkan
+drivers for whatever GPU it finds — `intel-media-driver` + `vulkan-intel` on
+Intel, `libva-mesa-driver` + `vulkan-radeon` on AMD, plus the `lib32-` variants
+(multilib is enabled by `pacman.sh`, which runs first). NVIDIA is not handled
+here; `nvidia.sh` owns that and is gated behind the preset's `nvidia` option.
+
+This is easy to skip because nothing *looks* broken without it: `mesa` alone
+gives a perfectly good desktop. What you lose is hardware video decode, so mpv
+and every browser fall back to the CPU — a hot laptop and short battery, with
+no error anywhere. The script runs `vainfo` afterwards and says so if decode
+did not come up.
+
+### quickshell version
+
+The installer uses the stable `quickshell` package, **not** `quickshell-git`,
+even though this machine happens to run the `-git` build the bar was written
+against. A `-git` PKGBUILD compiles whatever upstream HEAD is on the day you
+install, so it pins nothing and can only drift further from what was tested.
+
+Stable was verified rather than assumed: the exported QML API of 0.3.1 was
+diffed against the `0.3.0.r6.gb66495f` build this bar was developed on — 118 →
+119 types and 1056 → 1057 members, with nothing removed or renamed. The bar
+only uses `PanelWindow`, `PopupWindow`, `Variants`, `ShellRoot`, `Singleton`,
+`Process`, `Timer` and `HyprlandFocusGrab`, all unchanged.
 
 ### Wallpapers
 
