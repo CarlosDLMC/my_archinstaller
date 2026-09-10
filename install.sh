@@ -63,6 +63,47 @@ if ! command -v whiptail >/dev/null; then
     printf "\n%.0s" {1..1}
 fi
 
+## Default values for the options (will be overwritten by preset file if available)
+gtk_themes="OFF"
+bluetooth="OFF"
+thunar="OFF"
+quickshell="OFF"
+sddm="OFF"
+sddm_theme="OFF"
+xdph="OFF"
+zsh="OFF"
+pokemon="OFF"
+rog="OFF"
+dots="OFF"
+input_group="OFF"
+nvidia="OFF"
+nouveau="OFF"
+handy="OFF"
+ly="OFF"
+nopasswd_sudo="OFF"
+printing="OFF"
+
+# Function to load preset file
+load_preset() {
+    if [ -f "$1" ]; then
+        echo "✅ Loading preset: $1"
+        source "$1"
+    else
+        # Do not fall through to the defaults here: they are all "OFF", so a
+        # mistyped preset path would run a fully non-interactive install that
+        # installs nothing and looks like it succeeded.
+        echo "❌ Preset file not found: $1"
+        exit 1
+    fi
+}
+
+# Check if --preset argument is passed
+preset_mode="false"
+if [[ "$1" == "--preset" && -n "$2" ]]; then
+    load_preset "$2"
+    preset_mode="true"
+fi
+
 clear
 
 printf "\n%.0s" {1..2}  
@@ -73,20 +114,26 @@ echo -e "\e[35m
 \e[0m"
 printf "\n%.0s" {1..1} 
 
-# Welcome message using whiptail (for displaying information)
-whiptail --title "KooL Arch-Hyprland (2025) Install Script" \
-    --msgbox "Welcome to KooL Arch-Hyprland (2025) Install Script!!!\n\n\
+# The point of --preset is "git clone and hit install", so a preset run shows no
+# dialogs at all: not this welcome box, not the confirmation, not the AUR-helper
+# picker below, and not the component menu further down. Without a preset the
+# interactive path is unchanged.
+if [ "$preset_mode" != "true" ]; then
+    # Welcome message using whiptail (for displaying information)
+    whiptail --title "KooL Arch-Hyprland (2025) Install Script" \
+        --msgbox "Welcome to KooL Arch-Hyprland (2025) Install Script!!!\n\n\
 ATTENTION: Run a full system update and Reboot first !!! (Highly Recommended)\n\n\
 NOTE: If you are installing on a VM, ensure to enable 3D acceleration else Hyprland may NOT start!" \
-    15 80
+        15 80
 
-# Ask if the user wants to proceed
-if ! whiptail --title "Proceed with Installation?" \
-    --yesno "Would you like to proceed?" 7 50; then
-    echo -e "\n"
-    echo "❌ ${INFO} You 🫵 chose ${YELLOW}NOT${RESET} to proceed. ${YELLOW}Exiting...${RESET}" | tee -a "$LOG"
-    echo -e "\n" 
-    exit 1
+    # Ask if the user wants to proceed
+    if ! whiptail --title "Proceed with Installation?" \
+        --yesno "Would you like to proceed?" 7 50; then
+        echo -e "\n"
+        echo "❌ ${INFO} You 🫵 chose ${YELLOW}NOT${RESET} to proceed. ${YELLOW}Exiting...${RESET}" | tee -a "$LOG"
+        echo -e "\n" 
+        exit 1
+    fi
 fi
 
 echo "👌 ${OK} 🇵🇭 ${MAGENTA}KooL..${RESET} ${SKY_BLUE}lets continue with the installation...${RESET}" | tee -a "$LOG"
@@ -121,49 +168,17 @@ execute_script() {
 }
 
 
-## Default values for the options (will be overwritten by preset file if available)
-gtk_themes="OFF"
-bluetooth="OFF"
-thunar="OFF"
-quickshell="OFF"
-sddm="OFF"
-sddm_theme="OFF"
-xdph="OFF"
-zsh="OFF"
-pokemon="OFF"
-rog="OFF"
-dots="OFF"
-input_group="OFF"
-nvidia="OFF"
-nouveau="OFF"
-handy="OFF"
-ly="OFF"
-nopasswd_sudo="OFF"
-
-# Function to load preset file
-load_preset() {
-    if [ -f "$1" ]; then
-        echo "✅ Loading preset: $1"
-        source "$1"
-    else
-        # Do not fall through to the defaults here: they are all "OFF", so a
-        # mistyped preset path would run a fully non-interactive install that
-        # installs nothing and looks like it succeeded.
-        echo "❌ Preset file not found: $1"
-        exit 1
-    fi
-}
-
-# Check if --preset argument is passed
-preset_mode="false"
-if [[ "$1" == "--preset" && -n "$2" ]]; then
-    load_preset "$2"
-    preset_mode="true"
-fi
-
 # Check if yay or paru is installed
 echo "${INFO} - Checking if yay or paru is installed"
 if ! command -v yay &>/dev/null && ! command -v paru &>/dev/null; then
+    if [ "$preset_mode" == "true" ]; then
+        # A preset run must not stop to ask. yay is the default because yay.sh
+        # builds it from the yay-bin/ PKGBUILD that is vendored in this repo, so
+        # it works even before any AUR helper exists on the machine - which is
+        # exactly the fresh-install case this branch handles.
+        aur_helper="yay"
+        echo "${NOTE} - No AUR helper found. Preset mode: installing ${SKY_BLUE}yay${RESET} automatically." | tee -a "$LOG"
+    else
     echo "${CAT} - Neither yay nor paru found. Asking 🗣️ USER to select..."
     while true; do
         aur_helper=$(whiptail --title "Neither Yay nor Paru is installed" --checklist "Neither Yay nor Paru is installed. Choose one AUR.\n\nNOTE: Select only 1 AUR helper!\nINFO: spacebar to select" 12 60 2 \
@@ -193,6 +208,7 @@ if ! command -v yay &>/dev/null && ! command -v paru &>/dev/null; then
             break 
         fi
     done
+    fi
 else
     echo "${NOTE} - AUR helper is already installed. Skipping AUR helper selection."
 fi
@@ -219,16 +235,27 @@ check_services_running() {
 if check_services_running; then
     active_list=$(printf "%s\n" "${active_services[@]}")
 
-    # Display the active login manager(s) in the whiptail message box
-    whiptail --title "Active login manager(s) detected" \
-        --msgbox "The following login manager(s) are active:\n\n$active_list\n\nIf you want to install ly display manager, stop and disable the active services above, reboot before running this script\n\nYour option to install ly has now been removed\n\n- Ja " 23 80
+    if [ "$preset_mode" == "true" ]; then
+        # Same information, but printed instead of shown in a box that has to be
+        # dismissed. The preset loop below skips ly on its own in this case.
+        echo "${WARN} Active login manager(s) detected: ${active_services[*]}" | tee -a "$LOG"
+        echo "${NOTE} ly will be skipped. Disable them and re-run if you want ly." | tee -a "$LOG"
+    else
+        # Display the active login manager(s) in the whiptail message box
+        whiptail --title "Active login manager(s) detected" \
+            --msgbox "The following login manager(s) are active:\n\n$active_list\n\nIf you want to install ly display manager, stop and disable the active services above, reboot before running this script\n\nYour option to install ly has now been removed\n\n- Ja " 23 80
+    fi
 fi
 
 # Check if NVIDIA GPU is detected
 nvidia_detected=false
 if lspci | grep -i "nvidia" &> /dev/null; then
     nvidia_detected=true
-    whiptail --title "NVIDIA GPU Detected" --msgbox "NVIDIA GPU detected in your system.\n\nNOTE: The script will install nvidia-dkms, nvidia-utils, and nvidia-settings if you chose to configure." 12 60
+    if [ "$preset_mode" == "true" ]; then
+        echo "${NOTE} NVIDIA GPU detected. It is configured only if the preset sets nvidia=\"ON\"." | tee -a "$LOG"
+    else
+        whiptail --title "NVIDIA GPU Detected" --msgbox "NVIDIA GPU detected in your system.\n\nNOTE: The script will install nvidia-dkms, nvidia-utils, and nvidia-settings if you chose to configure." 12 60
+    fi
 fi
 
 # Initialize the options array for whiptail checklist
@@ -248,7 +275,11 @@ fi
 input_group_detected=false
 if ! groups "$(whoami)" | grep -q '\binput\b'; then
     input_group_detected=true
-    whiptail --title "Input Group" --msgbox "You are not currently in the input group.\n\nAdding you to the input group might be necessary for the Waybar keyboard-state functionality." 12 60
+    if [ "$preset_mode" == "true" ]; then
+        echo "${NOTE} You are not in the 'input' group. Added only if the preset sets input_group=\"ON\"." | tee -a "$LOG"
+    else
+        whiptail --title "Input Group" --msgbox "You are not currently in the input group.\n\nAdding you to the input group might be necessary for the Waybar keyboard-state functionality." 12 60
+    fi
 fi
 
 # Add 'input_group' option if necessary
@@ -278,6 +309,7 @@ options_command+=(
     "dots" "Download and install pre-configured KooL Hyprland dotfiles?" "OFF"
     "handy" "Install Handy speech-to-text (CTRL+SUPER+F8 toggle)?" "OFF"
     "nopasswd_sudo" "Passwordless sudo for wheel? (needed by the bar's VPN widget)" "OFF"
+    "printing" "Install CUPS printing? (nothing else pulls in a print stack)" "OFF"
 )
 
 # With a preset, skip the menu entirely and derive the selection from the
@@ -288,7 +320,8 @@ options_command+=(
 if [ "$preset_mode" == "true" ]; then
     selected_options=""
     for _opt in ly nvidia nouveau input_group gtk_themes bluetooth thunar \
-                quickshell xdph zsh pokemon rog dots handy nopasswd_sudo; do
+                quickshell xdph zsh pokemon rog dots handy nopasswd_sudo \
+                printing; do
         [ "${!_opt}" == "ON" ] || continue
 
         # Respect the same conditions the interactive menu applies before it
@@ -525,6 +558,10 @@ for option in "${options[@]}"; do
             echo "${INFO} Configuring ${SKY_BLUE}passwordless sudo for wheel...${RESET}" | tee -a "$LOG"
             execute_script "sudoers_nopasswd.sh"
             ;;
+        printing)
+            echo "${INFO} Installing ${SKY_BLUE}CUPS printing...${RESET}" | tee -a "$LOG"
+            execute_script "printing.sh"
+            ;;
         *)
             echo "Unknown option: $option" | tee -a "$LOG"
             ;;
@@ -567,6 +604,24 @@ if pacman -Q hyprland &> /dev/null || pacman -Q hyprland-git &> /dev/null; then
 
     printf "\n${NOTE} You can start Hyprland by typing ${SKY_BLUE}Hyprland${RESET} (IF SDDM is not installed) (note the capital H!).\n"
     printf "\n${NOTE} However, it is ${YELLOW}highly recommended to reboot${RESET} your system.\n\n"
+
+    # A preset run is meant to be unattended, so it reboots on its own rather
+    # than parking on a prompt nobody is there to answer. The countdown is the
+    # escape hatch: Ctrl-C, or any keypress, cancels the reboot.
+    if [ "$preset_mode" == "true" ]; then
+        echo "${NOTE} Preset mode: rebooting in 15 seconds."
+        echo "${CAT} Press any key to cancel and stay in this session."
+        if read -r -t 15 -n 1; then
+            printf "\n"
+            echo "👌 ${OK} Reboot cancelled. Reboot yourself with ${MAGENTA}systemctl reboot${RESET} when ready."
+            printf "\n%.0s" {1..2}
+            exit 0
+        fi
+        printf "\n"
+        echo "${INFO} Rebooting now..."
+        systemctl reboot
+        exit 0
+    fi
 
     while true; do
         echo -n "${CAT} Would you like to reboot now? (y/n): "

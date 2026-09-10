@@ -45,15 +45,18 @@ interfaces are in English and only dates and times are localised. See
    ./install.sh --preset custom-preset.conf
    ```
 
-   With `--preset`, the installer runs **non-interactively**: the component
-   menu is skipped and the selection comes from `custom-preset.conf`. Run
-   `./install.sh` with no arguments to pick components from a menu instead.
+   With `--preset`, the installer runs **fully non-interactively**: no welcome
+   box, no confirmation prompt, no AUR-helper picker and no component menu. The
+   selection comes from `custom-preset.conf`, and if no AUR helper is present
+   yet it builds `yay` from the vendored `yay-bin/` PKGBUILD automatically.
+   Run `./install.sh` with no arguments to pick components from a menu instead;
+   that interactive path is unchanged.
 
-3. **Reboot when prompted:**
-   ```bash
-   # The script will ask if you want to reboot
-   # Answer 'y' to reboot now
-   ```
+3. **It reboots itself.**
+
+   A preset run finishes with a 15-second countdown and then reboots, so the
+   whole install is unattended. Press any key during the countdown to cancel
+   and stay in the session. An interactive run (no `--preset`) still asks.
 
 4. **Fill in your machine-local secrets.**
 
@@ -99,6 +102,7 @@ interfaces are in English and only dates and times are localised. See
 - PipeWire audio
 - NetworkManager (plus `nss-mdns`, wired into `nsswitch.conf` for `.local` names)
 - GPU video-acceleration drivers, detected per machine (see [Graphics](#graphics))
+- CUPS printing, socket-activated (see [Printing](#printing))
 
 ### Desktop Environment
 - Quickshell (custom bar)
@@ -180,6 +184,52 @@ and not autostarted) asks for `Open Sans` and `FiraConde Nerd Font`. Both render
 substituted here already, so this is inherited from upstream rather than
 something the install broke.
 
+### GTK theme
+
+The GTK theme is **Adwaita**, set in two places that have to agree:
+
+- `Hyprland-Dots/config/gtk-3.0/settings.ini` — `gtk-theme-name`
+- `Hyprland-Dots/config/hypr/initial-boot.sh` — `gtk_theme`, applied over `gsettings`
+
+Both matter because GTK3 applications read the theme from *either* source
+depending on how they were launched, so a mismatch means some windows are
+themed and others are not. That is exactly what happened here before: the
+`settings.ini` copy on this machine named `Andromeda-dark`, which was never
+installed, so those applications silently fell back to Adwaita while everything
+reading `gsettings` got `Flat-Remix-GTK-Blue-Dark`. Adwaita is now set in both.
+
+Adwaita is built into `gtk3` itself, so unlike a downloaded theme it needs no
+package and can never go missing. Dark mode comes from
+`gtk-application-prefer-dark-theme=1` plus `color-scheme=prefer-dark`, not from
+a separate dark theme name.
+
+The **icon** theme (`Flat-Remix-Blue-Dark`) and **cursor** (`Bibata-Modern-Ice`)
+are unchanged and still come from `GTK-themes-icons/` via `gtk_themes.sh`, which
+also still installs the Flat-Remix GTK themes — they are simply no longer
+selected. One consequence worth knowing: `scripts/DarkLight.sh` picks a *random*
+theme matching `*Dark*` or `*Light*` from `~/.themes`, so running it would
+switch away from Adwaita. Nothing binds it to a key, so it only happens if you
+call it yourself.
+
+### Terminal greeting (pokefetch)
+
+`.zshrc` runs `~/pokefetch_perfect` on every new shell, which draws a Pokemon
+next to a `fastfetch` panel. It shells out to `pokemon-colorscripts`, and that
+binary comes from `install-scripts/zsh_pokemon.sh` and **nowhere else** — which
+is gated behind the preset's `pokemon` option.
+
+So `pokemon` is not optional decoration despite reading like it: with it `OFF`,
+every new terminal printed
+
+```
+/home/you/pokefetch_perfect: line 6: pokemon-colorscripts: command not found
+```
+
+and then rendered the panel with an empty `Pokemon:` field. `custom-preset.conf`
+now sets `pokemon="ON"`, and `pokefetch_perfect` additionally degrades to a
+plain `fastfetch` with a one-line hint if the binary is ever missing — so the
+failure cannot come back silently.
+
 ### Graphics
 
 `install-scripts/graphics.sh` reads `lspci` and installs the VA-API and Vulkan
@@ -193,6 +243,39 @@ gives a perfectly good desktop. What you lose is hardware video decode, so mpv
 and every browser fall back to the CPU — a hot laptop and short battery, with
 no error anywhere. The script runs `vainfo` afterwards and says so if decode
 did not come up.
+
+### Printing
+
+`install-scripts/printing.sh` installs `cups`, `cups-filters` and `cups-pdf`.
+Nothing else in the install pulls in a print stack, so without it every
+application's print dialog opens with an empty printer list and no way to add
+one — which is easy to miss for weeks, because nothing looks broken until the
+first time you try to print.
+
+Like Docker, CUPS is **socket-activated** rather than enabled at boot: `cupsd`
+is idle almost all the time on a laptop, so `cups.socket` and `cups.path` start
+it on demand — the first print dialog, `lp` call, or visit to
+<http://localhost:631> brings it up. Enable `cups.service` instead if you want
+`cupsd` resident, which is only needed if you rely on it continuously browsing
+the network for printers that appear later.
+
+No driver package is installed, and for a modern network printer none is
+needed: IPP Everywhere / AirPrint printers advertise their own capabilities and
+`cups-filters` does the rendering. Only an old USB or PostScript-only model
+needs a vendor driver (`brother-*`, `gutenprint`) from the AUR.
+
+**The printer itself is not configured by the installer** — see
+[What is deliberately NOT in this repo](#what-is-deliberately-not-in-this-repo).
+Adding it back is normally just discovery, since `avahi` and `nss-mdns` are
+already wired up:
+
+```bash
+# Look for it on the network (driverless printers answer here)
+driverless
+# or add it explicitly, replacing the URI and name
+sudo lpadmin -p Brother -E -v ipp://192.168.1.110/ipp/print -m everywhere
+lpstat -p          # should report the printer as idle
+```
 
 ### quickshell version
 
@@ -235,6 +318,14 @@ These are machine-specific, so a fresh install starts without them:
   whatever monitors the new machine has.
 - **`/etc/wireguard/*.conf`** — your VPN configs. They contain private keys, so
   they must never be committed. See below for how to move them across.
+- **`/etc/cups/printers.conf`** and its PPD — the printer queue. The device URI
+  is a LAN address (`ipp://192.168.1.110/ipp/print`) that will not be right on
+  another network, so the queue is machine-specific even though CUPS itself is
+  installed. Re-add the printer once; see [Printing](#printing).
+- **`intel-undervolt`** — deliberately not carried over. The config on this
+  machine reads `enable no`, so the service runs and does nothing; there is
+  nothing to reproduce. Undervolt offsets are also per-CPU-sample, so copying
+  another machine's numbers is a bad idea.
 - **Applications** beyond the desktop itself (browsers, editors, chat, language
   toolchains). The installer builds the Hyprland environment, not the full
   workstation.
@@ -414,7 +505,12 @@ Edit `custom-preset.conf` to enable/disable components:
 - Bluetooth
 - GTK themes
 - zsh with Oh-My-Zsh
+- CUPS printing
 - And more...
+
+Two of them are load-bearing rather than optional, despite the names:
+`dots` (without it you get vanilla Hyprland) and `pokemon` (`.zshrc` needs
+`pokemon-colorscripts` — see [Terminal greeting](#terminal-greeting-pokefetch)).
 
 ### After Installation
 
@@ -423,7 +519,7 @@ All configs are in `~/.config/`. Main files to edit:
 - `~/.config/quickshell/bar/` - Custom bar configuration
 - `~/.config/foot/` - Terminal configuration
 - `~/.zshrc` - Shell configuration
-- `~/.config/gtk-3.0/settings.ini` - GTK font, cursor and dark-mode preference
+- `~/.config/gtk-3.0/settings.ini` - GTK theme, font, cursor and dark-mode preference
 - `~/.config/environment.d/locale.conf` - `LC_TIME`, i.e. the clock and calendar format
 - `~/.config/fontconfig/conf.d/99-no-ligatures.conf` - turns coding ligatures off
 
@@ -479,6 +575,9 @@ chmod +x install.sh
 - ✅ nopasswd_sudo (passwordless sudo for wheel — the bar's VPN widget
   silently does nothing without it; see [VPN configs](#vpn-configs-the-bars-vpn-selector)
   for the trade-off)
+- ✅ printing (CUPS — nothing else pulls in a print stack; see [Printing](#printing))
+- ✅ pokemon (`pokemon-colorscripts`, which `.zshrc` needs for the pokefetch
+  greeting — see [Terminal greeting](#terminal-greeting-pokefetch))
 
 ## Verification
 

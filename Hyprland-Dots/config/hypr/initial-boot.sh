@@ -13,7 +13,11 @@ wallpaper=$HOME/.config/hypr/wallpaper_effects/.wallpaper_current
 #waybar_style="$HOME/.config/waybar/style/[Extra] Neon Circuit.css"
 kvantum_theme="catppuccin-mocha-blue"
 color_scheme="prefer-dark"
-gtk_theme="Flat-Remix-GTK-Blue-Dark"
+# Adwaita is gtk3's built-in theme, so it needs no package and can never go
+# missing. It must match gtk-3.0/settings.ini: GTK3 apps read the theme from
+# gsettings or from settings.ini depending on how they are launched, so a
+# mismatch between the two means some windows are themed and others are not.
+gtk_theme="Adwaita"
 icon_theme="Flat-Remix-Blue-Dark"
 cursor_theme="Bibata-Modern-Ice"
 

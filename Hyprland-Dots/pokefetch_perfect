@@ -1,6 +1,20 @@
 #!/bin/bash
 # Display Pokemon with neofetch side-by-side
 
+# pokemon-colorscripts comes from install-scripts/zsh_pokemon.sh, which only
+# runs when the preset sets pokemon="ON". .zshrc runs this script unconditionally,
+# so without the guard a machine installed with pokemon="OFF" printed
+# "pokemon-colorscripts: command not found" on every single new shell and then
+# rendered the fetch with an empty "Pokemon:" field. Degrade to a plain fetch
+# instead: still a greeting, no error, and an obvious hint about what is missing.
+if ! command -v pokemon-colorscripts >/dev/null 2>&1; then
+    fastfetch --config "$HOME/.config/fastfetch/config-compact.jsonc" 2>/dev/null ||
+        fastfetch 2>/dev/null
+    printf '\n\033[33mNote:\033[m pokemon-colorscripts is not installed, so the Pokemon art is off.\n'
+    printf '      Install it with: yay -S pokemon-colorscripts-git\n'
+    exit 0
+fi
+
 # Get pokemon WITH title (use -r for random, or pass name as argument)
 if [ -z "$1" ]; then
     pokemon_full_output=$(pokemon-colorscripts -r 1-4)
