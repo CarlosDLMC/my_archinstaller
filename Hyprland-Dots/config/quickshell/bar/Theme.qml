@@ -124,17 +124,13 @@ QtObject {
     //  Text roles are floored for legibility. colSeparator deliberately is
     //  NOT: WCAG applies to text, and the "│" dividers are decoration that
     //  should stay quiet rather than compete with the readings.
-    readonly property color colLabel: colGrey                 // "CPU", "MEM"
     readonly property color colValue: colWhite                // 17%, 9.25G
     readonly property color colFg: palFg
-    readonly property color colBright: palBright
     readonly property color colDim: atLeast(palDim, 0.59)
     readonly property color colMuted: atLeast(palMuted, 0.57)
     readonly property color colFaint: atLeast(palFaint, 0.56)
     readonly property color colSeparator: colGrey             // neutral, same grey as idle widgets
-    readonly property color colBorder: palBorder
 
-    readonly property color colAccent: palAccent  // active, connected, on
     //  Floored to 0.62 rather than to AAA: pushing the alert hue any lighter
     //  washes it out until it no longer reads as "coloured", which is the
     //  entire job it has on a monochrome bar.
@@ -155,15 +151,12 @@ QtObject {
     //  as named properties so a widget can be re-tinted in one place if
     //  it ever earns its own emphasis - but the default is: no hue.
 
-    readonly property color colClock: palFg
     readonly property color colCpu: colGrey
     readonly property color colMem: colGrey
     readonly property color colDisk: colGrey
-    readonly property color colVol: colWhite
     readonly property color colNetwork: colWhite
     readonly property color colBluetooth: colWhite
     readonly property color colWindow: colDim     // window title is secondary info
-    readonly property color colKernel: colDim
 
     //  Per-area treatment, picked by eye from the comparison:
     //    workspaces      -> variant E (near-white active, light grey inactive)

@@ -44,8 +44,8 @@ RowLayout {
                 text: wsRect.isActive ? "[" + wsRect.wsId + "]" : " " + wsRect.wsId + " "
                 // White when the workspace holds something, grey when empty.
                 // The [brackets] mark which one is focused, not the colour.
-                color: (wsRect.isActive || wsRect.hasWindows) ? Theme.colWhite
-                                                              : Theme.colGrey
+                color: (wsRect.isActive || wsRect.hasWindows) ? Theme.colWorkspaceActive
+                                                              : Theme.colWorkspaceInactive
                 font.pixelSize: Theme.fontSize
                 font.family: Theme.fontFamily
                 font.bold: wsRect.isActive
