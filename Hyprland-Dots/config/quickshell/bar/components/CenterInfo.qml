@@ -282,7 +282,7 @@ Item {
                 Text {
                     visible: centerInfo.barLocation !== ""
                     text: centerInfo.barLocation
-                    color: Theme.colWhite
+                    color: Theme.colCenter
                     font.pixelSize: Theme.fontSize
                     font.family: Theme.fontFamily
                     font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
@@ -316,7 +316,7 @@ Item {
             id: timeText
             anchors.centerIn: parent
             text: centerTime
-            color: Theme.colWhite
+            color: Theme.colCenter
             font.pixelSize: Theme.fontSize
             font.family: Theme.fontFamily
             font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
