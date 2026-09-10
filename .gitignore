@@ -31,3 +31,9 @@ Install-Logs/
 # auto-extract.sh writes its log next to itself on every run.
 GTK-themes-icons/*.log
 *.backup
+
+# A real secrets.zsh must never be committed. Only the .example template is
+# tracked. This is a safety net - the live file lives at
+# ~/.config/zsh/secrets.zsh, outside the repo entirely.
+Hyprland-Dots/config/zsh/secrets.zsh
+!Hyprland-Dots/config/zsh/secrets.zsh.example

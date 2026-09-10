@@ -55,23 +55,34 @@ interfaces are in English and only dates and times are localised. See
    # Answer 'y' to reboot now
    ```
 
-4. **Recreate your machine-local secrets:**
-   ```bash
-   mkdir -p ~/.config/zsh
-   chmod 600 ~/.config/zsh/secrets.zsh   # after creating it
-   ```
+4. **Fill in your machine-local secrets.**
 
-   API keys and tokens are deliberately **not** in this repo. `.zshrc` sources
-   `~/.config/zsh/secrets.zsh` if it exists and starts fine without it, so the
-   shell will work immediately - but anything needing a key will not. Add the
-   exports you use, for example:
+   The installer creates `~/.config/zsh/secrets.zsh` for you from
+   `Hyprland-Dots/config/zsh/secrets.zsh.example`, with **placeholder values**
+   and mode `600`. Open it and replace them with your real keys:
 
    ```bash
-   export ANTHROPIC_API_KEY="..."
-   export CLOUDFLARE_EMAIL="..."
-   export CLOUDFLARE_API_KEY="..."
-   export BITBUCKET_TOKEN="..."
+   ${EDITOR:-nano} ~/.config/zsh/secrets.zsh
    ```
+
+   API keys and tokens are deliberately **not** in this repo — anything
+   committed to git is recoverable from the history forever, and this repo is
+   pushed to GitHub. Only the `.example` template is tracked, and a real
+   `secrets.zsh` is blocked by `.gitignore` as a safety net.
+
+   `.zshrc` sources it guarded, so a shell without it still starts normally and
+   only the tools needing a key will fail:
+
+   ```bash
+   [ -r "$HOME/.config/zsh/secrets.zsh" ] && . "$HOME/.config/zsh/secrets.zsh"
+   ```
+
+   Re-running the installer **never** overwrites a `secrets.zsh` that already
+   exists — it is only created when missing, so your keys survive a re-install.
+
+   Note that `ANTHROPIC_API_KEY` is only needed for direct API use (SDK
+   scripts, `curl`). Claude Code does not read it; it authenticates by OAuth
+   and stores its own token in `~/.claude/.credentials.json`.
 
 5. **Optional per-machine tooling.** The installer does not install `fnm`,
    `uv`, `rustup` or Homebrew. `.zshrc` guards each of their hooks, so their
@@ -464,6 +475,9 @@ chmod +x install.sh
 - ✅ bluetooth (if you need it)
 - ✅ xdph (for screen sharing)
 - ✅ handy (offline speech-to-text, SUPER + CTRL + F8)
+- ✅ nopasswd_sudo (passwordless sudo for wheel — the bar's VPN widget
+  silently does nothing without it; see [VPN configs](#vpn-configs-the-bars-vpn-selector)
+  for the trade-off)
 
 ## Verification
 

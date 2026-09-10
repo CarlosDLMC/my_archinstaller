@@ -150,6 +150,32 @@ for dir in "${config_dirs[@]}"; do
     fi
 done
 
+# Install the secrets template, and seed the real file only if absent
+#
+# NOTE: "zsh" is deliberately NOT in config_dirs above. That loop backs up and
+# *replaces* the whole directory, which would move a filled-in secrets.zsh out
+# from under the user on every re-run. This block only ever adds.
+printf "\n${INFO} Setting up machine-local secrets...\n"
+if [ -f "$SCRIPT_DIR/config/zsh/secrets.zsh.example" ]; then
+    mkdir -p "$HOME/.config/zsh"
+
+    # The template itself is always refreshed - it is documentation, not data.
+    cp "$SCRIPT_DIR/config/zsh/secrets.zsh.example" "$HOME/.config/zsh/secrets.zsh.example"
+    echo "  ${OK} Copied secrets.zsh.example"
+
+    # The real file is created from the template ONLY when missing. Never
+    # overwrite it: it holds live credentials that exist nowhere else, and this
+    # script is expected to be re-run.
+    if [ -e "$HOME/.config/zsh/secrets.zsh" ]; then
+        echo "  ${NOTE} secrets.zsh already exists - left untouched"
+    else
+        cp "$SCRIPT_DIR/config/zsh/secrets.zsh.example" "$HOME/.config/zsh/secrets.zsh"
+        chmod 600 "$HOME/.config/zsh/secrets.zsh"
+        echo "  ${OK} Created ~/.config/zsh/secrets.zsh from the template (mode 600)"
+        echo "  ${NOTE} It holds placeholder values - edit it and put your real keys in"
+    fi
+fi
+
 # Copy the wallpaper library
 #
 # The dots hardcode $HOME/Pictures/wallpapers in WallpaperSelect.sh,
