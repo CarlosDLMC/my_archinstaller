@@ -166,9 +166,67 @@ These are machine-specific, so a fresh install starts without them:
   `FILES=` entry in `/etc/mkinitcpio.conf` and a `drm.edid_firmware=` kernel
   parameter — none of which live under `~`. Use `nwg-displays` to lay out
   whatever monitors the new machine has.
+- **`/etc/wireguard/*.conf`** — your VPN configs. They contain private keys, so
+  they must never be committed. See below for how to move them across.
 - **Applications** beyond the desktop itself (browsers, editors, chat, language
   toolchains). The installer builds the Hyprland environment, not the full
   workstation.
+
+### VPN configs (the bar's VPN selector)
+
+The VPN widget lists whatever is in `/etc/wireguard/`, so on a fresh machine the
+dropdown is empty until you copy your configs over. `/etc/wireguard` is
+`root:root 0700` and the `.conf` files hold private keys — treat them like
+secrets, and never put them in this repo.
+
+**On the old machine**, pack them up (the tarball lands in your home directory,
+not in the repo):
+
+```bash
+sudo tar -czf ~/wireguard-configs.tar.gz -C /etc wireguard
+sudo chown "$USER" ~/wireguard-configs.tar.gz
+```
+
+**Move the tarball across** — over the network, if both machines are up:
+
+```bash
+scp ~/wireguard-configs.tar.gz user@newmachine:~
+```
+
+or copy it to a USB stick. Either way, delete it once it has landed.
+
+**On the new machine**, unpack it and fix the ownership and modes — `wg-quick`
+refuses to use a config that is group- or world-readable:
+
+```bash
+sudo tar -xzf ~/wireguard-configs.tar.gz -C /etc
+sudo chown -R root:root /etc/wireguard
+sudo chmod 700 /etc/wireguard
+sudo chmod 600 /etc/wireguard/*.conf
+rm ~/wireguard-configs.tar.gz
+```
+
+**Check it worked.** The first command is exactly what the widget runs to build
+its list, so if it prints your VPN names the dropdown will be populated:
+
+```bash
+sudo find /etc/wireguard -name '*.conf' -exec basename {} .conf \; | sort
+sudo wg-quick up de-ber     # replace with one of your own config names
+wg show interfaces          # should print the interface that just came up
+sudo wg-quick down de-ber
+```
+
+Then restart the bar to pick them up: `pkill qs; qs -c bar &`.
+
+**This needs passwordless sudo.** `VpnWidget.qml` runs `sudo find`,
+`sudo wg-quick up|down` and `sudo timedatectl set-timezone` from a QML `Process`,
+which has no terminal to prompt on — with stock sudoers those calls fail
+silently and the dropdown does nothing at all. That is what the
+`nopasswd_sudo` preset option installs (`install-scripts/sudoers_nopasswd.sh`
+writes a validated `/etc/sudoers.d/10-wheel-nopasswd`). The trade-off is real:
+any process running as your user can become root without a prompt. If you would
+rather not have that, set `nopasswd_sudo="OFF"` and narrow the rule to just
+those three commands — the VPN widget is the only thing here that depends on it.
 
 ### Key Bindings (Some Important Ones)
 
