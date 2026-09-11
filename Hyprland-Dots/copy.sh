@@ -116,6 +116,11 @@ config_dirs=(
 # One stamp for the whole run, so a single invocation's backups group together.
 BACKUP_STAMP="$(date +%Y%m%d-%H%M%S)"
 
+# Where each directory's backup ended up, keyed by directory name. The wallust
+# seeding further down reads this to recover the live palette from the copy it
+# just displaced - see the comment there.
+declare -A BACKUP_OF
+
 for dir in "${config_dirs[@]}"; do
     if [ -d "$SCRIPT_DIR/config/$dir" ]; then
         # Back up to a timestamped name. A fixed "$dir.backup" target breaks on
@@ -136,6 +141,7 @@ for dir in "${config_dirs[@]}"; do
             # so a lost race fails loudly instead of silently nesting.
             if mv -T "$HOME/.config/$dir" "$backup"; then
                 printf "  ${NOTE} Backed up existing $dir to $(basename "$backup")\n"
+                BACKUP_OF["$dir"]="$backup"
             else
                 echo "  ${ERROR} Could not back up existing $dir - skipping it rather than merging over it"
                 continue
@@ -170,6 +176,74 @@ if [ -f "$_bookmarks" ]; then
         echo "  ${ERROR} Could not expand \$HOME in $_bookmarks - the sidebar bookmarks will be dead links"
     fi
 fi
+
+# Seed the wallust output files
+#
+# Every path below is a `target` in config/wallust/wallust.toml, so it is
+# regenerated in full on every wallpaper change. That makes them runtime state,
+# and they are gitignored for it - see .gitignore. But they are not optional:
+#
+#   - UserConfigs/UserDecorations.conf does an unconditional
+#     `source = $HOME/.config/hypr/wallust/wallust-hyprland.conf`
+#   - twelve rofi themes `@theme` colors-rofi.rasi
+#   - wlogout/style.css `@import`s colors-waybar.css
+#
+# A missing file at any of those is a config error on first launch, not a
+# silent fallback, and first launch happens before initial-boot.sh has had a
+# chance to run wallust. So a rendered snapshot of each ships in defaults/ and
+# is copied into place here. wallust overwrites all of them on first login.
+#
+# On a RE-RUN the live palette is recovered from the backup rather than
+# reverted to the snapshot. This needs saying because it is not obvious: every
+# one of these files sits inside a directory the loop above backs up and
+# replaces wholesale, so by the time we get here the live copy has already been
+# moved aside. Without the recovery step a re-install would silently reset the
+# desktop to the snapshot palette - and it would STAY there, because
+# initial-boot.sh is guarded by ~/.config/hypr/.initial_startup_done and does
+# not run a second time. Nothing would repaint until the next wallpaper change.
+printf "\n${INFO} Seeding wallust output files...\n"
+wallust_targets=(
+    "cava/config"
+    "hypr/wallust/wallust-hyprland.conf"
+    "rofi/wallust/colors-rofi.rasi"
+    "wallust/output/colors-waybar.css"
+    "quickshell/qml_color.json"
+)
+
+for _target in "${wallust_targets[@]}"; do
+    _seed="$SCRIPT_DIR/defaults/$_target"
+    _dest="$HOME/.config/$_target"
+    # "hypr/wallust/wallust-hyprland.conf" -> dir "hypr", rest "wallust/..."
+    _dir="${_target%%/*}"
+    _rest="${_target#*/}"
+    _live="${BACKUP_OF[$_dir]:+${BACKUP_OF[$_dir]}/$_rest}"
+
+    if [ -e "$_dest" ]; then
+        echo "  ${NOTE} $_target already present - left alone"
+        continue
+    fi
+
+    mkdir -p "$(dirname "$_dest")"
+
+    if [ -n "$_live" ] && [ -f "$_live" ]; then
+        if cp "$_live" "$_dest"; then
+            echo "  ${OK} Kept your current palette for $_target"
+            continue
+        fi
+        echo "  ${WARN} Could not recover $_target from the backup - falling back to the shipped default"
+    fi
+
+    if [ ! -f "$_seed" ]; then
+        echo "  ${ERROR} Missing seed defaults/$_target - $_dest will not exist until wallust runs"
+        continue
+    fi
+
+    if cp "$_seed" "$_dest"; then
+        echo "  ${OK} Seeded $_target"
+    else
+        echo "  ${ERROR} Failed to seed $_target"
+    fi
+done
 
 # Deploy secrets.zsh, but only if the user does not already have one
 #
@@ -237,6 +311,34 @@ if [ -f "$_default_src" ]; then
         echo "  ${OK} Default wallpaper set to $DEFAULT_WALLPAPER"
     else
         echo "  ${ERROR} Failed to set default wallpaper"
+    fi
+
+    # Point the rofi background symlink at the deployed wallpaper.
+    #
+    # WallustSwww.sh re-links this on every wallpaper change, so it is runtime
+    # state and is gitignored. It used to be tracked, and as a symlink git
+    # stores the target verbatim: it was an absolute path into /home/mentefria
+    # naming a wallpaper this repo does not ship, so on any other machine the
+    # six rofi themes that use it as a background got a dead link.
+    #
+    # Linked to ~/Pictures/wallpapers rather than into the repo, because that is
+    # where the wallpaper still is after the repo is moved or deleted.
+    # Like the wallust outputs above, the rofi/ backup is consulted first so a
+    # re-install keeps whatever wallpaper you were actually using.
+    _rofi_link="$HOME/.config/rofi/.current_wallpaper"
+    _rofi_live="${BACKUP_OF[rofi]:+${BACKUP_OF[rofi]}/.current_wallpaper}"
+    _rofi_target="$HOME/Pictures/wallpapers/$DEFAULT_WALLPAPER"
+
+    if [ -n "$_rofi_live" ] && [ -e "$_rofi_live" ]; then
+        # -e, not -L: a symlink left dangling by a deleted wallpaper is no use.
+        _rofi_target="$(readlink -f "$_rofi_live")"
+        echo "  ${NOTE} Keeping your current rofi background"
+    fi
+
+    if ln -sfn "$_rofi_target" "$_rofi_link"; then
+        echo "  ${OK} rofi background linked to $(basename "$_rofi_target")"
+    else
+        echo "  ${ERROR} Could not link $_rofi_link - rofi themes will have no background"
     fi
 else
     echo "  ${ERROR} Default wallpaper $DEFAULT_WALLPAPER not found - first boot will have no wallpaper"

@@ -31,3 +31,30 @@ Install-Logs/
 # auto-extract.sh writes its log next to itself on every run.
 GTK-themes-icons/*.log
 *.backup
+
+# Wallust output. Every one of these paths is a `target` in
+# Hyprland-Dots/config/wallust/wallust.toml, rewritten in full on every
+# wallpaper change - so tracking them meant the palette of whatever wallpaper
+# happened to be up got committed, and the next wallpaper change dirtied the
+# tree again. auto-install.sh refuses to pull over a dirty tree, so this was on
+# its way to blocking updates.
+#
+# They still have to EXIST on a fresh machine: UserDecorations.conf sources
+# wallust-hyprland.conf, twelve rofi themes @theme colors-rofi.rasi, and
+# wlogout's style.css @imports colors-waybar.css - a missing file there is a
+# config error, not a fallback. So a rendered snapshot of each lives in
+# Hyprland-Dots/defaults/ and copy.sh seeds it when the real file is absent.
+# initial-boot.sh then runs wallust on first login and overwrites all of them.
+Hyprland-Dots/config/cava/config
+Hyprland-Dots/config/hypr/wallust/wallust-hyprland.conf
+Hyprland-Dots/config/rofi/wallust/colors-rofi.rasi
+Hyprland-Dots/config/wallust/output/colors-waybar.css
+Hyprland-Dots/config/quickshell/qml_color.json
+Hyprland-Dots/config/quickshell/bar/wallust-colors.json
+
+# Symlink to the active wallpaper, pointed at by WallustSwww.sh on every
+# wallpaper change and used as the rofi background. Tracked, it was an absolute
+# symlink into /home/mentefria aimed at a wallpaper this repo does not even
+# ship - dead on arrival on any other machine. copy.sh links it to the default
+# wallpaper instead.
+Hyprland-Dots/config/rofi/.current_wallpaper
