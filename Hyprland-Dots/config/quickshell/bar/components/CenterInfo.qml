@@ -16,7 +16,8 @@ Item {
     property string weatherCity: ""
     property string weatherText: ""
     property string weatherIcon: ""
-    property string weatherCondition: ""
+    property string weatherCondition: ""          // English, drives getConditionColor()
+    property string weatherConditionDisplay: ""   // localised, what the popup shows
     property string weatherLocation: ""
     property string weatherFeelsLike: ""
     property string weatherMinTemp: ""
@@ -111,6 +112,7 @@ Item {
             var json = JSON.parse(output)
             centerInfo.weatherText = json.text || ""
             centerInfo.weatherCondition = json.alt || ""
+            centerInfo.weatherConditionDisplay = json.alt_display || json.alt || ""
 
             // Helper to strip HTML tags
             function stripHtml(str) {
@@ -704,7 +706,7 @@ Item {
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: parent.width - 20
                     horizontalAlignment: Text.AlignHCenter
-                    text: centerInfo.weatherCondition
+                    text: centerInfo.weatherConditionDisplay
                     color: Theme.colMuted
                     font.pixelSize: Theme.fontSize
                     font.family: Theme.fontFamily
@@ -752,7 +754,7 @@ Item {
             // Feels like
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: centerInfo.weatherFeelsLike ? "Feels " + centerInfo.weatherFeelsLike : ""
+                text: centerInfo.weatherFeelsLike ? "Ощущается " + centerInfo.weatherFeelsLike : ""
                 color: Theme.colMuted
                 font.pixelSize: Theme.fontSize - 2
                 font.family: Theme.fontFamily
@@ -770,7 +772,7 @@ Item {
 
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: " Rain"
+                    text: " Дождь"
                     color: Theme.colMuted
                     font.pixelSize: Theme.fontSize - 2
                     font.family: Theme.fontFamily

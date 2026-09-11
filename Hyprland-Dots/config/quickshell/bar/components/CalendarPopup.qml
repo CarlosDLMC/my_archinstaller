@@ -226,9 +226,16 @@ Item {
                     // so a bare month heading came out as "сентября 2026". The
                     // standalone form is the nominative "сентябрь" a heading wants.
                     // The month index is 0-based, same as Date.getMonth().
-                    text: Qt.locale().standaloneMonthName(root.displayDate.getMonth(),
-                                                          Locale.LongFormat)
-                          + " " + root.displayDate.getFullYear()
+                    // Russian writes month names lowercase ("сентябрь"), which is
+                    // correct prose but reads as a typo in a heading - so the first
+                    // letter is lifted here rather than in the locale data.
+                    // toUpperCase() is Unicode-aware, so "с" -> "С" works.
+                    text: {
+                        const name = Qt.locale().standaloneMonthName(root.displayDate.getMonth(),
+                                                                     Locale.LongFormat)
+                        return name.charAt(0).toUpperCase() + name.slice(1)
+                               + " " + root.displayDate.getFullYear()
+                    }
                     font.pixelSize: Theme.fontSize + 10
                     color: Theme.colWhite
                     font.family: Theme.fontFamily
