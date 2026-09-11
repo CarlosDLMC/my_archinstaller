@@ -154,6 +154,23 @@ for dir in "${config_dirs[@]}"; do
     fi
 done
 
+# Expand $HOME in the Thunar sidebar bookmarks
+#
+# GTK reads this file as a list of absolute file:// URIs and does no variable
+# expansion of its own, so the tracked copy cannot just say $HOME - but it also
+# must not hardcode one machine's home, which is what it did before: every
+# bookmark pointed at /home/mentefria and every one of them was dead on any
+# other machine. Tracked as a template, substituted here.
+printf "\n${INFO} Expanding \$HOME in GTK bookmarks...\n"
+_bookmarks="$HOME/.config/gtk-3.0/bookmarks"
+if [ -f "$_bookmarks" ]; then
+    if sed -i "s|\$HOME|$HOME|g" "$_bookmarks"; then
+        echo "  ${OK} Thunar sidebar bookmarks point at $HOME"
+    else
+        echo "  ${ERROR} Could not expand \$HOME in $_bookmarks - the sidebar bookmarks will be dead links"
+    fi
+fi
+
 # Deploy secrets.zsh, but only if the user does not already have one
 #
 # Two things here are load-bearing:
