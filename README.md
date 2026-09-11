@@ -441,6 +441,15 @@ those three commands — the VPN widget is the only thing here that depends on i
 
 See `Hyprland-Dots/config/hypr/configs/Keybinds.conf` for all keybindings.
 
+**Two binds do nothing on a fresh install.** `SUPER + T` launches Telegram and
+`SUPER + R` launches RustRover (`UserConfigs/UserKeybinds.conf:37-38`), and
+neither application is installed by this repo — applications beyond the desktop
+itself are deliberately out of scope, see
+[What is deliberately NOT in this repo](#what-is-deliberately-not-in-this-repo).
+A bind pointing at a missing binary fails silently in Hyprland: no error, no
+notification, the key just does nothing. Install `telegram-desktop` and
+`rustrover` if you want them, or delete the two lines.
+
 ### Speech-to-Text (Handy)
 
 Handy is offline speech-to-text — no audio leaves your machine. `wtype` injects the transcription into whatever window has focus.
