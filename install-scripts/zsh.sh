@@ -106,19 +106,44 @@ if command -v zsh >/dev/null; then
       cp 'assets/fastfetch/pokefetch.jsonc' ~/.config/fastfetch/
   fi
 
-  # Check if the current shell is zsh
-  current_shell=$(basename "$SHELL")
-  if [ "$current_shell" != "zsh" ]; then
-    printf "${NOTE} Changing default shell to ${MAGENTA}zsh${RESET}..."
-    printf "\n%.0s" {1..2}
+  # Prefer the zsh listed in /etc/shells over `command -v zsh`.
+  #
+  # /usr/sbin is a symlink to /usr/bin on Arch and can come first in PATH, so
+  # `command -v zsh` may answer /usr/sbin/zsh - which is the same binary but is
+  # NOT in /etc/shells. chsh warns and sets it anyway, leaving a login shell
+  # that anything validating against /etc/shells (ftp/su/some PAM setups) will
+  # reject, and that never compares equal to the /usr/bin/zsh already in passwd
+  # - so this block would re-run chsh on every single install.
+  zsh_path=""
+  while read -r _sh; do
+    case "$_sh" in */zsh) [ -x "$_sh" ] && { zsh_path="$_sh"; break; } ;; esac
+  done < /etc/shells
+  [ -n "$zsh_path" ] || zsh_path=$(command -v zsh)
 
-    # Loop to ensure the chsh command succeeds
-    while ! chsh -s "$(command -v zsh)"; do
-      echo "${ERROR} Authentication failed. Please enter the correct password." 2>&1 | tee -a "$LOG"
-      sleep 1
-    done
+  # Read the login shell out of the passwd database rather than $SHELL, which
+  # is inherited from whatever launched this script and can disagree with the
+  # real entry. Compare resolved paths so /bin/zsh and /usr/bin/zsh - the same
+  # binary through a compat symlink - do not read as a difference.
+  current_shell=$(getent passwd "$USER" | cut -d: -f7)
 
-    printf "${INFO} Shell changed successfully to ${MAGENTA}zsh${RESET}" 2>&1 | tee -a "$LOG"
+  if [ "$(readlink -f "$current_shell" 2>/dev/null)" != "$(readlink -f "$zsh_path")" ]; then
+    printf "${NOTE} Changing default shell to ${MAGENTA}zsh${RESET}...\n"
+
+    # `sudo chsh -s ... "$USER"`, not a bare `chsh`. /etc/pam.d/chsh is
+    # `auth required pam_unix.so`, so an unprivileged chsh prompts for the
+    # user's password itself - a second, separate password prompt in the middle
+    # of what --preset advertises as an unattended run. The old `while ! chsh`
+    # loop around it then spun forever on a wrong answer, printing the same
+    # error once a second with no exit but Ctrl-C. Under sudo, pam_rootok
+    # short-circuits the prompt and this reuses the sudo session the install
+    # already has.
+    if sudo chsh -s "$zsh_path" "$USER" >> "$LOG" 2>&1; then
+      printf "${INFO} Shell changed successfully to ${MAGENTA}zsh${RESET}\n" | tee -a "$LOG"
+    else
+      # Not fatal: everything else in the install still works, you just land in
+      # bash until this is set. Failing the whole run over it would be worse.
+      echo "${WARN} Could not change the login shell. Set it yourself with: chsh -s $zsh_path" | tee -a "$LOG"
+    fi
   else
     echo "${NOTE} Your shell is already set to ${MAGENTA}zsh${RESET}."
   fi

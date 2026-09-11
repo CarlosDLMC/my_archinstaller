@@ -2,10 +2,6 @@
 # 💫 https://github.com/JaKooLit 💫 #
 # quickshell - for desktop overview replacing AGS
 
-if [[ $USE_PRESET = [Yy] ]]; then
-  source ./preset.sh
-fi
-
 # quickshell, NOT quickshell-git.
 #
 # This machine happens to run quickshell-git (0.3.0.r6.gb66495f) because that is

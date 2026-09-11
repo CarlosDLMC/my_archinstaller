@@ -2,10 +2,17 @@
 # 💫 https://github.com/JaKooLit 💫 #
 # base-devel + archlinux-keyring #
 
-base=( 
+base=(
   base-devel
   archlinux-keyring
   findutils
+  # git is not in base-devel and not in the `base` metapackage, so a freshly
+  # installed Arch need not have it. zsh.sh clones oh-my-zsh and two plugins
+  # with it, and yay.sh falls back to an AUR clone when the vendored PKGBUILD
+  # is missing. Cloning this repo needs git too, so the README path always has
+  # it - but a tarball download or auto-install.sh's clone-into-place does not
+  # guarantee it is still there by the time those scripts run.
+  git
 )
 
 ## WARNING: DO NOT EDIT BEYOND THIS LINE IF YOU DON'T KNOW WHAT YOU ARE DOING! ##
