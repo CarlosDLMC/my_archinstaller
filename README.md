@@ -368,6 +368,29 @@ These are machine-specific, so a fresh install starts without them:
 - **Applications** beyond the desktop itself (browsers, editors, chat, language
   toolchains). The installer builds the Hyprland environment, not the full
   workstation.
+- **The wallust colour files** — `cava/config`,
+  `hypr/wallust/wallust-hyprland.conf`, `rofi/wallust/colors-rofi.rasi`,
+  `wallust/output/colors-waybar.css`, `quickshell/qml_color.json` and
+  `quickshell/bar/wallust-colors.json`. Every one is a `target` in
+  `wallust.toml`, rewritten in full each time the wallpaper changes, so they are
+  runtime state and are gitignored — otherwise whichever palette happened to be
+  up got committed and the next wallpaper change dirtied the tree, which
+  `auto-install.sh` then refuses to pull over.
+
+  They still have to *exist*: `UserDecorations.conf` sources
+  `wallust-hyprland.conf`, twelve rofi themes `@theme` `colors-rofi.rasi` and
+  wlogout's `style.css` `@import`s `colors-waybar.css` — a missing file there is
+  a config error on first launch, not a silent fallback. So a rendered snapshot
+  of each lives in **`Hyprland-Dots/defaults/`**, mirroring its path under
+  `~/.config/`, and `copy.sh` puts it in place. `initial-boot.sh` runs wallust on
+  first login and overwrites all of them from your actual wallpaper.
+
+  Re-running the installer keeps the palette you are already using: `copy.sh`
+  recovers these files from the backup it just made and only falls back to
+  `defaults/` when there is nothing to recover. That matters because
+  `initial-boot.sh` is guarded by `.initial_startup_done` and will not run a
+  second time — without the recovery the desktop would sit on the snapshot
+  palette until the next wallpaper change.
 
 ### VPN configs (the bar's VPN selector)
 
