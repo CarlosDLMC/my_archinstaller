@@ -1,3 +1,6 @@
 module QuickshellBar
 singleton Theme 1.0 Theme.qml
 singleton LayoutState 1.0 LayoutState.qml
+singleton RecordState 1.0 RecordState.qml
+singleton Monitors 1.0 Monitors.qml
+singleton ShotState 1.0 ShotState.qml

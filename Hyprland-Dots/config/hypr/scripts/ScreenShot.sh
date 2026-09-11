@@ -3,7 +3,9 @@
 # Screenshots scripts
 
 # variables
-time=$(date "+%d-%b_%H-%M-%S")
+# All-numeric so lexical order == chronological order, and no locale-dependent
+# month name (see ScreenRecord.sh for the same change).
+time=$(date "+%Y-%m-%d_%H-%M-%S")
 dir="$(xdg-user-dir PICTURES)/Screenshots"
 file="Screenshot_${time}_${RANDOM}.png"
 
@@ -86,6 +88,21 @@ shotnow() {
 	notify_view
 }
 
+# Shot of one whole monitor. $1 = output name, defaults to the focused one.
+shotmonitor() {
+	local output="$1"
+	[[ -z "$output" ]] && output=$(hyprctl -j monitors | jq -r '.[] | select(.focused) | .name' | head -1)
+
+	if [[ -z "$output" ]]; then
+		${notify_cmd_NOT} " Screenshot" " Could not determine which monitor"
+		return 1
+	fi
+
+	cd ${dir} && grim -o "$output" - | tee "$file" | wl-copy
+	sleep 1
+	notify_view
+}
+
 shot5() {
 	countdown '5'
 	sleep 1 && cd ${dir} && grim - | tee "$file" | wl-copy
@@ -138,7 +155,7 @@ shotswappy() {
 	h=$(( h * 80 / 100 ))
 
 	grim -g "$(slurp)" - | satty -f - \
-		--output-filename "$(xdg-user-dir PICTURES)/Screenshots/Screenshot_%Y%m%d_%H%M%S.png" \
+		--output-filename "$(xdg-user-dir PICTURES)/Screenshots/Screenshot_%Y-%m-%d_%H-%M-%S.png" \
 		--copy-command wl-copy \
 		--resize "${w}x${h}" \
 		--early-exit
@@ -150,6 +167,8 @@ fi
 
 if [[ "$1" == "--now" ]]; then
 	shotnow
+elif [[ "$1" == "--monitor" ]]; then
+	shotmonitor "$2"
 elif [[ "$1" == "--in5" ]]; then
 	shot5
 elif [[ "$1" == "--in10" ]]; then
@@ -163,7 +182,7 @@ elif [[ "$1" == "--active" ]]; then
 elif [[ "$1" == "--swappy" ]]; then
 	shotswappy
 else
-	echo -e "Available Options : --now --in5 --in10 --win --area --active --swappy"
+	echo -e "Available Options : --now --monitor [output] --in5 --in10 --win --area --active --swappy"
 fi
 
 exit 0

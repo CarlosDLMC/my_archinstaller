@@ -23,7 +23,10 @@ pkill -x quickshell; sleep 0.5; quickshell &
 ```
 shell.qml           # Main entry point, assembles the bar layout
 Theme.qml           # Singleton with colors, fonts, and theme settings
-qmldir              # QML module definition for Theme singleton
+qmldir              # QML module definition for the singletons
+Monitors.qml        # Singleton: connected monitors, shared by the capture dialogs
+RecordState.qml     # Singleton: screen-recording dialog state + global shortcuts
+ShotState.qml       # Singleton: screenshot dialog state + global shortcut
 components/         # Modular widget components
   ├── DropdownWidget.qml   # Base component for click-to-open dropdown widgets (notch design)
   ├── WeatherStatItem.qml  # Reusable stat row for weather popup
@@ -40,6 +43,10 @@ components/         # Modular widget components
   ├── BluetoothWidget.qml  # Bluetooth status with dropdown (extends DropdownWidget)
   ├── PowerProfileWidget.qml # Power profile selector (extends DropdownWidget)
   ├── PowerWidget.qml      # Power menu: lock, logout, reboot, shutdown (extends DropdownWidget)
+  ├── RecordOsd.qml        # Screen-recording dialog (centred box, big buttons, audio toggles)
+  ├── ShotOsd.qml          # Screenshot dialog (same box, no audio row)
+  ├── BigButton.qml        # Big icon+label button, shared by both capture dialogs
+  ├── ToggleRow.qml        # Labelled switch, shared by both capture dialogs
   ├── SlackWidget.qml      # Slack indicator, click to focus app
   ├── WhatsAppWidget.qml   # WhatsApp indicator, click to focus app
   └── Separator.qml        # Visual separator line
@@ -50,6 +57,29 @@ components/         # Modular widget components
 - **Theme.qml**: Singleton pragma provides `Theme.colBg`, `Theme.fontSize`, etc. to all components.
   Colours are **not** hardcoded here — see Theming below.
 - **WorkspaceBar.qml**: Pill-shaped workspace indicators with numbers and deduplicated app icons (max 3). Hover effects and active state highlighting
+- **RecordOsd.qml**: Screen-recording dialog on `$mainMod SHIFT R` (global shortcut
+  `quickshell:recordMenu`). Two big mode buttons (full screen / region), a monitor
+  picker shown only when more than one is connected, and switches for system audio
+  and mic. State lives in `RecordState.qml`; the recording itself is done by
+  `~/.config/hypr/scripts/ScreenRecord.sh`, so the dialog and the bare keybinds
+  share one code path. Keys: `F` full screen, `R` region, `W` window, `S`/`M` audio
+  toggles, `Esc` dismiss. Pressing the shortcut while recording stops it.
+- **ShotOsd.qml**: Screenshot dialog on `$mainMod Print` (global shortcut
+  `quickshell:shotMenu`). Same box as RecordOsd without the audio row. State in
+  `ShotState.qml`, capture by `~/.config/hypr/scripts/ScreenShot.sh`. Keys: `F`
+  full screen, `R` region, `W` active window, `E` annotate (satty), `Esc` dismiss.
+  `ShotState.settleMs` (300ms) waits for the overlay to leave the screen before
+  grim runs, otherwise the shot contains the dialog and its dim — it must stay
+  comfortably above the 160ms fade.
+- **Monitors.qml**: Shared monitor list (`list`, `multiple`, `focusedName()`,
+  `resolveTarget()`). `resolveTarget` keeps a remembered monitor while it is still
+  plugged in and falls back to the focused one, so neither dialog can aim at a
+  monitor that has been unplugged.
+
+  Note: both capture tools **must** be given an explicit output. wf-recorder with
+  no `-o` on a multi-monitor setup falls back to an interactive stdin prompt and
+  silently records the laptop panel; grim with no `-o` captures the whole layout
+  (both screens stitched together with the dead space between them).
 - **CenterInfo.qml**: DND toggle + date + weather. Click shows popup with notch design connecting to bar. Displays location, temperature, condition, feels-like, min/max, and hourly rain forecast bars. Weather icon/temp colored by temperature. Caches weather data for offline use.
 - **CpuWidget.qml / MemoryWidget.qml / DiskWidget.qml**: Simple percentage displays with themed colors
 - **VolumeWidget.qml**: Volume with mute detection and audio sink icons (speaker/headphone/bluetooth/HDMI). Click opens pavucontrol
