@@ -1,7 +1,17 @@
 #!/bin/bash
 # 💫 https://github.com/JaKooLit 💫 #
 # Final checking if packages are installed
-# NOTE: These package check are only the essentials
+#
+# Two sources are checked, and the script exits non-zero if either reports
+# something missing - install.sh keys its auto-reboot off that exit code.
+#
+#   1. The hardcoded list below. This is a floor, not the whole check: it
+#      catches a package that never got attempted at all, e.g. because its
+#      install script was skipped by the preset or died before reaching it.
+#   2. Install-Logs/.failed-packages, written by record_package_failure() in
+#      Global_functions.sh every time an install_* function's post-install
+#      verification fails. That covers every package any script actually tried
+#      to install - roughly a hundred of them - rather than only these sixteen.
 
 packages=(
   cliphist
@@ -71,26 +81,53 @@ for pkg1 in "${local_pkgs_installed[@]}"; do
     fi
 done
 
+# Fold in everything any install script failed on.
+#
+# Re-verified rather than trusted: a package can fail its own install and then
+# be pulled in later as a dependency of something else, and reporting it as
+# missing when it is sitting there installed would train you to ignore this
+# screen. Only what is genuinely still absent is reported.
+if [ -f "$FAILED_PACKAGES_MANIFEST" ]; then
+    while read -r pkg; do
+        [ -n "$pkg" ] || continue
+        is_installed_pacman "$pkg" && continue
+        # Skip anything the hardcoded list above already reported.
+        already="no"
+        for seen in "${missing[@]}"; do
+            [ "$seen" == "$pkg" ] && already="yes" && break
+        done
+        [ "$already" == "yes" ] && continue
+        missing+=("$pkg")
+    done < "$FAILED_PACKAGES_MANIFEST"
+fi
+
 # Log missing packages
 if [ ${#missing[@]} -eq 0 ] && [ ${#local_missing[@]} -eq 0 ]; then
     echo "${OK} GREAT! All ${YELLOW}essential packages${RESET} have been successfully installed." | tee -a "$LOG"
-else
-    if [ ${#missing[@]} -ne 0 ]; then
-        echo "${WARN} The following packages are not installed and will be logged:"
-        for pkg in "${missing[@]}"; do
-            echo "${WARNING}$pkg${RESET}"
-            echo "$pkg" >> "$LOG" 
-        done
-    fi
-
-    if [ ${#local_missing[@]} -ne 0 ]; then
-        echo "${WARN} The following local packages are missing from /usr/local/bin/ and will be logged:"
-        for pkg1 in "${local_missing[@]}"; do
-            echo "${WARNING}$pkg1${REST} is not installed. Can't find it in /usr/local/bin/"
-            echo "$pkg1" >> "$LOG" 
-        done
-    fi
-
-    echo "${NOTE} Missing packages logged at $(date)" >> "$LOG"
+    exit 0
 fi
 
+if [ ${#missing[@]} -ne 0 ]; then
+    echo "${WARN} The following packages are NOT installed and will be logged:"
+    for pkg in "${missing[@]}"; do
+        echo "${WARNING}$pkg${RESET}"
+        echo "$pkg" >> "$LOG"
+    done
+fi
+
+if [ ${#local_missing[@]} -ne 0 ]; then
+    echo "${WARN} The following local packages are missing from /usr/local/bin/ and will be logged:"
+    for pkg1 in "${local_missing[@]}"; do
+        echo "${WARNING}$pkg1${RESET} is not installed. Can't find it in /usr/local/bin/"
+        echo "$pkg1" >> "$LOG"
+    done
+fi
+
+echo "${NOTE} Missing packages logged at $(date)" >> "$LOG"
+
+printf "\n%s Full list also in %s\n" "${NOTE}" "$LOG"
+
+# Non-zero so install.sh knows not to reboot out from under an incomplete
+# install. Before this, the warning above scrolled past and a preset run
+# rebooted 15 seconds later regardless.
+exit 1
