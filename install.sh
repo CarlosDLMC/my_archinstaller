@@ -617,9 +617,10 @@ echo "${INFO} Enabling ${SKY_BLUE}essential system services...${RESET}" | tee -a
 sleep 1
 execute_script "services.sh"
 
-# copy fastfetch config if arch.png is not present
+# copy fastfetch config if arch.png is not present. From the dotfiles: the
+# duplicate assets/fastfetch/ it used to read is gone.
 if [ ! -f "$HOME/.config/fastfetch/arch.png" ]; then
-    cp -r assets/fastfetch "$HOME/.config/"
+    cp -r Hyprland-Dots/config/fastfetch "$HOME/.config/"
 fi
 
 clear
