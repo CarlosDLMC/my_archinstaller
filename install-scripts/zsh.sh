@@ -100,10 +100,11 @@ if command -v zsh >/dev/null; then
       chmod +x ~/.local/bin/pokefetch-merge
   fi
 
-  # Copy pokefetch.jsonc fastfetch config
-  if [ -f 'assets/fastfetch/pokefetch.jsonc' ]; then
+  # Copy pokefetch.jsonc fastfetch config - from the dotfiles, which are the
+  # single copy now that the duplicate assets/fastfetch/ has gone.
+  if [ -f 'Hyprland-Dots/config/fastfetch/pokefetch.jsonc' ]; then
       mkdir -p ~/.config/fastfetch
-      cp 'assets/fastfetch/pokefetch.jsonc' ~/.config/fastfetch/
+      cp 'Hyprland-Dots/config/fastfetch/pokefetch.jsonc' ~/.config/fastfetch/
   fi
 
   # Prefer the zsh listed in /etc/shells over `command -v zsh`.
