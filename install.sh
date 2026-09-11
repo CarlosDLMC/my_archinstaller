@@ -34,6 +34,15 @@ if [[ $EUID -eq 0 ]]; then
     exit 1
 fi
 
+# Reset the failed-package manifest that Global_functions.sh appends to and
+# 02-Final-Check.sh reads. Truncated per run so a failure from a previous
+# install is never reported against this one - the path must stay in step with
+# FAILED_PACKAGES_MANIFEST in install-scripts/Global_functions.sh.
+#
+# Below the root check on purpose: run as root this would leave a root-owned
+# file that every later non-root run then fails to truncate.
+: > "Install-Logs/.failed-packages"
+
 # Check if PulseAudio package is installed
 if pacman -Qq | grep -qw '^pulseaudio$'; then
     echo "$ERROR PulseAudio is detected as installed. Uninstall it first, or comment out the execute_script 'pipewire.sh' call in install.sh." | tee -a "$LOG"
@@ -161,9 +170,11 @@ execute_script() {
             env "$script_path"
         else
             echo "Failed to make script '$script' executable."
+            return 1
         fi
     else
         echo "Script '$script' not found in '$script_directory'."
+        return 1
     fi
 }
 
@@ -588,15 +599,25 @@ fi
 
 clear
 
-# final check essential packages if it is installed
-execute_script "02-Final-Check.sh"
+# Final check that every package actually landed. Its exit code gates the
+# preset auto-reboot below: an incomplete install must not reboot out from
+# under you with the warning scrolled off the screen.
+if execute_script "02-Final-Check.sh"; then
+    install_complete="true"
+else
+    install_complete="false"
+fi
 
 printf "\n%.0s" {1..1}
 
 # Check if hyprland or hyprland-git is installed
 if pacman -Q hyprland &> /dev/null || pacman -Q hyprland-git &> /dev/null; then
-    printf "\n ${OK} 👌 Hyprland is installed. However, some essential packages may not be installed. Please see above!"
-    printf "\n${CAT} Ignore this message if it states ${YELLOW}All essential packages${RESET} are installed as per above\n"
+    if [ "$install_complete" == "true" ]; then
+        printf "\n ${OK} 👌 Hyprland is installed and every package checked out."
+    else
+        printf "\n ${WARN} Hyprland is installed, but ${WARNING}some packages are missing${RESET} - see the list above."
+    fi
+    printf "\n"
     sleep 2
     printf "\n%.0s" {1..2}
 
@@ -605,6 +626,22 @@ if pacman -Q hyprland &> /dev/null || pacman -Q hyprland-git &> /dev/null; then
 
     printf "\n${NOTE} You can start Hyprland by typing ${SKY_BLUE}Hyprland${RESET} (IF SDDM is not installed) (note the capital H!).\n"
     printf "\n${NOTE} However, it is ${YELLOW}highly recommended to reboot${RESET} your system.\n\n"
+
+    # An unattended reboot is only safe when the install actually completed.
+    # With packages missing, rebooting just hides the evidence: the warning
+    # scrolls away with the session and the next thing you see is a desktop
+    # that is subtly wrong, with nothing on screen saying why. Stop instead and
+    # leave the list in front of you.
+    if [ "$preset_mode" == "true" ] && [ "$install_complete" != "true" ]; then
+        printf "\n%.0s" {1..1}
+        echo "${WARN} NOT rebooting: the final check found missing packages."
+        echo "${CAT} Install them, then reboot with ${MAGENTA}systemctl reboot${RESET}."
+        echo "${NOTE} Most failures here are AUR builds. Retry one with:"
+        echo "        ${MAGENTA}yay -S <package>${RESET}"
+        echo "${NOTE} The full list is in ${MAGENTA}Install-Logs/00_CHECK-*_installed.log${RESET}"
+        printf "\n%.0s" {1..2}
+        exit 1
+    fi
 
     # A preset run is meant to be unattended, so it reboots on its own rather
     # than parking on a prompt nobody is there to answer. The countdown is the

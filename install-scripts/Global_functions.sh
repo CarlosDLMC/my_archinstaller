@@ -25,6 +25,24 @@ if [ ! -d Install-Logs ]; then
     mkdir Install-Logs
 fi
 
+# Manifest of packages that failed to install, read by 02-Final-Check.sh.
+#
+# Each install_* function below already double-checks its package and prints an
+# error on a miss, but printing was all it did: the message scrolls past, the
+# install carries on, and a preset run reboots 15 seconds later into a desktop
+# that is quietly missing pieces. Recording every failure here gives the final
+# check a complete picture - every package actually attempted by any script,
+# rather than the short hardcoded list it used to be limited to.
+#
+# The path is relative to the repo root, which every install script cd's into
+# before sourcing this file. install.sh truncates it at the start of each run,
+# so a failure from a previous install is never reported against this one.
+FAILED_PACKAGES_MANIFEST="Install-Logs/.failed-packages"
+
+record_package_failure() {
+  echo "$1" >> "$FAILED_PACKAGES_MANIFEST"
+}
+
 # Show progress function
 show_progress() {
     local pid=$1
@@ -66,6 +84,7 @@ install_package_pacman() {
       echo -e "${OK} Package ${YELLOW}$1${RESET} has been successfully installed!"
     else
       echo -e "\n${ERROR} ${YELLOW}$1${RESET} failed to install. Please check the $LOG. You may need to install manually."
+      record_package_failure "$1"
     fi
   fi
 }
@@ -88,6 +107,7 @@ install_package() {
     else
       # Something is missing, exiting to review log
       echo -e "\n${ERROR} ${YELLOW}$1${RESET} failed to install :( , please check the install.log. You may need to install manually! Sorry I have tried :("
+      record_package_failure "$1"
     fi
   fi
 }
@@ -106,6 +126,7 @@ install_package_f() {
   else
     # Something is missing, exiting to review log
     echo -e "\n${ERROR} ${YELLOW}$1${RESET} failed to install :( , please check the install.log. You may need to install manually! Sorry I have tried :("
+    record_package_failure "$1"
   fi
 }
 
