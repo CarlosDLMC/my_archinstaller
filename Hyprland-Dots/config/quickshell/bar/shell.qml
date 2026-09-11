@@ -233,4 +233,17 @@ ShellRoot {
         model: Quickshell.screens
         LayoutOsd {}
     }
+
+    // Screen-recording dialog, one per screen (it shows itself only on the
+    // focused monitor). Driven by the recordMenu global shortcut.
+    Variants {
+        model: Quickshell.screens
+        RecordOsd {}
+    }
+
+    // Screenshot dialog, same deal. Driven by the shotMenu global shortcut.
+    Variants {
+        model: Quickshell.screens
+        ShotOsd {}
+    }
 }
