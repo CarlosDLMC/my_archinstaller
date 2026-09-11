@@ -88,6 +88,41 @@ shotnow() {
 	notify_view
 }
 
+# Name of the monitor the pointer is currently on. This is deliberately not
+# the focused monitor: the pointer can sit on one screen while focus is on the
+# other, and "the screen my mouse is in" means the pointer.
+#
+# hyprctl reports x,y in layout coordinates but width,height in pixels, so the
+# logical extent is width/scale. Both monitors here are scale 1, but dividing
+# keeps it right on a scaled display.
+output_at_cursor() {
+	local pos x y
+	pos=$(hyprctl cursorpos 2>/dev/null | tr -d ' ')
+	x=${pos%,*}
+	y=${pos#*,}
+
+	[[ -z "$x" || -z "$y" ]] && return 1
+
+	hyprctl -j monitors | jq -r --argjson x "$x" --argjson y "$y" '
+		.[] | select(
+			$x >= .x and $x < (.x + (.width / .scale)) and
+			$y >= .y and $y < (.y + (.height / .scale))
+		) | .name' | head -1
+}
+
+# Shot of the monitor under the pointer, taken immediately.
+shotmouse() {
+	local output
+	output=$(output_at_cursor)
+
+	if [[ -z "$output" ]]; then
+		${notify_cmd_NOT} " Screenshot" " Could not find the monitor under the pointer"
+		return 1
+	fi
+
+	shotmonitor "$output"
+}
+
 # Shot of one whole monitor. $1 = output name, defaults to the focused one.
 shotmonitor() {
 	local output="$1"
@@ -169,6 +204,8 @@ if [[ "$1" == "--now" ]]; then
 	shotnow
 elif [[ "$1" == "--monitor" ]]; then
 	shotmonitor "$2"
+elif [[ "$1" == "--mouse" ]]; then
+	shotmouse
 elif [[ "$1" == "--in5" ]]; then
 	shot5
 elif [[ "$1" == "--in10" ]]; then
@@ -182,7 +219,7 @@ elif [[ "$1" == "--active" ]]; then
 elif [[ "$1" == "--swappy" ]]; then
 	shotswappy
 else
-	echo -e "Available Options : --now --monitor [output] --in5 --in10 --win --area --active --swappy"
+	echo -e "Available Options : --now --mouse --monitor [output] --in5 --in10 --win --area --active --swappy"
 fi
 
 exit 0
