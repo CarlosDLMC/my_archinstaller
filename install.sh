@@ -544,7 +544,8 @@ for option in "${options[@]}"; do
             echo "${INFO} Installing ${SKY_BLUE}Thunar file manager...${RESET}" | tee -a "$LOG"
             execute_script "thunar.sh"
             execute_script "thunar_default.sh"
-            execute_script "thunar_sort.sh"
+            # thunar_sort.sh is deliberately NOT here - it has to run after
+            # dotfiles-main.sh. See below the loop.
             ;;
         zsh)
             echo "${INFO} Installing ${SKY_BLUE}zsh with Oh-My-Zsh...${RESET}" | tee -a "$LOG"
@@ -579,6 +580,30 @@ for option in "${options[@]}"; do
             ;;
     esac
 done
+
+sleep 1
+
+# Thunar per-folder sort - AFTER the dotfiles, not with the rest of Thunar.
+#
+# thunar_sort.sh turns on /misc-directory-specific-settings, and xfconf-query
+# stores that in ~/.config/xfce4/xfconf/xfce-perchannel-xml/thunar.xml. But
+# "xfce4" is one of the directories copy.sh replaces wholesale, and the tracked
+# copy of thunar.xml does not carry that property - so running the sort script
+# inside the thunar) case (which the option order puts before dots) wrote the
+# setting and then had dotfiles-main.sh copy it straight back off again.
+#
+# The symptom was quiet and misleading: the gio metadata on the folders lives in
+# ~/.local/share/gvfs-metadata and DOES survive, so the per-folder sort was set
+# up correctly and simply ignored, because the switch that makes Thunar honour
+# per-folder settings at all had been reverted. Screenshots and Recordings
+# opened in name order on every fresh install.
+#
+# Keyed off selected_options rather than the preset variable so it behaves the
+# same on the interactive path, where the preset variables are never set.
+if [[ " $selected_options " == *" thunar "* ]]; then
+    echo "${INFO} Configuring ${SKY_BLUE}Thunar per-folder sort...${RESET}" | tee -a "$LOG"
+    execute_script "thunar_sort.sh"
+fi
 
 sleep 1
 
