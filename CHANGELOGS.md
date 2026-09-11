@@ -37,6 +37,7 @@ Added:
   - Teardown also matches modules by sink name, not just the ids it recorded, so a crashed run cannot leave loopbacks behind — this machine has hit the pulse client cap before and lost audio to leaked `pactl` children
   - All four states verified end to end (`none`, `system`, `mic`, `both`): the first produces a video-only file, the rest an `aac` stereo track, and `both` measured -17.9 dB mean / -5.6 dB peak with a test sound playing rather than a silent track. `pactl list short modules` was clean after every run
 - `ScreenShot.sh --monitor [output]` — a shot of one whole monitor, defaulting to the focused one
+- Bare `Print` takes an immediate shot of the monitor the *pointer* is on, via `ScreenShot.sh --mouse`. Deliberately the pointer and not the focused monitor: those can sit on different screens, and "the screen my mouse is in" means the pointer. `output_at_cursor()` resolves `hyprctl cursorpos` against the monitor rectangles, dividing by `.scale` because hyprctl reports positions in layout coordinates but sizes in pixels. Verified with focus and pointer deliberately split — pointer on the 2560x1440 monitor, focus on the 1920x1080 panel — which captured 2560x1440
 
 Changed:
 
