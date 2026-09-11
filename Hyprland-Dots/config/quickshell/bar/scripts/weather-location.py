@@ -46,6 +46,19 @@ VPN_LOCATIONS = {
     "jakarta": (-6.200000, 106.816666),
 }
 
+# Russian display names for the VPN cities above. Everywhere else the city name
+# is localised by ip-api itself (&lang=ru), so there is nothing to maintain here
+# beyond these seven overrides.
+VPN_LOCATION_NAMES_RU = {
+    "berlin": "Берлин",
+    "warsaw": "Варшава",
+    "tbilisi": "Тбилиси",
+    "madrid": "Мадрид",
+    "kyiv": "Киев",
+    "vilnius": "Вильнюс",
+    "jakarta": "Джакарта",
+}
+
 # WMO weather code -> (description, icon category)
 # https://open-meteo.com/en/docs#weathervariables (WMO code interpretation)
 WMO = {
@@ -79,6 +92,42 @@ WMO = {
     99: ("Thunderstorm with heavy hail", "severe"),
 }
 
+# Russian condition text, keyed by the same WMO code. Kept separate from WMO so
+# the English string survives as the machine-readable key: getConditionColor()
+# in ../components/CenterInfo.qml matches on English substrings ("sun", "rain",
+# "thunder", ...) to tint the popup icon, and would fall back to a flat colour
+# if it were handed Cyrillic.
+WMO_RU = {
+    0: "Ясно",
+    1: "Преимущественно ясно",
+    2: "Переменная облачность",
+    3: "Пасмурно",
+    45: "Туман",
+    48: "Изморозь",
+    51: "Слабая морось",
+    53: "Умеренная морось",
+    55: "Сильная морось",
+    56: "Слабая ледяная морось",
+    57: "Сильная ледяная морось",
+    61: "Небольшой дождь",
+    63: "Умеренный дождь",
+    65: "Сильный дождь",
+    66: "Слабый ледяной дождь",
+    67: "Сильный ледяной дождь",
+    71: "Небольшой снег",
+    73: "Умеренный снег",
+    75: "Сильный снег",
+    77: "Снежные зёрна",
+    80: "Небольшой ливень",
+    81: "Умеренный ливень",
+    82: "Сильный ливень",
+    85: "Небольшой снегопад",
+    86: "Сильный снегопад",
+    95: "Гроза",
+    96: "Гроза с небольшим градом",
+    99: "Гроза с сильным градом",
+}
+
 # icon category + day/night -> weather_icons key
 ICON_CATEGORY = {
     ("sunny", 1): "sunnyDay",
@@ -105,7 +154,8 @@ def get_location():
     # Try ip-api.com first (45 req/min for non-commercial)
     try:
         r = requests.get(
-            "http://ip-api.com/json/?fields=lat,lon,city,status,message", timeout=5
+            "http://ip-api.com/json/?fields=lat,lon,city,status,message&lang=ru",
+            timeout=5,
         )
         data = r.json()
         if data.get("status") == "success":
@@ -161,7 +211,7 @@ city_arg = sys.argv[1].lower() if len(sys.argv) > 1 else None
 ip_city = ""
 if city_arg and city_arg in VPN_LOCATIONS:
     latitude, longitude = VPN_LOCATIONS[city_arg]
-    location = city_arg.capitalize()
+    location = VPN_LOCATION_NAMES_RU.get(city_arg, city_arg.capitalize())
 else:
     latitude, longitude, ip_city = get_location()
     location = ip_city
@@ -200,6 +250,7 @@ is_day = int(cur.get("is_day", 1))
 code = int(cur.get("weather_code", -1))
 
 status, category = WMO.get(code, ("Unknown", "default"))
+status_ru = WMO_RU.get(code, "Неизвестно")
 icon_key = ICON_CATEGORY.get((category, is_day), "default")
 icon = weather_icons.get(icon_key, weather_icons["default"])
 
@@ -243,7 +294,7 @@ tooltip = (
     f"<b>{location}</b>\n"
     f'\t\t<span size="xx-large">{temp}°</span>\t\t\n'
     f"<big> {icon}</big>\n"
-    f"<b>{status}</b>\n"
+    f"<b>{status_ru}</b>\n"
     f"<small>Feels like {feels}°</small>\n"
     f"\n"
     f"<b>  {temp_min}°\t\t  {temp_max}°</b>\n"
@@ -255,6 +306,7 @@ tooltip = (
 out_data = {
     "text": text,
     "alt": status,
+    "alt_display": status_ru,
     "tooltip": tooltip,
     "class": icon_key,
 }
