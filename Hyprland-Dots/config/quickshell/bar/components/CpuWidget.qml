@@ -75,10 +75,26 @@ RowLayout {
         Component.onCompleted: running = true
     }
 
-    // CPU temperature process
+    // CPU temperature.
+    //
+    // Not thermal_zone0. That is simply whichever zone the kernel registered
+    // first, and it is the wrong sensor on both vendors. On this Intel ThinkPad
+    // zone0 is `acpitz` - a chassis sensor that reads a couple of degrees below
+    // the actual package temperature in `coretemp`. On an AMD desktop it is
+    // worse than inaccurate: those boards commonly expose no ACPI thermal zone
+    // at all, the CPU temperature lives only in `k10temp` under hwmon, so the
+    // glob matched nothing and the widget sat at 0ºC forever with no error.
+    //
+    // So ask the CPU's own hwmon driver first - temp1_input is the package on
+    // coretemp and Tctl on k10temp - then fall back to the package thermal zone
+    // ahead of the chassis one, and only then to the old blind first-zone read.
     Process {
         id: tempProc
-        command: ["sh", "-c", "cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null | head -1"]
+        command: ["sh", "-c",
+            'for d in /sys/class/hwmon/hwmon*; do case "$(cat "$d/name" 2>/dev/null)" in k10temp|zenpower|coretemp) [ -r "$d/temp1_input" ] && { cat "$d/temp1_input"; exit 0; };; esac; done\n' +
+            'for want in x86_pkg_temp acpitz; do for z in /sys/class/thermal/thermal_zone*; do [ "$(cat "$z/type" 2>/dev/null)" = "$want" ] && [ -r "$z/temp" ] && { cat "$z/temp"; exit 0; }; done; done\n' +
+            'cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null | head -1\n'
+        ]
         stdout: SplitParser {
             onRead: data => {
                 if (!data) return
