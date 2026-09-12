@@ -142,6 +142,7 @@ working password sudo to get that far.
 - NetworkManager (plus `nss-mdns`, wired into `nsswitch.conf` for `.local` names)
 - GPU video-acceleration drivers, detected per machine (see [Graphics](#graphics))
 - CPU microcode, detected per machine (see [Microcode](#microcode))
+- A power profile daemon, whichever one the distro provides (see [Power profiles](#power-profiles))
 - CUPS printing, socket-activated (see [Printing](#printing))
 
 ### Desktop Environment
@@ -329,6 +330,31 @@ After rebooting, confirm it took:
 ```bash
 journalctl -k -b | grep microcode      # want: "microcode updated early"
 ```
+
+### Power profiles
+
+The bar's `PowerProfileWidget.qml` runs `powerprofilesctl` and watches
+`net.hadess.PowerProfiles` on the system bus. What it needs is that D-Bus API —
+not one particular package.
+
+On Arch the API comes from `power-profiles-daemon`. On CachyOS it normally
+comes from `tuned-cachy-ppd`, which provides the same interface and
+**conflicts** with `power-profiles-daemon`. That conflict is why this has its
+own script: asking for `power-profiles-daemon` on CachyOS is not a harmless
+no-op, it is a conflicting transaction, and `pacman -S --noconfirm` will not
+remove an installed package to satisfy it — so the install stops partway
+through a run whose whole point is being unattended.
+
+`install-scripts/power_profiles.sh` asks `pacman -T` whether anything already
+satisfies the dependency (which counts `provides`) and installs
+`power-profiles-daemon` only when nothing does. It then checks that
+`powerprofilesctl` actually exists, because the widget calls the CLI rather
+than the bus — a provider without it leaves the dropdown inert even with the
+daemon running.
+
+`services.sh` enables whichever unit is present: `power-profiles-daemon.service`,
+or `tuned-ppd.service` with `tuned.service` under it. The unit name is not
+fixed either, and hardcoding one meant enabling a unit that did not exist.
 
 ### Printing
 

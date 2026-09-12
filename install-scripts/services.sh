@@ -29,13 +29,35 @@ else
   echo "${WARN} NetworkManager failed to start. Network connectivity may not work." | tee -a "$LOG"
 fi
 
-# Enable power-profiles-daemon
-printf "\n${NOTE} Enabling ${SKY_BLUE}power-profiles-daemon${RESET}...\n" | tee -a "$LOG"
-sudo systemctl enable --now power-profiles-daemon.service 2>&1 | tee -a "$LOG"
-if systemctl is-active --quiet power-profiles-daemon.service; then
-  echo "${OK} power-profiles-daemon is running." | tee -a "$LOG"
+# Enable whichever daemon provides the power-profiles-daemon D-Bus API.
+#
+# The unit name is not fixed. power-profiles-daemon.service on Arch;
+# tuned-ppd.service (plus tuned.service under it) on CachyOS, where
+# tuned-cachy-ppd provides the same interface. Hardcoding the first meant that
+# on CachyOS this enabled a unit that does not exist, printed a warning, and
+# left the bar's power widget pointing at a daemon nobody had started.
+ppd_unit=""
+for unit in power-profiles-daemon.service tuned-ppd.service; do
+  if systemctl cat "$unit" &>/dev/null; then
+    ppd_unit="$unit"
+    break
+  fi
+done
+
+if [ -z "$ppd_unit" ]; then
+  echo "${WARN} No power profile daemon unit found. The bar's power widget will be inert." | tee -a "$LOG"
 else
-  echo "${WARN} power-profiles-daemon failed to start. Power profile management may not work." | tee -a "$LOG"
+  printf "\n${NOTE} Enabling ${SKY_BLUE}${ppd_unit}${RESET}...\n" | tee -a "$LOG"
+  # tuned-ppd is only the translation layer; tuned itself does the work.
+  if [ "$ppd_unit" == "tuned-ppd.service" ] && systemctl cat tuned.service &>/dev/null; then
+    sudo systemctl enable --now tuned.service 2>&1 | tee -a "$LOG"
+  fi
+  sudo systemctl enable --now "$ppd_unit" 2>&1 | tee -a "$LOG"
+  if systemctl is-active --quiet "$ppd_unit"; then
+    echo "${OK} $ppd_unit is running." | tee -a "$LOG"
+  else
+    echo "${WARN} $ppd_unit failed to start. Power profile management may not work." | tee -a "$LOG"
+  fi
 fi
 
 # Wire nss-mdns into /etc/nsswitch.conf.
