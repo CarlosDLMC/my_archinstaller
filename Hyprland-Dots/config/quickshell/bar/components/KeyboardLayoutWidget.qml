@@ -59,6 +59,9 @@ Rectangle {
 
     function applyLayoutName(name) {
         var layout = name.trim().toLowerCase()
+        // "none" / "error" are what Hyprland reports for keyboards without a
+        // real keymap (virtual keyboards); never show those.
+        if (layout === "" || layout === "none" || layout === "error") return
         if (layout.includes("english")) kbWidget.currentLayout = "us"
         else if (layout.includes("spanish")) kbWidget.currentLayout = "es"
         else if (layout.includes("russian")) kbWidget.currentLayout = "ru"
@@ -69,12 +72,18 @@ Rectangle {
     // The event payload is "<device>,<Layout Name>", so the name is read
     // straight off it instead of shelling out to hyprctl+jq for every one of
     // the ten per-keyboard events Hyprland fires on each switch.
+    //
+    // Virtual keyboards are skipped: wtype (clipboard manager), Handy and the
+    // like create a short-lived "hl-virtual-keyboard-*" device for every paste,
+    // and Hyprland fires activelayout for it with "English (US)" and then
+    // "none"/"error" - which used to flash "NO"/"ER" in the bar.
     Connections {
         target: Hyprland
         function onRawEvent(event) {
             if (event.name !== "activelayout") return
             var i = event.data.indexOf(",")
             if (i < 0) return
+            if (event.data.substring(0, i).startsWith("hl-virtual-keyboard")) return
             kbWidget.applyLayoutName(event.data.substring(i + 1))
         }
     }
