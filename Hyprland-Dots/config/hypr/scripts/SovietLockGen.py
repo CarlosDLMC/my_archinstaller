@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 # Generate the per-monitor hyprlock widgets for the Soviet TUI lock screen.
 #
 # Why this exists: hyprlock positions are absolute logical pixels, so a config

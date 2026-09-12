@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 -- Laptop keys and touchpad. Addendum to Keybinds.lua.
 
 local V    = require("configs.Vars")

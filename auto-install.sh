@@ -1,5 +1,4 @@
 #!/bin/bash
-# https://github.com/JaKooLit
 
 # Set some colors for output messages
 OK="$(tput setaf 2)[OK]$(tput sgr0)"
@@ -18,9 +17,9 @@ SKY_BLUE="$(tput setaf 6)"
 RESET="$(tput sgr0)"
 
 # Variables
-# This is a fork of JaKooLit/Arch-Hyprland carrying local customisations, so it
-# must clone THIS repo - cloning upstream would install a stock system and
-# silently discard every change in Hyprland-Dots/ and install-scripts/.
+# This must clone THIS repo. Cloning the upstream project it was originally
+# forked from would install a stock system and silently discard every change in
+# Hyprland-Dots/ and install-scripts/.
 # HTTPS on purpose: a freshly installed machine has no SSH key yet.
 Distro="my_archinstaller"
 Github_URL="https://github.com/CarlosDLMC/$Distro.git"

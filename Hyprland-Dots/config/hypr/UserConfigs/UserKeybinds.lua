@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 -- Your own keybinds. Check configs/Keybinds.lua to avoid conflicts; see also
 -- configs/Laptops.lua. https://wiki.hypr.land/Configuring/Core/Binds/
 --

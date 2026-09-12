@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 -- Window rules and layer rules (vendor defaults).
 -- https://wiki.hypr.land/Configuring/Core/Rules/Window-rules/
 --
@@ -19,7 +18,7 @@ local class_tags = {
                         "^([Tt]horium-browser|[Cc]achy-browser)$",
                         "^(zen-alpha|zen)$" },
     notif           = { "^(swaync-control-center|swaync-notification-window|swaync-client|class)$" },
-    ["KooL-Settings"] = { "^(nwg-displays|nwg-look)$" },
+    ["Hypr-Settings"] = { "^(nwg-displays|nwg-look)$" },
     terminal        = { "^(Alacritty|foot)$" },
     email           = { "^([Tt]hunderbird|org.gnome.Evolution)$", "^(eu.betterbird.Betterbird)$" },
     projects        = { "^(codium|codium-url-handler|VSCodium)$", "^(VSCode|code|code-url-handler)$", "^(jetbrains-.+)$" },
@@ -45,8 +44,8 @@ for tag, classes in pairs(class_tags) do
     end
 end
 -- tags matched on the title instead of the class
-rule({ match = { title = "^(KooL Quick Cheat Sheet)$" }, tag = "+KooL_Cheat" })
-rule({ match = { title = "^(KooL Hyprland Settings)$" }, tag = "+KooL_Settings" })
+rule({ match = { title = "^(Quick Cheat Sheet)$" }, tag = "+Cheat_Sheet" })
+rule({ match = { title = "^(Hyprland Settings)$" }, tag = "+Hypr_Settings" })
 rule({ match = { title = "^([Ll]utris)$" },              tag = "+gamestore" })
 rule({ match = { title = "^(ROG Control)$" },            tag = "+settings" })
 rule({ match = { title = "(Kvantum Manager)" },          tag = "+settings" })
@@ -54,10 +53,10 @@ rule({ match = { title = "(Kvantum Manager)" },          tag = "+settings" })
 rule({ match = { tag = "multimedia_video*" }, no_blur = true })
 
 ---- POSITION ----
-rule({ match = { tag = "KooL_Cheat*" },   center = true })
+rule({ match = { tag = "Cheat_Sheet*" },   center = true })
 rule({ match = { class = "([Tt]hunar)", title = "negative:(.*[Tt]hunar.*)" }, center = true })
 rule({ match = { title = "^(ROG Control)$" }, center = true })
-rule({ match = { tag = "KooL-Settings*" }, center = true })
+rule({ match = { tag = "Hypr-Settings*" }, center = true })
 rule({ match = { title = "^(Keybindings)$" }, center = true })
 rule({ match = { class = "^(pavucontrol|org.pulseaudio.pavucontrol|com.saivert.pwvucontrol)$" }, center = true })
 rule({ match = { class = "^([Ww]hatsapp-for-linux|ZapZap|com.rtosta.zapzap)$" }, center = true })
@@ -82,11 +81,11 @@ rule({ match = { title = "^(Picture-in-Picture)$" }, move = "72% 7%" })
 -- rule({ match = { tag = "multimedia*" }, workspace = "9 silent" })
 
 ---- FLOAT ----
-rule({ match = { tag = "KooL_Cheat*" },    float = true })
+rule({ match = { tag = "Cheat_Sheet*" },    float = true })
 rule({ match = { tag = "wallpaper*" },     float = true })
 rule({ match = { tag = "settings*" },      float = true })
 rule({ match = { tag = "viewer*" },        float = true })
-rule({ match = { tag = "KooL-Settings*" }, float = true })
+rule({ match = { tag = "Hypr-Settings*" }, float = true })
 rule({ match = { class = "([Zz]oom|onedriver|onedriver-launcher)$" }, float = true })
 rule({ match = { class = "(org.gnome.Calculator)", title = "(Calculator)" }, float = true })
 rule({ match = { class = "^(mpv|com.github.rafostar.Clapper)$" }, float = true })
@@ -104,13 +103,13 @@ rule({ match = { class = "([Tt]hunar)", title = "negative:(.*[Tt]hunar.*)" }, fl
 rule({ match = { title = "^(Add Folder to Workspace)$" }, float = true, size = "70% 60%", center = true })
 rule({ match = { title = "^(Save As)$" },                 float = true, size = "70% 60%", center = true })
 rule({ match = { initial_title = "(Open Files)" },        float = true, size = "70% 60%" })
-rule({ match = { title = "^(SDDM Background)$" },         float = true, center = true, size = "16% 12%" }) -- KooL's YAD for the SDDM background
+rule({ match = { title = "^(SDDM Background)$" },         float = true, center = true, size = "16% 12%" }) -- the YAD dialog for the SDDM background
 
 ---- OPACITY ----
 rule({ match = { tag = "terminal*" }, opacity = "0.9 0.7" })
 
 ---- SIZE ----
-rule({ match = { tag = "KooL_Cheat*" }, size = "65% 90%" })
+rule({ match = { tag = "Cheat_Sheet*" }, size = "65% 90%" })
 rule({ match = { tag = "wallpaper*" },  size = "70% 70%" })
 rule({ match = { tag = "settings*" },   size = "70% 70%" })
 rule({ match = { class = "^([Ww]hatsapp-for-linux|ZapZap|com.rtosta.zapzap)$" }, size = "60% 70%" })

@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 -- Your laptop-specific binds. Addendum to configs/Laptops.lua and Keybinds.lua.
 -- https://wiki.hypr.land/Configuring/Core/Binds/Switches/
 

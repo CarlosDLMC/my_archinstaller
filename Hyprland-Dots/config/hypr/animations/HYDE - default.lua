@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 --
 -- name "Default"
 -- credit https://github.com/prasanthrangan/hyprdots

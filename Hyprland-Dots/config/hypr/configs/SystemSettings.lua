@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 -- Default Hyprland settings. Put your own overrides in UserConfigs/UserSettings.lua
 -- (loaded after this file) - the last assignment of an option wins.
 -- https://wiki.hypr.land/Configuring/Core/Config-options/

@@ -1,5 +1,4 @@
 #!/bin/bash
-# /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 
 # uninstalling hyprland packages
 OK="$(tput setaf 2)[OK]$(tput sgr0)"

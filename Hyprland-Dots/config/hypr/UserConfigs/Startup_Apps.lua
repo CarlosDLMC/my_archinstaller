@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 -- Your own apps to run once at launch. Add hl.exec_cmd(...) calls inside the
 -- hyprland.start handler below; a config reload does not re-run them.
 

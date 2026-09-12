@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 -- Commands and apps executed once at launch (vendor defaults).
 -- `hyprland.start` fires once per session, so a config reload does NOT re-run
 -- these - same semantics as the old exec-once.

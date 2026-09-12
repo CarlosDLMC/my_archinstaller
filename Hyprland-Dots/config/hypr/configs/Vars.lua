@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 -- Shared paths, the main modifier and small helpers. Every config file does
 --   local V = require("configs.Vars")
 -- This replaces the old $mainMod / $scriptsDir / $UserScripts hyprlang variables.

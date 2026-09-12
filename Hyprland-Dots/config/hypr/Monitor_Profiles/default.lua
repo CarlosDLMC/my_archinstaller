@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 -- Default monitor profile. MonitorProfiles.sh copies a file from this directory
 -- over ~/.config/hypr/monitors.lua. https://wiki.hypr.land/Configuring/Core/Monitors/
 -- `hyprctl monitors` lists names, modes and positions.

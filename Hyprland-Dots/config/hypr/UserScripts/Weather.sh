@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  ##
 # weather info from wttr. https://github.com/chubin/wttr.in
 # Remember to add city 
 

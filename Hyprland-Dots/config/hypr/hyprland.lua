@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 -- Hyprland main config, Lua format (hyprlang .conf is deprecated since 0.55 and
 -- removed in 0.57). Wiki: https://wiki.hypr.land/Configuring/
 --

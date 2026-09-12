@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 -- Your Hyprland settings. Loaded after configs/SystemSettings.lua, so anything
 -- set here overrides it. https://wiki.hypr.land/Configuring/Core/Config-options/
 -- Look at configs/SystemSettings.lua to see how the options are grouped.

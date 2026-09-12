@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  ##
 # Searchable keybinds using rofi.
 #
 # The list comes from `hyprctl binds`, i.e. the binds Hyprland actually has

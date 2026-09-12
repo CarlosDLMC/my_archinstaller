@@ -219,7 +219,7 @@ it — and add the package to `fonts.sh` and the family to `required_families`
 in the same file.
 
 Two places name fonts that are **not** installed and have never been:
-`config/rofi/themes/KooL_LonerOrZ.rasi` asks for `Iosevka`, and the quickshell
+`config/rofi/themes/LonerOrZ.rasi` asks for `Iosevka`, and the quickshell
 *overview* config (`config.json` / `modules/common/Appearance.qml`, not the bar,
 and not autostarted) asks for `Open Sans` and `FiraConde Nerd Font`. Both render
 substituted here already, so this is inherited from upstream rather than

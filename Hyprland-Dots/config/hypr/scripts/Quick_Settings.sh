@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  ##
-# Rofi menu for KooL Hyprland Quick Settings (SUPER SHIFT E)
+# Rofi menu for Hyprland quick settings (SUPER SHIFT E)
 # Updated for UserConfigs/configs separation
 
 # Default terminal and EDITOR come from UserConfigs/01-UserDefaults.lua. It is a

@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 -- Monitor layout. NOTE: nwg-displays overwrites this file when you click Apply;
 -- the shipped default is kept in ~/.config/hypr/Monitor_Profiles/default.lua.
 -- over ~/.config/hypr/monitors.lua. https://wiki.hypr.land/Configuring/Core/Monitors/

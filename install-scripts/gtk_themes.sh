@@ -1,5 +1,4 @@
 #!/bin/bash
-# 💫 https://github.com/JaKooLit 💫 #
 # GTK Themes & ICONS and  Sourcing from a different Repo #
 
 engine=(

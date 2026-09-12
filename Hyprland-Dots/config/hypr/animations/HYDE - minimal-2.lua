@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 --
 -- # name "Minimal-2"
 -- credit https://github.com/prasanthrangan/hyprdots

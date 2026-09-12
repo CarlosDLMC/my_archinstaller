@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  ##
 # Toggle between light and heavy blur. Runtime-only: a config reload restores
 # the values from UserConfigs/UserDecorations.lua.
 

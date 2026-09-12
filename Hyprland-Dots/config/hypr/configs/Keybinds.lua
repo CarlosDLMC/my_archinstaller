@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 -- Default keybinds. https://wiki.hypr.land/Configuring/Core/Binds/
 --
 -- hl.bind("MODS + key", dispatcher_or_function, { flags })
@@ -102,7 +101,7 @@ bind(M .. " + Q",           hl.dsp.window.close(),                  { descriptio
 bind(M .. " + SHIFT + Q",   exec(S .. "/KillActiveProcess.sh"),     { description = "Terminate active process" })
 bind("CTRL + ALT + L",      exec(S .. "/LockScreen.sh"),            { description = "lock screen" })
 bind("CTRL + ALT + P",      exec(S .. "/Wlogout.sh"),               { description = "powermenu" })
-bind(M .. " + SHIFT + E",   exec(S .. "/Kool_Quick_Settings.sh"),   { description = "Quick settings menu" })
+bind(M .. " + SHIFT + E",   exec(S .. "/Quick_Settings.sh"),   { description = "Quick settings menu" })
 
 -- Master layout
 bind(M .. " + CTRL + D",      hl.dsp.layout("removemaster"),   { description = "remove master" })

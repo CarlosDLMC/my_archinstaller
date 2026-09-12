@@ -1,5 +1,4 @@
 #!/bin/bash
-# https://github.com/JaKooLit
 
 clear
 
@@ -140,8 +139,8 @@ printf "\n%.0s" {1..1}
 # interactive path is unchanged.
 if [ "$preset_mode" != "true" ]; then
     # Welcome message using whiptail (for displaying information)
-    whiptail --title "KooL Arch-Hyprland (2025) Install Script" \
-        --msgbox "Welcome to KooL Arch-Hyprland (2025) Install Script!!!\n\n\
+    whiptail --title "Hyprland Install Script" \
+        --msgbox "Welcome to the Hyprland install script!\n\n\
 ATTENTION: Run a full system update and Reboot first !!! (Highly Recommended)\n\n\
 NOTE: If you are installing on a VM, ensure to enable 3D acceleration else Hyprland may NOT start!" \
         15 80
@@ -156,7 +155,7 @@ NOTE: If you are installing on a VM, ensure to enable 3D acceleration else Hyprl
     fi
 fi
 
-echo "👌 ${OK} 🇵🇭 ${MAGENTA}KooL..${RESET} ${SKY_BLUE}lets continue with the installation...${RESET}" | tee -a "$LOG"
+echo "👌 ${OK} ${SKY_BLUE}Continuing with the installation...${RESET}" | tee -a "$LOG"
 
 sleep 1
 printf "\n%.0s" {1..1}
@@ -353,7 +352,7 @@ options_command+=(
     "zsh" "Install zsh shell with Oh-My-Zsh?" "OFF"
     "pokemon" "Add Pokemon color scripts to your terminal?" "OFF"
     "rog" "Are you installing on Asus ROG laptops?" "OFF"
-    "dots" "Download and install pre-configured KooL Hyprland dotfiles?" "OFF"
+    "dots" "Install the pre-configured Hyprland dotfiles?" "OFF"
     "handy" "Install Handy speech-to-text (CTRL+SUPER+F8 toggle)?" "OFF"
     "nopasswd_sudo" "Passwordless sudo for wheel? (needed by the bar's VPN widget)" "OFF"
     "printing" "Install CUPS printing? (nothing else pulls in a print stack)" "OFF"
@@ -451,8 +450,8 @@ while true; do
     # If "dots" is not selected, show a note and ask the user to proceed or return to choices
     if [[ "$dots_selected" == "OFF" ]]; then
         # Show a note about not selecting the "dots" option
-        if ! whiptail --title "KooL Hyprland Dot Files" --yesno \
-        "You have not selected to install the pre-configured KooL Hyprland dotfiles.\n\nKindly NOTE that if you proceed without Dots, Hyprland will start with default vanilla Hyprland configuration and I won't be able to give you support.\n\nWould you like to continue install without KooL Hyprland Dots or return to choices/options?" \
+        if ! whiptail --title "Hyprland Dotfiles" --yesno \
+        "You have not selected to install the pre-configured Hyprland dotfiles.\n\nNOTE: without them Hyprland starts with its default vanilla configuration - none of the bar, keybinds, theming or scripts in this repo will be in place.\n\nContinue without the dotfiles, or return to the options?" \
         --yes-button "Continue" --no-button "Return" 15 90; then
             echo "🔙 Returning to options..." | tee -a "$LOG"
             continue
@@ -477,7 +476,7 @@ while true; do
         continue 
     fi
 
-    echo "👌 ${OK} You confirmed your choices. Proceeding with ${SKY_BLUE}KooL 🇵🇭 Hyprland Installation...${RESET}" | tee -a "$LOG"
+    echo "👌 ${OK} You confirmed your choices. Proceeding with the ${SKY_BLUE}Hyprland installation...${RESET}" | tee -a "$LOG"
     break  
 done
 fi
@@ -508,7 +507,7 @@ fi
 sleep 1
 
 # Run the Hyprland related scripts
-echo "${INFO} Installing ${SKY_BLUE}KooL Hyprland additional packages...${RESET}" | tee -a "$LOG"
+echo "${INFO} Installing ${SKY_BLUE}additional Hyprland packages...${RESET}" | tee -a "$LOG"
 sleep 1
 execute_script "01-hypr-pkgs.sh"
 
@@ -610,7 +609,7 @@ for option in "${options[@]}"; do
             execute_script "rog.sh"
             ;;
         dots)
-            echo "${INFO} Installing pre-configured ${SKY_BLUE}KooL Hyprland dotfiles...${RESET}" | tee -a "$LOG"
+            echo "${INFO} Installing the pre-configured ${SKY_BLUE}Hyprland dotfiles...${RESET}" | tee -a "$LOG"
             execute_script "dotfiles-main.sh"
             ;;
         handy)
@@ -697,7 +696,7 @@ if pacman -Q hyprland &> /dev/null || pacman -Q hyprland-git &> /dev/null; then
     sleep 2
     printf "\n%.0s" {1..2}
 
-    printf "${SKY_BLUE}Thank you${RESET} 🫰 for using 🇵🇭 ${MAGENTA}KooL's Hyprland Dots${RESET}. ${YELLOW}Enjoy and Have a good day!${RESET}"
+    printf "${SKY_BLUE}Installation complete.${RESET} ${YELLOW}Enjoy!${RESET}"
     printf "\n%.0s" {1..2}
 
     printf "\n${NOTE} You can start Hyprland by typing ${SKY_BLUE}Hyprland${RESET} (IF SDDM is not installed) (note the capital H!).\n"

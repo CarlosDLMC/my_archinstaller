@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 --
 -- name "Standard"
 -- credit https://github.com/mylinuxforwork/dotfiles

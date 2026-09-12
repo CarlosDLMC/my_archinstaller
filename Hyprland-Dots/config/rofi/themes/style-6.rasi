@@ -1,20 +1,19 @@
-/* ---- 💫 https://github.com/JaKooLit 💫 ---- */
-/* KooL Hyprland Rofi Style 1 */
+/* Rofi style 6 */
 
 /* ---- Configuration ---- */
 
 configuration {
-    modi:                       "drun,run,filebrowser";
+	modi:                       "drun,run,filebrowser";
     show-icons:                 true;
     display-drun:               "  apps";
     display-run:                "  term";
     display-filebrowser:        "  files";
     display-window:             "  window";
-    drun-display-format:        "{name}";
-    window-format:              "{w} · {c} · {t}";
-    hover-select:               true;
-    me-select-entry:            "MouseSecondary";
+	drun-display-format:        "{name}";
+	hover-select:               true;
+	me-select-entry:            "MouseSecondary";
     me-accept-entry:            "MousePrimary";
+	window-format:              "{w} · {c} · {t}";
 }
 
 /* ---- Load wallust colors ---- */
@@ -22,6 +21,7 @@ configuration {
 
 /* ---- Global Properties ---- */
 * {
+
     background-alt:              @color1;
     selected:                    @color12;
     active:                      @color11;
@@ -40,19 +40,18 @@ window {
     transparency:               "real";
     cursor:                     "default";
     spacing:                    0px;
-    border:                     3px 0px 3px 0px;
+    border:                     2px;
     border-radius:              30px;
     location:                   center;
     anchor:                     center;
 
     // Style Values
     width:                      50%;
-    background-color:           @background;
+    background-color:           #00000099;
 }
 
 /* ----- Main Box ----- */
 mainbox {
-	padding:					 12px;
     enabled:                     true;
     orientation:                 vertical;
     children:                    [ "inputbar", "listbox" ];
@@ -63,10 +62,10 @@ mainbox {
 /* ---- Inputbar ---- */
 inputbar {
     enabled:                     true;
-    padding:                     10px 10px 50px 10px;
+    padding:                     10px 10px 150px 10px;
     margin:                      10px;
     background-color:            transparent;
-    border-radius:               20px;
+    border-radius:               25px;
     orientation:                 horizontal;
     children:                    ["entry", "dummy", "mode-switcher" ];
     background-image:            url("~/.config/rofi/.current_wallpaper", width);
@@ -76,13 +75,13 @@ inputbar {
 entry {
     enabled:                     true;
     expand:                      false;
-    width:                       20%;
+    width:                       300px;
     padding:                     10px;
     border-radius:               12px;
-    background-color:            @active;
-    text-color:                  @text-selected;
+    background-color:            @background;
+    text-color:                  inherit;
     cursor:                      text;
-    placeholder:                 " 🖥️ Search ";
+    placeholder:                 "  Search "; // << Search symbol
     placeholder-color:           inherit;
 }
 
@@ -98,24 +97,32 @@ listbox {
 /* ---- Listview ---- */
 listview {
     enabled:                     true;
-    columns:                     5;
-    lines:                       5;
+    columns:                     2;
+    lines:                       6;
     cycle:                       true;
     dynamic:                     true;
-    scrollbar:                   true;
+    scrollbar:                   false;
     layout:                      vertical;
     reverse:                     false;
     fixed-height:                true;
     fixed-columns:               true;    
     spacing:                     10px;
+    padding:					 10px;
     background-color:            transparent;
-    margin: 					 10px;
-    text-color:					 @foreground;
 
 //  Adapt rofi theme
     border:                      0px;
 }
 
+/* ---- Scrollbar ---- */
+scrollbar {
+  	border:						0px;
+  	border-radius:				10px;
+  	background-color:				transparent;
+  	handle-color: 				@active;
+  	handle-width: 				2px ;
+  	padding:      				0;
+}
 /* ---- Dummy ---- */
 dummy {
     expand:                      true;
@@ -132,37 +139,26 @@ button {
     width:                       5%;
     padding:                     12px;
     border-radius:               12px;
-    background-color:            @text-selected;
-    text-color:                  @text-color;
+    background-color:            @background;
+    text-color:                  inherit;
     cursor:                      pointer;
 }
 button selected {
-    background-color:            @selected;
+    background-color:            @active;
     text-color:                  @text-selected;
 }
 
-/* ---- Scrollbar ---- */
-scrollbar {
-    border:       				0px;
-    border-radius:				10px;
-    border-color:				@color12;
-    handle-color: 				@color11;
-    handle-width: 				2px ;
-    padding:      				0;
-}
 
 /* ---- Elements ---- */
 element {
     enabled:                     true;
-    orientation: 				 vertical;
-  	padding: 					 10px;
-  	spacing: 					 10px;
-    border-radius:               12px;
+    spacing:                     10px;
+    padding:                     15px;
+    border-radius:               10px;
     background-color:            transparent;
     cursor:                      pointer;
 }
 
-element-text selected,
 element normal.normal {
     background-color:            inherit;
     text-color:                  inherit;
@@ -171,19 +167,17 @@ element normal.urgent {
     background-color:            @urgent;
     text-color:                  @foreground;
 }
+
+element-text selected,
 element normal.active {
     background-color:            @active;
     text-color:                  @foreground;
 }
 
 element selected.normal {
-    border:                      0px 3px 0px 3px;
-    border-radius:               16px;
-    border-color:                @active;
-    background-color:            transparent;
-    text-color:                  @selected;
+    background-color:            @color11;
+    text-color:                  @text-selected;
 }
-
 element selected.urgent {
     background-color:            @urgent;
     text-color:                  @text-selected;
@@ -206,27 +200,27 @@ element alternate.active {
     text-color:                  inherit;
 }
 element-icon {
-  	size: 						 3%;
     background-color:            transparent;
     text-color:                  inherit;
+    size:                        36px;
     cursor:                      inherit;
 }
 element-text {
-	size:						 1%;
     background-color:            transparent;
     text-color:                  inherit;
     cursor:                      inherit;
     vertical-align:              0.5;
-    horizontal-align:            0.5;
+    horizontal-align:            0.0;
+
 }
 
 /* ---- Message ---- */
 message {
-    background-color:            transparent;
+    background-color:            @background;
     border:                      0px;
 }
 textbox {
-	margin: 10px;
+	margin:						 10px;
     padding:                     12px;
     border-radius:               10px;
     background-color:            @active;

@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 -- Decoration settings. https://wiki.hypr.land/Configuring/Core/Config-options/#decoration
 -- Animations live in UserAnimations.lua.
 

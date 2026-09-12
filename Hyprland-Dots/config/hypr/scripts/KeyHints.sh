@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  ##
 # Quick Cheat Sheet — generated LIVE from `hyprctl binds`, i.e. the keybinds
 # Hyprland has loaded right now, so it never drifts out of date. Add a keybind
 # with a description in the Lua config -> it shows here automatically.
@@ -44,7 +43,7 @@ rows+=( "──────────" "wiki: wiki.hypr.land/Configuring/Core/
 GDK_BACKEND=$BACKEND yad \
     --width=1100 --height=1000 \
     --center \
-    --title="KooL Quick Cheat Sheet" \
+    --title="Quick Cheat Sheet" \
     --no-buttons \
     --list \
     --column=Keys: \

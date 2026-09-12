@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 -- Your window rules and layer rules. Loaded after configs/WindowRules.lua, so
 -- these win over the defaults. https://wiki.hypr.land/Configuring/Core/Rules/Window-rules/
 

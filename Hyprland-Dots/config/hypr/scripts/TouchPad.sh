@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  ##
 # Toggle the touchpad on/off (XF86TouchpadToggle).
 #
 # With the Lua config `hyprctl keyword` no longer exists, so this flips the
