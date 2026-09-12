@@ -25,10 +25,13 @@ require("UserConfigs.Startup_Apps")
 require("configs.ENVariables")
 require("UserConfigs.ENVariables")
 
--- Laptop related
-require("configs.Laptops")
-require("UserConfigs.Laptops")
-require("UserConfigs.LaptopDisplay")
+-- Laptop related. Skipped entirely on a desktop - see V.is_laptop in
+-- configs/Vars.lua for how that is decided.
+if require("configs.Vars").is_laptop then
+    require("configs.Laptops")
+    require("UserConfigs.Laptops")
+    require("UserConfigs.LaptopDisplay")
+end
 
 -- Window rules and layer rules: defaults, then user additions
 require("configs.WindowRules")

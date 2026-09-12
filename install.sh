@@ -73,7 +73,7 @@ fi
 
 ## Default values for the options (will be overwritten by preset file if available)
 gtk_themes="OFF"
-bluetooth="OFF"
+bluetooth="auto"
 thunar="OFF"
 quickshell="OFF"
 sddm="OFF"
@@ -287,14 +287,29 @@ if grep -qi 'asus' /sys/class/dmi/id/sys_vendor 2>/dev/null; then
     echo "${NOTE} ASUS hardware detected (${SKY_BLUE}$(cat /sys/class/dmi/id/sys_vendor)${RESET})." | tee -a "$LOG"
 fi
 
+# Check for a Bluetooth controller. The kernel creates /sys/class/bluetooth/hci*
+# as soon as a driver binds one, with no help from bluez, so this is answerable
+# before anything is installed. lspci/lsusb is the fallback for a controller
+# whose driver has not loaded yet in the installer environment.
+bluetooth_detected=false
+if ls -d /sys/class/bluetooth/hci* >/dev/null 2>&1; then
+    bluetooth_detected=true
+elif lsusb 2>/dev/null | grep -qi bluetooth || lspci 2>/dev/null | grep -qi bluetooth; then
+    bluetooth_detected=true
+fi
+if [ "$bluetooth_detected" == "true" ]; then
+    echo "${NOTE} Bluetooth controller detected." | tee -a "$LOG"
+fi
+
 # Resolve "auto" into ON/OFF from what was just detected. Only the preset loop
 # reads these - the interactive checklist below ships its own defaults - so an
 # interactive run is unaffected.
-for _hw in nvidia nouveau rog; do
+for _hw in nvidia nouveau rog bluetooth; do
     [ "${!_hw}" == "auto" ] || continue
     case "$_hw" in
         nvidia|nouveau) _want="$nvidia_detected" ;;
         rog)            _want="$rog_detected" ;;
+        bluetooth)      _want="$bluetooth_detected" ;;
     esac
     if [ "$_want" == "true" ]; then
         printf -v "$_hw" "ON"
@@ -382,6 +397,12 @@ if [ "$preset_mode" == "true" ]; then
             rog)
                 if [ "$rog_detected" != "true" ]; then
                     echo "${NOTE} Preset forces 'rog' but this is not ASUS hardware. Skipping." | tee -a "$LOG"
+                    continue
+                fi
+                ;;
+            bluetooth)
+                if [ "$bluetooth_detected" != "true" ]; then
+                    echo "${NOTE} Preset forces 'bluetooth' but no controller was detected. Skipping." | tee -a "$LOG"
                     continue
                 fi
                 ;;

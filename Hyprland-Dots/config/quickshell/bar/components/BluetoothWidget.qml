@@ -15,6 +15,25 @@ DropdownWidget {
     property string btConnectedDevice: ""
     property var btDevices: []
 
+    // No controller bound means no /sys/class/bluetooth/hci*, which is the
+    // normal case on a desktop without a dongle. Without this the widget
+    // showed a permanently "off" icon whose dropdown listed nothing and whose
+    // toggle silently failed, because bluetoothctl had no adapter to talk to.
+    property bool hasAdapter: false
+
+    visible: hasAdapter
+
+    Process {
+        id: btPresenceProc
+        command: ["sh", "-c", "ls -d /sys/class/bluetooth/hci* >/dev/null 2>&1 && echo yes || echo no"]
+        stdout: SplitParser {
+            onRead: data => {
+                if (data) btWidget.hasAdapter = (data.trim() === "yes")
+            }
+        }
+        Component.onCompleted: running = true
+    }
+
     onOpened: btDevicesProc.running = true
 
     // Bluetooth status check

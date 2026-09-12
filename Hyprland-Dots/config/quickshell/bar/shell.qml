@@ -146,20 +146,26 @@ ShellRoot {
                     Separator {}
 
                     BatteryWidget {
+                        id: batteryWidget
                         barWindow: barWindow
                     }
 
-                    Separator {}
+                    // Tied to the widget beside it. A hidden widget is dropped
+                    // from the layout, but its separator is a sibling and would
+                    // otherwise stay - leaving two dividers with nothing between
+                    // them on any machine without the hardware.
+                    Separator { visible: batteryWidget.visible }
 
                     // WiFi indicator
                     WifiWidget {
                         barWindow: barWindow
                     }
 
-                    Separator {}
+                    Separator { visible: bluetoothWidget.visible }
 
                     // Bluetooth indicator
                     BluetoothWidget {
+                        id: bluetoothWidget
                         barWindow: barWindow
                         Layout.rightMargin: 8
                     }
