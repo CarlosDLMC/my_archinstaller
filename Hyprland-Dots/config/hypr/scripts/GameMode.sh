@@ -17,7 +17,7 @@ if [ "$HYPRGAMEMODE" = "true" ] ; then
     })'
     hyprctl eval 'hl.window_rule({ name = "gamemode-opaque", match = { class = ".*" }, opacity = "1 override 1 override 1 override" })'
     awww kill
-    notify-send -e -u low -i "$notif" " Gamemode:" " enabled"
+    notify-send -t 1000 -e -u low -i "$notif" " Gamemode:" " enabled"
     sleep 0.1
     exit
 else
@@ -27,6 +27,6 @@ else
 	sleep 0.5
   hyprctl reload
 	${SCRIPTSDIR}/Refresh.sh
-    notify-send -e -u normal -i "$notif" " Gamemode:" " disabled"
+    notify-send -t 1000 -e -u normal -i "$notif" " Gamemode:" " disabled"
     exit
 fi

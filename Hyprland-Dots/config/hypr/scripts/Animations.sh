@@ -24,7 +24,7 @@ chosen_file=$(echo "$animations_list" | rofi -i -dmenu -config $rofi_theme -mesg
 if [[ -n "$chosen_file" ]]; then
     full_path="$animations_dir/$chosen_file.lua"    
     cp "$full_path" "$UserConfigs/UserAnimations.lua"    
-    notify-send -u low -i "$iDIR/ja.png" "$chosen_file" "Hyprland Animation Loaded"
+    notify-send -t 1000 -u low -i "$iDIR/ja.png" "$chosen_file" "Hyprland Animation Loaded"
 fi
 
 sleep 1

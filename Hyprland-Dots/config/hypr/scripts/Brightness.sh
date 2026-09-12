@@ -26,7 +26,7 @@ send_notification() {
     local brightness=$1
     local icon_path=$2
 
-    notify-send -e \
+    notify-send -t 1000 -e \
         -h string:x-canonical-private-synchronous:brightness_notif \
         -h int:value:"$brightness" \
         -u low \
