@@ -3,7 +3,8 @@
 # Asus ROG Laptops #
 
 rog=(
-    power-profiles-daemon
+    # power-profiles-daemon: see power_profiles.sh, which owns it and skips
+    # it when something (tuned-cachy-ppd on CachyOS) already provides the API.
     asusctl
     supergfxctl
     rog-control-center
@@ -36,8 +37,5 @@ done
 
 printf " Activating ROG services...\n"
 sudo systemctl enable supergfxd 2>&1 | tee -a "$LOG"
-
-printf " enabling power-profiles-daemon...\n"
-sudo systemctl enable power-profiles-daemon 2>&1 | tee -a "$LOG"
 
 printf "\n%.0s" {1..2}

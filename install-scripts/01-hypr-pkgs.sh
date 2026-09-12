@@ -38,7 +38,10 @@ hypr_package=(
   pamixer
   pavucontrol
   playerctl
-  power-profiles-daemon
+  # power-profiles-daemon is deliberately NOT here: on CachyOS the API is
+  # provided by tuned-cachy-ppd, which conflicts with it, and a conflicting
+  # --noconfirm transaction stops the install. power_profiles.sh installs it
+  # only when nothing already provides the interface.
   python-requests
   python-pyquery
   # SovietLockGen.py imports gi/Pango (python-gobject) and cairo (python-cairo)
