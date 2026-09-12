@@ -274,9 +274,11 @@ failure cannot come back silently.
 
 `install-scripts/graphics.sh` reads `lspci` and installs the VA-API and Vulkan
 drivers for whatever GPU it finds — `intel-media-driver` + `vulkan-intel` on
-Intel, `libva-mesa-driver` + `vulkan-radeon` on AMD, plus the `lib32-` variants
-(multilib is enabled by `pacman.sh`, which runs first). NVIDIA is not handled
-here; `nvidia.sh` owns that and is gated behind the preset's `nvidia` option.
+Intel, `vulkan-radeon` on AMD (VA-API for AMD now comes from `mesa` itself,
+which is why there is no `libva-mesa-driver` here — asking for that name fails
+the install), plus the `lib32-` variants (multilib is enabled by `pacman.sh`,
+which runs first). NVIDIA is not handled here; `nvidia.sh` owns that, and the
+preset's `nvidia` option defaults to `auto` — see [Hardware options](#hardware-options).
 
 This is easy to skip because nothing *looks* broken without it: `mesa` alone
 gives a perfectly good desktop. What you lose is hardware video decode, so mpv
@@ -619,6 +621,29 @@ Edit `custom-preset.conf` to enable/disable components:
 Two of them are load-bearing rather than optional, despite the names:
 `dots` (without it you get vanilla Hyprland) and `pokemon` (`.zshrc` needs
 `pokemon-colorscripts` — see [Terminal greeting](#terminal-greeting-pokefetch)).
+
+#### Hardware options
+
+`nvidia`, `nouveau` and `rog` take a third value, **`auto`**, which is their
+default, and it is what the shipped preset uses.
+
+A preset is carried from machine to machine, which makes it the worst possible
+place to record what hardware a machine has. This one was written on a laptop
+with Intel graphics, so it used to say `nvidia="OFF"` — and run unchanged on an
+NVIDIA machine that silently skipped `nvidia.sh` entirely. No driver, no
+prompt, and `02-Final-Check.sh` could not report it, because nothing had been
+attempted. The same applied to `rog="OFF"` on an ASUS laptop.
+
+With `auto`, the installer answers these from the machine instead: `lspci` for
+the GPU, `/sys/class/dmi/id/sys_vendor` for ASUS hardware. `ON` and `OFF` still
+force the decision, for when you mean it — `nvidia="OFF"` to stay on the
+open-source driver, for instance. A forced `ON` is still ignored with a note if
+the hardware is not there, so a stale preset cannot install an NVIDIA driver on
+an AMD box.
+
+This is also why there is no CPU/GPU vendor prompt: `--preset` runs
+unattended by design, so a dialog could only appear in the interactive path —
+the one that already worked.
 
 ### After Installation
 
