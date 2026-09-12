@@ -160,6 +160,10 @@ Singleton {
             if (event.name !== "activelayout") return
             var comma = event.data.indexOf(",")
             if (comma < 0) return
+            // Virtual keyboards (wtype, Handy: "hl-virtual-keyboard-*") report
+            // "English (US)" when they appear, which is not a layout switch -
+            // reacting to it opened the switcher popup on every paste.
+            if (event.data.substring(0, comma).startsWith("hl-virtual-keyboard")) return
             var displayName = event.data.substring(comma + 1)
 
             var idx = -1

@@ -14,6 +14,26 @@ if pidof rofi > /dev/null; then
   pkill rofi
 fi
 
+# After picking an entry, paste it straight into the window that had focus
+# before rofi opened, so Enter both copies and pastes. Terminals take
+# Ctrl+Shift+V, everything else Ctrl+V. wtype types through Hyprland's
+# virtual-keyboard protocol; the short sleep lets focus return to the window
+# after rofi closes, otherwise the keystroke lands nowhere.
+paste_into_active_window() {
+    command -v wtype >/dev/null 2>&1 || return 0
+    sleep 0.15
+    local class
+    class=$(hyprctl -j activewindow 2>/dev/null | jq -r '.class // ""')
+    case "$class" in
+        foot|footclient|kitty|Alacritty|com.mitchellh.ghostty|org.wezfurlong.wezterm|xterm|st|st-256color|konsole|org.kde.konsole|Gnome-terminal|org.gnome.Terminal)
+            wtype -M ctrl -M shift -k v -m shift -m ctrl ;;
+        "")
+            ;;  # nothing focused - leave it in the clipboard
+        *)
+            wtype -M ctrl -k v -m ctrl ;;
+    esac
+}
+
 while true; do
     result=$(
         rofi -i -dmenu \
@@ -34,6 +54,7 @@ while true; do
                     ;;
                 *)
                     cliphist decode <<<"$result" | wl-copy
+                    paste_into_active_window
                     exit
                     ;;
             esac
