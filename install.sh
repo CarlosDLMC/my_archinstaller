@@ -82,11 +82,22 @@ sddm_theme="OFF"
 xdph="OFF"
 zsh="OFF"
 pokemon="OFF"
-rog="OFF"
+# "auto" on the hardware-gated options, not "OFF".
+#
+# A preset is carried between machines, which makes it exactly the wrong place
+# to record what hardware a machine has. This preset was written on a box with
+# Intel graphics, so it used to say nvidia="OFF"; run that unchanged on an
+# NVIDIA machine and nvidia.sh simply never executed - no driver, no prompt, and
+# 02-Final-Check.sh cannot flag it because nothing was ever attempted.
+#
+# So these three follow detection unless the preset overrides them. "ON" and
+# "OFF" still mean force-on and force-off, for the cases where you genuinely
+# want to decide (keeping nouveau, or skipping the proprietary driver).
+rog="auto"
 dots="OFF"
 input_group="OFF"
-nvidia="OFF"
-nouveau="OFF"
+nvidia="auto"
+nouveau="auto"
 handy="OFF"
 ly="OFF"
 nopasswd_sudo="OFF"
@@ -263,11 +274,36 @@ nvidia_detected=false
 if lspci | grep -i "nvidia" &> /dev/null; then
     nvidia_detected=true
     if [ "$preset_mode" == "true" ]; then
-        echo "${NOTE} NVIDIA GPU detected. It is configured only if the preset sets nvidia=\"ON\"." | tee -a "$LOG"
+        echo "${NOTE} NVIDIA GPU detected. It is configured unless the preset sets nvidia=\"OFF\"." | tee -a "$LOG"
     else
         whiptail --title "NVIDIA GPU Detected" --msgbox "NVIDIA GPU detected in your system.\n\nNOTE: The script will install nvidia-dkms, nvidia-utils, and nvidia-settings if you chose to configure." 12 60
     fi
 fi
+
+# Check if this is an ASUS laptop (asusctl/supergfxctl target ROG hardware).
+# DMI is the same question rog="ON" was asking the user to answer by hand.
+rog_detected=false
+if grep -qi 'asus' /sys/class/dmi/id/sys_vendor 2>/dev/null; then
+    rog_detected=true
+    echo "${NOTE} ASUS hardware detected (${SKY_BLUE}$(cat /sys/class/dmi/id/sys_vendor)${RESET})." | tee -a "$LOG"
+fi
+
+# Resolve "auto" into ON/OFF from what was just detected. Only the preset loop
+# reads these - the interactive checklist below ships its own defaults - so an
+# interactive run is unaffected.
+for _hw in nvidia nouveau rog; do
+    [ "${!_hw}" == "auto" ] || continue
+    case "$_hw" in
+        nvidia|nouveau) _want="$nvidia_detected" ;;
+        rog)            _want="$rog_detected" ;;
+    esac
+    if [ "$_want" == "true" ]; then
+        printf -v "$_hw" "ON"
+        echo "${NOTE} auto: enabling ${SKY_BLUE}$_hw${RESET} (hardware detected)." | tee -a "$LOG"
+    else
+        printf -v "$_hw" "OFF"
+    fi
+done
 
 # Initialize the options array for whiptail checklist
 options_command=(
@@ -340,7 +376,13 @@ if [ "$preset_mode" == "true" ]; then
         case "$_opt" in
             nvidia|nouveau)
                 if [ "$nvidia_detected" != "true" ]; then
-                    echo "${NOTE} Preset asks for '$_opt' but no NVIDIA GPU was detected. Skipping." | tee -a "$LOG"
+                    echo "${NOTE} Preset forces '$_opt' but no NVIDIA GPU was detected. Skipping." | tee -a "$LOG"
+                    continue
+                fi
+                ;;
+            rog)
+                if [ "$rog_detected" != "true" ]; then
+                    echo "${NOTE} Preset forces 'rog' but this is not ASUS hardware. Skipping." | tee -a "$LOG"
                     continue
                 fi
                 ;;
