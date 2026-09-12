@@ -72,53 +72,21 @@ else
   printf "\n"
 fi
 
-# Additional for GRUB users
-if [ -f /etc/default/grub ]; then
-    printf "${INFO} ${YELLOW}GRUB${RESET} bootloader detected\n" 2>&1 | tee -a "$LOG"
-    
-    # Check if nvidia-drm.modeset=1 is present
-    if ! sudo grep -q "nvidia-drm.modeset=1" /etc/default/grub; then
-        sudo sed -i -e 's/\(GRUB_CMDLINE_LINUX_DEFAULT=".*\)"/\1 nvidia-drm.modeset=1"/' /etc/default/grub
-        printf "${OK} nvidia-drm.modeset=1 added to /etc/default/grub\n" 2>&1 | tee -a "$LOG"
-    fi
-
-    # Check if nvidia_drm.fbdev=1 is present
-    if ! sudo grep -q "nvidia_drm.fbdev=1" /etc/default/grub; then
-        sudo sed -i -e 's/\(GRUB_CMDLINE_LINUX_DEFAULT=".*\)"/\1 nvidia_drm.fbdev=1"/' /etc/default/grub
-        printf "${OK} nvidia_drm.fbdev=1 added to /etc/default/grub\n" 2>&1 | tee -a "$LOG"
-    fi
-
-    # Regenerate GRUB configuration 
-    if sudo grep -q "nvidia-drm.modeset=1" /etc/default/grub || sudo grep -q "nvidia_drm.fbdev=1" /etc/default/grub; then
-       sudo grub-mkconfig -o /boot/grub/grub.cfg
-       printf "${INFO} ${YELLOW}GRUB${RESET} configuration regenerated\n" 2>&1 | tee -a "$LOG"
-    fi
-  
-    printf "${OK} Additional steps for ${YELLOW}GRUB${RESET} completed\n" 2>&1 | tee -a "$LOG"
-fi
-
-# Additional for systemd-boot users
-if [ -f /boot/loader/loader.conf ]; then
-    printf "${INFO} ${YELLOW}systemd-boot${RESET} bootloader detected\n" 2>&1 | tee -a "$LOG"
-  
-    backup_count=$(find /boot/loader/entries/ -type f -name "*.conf.bak" | wc -l)
-    conf_count=$(find /boot/loader/entries/ -type f -name "*.conf" | wc -l)
-  
-    if [ "$backup_count" -ne "$conf_count" ]; then
-        find /boot/loader/entries/ -type f -name "*.conf" | while read imgconf; do
-            # Backup conf
-            sudo cp "$imgconf" "$imgconf.bak"
-            printf "${INFO} Backup created for systemd-boot loader: %s\n" "$imgconf" 2>&1 | tee -a "$LOG"
-            
-            # Clean up options and update with NVIDIA settings
-            sdopt=$(grep -w "^options" "$imgconf" | sed 's/\b nvidia-drm.modeset=[^ ]*\b//g' | sed 's/\b nvidia_drm.fbdev=[^ ]*\b//g')
-            sudo sed -i "/^options/c${sdopt} nvidia-drm.modeset=1 nvidia_drm.fbdev=1" "$imgconf" 2>&1 | tee -a "$LOG"
-        done
-
-        printf "${OK} Additional steps for ${YELLOW}systemd-boot${RESET} completed\n" 2>&1 | tee -a "$LOG"
-    else
-        printf "${NOTE} ${YELLOW}systemd-boot${RESET} is already configured...\n" 2>&1 | tee -a "$LOG"
-    fi
-fi
+# Deliberately no bootloader changes here.
+#
+# This used to edit /etc/default/grub and run grub-mkconfig, and separately
+# rewrite the `options` line of every systemd-boot loader entry, to add
+# nvidia-drm.modeset=1 and nvidia_drm.fbdev=1 to the kernel command line.
+#
+# Both were redundant: /etc/modprobe.d/nvidia.conf above sets exactly those two
+# options, the module reads them when it loads, and that works the same under
+# every bootloader - grub, systemd-boot, limine, rEFInd or a UKI. The kernel
+# command line added nothing the module was not already being told.
+#
+# They were also the riskiest thing in this repo. Rewriting a loader entry's
+# options line means a bad quote or an unescaped character leaves a machine
+# that does not boot and cannot be fixed from the desktop that failed to come
+# up - for a setting that was already applied by other means. An installer has
+# no business touching the bootloader, so it no longer does.
 
 printf "\n%.0s" {1..2} 
