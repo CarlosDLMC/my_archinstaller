@@ -84,18 +84,6 @@ if [ "$microcode_hook" == "true" ]; then
   printf "${OK} mkinitcpio's ${MAGENTA}microcode${RESET} hook is enabled, so the image is built\n" | tee -a "$LOG"
   printf "${OK} into the initramfs - no bootloader change is needed.\n" | tee -a "$LOG"
 
-elif command -v grub-mkconfig &>/dev/null && sudo test -f /boot/grub/grub.cfg; then
-  # GRUB discovers the image by itself; the config just has to be rebuilt.
-  printf "${NOTE} GRUB detected - regenerating grub.cfg so it picks up the microcode...\n" | tee -a "$LOG"
-  # PIPESTATUS, not the pipeline's own status: that would be tee's, which is 0
-  # even when grub-mkconfig fails, turning a broken boot config into an "OK".
-  sudo grub-mkconfig -o /boot/grub/grub.cfg 2>&1 | tee -a "$LOG"
-  if [ "${PIPESTATUS[0]}" -eq 0 ]; then
-    printf "${OK} GRUB config regenerated.\n" | tee -a "$LOG"
-  else
-    printf "${WARN} grub-mkconfig failed - microcode will not load. Run it by hand.\n" | tee -a "$LOG"
-  fi
-
 elif command -v bootctl &>/dev/null && sudo test -d /boot/loader/entries; then
   # systemd-boot Type #1 entries are edited by hand, and this script will not
   # do it for you. A malformed loader entry is an unbootable machine that
@@ -121,10 +109,20 @@ elif command -v bootctl &>/dev/null && sudo test -d /boot/loader/entries; then
     printf "${NOTE} Order matters - the microcode initrd must come first.\n" | tee -a "$LOG"
   fi
 
+elif sudo test -f /boot/limine.conf || sudo test -f /boot/limine.cfg; then
+  # Limine, also report-only. Its entries take the microcode as a module listed
+  # before the initramfs one; order matters the same way it does everywhere.
+  img_name="${ucode_img##*/}"
+  printf "\n${NOTE} ${SKY_BLUE}Limine${RESET} detected. Make sure each boot entry loads the microcode\n" | tee -a "$LOG"
+  printf "${NOTE} ${YELLOW}above${RESET} the initramfs module:\n" | tee -a "$LOG"
+  printf "${NOTE}   ${MAGENTA}module_path: boot():/${img_name}${RESET}\n" | tee -a "$LOG"
+  printf "${NOTE} If limine-mkinitcpio-hook or limine-entry-tool generates your entries,\n" | tee -a "$LOG"
+  printf "${NOTE} they already handle this and there is nothing to do.\n" | tee -a "$LOG"
+
 else
-  printf "${NOTE} No GRUB or systemd-boot entries found (UKI, rEFInd, Limine?).\n" | tee -a "$LOG"
-  printf "${NOTE} Make sure your bootloader loads ${MAGENTA}${ucode_img##*/}${RESET} as an initrd\n" | tee -a "$LOG"
-  printf "${NOTE} before the main one, or the microcode update will not apply.\n" | tee -a "$LOG"
+  printf "${NOTE} Bootloader not recognised (rEFInd, a UKI, something else?).\n" | tee -a "$LOG"
+  printf "${NOTE} Make sure it loads ${MAGENTA}${ucode_img##*/}${RESET} as an initrd before the\n" | tee -a "$LOG"
+  printf "${NOTE} main one, or the microcode update will not apply.\n" | tee -a "$LOG"
 fi
 
 printf "\n${NOTE} After rebooting, confirm with: ${MAGENTA}journalctl -k -b | grep microcode${RESET}\n"

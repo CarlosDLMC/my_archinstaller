@@ -312,18 +312,23 @@ separate `initrd` line would only load it a second time. This is checked first
 on purpose: telling someone to hand-edit a working boot entry is a good way to
 end up with one that is broken.
 
-**GRUB**, without that hook — it discovers the image by itself, so the script
-just regenerates `grub.cfg`.
-
-**systemd-boot**, without that hook — entries are edited by hand, and the
-script deliberately will not do it for you. A malformed loader entry is an
-unbootable machine that cannot be repaired from the desktop that failed to come
-up. Instead it names the entries missing the line and prints the exact line to
-add, above the existing `initrd`:
+**systemd-boot or limine**, without that hook — both are reported, never
+edited. The installer does not write to any bootloader, on purpose: a malformed
+boot entry is an unbootable machine that cannot be repaired from the desktop
+that failed to come up, and that is a far worse outcome than a microcode update
+that has not been wired up yet. So it names what is missing and prints the
+exact line to add, which in both cases must come *above* the initramfs:
 
 ```
-initrd /amd-ucode.img
+initrd /amd-ucode.img              # systemd-boot, in /boot/loader/entries/*.conf
+module_path: boot():/amd-ucode.img # limine, in /boot/limine.conf
 ```
+
+If `limine-mkinitcpio-hook` or `limine-entry-tool` generates your entries, this
+is already handled.
+
+Anything else (rEFInd, a UKI) gets the same treatment: a description of what to
+add, and no changes made.
 
 After rebooting, confirm it took:
 
@@ -710,6 +715,14 @@ an AMD box.
 This is also why there is no CPU/GPU vendor prompt: `--preset` runs
 unattended by design, so a dialog could only appear in the interactive path —
 the one that already worked.
+
+Note that enabling `nvidia` does **not** touch your bootloader. The driver's
+`modeset=1 fbdev=1` settings are written to `/etc/modprobe.d/nvidia.conf`,
+which the module reads when it loads and which works identically under
+systemd-boot, limine, GRUB, rEFInd or a UKI. `nvidia.sh` used to also add those
+as kernel parameters by editing `/etc/default/grub` and rewriting every
+systemd-boot entry's `options` line; that was redundant with the modprobe
+drop-in and is gone.
 
 ### After Installation
 
