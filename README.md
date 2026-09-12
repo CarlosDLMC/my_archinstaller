@@ -356,6 +356,32 @@ daemon running.
 or `tuned-ppd.service` with `tuned.service` under it. The unit name is not
 fixed either, and hardcoding one meant enabling a unit that did not exist.
 
+### Laptops and desktops
+
+The same install is meant to work on both, so anything tied to laptop hardware
+is decided by whether the hardware is there — never by a question or a flag you
+have to remember to flip when you move the preset to another machine.
+
+- **Battery widget** — hidden when there is no `/sys/class/power_supply/BAT*`.
+  It used to sit in the bar reading `0%` with an empty dropdown.
+- **Bluetooth widget** — hidden when no controller is bound
+  (`/sys/class/bluetooth/hci*`). It used to show a permanently "off" icon whose
+  toggle silently failed, because `bluetoothctl` had no adapter to talk to.
+- **Separators** — tied to the widget beside them. A hidden widget drops out of
+  the layout, but its separator is a sibling and would otherwise remain,
+  leaving two dividers with nothing between them.
+- **`configs/Laptops.lua` and `UserConfigs/Laptops.lua`** — not loaded at all on
+  a desktop. They bind `XF86MonBrightness*`, `XF86KbdBrightness*` and
+  `XF86TouchpadToggle`, and name a touchpad device by its exact Hyprland name.
+  None of that errors on a desktop; it just fills the keybind cheat sheet with
+  entries that do nothing.
+- **`bluetooth` in the preset** — `auto`, so bluez is installed and enabled only
+  when a controller is present.
+
+Laptop detection lives in `V.is_laptop` (`configs/Vars.lua`). A battery is the
+primary signal; DMI `chassis_type` is the fallback, so a laptop running with a
+dead or removed battery is still treated as one.
+
 ### Printing
 
 `install-scripts/printing.sh` installs `cups`, `cups-filters` and `cups-pdf`.

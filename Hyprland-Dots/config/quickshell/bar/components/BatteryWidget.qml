@@ -13,6 +13,25 @@ DropdownWidget {
     property int averageLevel: 0
     property bool isCharging: false
 
+    // A desktop has no /sys/class/power_supply/BAT*, so the widget used to sit
+    // in the bar reading "0%" forever with an empty dropdown. Hidden rather
+    // than blanked: an invisible item is dropped from the RowLayout entirely,
+    // so it leaves no gap. shell.qml ties the neighbouring separator to this.
+    property bool hasBattery: false
+
+    visible: hasBattery
+
+    Process {
+        id: batteryPresenceProc
+        command: ["sh", "-c", "ls -d /sys/class/power_supply/BAT* >/dev/null 2>&1 && echo yes || echo no"]
+        stdout: SplitParser {
+            onRead: data => {
+                if (data) batteryWidget.hasBattery = (data.trim() === "yes")
+            }
+        }
+        Component.onCompleted: running = true
+    }
+
     function getBatteryIcon(level, charging) {
         if (charging) return "󰂄"
         if (level <= 10) return "󰂎"
