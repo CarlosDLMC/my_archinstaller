@@ -96,7 +96,7 @@ Added:
   - Appends `CTRL+SUPER+F8` toggle keybind to `UserConfigs/UserKeybinds.conf` (idempotent — uses `notify-send` for feedback, then `handy --toggle-transcription`)
   - Writes `UserScripts/handy-start.sh` launcher that opens Handy visibly until a model is selected, then `--start-hidden` on subsequent logins (so the user sees the model picker on first login without the UI re-opening every boot)
   - Appends `exec-once = ~/.config/hypr/UserScripts/handy-start.sh` to `UserConfigs/Startup_Apps.conf`
-  - Must run after `dotfiles-main.sh` (depends on KooL `UserConfigs/` files existing)
+  - Must run after `dotfiles-main.sh` (depends on the `UserConfigs/` files existing)
   - Wired into `install.sh` whiptail menu and `custom-preset.conf` (default `ON`)
 
 ## Dec 2025
@@ -260,7 +260,7 @@ Added:
 
 ## 08 Aug 2024
 
-- Increased to 1 sec delay for installing base-devel [commit](https://github.com/JaKooLit/Arch-Hyprland/commit/7ebfa06c3b186f9bec0bcf268fae401ba67dfc2a)
+- Increased to 1 sec delay for installing base-devel
 
 ## 07 Jul 2024
 
