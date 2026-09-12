@@ -42,4 +42,3 @@ done
 printf "${NOTE} Enabling ly display manager on tty2...\n"
 sudo systemctl enable ly@tty2.service 2>&1 | tee -a "$LOG"
 
-clear

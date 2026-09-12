@@ -2,6 +2,25 @@
 
 ## September 2026
 
+Fixed (first audit of a fresh-machine run against this machine):
+
+- `Global_functions.sh`: `ISAUR=$(command -v yay || command -v paru)` under `set -e` killed any script that sourced it before an AUR helper existed. `locales.sh` runs before `yay.sh`, so on a fresh install the Russian locale was never generated and the clock, calendar and lock-screen date fell back to English with no error. Now `|| true`
+- `01-hypr-pkgs.sh`: `librewolf-bin` → `librewolf` (the -bin package left the AUR when LibreWolf entered `[extra]`; every fresh run failed the final check and never rebooted, and there was no default browser). Added `vim`, which `01-UserDefaults.lua` names as `$EDITOR` but nothing installed
+- `nvidia.sh`: `nvidia-dkms` → `nvidia-open-dkms` (the closed module packages are gone from the repos; the old name installed nothing while nouveau still got blacklisted)
+- `services.sh`: enables `systemd-resolved` and points `/etc/resolv.conf` at its stub whenever `systemd-resolvconf` is installed. The shim is useless without the daemon, so a fresh machine connected but resolved nothing, and `wg-quick` failed on every `DNS=` line. This machine only worked because resolved had been enabled by hand
+- `install.sh`: sudo is authenticated once up front, a `sudo -v` keepalive runs for the whole install, and with `nopasswd_sudo` selected the rule is installed *before* the first package — so a preset run never prompts again. Previously the 5-minute timestamp expired under the spinner and the run appeared to hang
+- `install.sh`: aborts if no AUR helper exists after `yay.sh`, instead of running ~150 silent failures with an empty helper name
+- `install.sh`: no `clear` before the final check (and none in `ly.sh` / `ly_config.sh`), so errors printed during the run are still on screen at the reboot countdown
+- `02-Final-Check.sh`: outcome checks per selected component gate the reboot too — dotfiles in `~/.config`, `ly@tty2` enabled and config matching, zsh the login shell, `ru_RU.UTF-8` generated, resolved enabled, `sudo -n` working, icon/cursor themes extracted, `pokemon-colorscripts`/`handy` on PATH, `cups.socket` enabled. A dead `copy.sh` used to reboot into vanilla Hyprland with every package "installed"
+- `initial-boot.sh`: sets the GTK `font-name` / `monospace-font-name` (JetBrainsMono Nerd Font 16) over gsettings; they lived only in this machine's dconf
+- `Hyprland-Dots/wallpapers/`: ships all fourteen wallpapers in use here, not only the `sovietpunk/` four
+- `pipewire.sh`: the second loop installed `$PIPEWIRE` (stale) instead of `$PIPEWIRE2`
+- `yay.sh`: the post-build `-Syu` checked `tee`'s exit status; now `PIPESTATUS[0]`
+- `copy.sh`: `mkdir -p ~/.config` before the user-dirs copies, not after
+- `.bashrc` / `.bash_profile`: `~/.cargo/env` and `~/.local/bin/env` are sourced guarded, like `.zshrc` already did
+- `verify-before-transfer.sh`: checks for `install.sh` next to itself rather than in `$PWD`
+- README: swaync → dunst, backup suffix is `.backup-<timestamp>`, `verify-before-transfer.sh` described as the repo check it is, the LICENSE reference removed (no such file), new DNS section, sudo behaviour, `nvidia-open-dkms`, packages that moved to the AUR
+
 Changed:
 
 - Hyprland config migrated from hyprlang `.conf` to Hyprland's Lua format (`hyprland.lua`, `configs/*.lua`, `UserConfigs/*.lua`, animation presets, monitor profiles). Hyprland 0.55 deprecated `.conf` and 0.57 removes it; there is no switch to silence the startup warning, only the migration

@@ -19,6 +19,11 @@ color_scheme="prefer-dark"
 gtk_theme="Adwaita"
 icon_theme="Flat-Remix-Blue-Dark"
 cursor_theme="Bibata-Modern-Ice"
+# GTK application fonts. These live in dconf, not in any file the dots ship, so
+# a fresh machine used to come up with gtk-3.0/settings.ini's 14pt (or the
+# portal's Cantarell default for GTK4 apps) instead of the 16pt in use here.
+gtk_font="JetBrainsMono Nerd Font 16"
+gtk_mono_font="JetBrainsMono Nerd Font Mono 16"
 
 awww="awww img"
 effect="--transition-bezier .43,1.19,1,.4 --transition-fps 30 --transition-type grow --transition-pos 0.925,0.977 --transition-duration 2"
@@ -39,6 +44,8 @@ if [ ! -f "$HOME/.config/hypr/.initial_startup_done" ]; then
     gsettings set org.gnome.desktop.interface icon-theme $icon_theme > /dev/null 2>&1 &
     gsettings set org.gnome.desktop.interface cursor-theme $cursor_theme > /dev/null 2>&1 &
     gsettings set org.gnome.desktop.interface cursor-size 24 > /dev/null 2>&1 &
+    gsettings set org.gnome.desktop.interface font-name "$gtk_font" > /dev/null 2>&1 &
+    gsettings set org.gnome.desktop.interface monospace-font-name "$gtk_mono_font" > /dev/null 2>&1 &
 
      # NIXOS initiate GTK dark mode and apply icon and cursor theme
 	if [ -n "$(grep -i nixos < /etc/os-release)" ]; then
@@ -47,6 +54,8 @@ if [ ! -f "$HOME/.config/hypr/.initial_startup_done" ]; then
       dconf write /org/gnome/desktop/interface/icon-theme "'$icon_theme'" > /dev/null 2>&1 &
       dconf write /org/gnome/desktop/interface/cursor-theme "'$cursor_theme'" > /dev/null 2>&1 &
       dconf write /org/gnome/desktop/interface/cursor-size "24" > /dev/null 2>&1 &
+      dconf write /org/gnome/desktop/interface/font-name "'$gtk_font'" > /dev/null 2>&1 &
+      dconf write /org/gnome/desktop/interface/monospace-font-name "'$gtk_mono_font'" > /dev/null 2>&1 &
 	fi
        
     # initiate kvantum theme

@@ -44,6 +44,11 @@ if [ -d "$SCRIPT_DIR/.local/share" ]; then
     cp -r "$SCRIPT_DIR/.local/share/." "$HOME/.local/share/" 2>/dev/null && echo "  ${OK} Copied .local/share data files"
 fi
 
+# ~/.config has to exist before anything is copied into it. On a fresh machine
+# it usually does by now (yay and pipewire.sh create it), but the user-dirs
+# copies below used to run before the mkdir further down and fail silently.
+mkdir -p "$HOME/.config"
+
 # Copy XDG user directories configuration
 printf "\n${INFO} Copying XDG user directories configuration...\n"
 for file in user-dirs.dirs user-dirs.locale; do

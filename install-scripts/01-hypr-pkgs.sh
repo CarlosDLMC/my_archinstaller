@@ -85,8 +85,15 @@ hypr_package_2=(
   loupe
   fastfetch
   gnome-system-monitor
-  librewolf-bin
+  # librewolf, not librewolf-bin: the -bin package left the AUR when LibreWolf
+  # entered [extra]. Asking for the old name fails every fresh install, which
+  # trips the final check and blocks the auto-reboot - and mimeapps.list points
+  # http/https at librewolf.desktop, so there was no default browser either.
+  librewolf
   mousepad
+  # vim is the editor UserConfigs/01-UserDefaults.lua names and ENVariables.lua
+  # exports as $EDITOR. Only nano was installed, so $EDITOR pointed at nothing.
+  vim
   mpv
   mpv-mpris
   nvtop

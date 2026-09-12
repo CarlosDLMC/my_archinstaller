@@ -2,7 +2,12 @@
 # Nvidia Stuffs #
 
 nvidia_pkg=(
-  nvidia-dkms
+  # nvidia-open-dkms, not nvidia-dkms: the closed-source kernel module packages
+  # were dropped from [extra] and only the open modules remain (nvidia-open,
+  # nvidia-open-dkms, nvidia-open-lts). With the old name nothing installed,
+  # while the steps below still added the modules to mkinitcpio and nouveau
+  # got blacklisted - a reboot into no GPU driver at all.
+  nvidia-open-dkms
   nvidia-settings
   nvidia-utils
   libva

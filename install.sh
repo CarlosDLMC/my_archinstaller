@@ -504,6 +504,45 @@ fi
 
 printf "\n%.0s" {1..1}
 
+# The selection is exported so 02-Final-Check.sh can verify the *outcome* of
+# each selected component (dots copied, ly enabled, zsh the login shell, ...)
+# and not only whether packages landed - see the outcome checks in that file.
+export INSTALL_SELECTED_OPTIONS="$selected_options"
+
+# Sudo, once, up front - and then never again for the rest of the run.
+#
+# Every install_* function runs `sudo pacman`/`yay` in the background with its
+# output sent to the log, while show_progress redraws a spinner on the same
+# line. sudo writes its password prompt to /dev/tty, so when the timestamp
+# expired mid-run (the default is 5 minutes, and the first `yay -Syu`, the
+# oh-my-zsh clone or the GTK theme extraction alone can take longer) the next
+# package call looked like a spinner that had hung. "Fully unattended" was
+# only true for the first five minutes.
+#
+# Two things fix it. If the preset asked for passwordless sudo, install that
+# rule FIRST, before anything else needs root, so the rest of the run cannot
+# prompt at all. And regardless, keep the sudo timestamp alive from a
+# background loop for the whole run, which covers the interactive path and
+# the few seconds before the rule lands.
+echo "${INFO} Authenticating ${SKY_BLUE}sudo${RESET} once for the whole run..." | tee -a "$LOG"
+if ! sudo -v; then
+    echo "${ERROR} sudo did not accept your password, or $USER is not allowed to sudo. See README: Prerequisites." | tee -a "$LOG"
+    exit 1
+fi
+( while true; do sudo -n true 2>/dev/null; sleep 60; kill -0 "$$" 2>/dev/null || exit; done ) &
+sudo_keepalive_pid=$!
+trap 'kill "$sudo_keepalive_pid" 2>/dev/null' EXIT
+
+if [[ " $selected_options " == *" nopasswd_sudo "* ]]; then
+    echo "${INFO} Configuring ${SKY_BLUE}passwordless sudo for wheel${RESET} first, so nothing below can prompt..." | tee -a "$LOG"
+    execute_script "sudoers_nopasswd.sh"
+    if sudo -n true 2>/dev/null; then
+        echo "${OK} sudo no longer asks for a password." | tee -a "$LOG"
+    else
+        echo "${WARN} sudo still wants a password; the keepalive loop will carry the run instead." | tee -a "$LOG"
+    fi
+fi
+
 # Ensuring base-devel is installed
 execute_script "00-base.sh"
 sleep 1
@@ -523,6 +562,16 @@ if [ "$aur_helper" == "paru" ]; then
     execute_script "paru.sh"
 elif [ "$aur_helper" == "yay" ]; then
     execute_script "yay.sh"
+fi
+
+# Nothing below works without an AUR helper: install_package() would run
+# `-S --noconfirm pkg` with an empty helper name, about 150 times, each one a
+# silent failure, and the run would end an hour later with a misleading
+# final screen. Stop here instead, while the real error is still on screen.
+if ! command -v yay &>/dev/null && ! command -v paru &>/dev/null; then
+    echo "${ERROR} No AUR helper is available after ${aur_helper:-yay}.sh ran. Nothing else can install without one." | tee -a "$LOG"
+    echo "${NOTE} Read the build error above (also in Install-Logs/), fix it, and re-run the installer." | tee -a "$LOG"
+    exit 1
 fi
 
 sleep 1
@@ -638,8 +687,8 @@ for option in "${options[@]}"; do
             execute_script "handy.sh"
             ;;
         nopasswd_sudo)
-            echo "${INFO} Configuring ${SKY_BLUE}passwordless sudo for wheel...${RESET}" | tee -a "$LOG"
-            execute_script "sudoers_nopasswd.sh"
+            # Already done at the top of the run, before the first package
+            # install, so that nothing in between could prompt for a password.
             ;;
         printing)
             echo "${INFO} Installing ${SKY_BLUE}CUPS printing...${RESET}" | tee -a "$LOG"
@@ -693,9 +742,14 @@ if [ ! -f "$HOME/.config/fastfetch/arch.png" ]; then
     cp -r Hyprland-Dots/config/fastfetch "$HOME/.config/"
 fi
 
-clear
+# No `clear` here, on purpose. It used to wipe the screen right before the
+# final check, so any error a script printed during the run was gone by the
+# time the reboot countdown started - the one moment you would want to read it.
+printf "\n%.0s" {1..2}
 
-# Final check that every package actually landed. Its exit code gates the
+# Final check that every package actually landed AND that each selected
+# component produced what it was supposed to (dots in ~/.config, ly enabled,
+# zsh the login shell, the locales generated, ...). Its exit code gates the
 # preset auto-reboot below: an incomplete install must not reboot out from
 # under you with the warning scrolled off the screen.
 if execute_script "02-Final-Check.sh"; then
@@ -711,7 +765,7 @@ if pacman -Q hyprland &> /dev/null || pacman -Q hyprland-git &> /dev/null; then
     if [ "$install_complete" == "true" ]; then
         printf "\n ${OK} 👌 Hyprland is installed and every package checked out."
     else
-        printf "\n ${WARN} Hyprland is installed, but ${WARNING}some packages are missing${RESET} - see the list above."
+        printf "\n ${WARN} Hyprland is installed, but ${WARNING}the final check found problems${RESET} - see the list above."
     fi
     printf "\n"
     sleep 2
@@ -730,10 +784,11 @@ if pacman -Q hyprland &> /dev/null || pacman -Q hyprland-git &> /dev/null; then
     # leave the list in front of you.
     if [ "$preset_mode" == "true" ] && [ "$install_complete" != "true" ]; then
         printf "\n%.0s" {1..1}
-        echo "${WARN} NOT rebooting: the final check found missing packages."
-        echo "${CAT} Install them, then reboot with ${MAGENTA}systemctl reboot${RESET}."
-        echo "${NOTE} Most failures here are AUR builds. Retry one with:"
+        echo "${WARN} NOT rebooting: the final check found missing packages or a component that did not land."
+        echo "${CAT} Fix what is listed above, then reboot with ${MAGENTA}systemctl reboot${RESET}."
+        echo "${NOTE} Most package failures are AUR builds. Retry one with:"
         echo "        ${MAGENTA}yay -S <package>${RESET}"
+        echo "${NOTE} A failed component can be retried with its script, e.g. ${MAGENTA}install-scripts/dotfiles-main.sh${RESET}"
         echo "${NOTE} The full list is in ${MAGENTA}Install-Logs/00_CHECK-*_installed.log${RESET}"
         printf "\n%.0s" {1..2}
         exit 1
