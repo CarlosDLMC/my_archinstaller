@@ -12,13 +12,13 @@ case $LAYOUT in
 	hyprctl eval 'hl.config({ general = { layout = "dwindle" } })'
 	# SUPER+J/K are global (configs/Keybinds.lua); only SUPER+O is layout-specific
 	hyprctl eval 'hl.bind("SUPER + O", hl.dsp.layout("togglesplit"), { description = "toggle split (dwindle)" })'
-	notify-send -e -u low -i "$notif" " Dwindle Layout"
+	notify-send -t 1000 -e -u low -i "$notif" " Dwindle Layout"
 	;;
 "dwindle")
 	hyprctl eval 'hl.config({ general = { layout = "master" } })'
 	# Drop the togglesplit bind on SUPER+O when switching back to master
 	hyprctl eval 'hl.unbind("SUPER + O")'
-	notify-send -e -u low -i "$notif" " Master Layout"
+	notify-send -t 1000 -e -u low -i "$notif" " Master Layout"
 	;;
 *) ;;
 esac
