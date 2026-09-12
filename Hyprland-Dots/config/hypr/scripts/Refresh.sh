@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  ##
 # Scripts for refreshing quickshell, rofi, mako, wallust
 
 SCRIPTSDIR=$HOME/.config/hypr/scripts

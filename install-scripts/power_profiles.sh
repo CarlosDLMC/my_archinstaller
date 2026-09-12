@@ -1,5 +1,4 @@
 #!/bin/bash
-# /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 # Power profile daemon (whatever provides the power-profiles-daemon D-Bus API)
 
 ## WARNING: DO NOT EDIT BEYOND THIS LINE IF YOU DON'T KNOW WHAT YOU ARE DOING! ##

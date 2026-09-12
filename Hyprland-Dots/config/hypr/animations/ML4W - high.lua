@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 --
 -- name "High"
 -- credit https://github.com/mylinuxforwork/dotfiles

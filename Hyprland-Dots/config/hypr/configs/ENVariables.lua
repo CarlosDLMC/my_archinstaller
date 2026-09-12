@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 -- Environment variables. https://wiki.hypr.land/Configuring/Core/Environment-variables/
 -- hl.env(NAME, VALUE) - set before the display server initialises.
 -- Your default editor lives in UserConfigs/01-UserDefaults.lua (exported as $EDITOR here).
@@ -10,7 +9,7 @@ hl.env("EDITOR", D.editor)
 -- Locale for time/date formatting (Monday start, DD/MM/YYYY, 24-hour)
 hl.env("LC_TIME", "ru_RU.UTF-8")
 
--- Current version of the JaKooLit dotfiles this fork started from
+-- Version of the upstream dotfiles this config originally started from
 hl.env("DOTS_VERSION", "2.3.19")
 
 ---- Toolkit backend ----

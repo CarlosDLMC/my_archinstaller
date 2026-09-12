@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 # Soviet-brutalist TUI renderer for hyprlock.
 # Mirrors the aesthetic of the ly display manager (see assets/ly/config.ini
 # and assets/ly/lang/soviet.ini) so the login and lock screens match.

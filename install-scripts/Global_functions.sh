@@ -1,5 +1,4 @@
 #!/bin/bash
-# 💫 https://github.com/JaKooLit 💫 #
 # Global Functions for Scripts #
 
 set -e

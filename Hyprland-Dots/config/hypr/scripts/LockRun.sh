@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  ##
 # Start the lock screen, and record why it stops.
 #
 # hypridle's lock_cmd used to discard hyprlock's output, so when hyprlock quit

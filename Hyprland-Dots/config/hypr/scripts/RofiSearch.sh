@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  ##
 # For Searching via web browsers
 
 # The search engine lives in UserConfigs/01-UserDefaults.lua. It is a plain Lua

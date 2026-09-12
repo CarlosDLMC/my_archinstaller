@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 -- Workspace rules. NOTE: nwg-displays overwrites this file when you click Apply.
 -- https://wiki.hypr.land/Configuring/Core/Rules/Workspace-rules/
 -- See UserConfigs/WorkSpaceRules.lua for examples.

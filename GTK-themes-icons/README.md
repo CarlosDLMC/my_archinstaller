@@ -1,50 +1,32 @@
-# GTK-themes-icons
-### GTK Themes, icons and cursor for my Hyprland install scripts & dots
+# GTK themes, icons and cursors
 
-### This will be only as hosting for the gtk themes and icons that will be pulled during installation of Hyprland using my Hyprland install scripts
+Vendored copies of the GTK themes, icon sets and cursor theme that
+`install-scripts/gtk_themes.sh` unpacks into `~/.themes` and `~/.icons`.
 
-### to auto extract / install:
+They are committed here on purpose rather than cloned at install time: a clone
+makes the install depend on a third-party repository still existing and still
+containing the same files, and the previous version of `gtk_themes.sh` deleted
+this directory before re-cloning it, which meant a network failure left the
+machine with no themes at all.
 
-Dependencies
-`tar` & `unzip`
+`gtk_themes.sh` runs `auto-extract.sh` from this directory. To unpack them by
+hand:
 
-clone the repo
 ```bash
-git clone https://github.com/JaKooLit/GTK-themes-icons.git --depth 1
 cd GTK-themes-icons
 chmod +x auto-extract.sh
 ./auto-extract.sh
 ```
 
-Manual (clone)
-```bash
-git clone https://github.com/JaKooLit/GTK-themes-icons.git --depth 1
-cd GTK-themes-icons
-```
+Apply them with `nwg-look`, or:
 
-Unpack
-```bash
-mkdir -p ~/.icons
-mkdir -p ~/.themes
-tar -xzvf "theme/Flat-Remix-GTK-Blue-Dark.tar.gz" -C ~/.themes
-tar -xzvf "theme/Flat-Remix-GTK-Blue-Dark.tar.gz" -C ~/.themes
-unzip -o -q "icon/Flat-Remix-Blue-Dark.zip" -d ~/.icons
-unzip -o -q "icon/Flat-Remix-Blue-Light.zip" -d ~/.icons
-unzip -o -q "icon/Bibata-Modern-Ice.zip" -d ~/.icons
-```
-
-then apply the icons and themes using `nwg-look` [`LINK`](https://github.com/nwg-piotr/nwg-look)
-
-for applying hyprcursor [`THIS`](https://wiki.hyprland.org/Hypr-Ecosystem/hyprcursor/) Hyprland WIKI will guide you how to apply
-
-or
 ```bash
 gsettings set org.gnome.desktop.interface gtk-theme Flat-Remix-GTK-Blue-Dark
-
 gsettings set org.gnome.desktop.interface icon-theme Flat-Remix-Blue-Dark
 ```
 
+## Credit and source
 
-## 🤟 CREDIT and Source:
-- Flat remix GTK Theme [`LINK`](https://github.com/daniruiz/flat-remix-gtk)
-- Flat remix Icon Themes [`LINK`](https://github.com/daniruiz/flat-remix)
+- Flat Remix GTK theme — [daniruiz/flat-remix-gtk](https://github.com/daniruiz/flat-remix-gtk)
+- Flat Remix icon theme — [daniruiz/flat-remix](https://github.com/daniruiz/flat-remix)
+- Bibata cursors — [ful1e5/Bibata_Cursor](https://github.com/ful1e5/Bibata_Cursor)

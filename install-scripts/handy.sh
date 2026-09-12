@@ -2,7 +2,7 @@
 # Handy - free, open-source, offline speech-to-text
 # Adds a Hyprland keybind (CTRL+SUPER+F8) that toggles transcription
 # and an autostart entry so Handy is ready to receive the IPC toggle.
-# NOTE: must run AFTER dotfiles-main.sh so the KooL UserConfigs/ files exist.
+# NOTE: must run AFTER dotfiles-main.sh so the UserConfigs/ files exist.
 
 handy_pkg=(
   handy-bin
@@ -71,7 +71,7 @@ if [ -f "$USER_KEYBINDS" ]; then
     echo "${INFO} Handy keybind already present in UserKeybinds.lua, skipping." | tee -a "$LOG"
   fi
 else
-  echo "${WARN} $USER_KEYBINDS not found — install KooL dotfiles first to get the keybind." | tee -a "$LOG"
+  echo "${WARN} $USER_KEYBINDS not found — install the dotfiles first to get the keybind." | tee -a "$LOG"
 fi
 
 # Autostart DISABLED by default to save RAM (~460MB: Handy + its embedded WebKit

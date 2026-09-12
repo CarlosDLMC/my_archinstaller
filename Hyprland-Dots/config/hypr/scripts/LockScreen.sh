@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  ##
 
 # Regenerate the per-monitor hyprlock widgets. hyprlock positions are absolute
 # logical pixels, so this has to run whenever the display set may have changed

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 # ly-style bigclock in block glyphs, for the hyprlock Soviet TUI lock screen.
 #
 # Why this is shell and not another mode of SovietLock.py: hyprlock re-runs the

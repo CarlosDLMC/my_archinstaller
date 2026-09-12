@@ -1,5 +1,4 @@
 #!/bin/bash
-# 💫 https://github.com/JaKooLit 💫 #
 # Asus ROG Laptops #
 
 rog=(

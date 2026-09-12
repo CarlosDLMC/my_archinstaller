@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  ##
 # Preserve the session's log across logout.
 #
 # Two logs vanish exactly when you need them:

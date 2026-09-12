@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 # Switch which soviet flag ly draws, or report the current one.
 #
 #   ./flag-switch.sh              # print which variant is active

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  ##
 # Airplane Mode. Turning on or off all wifi using rfkill. 
 
 notif="$HOME/.config/swaync/images/ja.png"

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 # Show one of the two soviet flags on a spare TTY, WITHOUT touching /etc/ly.
 #
 # Use this to compare them before committing to one. It copies the live ly

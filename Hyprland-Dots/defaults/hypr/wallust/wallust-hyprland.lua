@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */
 -- /* wallust output - colors-hyprland (Lua module) */
 -- Seed palette copied by copy.sh; wallust overwrites it on the first login.
 return {

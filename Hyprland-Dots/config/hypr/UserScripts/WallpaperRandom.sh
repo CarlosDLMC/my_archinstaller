@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  ##
 # Script for Random Wallpaper ( CTRL ALT W)
 
 wallDIR="$HOME/Pictures/wallpapers"

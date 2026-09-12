@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  ##
 # Change Hyprland layout (Master or Dwindle) on the fly.
 # Runtime-only: a config reload goes back to general.layout from SystemSettings.lua.
 

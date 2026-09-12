@@ -1,8 +1,7 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 -- Your default apps and search engine.
 --
 -- Keep this file PURE DATA (no hl.* calls): besides Hyprland, the shell scripts
--- Kool_Quick_Settings.sh and RofiSearch.sh read it with the `lua` interpreter.
+-- Quick_Settings.sh and RofiSearch.sh read it with the `lua` interpreter.
 -- $EDITOR is exported from configs/ENVariables.lua using `editor` below.
 
 return {

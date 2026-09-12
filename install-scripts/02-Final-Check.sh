@@ -1,5 +1,4 @@
 #!/bin/bash
-# 💫 https://github.com/JaKooLit 💫 #
 # Final checking if packages are installed
 #
 # Two sources are checked, and the script exits non-zero if either reports

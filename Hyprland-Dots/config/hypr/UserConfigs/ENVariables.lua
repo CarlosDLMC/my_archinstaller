@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 -- Your environment variable overrides. https://wiki.hypr.land/Configuring/Core/Environment-variables/
 -- Anything set here wins over configs/ENVariables.lua (loaded after it).
 -- The default editor lives in UserConfigs/01-UserDefaults.lua.

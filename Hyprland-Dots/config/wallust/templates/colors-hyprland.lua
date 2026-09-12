@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */
 -- /* wallust template - colors-hyprland */
 -- Rendered by wallust to ~/.config/hypr/wallust/wallust-hyprland.lua; required by UserConfigs/UserDecorations.lua.
 return {

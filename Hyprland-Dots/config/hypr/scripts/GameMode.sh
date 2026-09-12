@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  ##
 # Game Mode. Turns off animations, blur, shadows, gaps and rounding, and makes
 # every window opaque. `hyprctl reload` undoes all of it (the runtime values and
 # the extra window rule only live until the next reload).

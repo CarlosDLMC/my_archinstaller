@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 -- NOTE: THIS FILE IS NOT LOADED by hyprland.lua. It is only a guide.
 -- The file Hyprland loads is ~/.config/hypr/workspaces.lua, which nwg-displays
 -- overwrites - use nwg-displays to handle your workspace rules.

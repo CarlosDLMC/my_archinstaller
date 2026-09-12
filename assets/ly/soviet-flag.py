@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 # Generate the 8-bit Soviet flag that ly draws behind its login screen.
 # Writes two durdraw .dur files (gzipped JSON) from the same traced art:
 # soviet-flag-animated.dur, where the cloth waves, and soviet-flag-static.dur,

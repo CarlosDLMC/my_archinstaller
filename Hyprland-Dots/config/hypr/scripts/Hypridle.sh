@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  ##
 # This is for idle_inhibitor which activates / deactivates hypridle
 
 PROCESS="hypridle"

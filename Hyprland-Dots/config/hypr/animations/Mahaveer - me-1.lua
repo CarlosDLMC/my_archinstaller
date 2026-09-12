@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 --
 -- name "Me-1"
 -- credit https://github.com/mahaveergurjar

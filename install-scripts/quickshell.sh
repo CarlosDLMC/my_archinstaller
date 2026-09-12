@@ -1,5 +1,4 @@
 #!/bin/bash
-# 💫 https://github.com/JaKooLit 💫 #
 # quickshell - for desktop overview replacing AGS
 
 # quickshell, NOT quickshell-git.

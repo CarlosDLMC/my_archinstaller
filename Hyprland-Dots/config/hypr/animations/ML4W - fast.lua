@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 --
 -- name "Fast"
 -- credit https://github.com/mylinuxforwork/dotfiles

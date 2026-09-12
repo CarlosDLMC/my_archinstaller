@@ -1,4 +1,3 @@
--- /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
 --
 -- name "Optimized"
 -- credit https://github.com/prasanthrangan/hyprdots
