@@ -839,10 +839,6 @@ cd ~/Documents/my_archinstaller
   if it is ever committed, copy.sh deploys it to the new machine and the whole
   first-boot setup silently skips itself.
 
-## Credits
-
-Based on [JaKooLit's Arch-Hyprland](https://github.com/JaKooLit/Arch-Hyprland) with extensive customizations.
-
 ## License
 
 See LICENSE.md file.
