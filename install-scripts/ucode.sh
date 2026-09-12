@@ -63,7 +63,29 @@ if [ -z "$ucode_img" ] || ! sudo test -f "$ucode_img"; then
 fi
 printf "${OK} Microcode image: ${MAGENTA}${ucode_img}${RESET}\n" | tee -a "$LOG"
 
-if command -v grub-mkconfig &>/dev/null && sudo test -f /boot/grub/grub.cfg; then
+# mkinitcpio's `microcode` hook, which Arch has shipped in the default HOOKS
+# since 2024, builds the image into the main initramfs as an early uncompressed
+# CPIO section. The bootloader then needs no separate initrd line at all, and
+# the pacman hook regenerates the initramfs when the ucode package lands, so it
+# is already done by the time we get here.
+#
+# This is checked first and on purpose. Telling someone to hand-edit a boot
+# entry that is already correct is a good way to end up with a boot entry that
+# is not - which is the exact failure this script is written to avoid.
+#
+# find, not a glob: an empty conf.d would leave the pattern unexpanded and
+# grep -s would swallow it, turning "I could not check" into "not enabled".
+microcode_hook=false
+while IFS= read -r conf; do
+  [ -n "$conf" ] || continue
+  if grep -qsE '^HOOKS=.*[ (]microcode[ )]' "$conf"; then microcode_hook=true; break; fi
+done <<< "$(printf '/etc/mkinitcpio.conf\n'; find /etc/mkinitcpio.conf.d -maxdepth 1 -name '*.conf' 2>/dev/null)"
+
+if [ "$microcode_hook" == "true" ]; then
+  printf "${OK} mkinitcpio's ${MAGENTA}microcode${RESET} hook is enabled, so the image is built\n" | tee -a "$LOG"
+  printf "${OK} into the initramfs - no bootloader change is needed.\n" | tee -a "$LOG"
+
+elif command -v grub-mkconfig &>/dev/null && sudo test -f /boot/grub/grub.cfg; then
   # GRUB discovers the image by itself; the config just has to be rebuilt.
   printf "${NOTE} GRUB detected - regenerating grub.cfg so it picks up the microcode...\n" | tee -a "$LOG"
   # PIPESTATUS, not the pipeline's own status: that would be tee's, which is 0

@@ -298,13 +298,27 @@ revision the board's firmware supplied. What you lose is every erratum and
 side-channel mitigation the vendor shipped after the last BIOS release — on a
 laptop that stopped getting firmware updates, years of them.
 
-Installing the package is only half of it. The image has to be loaded by the
-bootloader as an **extra initrd, ahead of the real one**, or the kernel never
-sees it. GRUB finds it by itself and the script just regenerates `grub.cfg`.
-systemd-boot entries are edited by hand, and the script deliberately will not
-do that for you — a malformed loader entry is an unbootable machine that cannot
-be repaired from the desktop that failed to come up. Instead it names the
-entries that are missing the line and prints the exact line to add:
+Installing the package is only half of it: the microcode has to actually reach
+the kernel early, or the package just sits on disk. How that happens depends on
+the system, so the script checks three things in order.
+
+**mkinitcpio's `microcode` hook** — in Arch's default `HOOKS` since 2024, and
+the usual case. It builds the image straight into the main initramfs as an
+early uncompressed CPIO section, and the pacman hook regenerates the initramfs
+when the ucode package lands. Nothing else is needed, and in particular the
+bootloader entry must **not** be edited — the image is already there, and a
+separate `initrd` line would only load it a second time. This is checked first
+on purpose: telling someone to hand-edit a working boot entry is a good way to
+end up with one that is broken.
+
+**GRUB**, without that hook — it discovers the image by itself, so the script
+just regenerates `grub.cfg`.
+
+**systemd-boot**, without that hook — entries are edited by hand, and the
+script deliberately will not do it for you. A malformed loader entry is an
+unbootable machine that cannot be repaired from the desktop that failed to come
+up. Instead it names the entries missing the line and prints the exact line to
+add, above the existing `initrd`:
 
 ```
 initrd /amd-ucode.img
