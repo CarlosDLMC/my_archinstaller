@@ -470,6 +470,10 @@ echo "${INFO} Installing ${SKY_BLUE}KooL Hyprland additional packages...${RESET}
 sleep 1
 execute_script "01-hypr-pkgs.sh"
 
+echo "${INFO} Installing ${SKY_BLUE}CPU microcode...${RESET}" | tee -a "$LOG"
+sleep 1
+execute_script "ucode.sh"
+
 echo "${INFO} Installing ${SKY_BLUE}GPU drivers...${RESET}" | tee -a "$LOG"
 sleep 1
 execute_script "graphics.sh"

@@ -141,6 +141,7 @@ working password sudo to get that far.
 - PipeWire audio
 - NetworkManager (plus `nss-mdns`, wired into `nsswitch.conf` for `.local` names)
 - GPU video-acceleration drivers, detected per machine (see [Graphics](#graphics))
+- CPU microcode, detected per machine (see [Microcode](#microcode))
 - CUPS printing, socket-activated (see [Printing](#printing))
 
 ### Desktop Environment
@@ -282,6 +283,36 @@ gives a perfectly good desktop. What you lose is hardware video decode, so mpv
 and every browser fall back to the CPU — a hot laptop and short battery, with
 no error anywhere. The script runs `vainfo` afterwards and says so if decode
 did not come up.
+
+### Microcode
+
+`install-scripts/ucode.sh` reads the vendor from `/proc/cpuinfo` and installs
+`amd-ucode` or `intel-ucode`. Nothing asks you: the CPU already knows what it
+is, and a prompt could only be answered wrong.
+
+Like the graphics drivers, this is invisible when it is missing. The machine
+boots, the desktop comes up, and the CPU just keeps running whatever microcode
+revision the board's firmware supplied. What you lose is every erratum and
+side-channel mitigation the vendor shipped after the last BIOS release — on a
+laptop that stopped getting firmware updates, years of them.
+
+Installing the package is only half of it. The image has to be loaded by the
+bootloader as an **extra initrd, ahead of the real one**, or the kernel never
+sees it. GRUB finds it by itself and the script just regenerates `grub.cfg`.
+systemd-boot entries are edited by hand, and the script deliberately will not
+do that for you — a malformed loader entry is an unbootable machine that cannot
+be repaired from the desktop that failed to come up. Instead it names the
+entries that are missing the line and prints the exact line to add:
+
+```
+initrd /amd-ucode.img
+```
+
+After rebooting, confirm it took:
+
+```bash
+journalctl -k -b | grep microcode      # want: "microcode updated early"
+```
 
 ### Printing
 
