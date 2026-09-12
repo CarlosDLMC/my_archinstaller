@@ -1,0 +1,3 @@
+-- NOTE: this file is written by the lid-switch binds in UserConfigs/Laptops.lua
+-- when those are enabled. See the notes there.
+-- hl.monitor({ output = "eDP-1", mode = "preferred", position = "auto", scale = 1 })

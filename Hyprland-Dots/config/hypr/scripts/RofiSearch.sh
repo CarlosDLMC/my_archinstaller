@@ -2,24 +2,19 @@
 # /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  ##
 # For Searching via web browsers
 
-# Define the path to the config file
-config_file=$HOME/.config/hypr/UserConfigs/01-UserDefaults.conf
+# The search engine lives in UserConfigs/01-UserDefaults.lua. It is a plain Lua
+# table (no hl.* calls), so the stock `lua` interpreter can read it.
+defaults_file="$HOME/.config/hypr/UserConfigs/01-UserDefaults.lua"
 
-# Check if the config file exists
-if [[ ! -f "$config_file" ]]; then
-    echo "Error: Configuration file not found!"
+if [[ ! -f "$defaults_file" ]]; then
+    echo "Error: $defaults_file not found!"
     exit 1
 fi
 
-# Process the config file in memory, removing the $ and fixing spaces
-config_content=$(sed 's/\$//g' "$config_file" | sed 's/ = /=/')
+Search_Engine=$(DEFAULTS="$defaults_file" lua -e 'print(dofile(os.getenv("DEFAULTS")).search_engine or "")')
 
-# Source the modified content directly from the variable
-eval "$config_content"
-
-# Check if $term is set correctly
 if [[ -z "$Search_Engine" ]]; then
-    echo "Error: \$Search_Engine is not set in the configuration file!"
+    echo "Error: search_engine is not set in $defaults_file!"
     exit 1
 fi
 

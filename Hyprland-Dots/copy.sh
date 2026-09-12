@@ -183,8 +183,8 @@ fi
 # regenerated in full on every wallpaper change. That makes them runtime state,
 # and they are gitignored for it - see .gitignore. But they are not optional:
 #
-#   - UserConfigs/UserDecorations.conf does an unconditional
-#     `source = $HOME/.config/hypr/wallust/wallust-hyprland.conf`
+#   - UserConfigs/UserDecorations.lua requires wallust/wallust-hyprland.lua
+#     (it falls back to a built-in palette, but seeding keeps colours consistent)
 #   - twelve rofi themes `@theme` colors-rofi.rasi
 #   - wlogout/style.css `@import`s colors-waybar.css
 #
@@ -204,7 +204,7 @@ fi
 printf "\n${INFO} Seeding wallust output files...\n"
 wallust_targets=(
     "cava/config"
-    "hypr/wallust/wallust-hyprland.conf"
+    "hypr/wallust/wallust-hyprland.lua"
     "rofi/wallust/colors-rofi.rasi"
     "wallust/output/colors-waybar.css"
     "quickshell/qml_color.json"
@@ -213,7 +213,7 @@ wallust_targets=(
 for _target in "${wallust_targets[@]}"; do
     _seed="$SCRIPT_DIR/defaults/$_target"
     _dest="$HOME/.config/$_target"
-    # "hypr/wallust/wallust-hyprland.conf" -> dir "hypr", rest "wallust/..."
+    # "hypr/wallust/wallust-hyprland.lua" -> dir "hypr", rest "wallust/..."
     _dir="${_target%%/*}"
     _rest="${_target#*/}"
     _live="${BACKUP_OF[$_dir]:+${BACKUP_OF[$_dir]}/$_rest}"

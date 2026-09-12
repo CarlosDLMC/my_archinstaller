@@ -104,7 +104,7 @@ Scope {
                             if (targetId > maxWorkspaceId) targetId -= workspacesPerGroup;
                         }
                         
-                        Hyprland.dispatch("workspace " + targetId);
+                        Hyprland.dispatch('hl.dsp.focus({ workspace = "' + targetId + '" })');
                         event.accepted = true;
                     }
                 }

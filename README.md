@@ -185,7 +185,7 @@ date, with nothing anywhere explaining why.
 Three places consume it, and all three want Russian:
 
 - `config/environment.d/locale.conf` — `LC_TIME` for the systemd user session
-- `config/hypr/configs/ENVariables.conf` — `LC_TIME` for everything Hyprland launches
+- `config/hypr/configs/ENVariables.lua` — `LC_TIME` for everything Hyprland launches
 - `scripts/SovietLock.py` — calls `setlocale(LC_TIME, "ru_RU.utf8")` itself, so
   the lock screen reads `Четверг, 10 сентября 2026`
 
@@ -193,7 +193,7 @@ The bar's calendar picks up `firstDayOfWeek` and its `MMMM yyyy` heading from
 `Qt.locale()`. The bar's *clock* does not — `Clock.qml` formats `"HH:mm"`
 directly, so it is 24-hour regardless of locale.
 
-**To change it**, edit `LC_TIME` in both `locale.conf` and `ENVariables.conf`,
+**To change it**, edit `LC_TIME` in both `locale.conf` and `ENVariables.lua`,
 add the locale to `wanted_locales` in `locales.sh`, and re-run it.
 
 ### Fonts
@@ -349,7 +349,7 @@ over them.
 These are machine-specific, so a fresh install starts without them:
 
 - **`~/.config/zsh/secrets.zsh`** — API keys and tokens. See installation step 4.
-- **`~/.config/hypr/monitors.conf`** — the repo ships a generic template. This
+- **`~/.config/hypr/monitors.lua`** — the repo ships a generic template. This
   machine's copy also carries a patched-EDID setup for a 2560x1440@75 Samsung
   over HDMI, which additionally needs a blob in `/usr/lib/firmware/edid/`, a
   `FILES=` entry in `/etc/mkinitcpio.conf` and a `drm.edid_firmware=` kernel
@@ -369,7 +369,7 @@ These are machine-specific, so a fresh install starts without them:
   toolchains). The installer builds the Hyprland environment, not the full
   workstation.
 - **The wallust colour files** — `cava/config`,
-  `hypr/wallust/wallust-hyprland.conf`, `rofi/wallust/colors-rofi.rasi`,
+  `hypr/wallust/wallust-hyprland.lua`, `rofi/wallust/colors-rofi.rasi`,
   `wallust/output/colors-waybar.css`, `quickshell/qml_color.json` and
   `quickshell/bar/wallust-colors.json`. Every one is a `target` in
   `wallust.toml`, rewritten in full each time the wallpaper changes, so they are
@@ -377,8 +377,8 @@ These are machine-specific, so a fresh install starts without them:
   up got committed and the next wallpaper change dirtied the tree, which
   `auto-install.sh` then refuses to pull over.
 
-  They still have to *exist*: `UserDecorations.conf` sources
-  `wallust-hyprland.conf`, twelve rofi themes `@theme` `colors-rofi.rasi` and
+  They still have to *exist*: `UserDecorations.lua` requires
+  `wallust-hyprland.lua`, twelve rofi themes `@theme` `colors-rofi.rasi` and
   wlogout's `style.css` `@import`s `colors-waybar.css` — a missing file there is
   a config error on first launch, not a silent fallback. So a rendered snapshot
   of each lives in **`Hyprland-Dots/defaults/`**, mirroring its path under
@@ -462,10 +462,16 @@ those three commands — the VPN widget is the only thing here that depends on i
 - `CTRL + ALT + L` - Lock screen (Soviet TUI)
 - `CTRL + ALT + P` - Power menu (wlogout)
 
-See `Hyprland-Dots/config/hypr/configs/Keybinds.conf` for all keybindings.
+See `Hyprland-Dots/config/hypr/configs/Keybinds.lua` for all keybindings, or press
+`SUPER H` (cheat sheet) / `SUPER SHIFT K` (search) — both list the live binds from `hyprctl binds`.
+
+The Hyprland config is Lua (`hyprland.lua` + `configs/*.lua` + `UserConfigs/*.lua`); the
+hyprlang `.conf` format is deprecated since Hyprland 0.55 and removed in 0.57.
+`hyprctl keyword` no longer exists — scripts change options with `hyprctl eval 'hl.config({...})'`
+and dispatch with `hyprctl dispatch 'hl.dsp.…'`.
 
 **Two binds do nothing on a fresh install.** `SUPER + T` launches Telegram and
-`SUPER + R` launches RustRover (`UserConfigs/UserKeybinds.conf:37-38`), and
+`SUPER + R` launches RustRover (`UserConfigs/UserKeybinds.lua`), and
 neither application is installed by this repo — applications beyond the desktop
 itself are deliberately out of scope, see
 [What is deliberately NOT in this repo](#what-is-deliberately-not-in-this-repo).
@@ -486,12 +492,12 @@ Handy is offline speech-to-text — no audio leaves your machine. `wtype` inject
 **First login on a fresh install:**
 - Handy does **not** autostart — it is launched on demand by the keybind, to save the RAM of an idle daemon. So on first use, press `SUPER + CTRL + F8` and Handy comes up.
 - Pick a model: choose **Parakeet V3** (CPU-friendly, auto-detects 25 languages including English, Spanish, German, Russian) and let it download (~30s).
-- **Ignore the "Shortcut" field inside Handy's UI** — Wayland blocks apps from registering global shortcuts, so it doesn't work. The Hyprland keybind in `UserKeybinds.conf` is what actually fires the toggle.
+- **Ignore the "Shortcut" field inside Handy's UI** — Wayland blocks apps from registering global shortcuts, so it doesn't work. The Hyprland keybind in `UserKeybinds.lua` is what actually fires the toggle.
 
-**If you would rather have it resident**, uncomment this line in `~/.config/hypr/UserConfigs/Startup_Apps.conf`:
+**If you would rather have it resident**, uncomment this line in `~/.config/hypr/UserConfigs/Startup_Apps.lua`:
 
-```
-# exec-once = $UserScripts/handy-start.sh
+```lua
+-- hl.exec_cmd(V.UserScripts .. "/handy-start.sh")
 ```
 
 `handy-start.sh` opens Handy visibly while `selected_model` is empty — so you get the model picker on a fresh machine — and switches to `--start-hidden` once a model is set.

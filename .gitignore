@@ -39,14 +39,14 @@ GTK-themes-icons/*.log
 # tree again. auto-install.sh refuses to pull over a dirty tree, so this was on
 # its way to blocking updates.
 #
-# They still have to EXIST on a fresh machine: UserDecorations.conf sources
-# wallust-hyprland.conf, twelve rofi themes @theme colors-rofi.rasi, and
+# They still have to EXIST on a fresh machine: UserDecorations.lua requires
+# wallust-hyprland.lua, twelve rofi themes @theme colors-rofi.rasi, and
 # wlogout's style.css @imports colors-waybar.css - a missing file there is a
 # config error, not a fallback. So a rendered snapshot of each lives in
 # Hyprland-Dots/defaults/ and copy.sh seeds it when the real file is absent.
 # initial-boot.sh then runs wallust on first login and overwrites all of them.
 Hyprland-Dots/config/cava/config
-Hyprland-Dots/config/hypr/wallust/wallust-hyprland.conf
+Hyprland-Dots/config/hypr/wallust/wallust-hyprland.lua
 Hyprland-Dots/config/rofi/wallust/colors-rofi.rasi
 Hyprland-Dots/config/wallust/output/colors-waybar.css
 Hyprland-Dots/config/quickshell/qml_color.json

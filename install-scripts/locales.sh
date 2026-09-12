@@ -20,7 +20,7 @@ LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_locales.log"
 # instead of Cyrillic, with nothing anywhere saying why.
 #
 # Three consumers:
-#   - environment.d/locale.conf and hypr/configs/ENVariables.conf set
+#   - environment.d/locale.conf and hypr/configs/ENVariables.lua set
 #     LC_TIME=ru_RU.UTF-8. CalendarPopup.qml reads Qt.locale() for
 #     firstDayOfWeek and for its "MMMM yyyy" heading, so this is what makes the
 #     calendar start on Monday with Russian month names.

@@ -32,8 +32,8 @@ for PKG in "${handy_pkg[@]}"; do
   install_package "$PKG" "$LOG"
 done
 
-USER_KEYBINDS="$HOME/.config/hypr/UserConfigs/UserKeybinds.conf"
-STARTUP_APPS="$HOME/.config/hypr/UserConfigs/Startup_Apps.conf"
+USER_KEYBINDS="$HOME/.config/hypr/UserConfigs/UserKeybinds.lua"
+STARTUP_APPS="$HOME/.config/hypr/UserConfigs/Startup_Apps.lua"
 USER_SCRIPTS_DIR="$HOME/.config/hypr/UserScripts"
 HANDY_LAUNCHER="$USER_SCRIPTS_DIR/handy-start.sh"
 
@@ -63,12 +63,12 @@ if [ -f "$USER_KEYBINDS" ]; then
   if ! grep -q "handy --toggle-transcription" "$USER_KEYBINDS"; then
     {
       echo ""
-      echo "# Handy speech-to-text: press to start, press again to stop & transcribe"
-      echo 'bindd = CTRL $mainMod, F8, Handy toggle transcription, exec, notify-send -t 1500 -i audio-input-microphone "Handy" "Toggling transcription" && handy --toggle-transcription'
+      echo "-- Handy speech-to-text: press to start, press again to stop & transcribe"
+      echo 'hl.bind("CTRL + SUPER + F8", hl.dsp.exec_cmd([[notify-send -t 1500 -i audio-input-microphone "Handy" "Toggling transcription" && handy --toggle-transcription]]), { description = "Handy toggle transcription" })'
     } >> "$USER_KEYBINDS"
-    echo "${OK} Added Handy keybind (CTRL+SUPER+F8) to UserKeybinds.conf" | tee -a "$LOG"
+    echo "${OK} Added Handy keybind (CTRL+SUPER+F8) to UserKeybinds.lua" | tee -a "$LOG"
   else
-    echo "${INFO} Handy keybind already present in UserKeybinds.conf, skipping." | tee -a "$LOG"
+    echo "${INFO} Handy keybind already present in UserKeybinds.lua, skipping." | tee -a "$LOG"
   fi
 else
   echo "${WARN} $USER_KEYBINDS not found — install KooL dotfiles first to get the keybind." | tee -a "$LOG"
@@ -77,29 +77,33 @@ fi
 # Autostart DISABLED by default to save RAM (~460MB: Handy + its embedded WebKit
 # processes). Handy is rarely used, so it's launched on demand via CTRL+SUPER+F8
 # instead. The line below is written commented-out so it's easy to re-enable:
-# uncomment it in ~/.config/hypr/UserConfigs/Startup_Apps.conf. The launcher's
+# uncomment it in ~/.config/hypr/UserConfigs/Startup_Apps.lua. The launcher's
 # visible-then-hidden logic is preserved in $HANDY_LAUNCHER for when you do.
 # NOTE: with autostart off, the first-login model picker won't open automatically —
 # run `handy` once manually to pick a model (Parakeet V3).
 if [ -f "$STARTUP_APPS" ]; then
   if [ -x "$HANDY_LAUNCHER" ]; then
-    AUTOSTART_LINE="# exec-once = $HANDY_LAUNCHER"
+    AUTOSTART_LINE="    -- hl.exec_cmd(\"$HANDY_LAUNCHER\")"
   else
-    AUTOSTART_LINE="# exec-once = handy --start-hidden"
+    AUTOSTART_LINE="    -- hl.exec_cmd(\"handy --start-hidden\")"
   fi
-  if ! grep -qE "exec-once *= *(handy|.*handy-start\.sh)" "$STARTUP_APPS"; then
+  # The Lua config runs autostart from a hyprland.start handler, so the hint is
+  # a complete (commented-out) handler that works as soon as the line is uncommented.
+  if ! grep -qE 'hl\.exec_cmd\(.*(handy-start\.sh|"handy )' "$STARTUP_APPS"; then
     {
       echo ""
-      echo "# Handy autostart disabled by default to save RAM — uncomment to enable (launch on demand via CTRL+SUPER+F8)"
+      echo "-- Handy autostart disabled by default to save RAM — uncomment the hl.exec_cmd line to enable (launch on demand via CTRL+SUPER+F8)"
+      echo 'hl.on("hyprland.start", function()'
       echo "$AUTOSTART_LINE"
+      echo "end)"
     } >> "$STARTUP_APPS"
-    echo "${OK} Added Handy autostart (commented/disabled) to Startup_Apps.conf" | tee -a "$LOG"
+    echo "${OK} Added Handy autostart (commented/disabled) to Startup_Apps.lua" | tee -a "$LOG"
   else
-    echo "${INFO} Handy autostart already present in Startup_Apps.conf, skipping." | tee -a "$LOG"
+    echo "${INFO} Handy autostart already present in Startup_Apps.lua, skipping." | tee -a "$LOG"
   fi
 else
   echo "${WARN} $STARTUP_APPS not found — autostart not added." | tee -a "$LOG"
 fi
 
-printf "\n${NOTE} ${SKY_BLUE}Handy${RESET} installed. Autostart is ${YELLOW}disabled${RESET} to save RAM — run ${MAGENTA}handy${RESET} once manually to pick a model (${MAGENTA}Parakeet V3${RESET} recommended, auto-detects 25 languages) and let it download. Afterwards, ${YELLOW}CTRL+SUPER+F8${RESET} launches it on demand and toggles transcription. To autostart it again, uncomment the exec-once line in ${SKY_BLUE}Startup_Apps.conf${RESET}.\n"
+printf "\n${NOTE} ${SKY_BLUE}Handy${RESET} installed. Autostart is ${YELLOW}disabled${RESET} to save RAM — run ${MAGENTA}handy${RESET} once manually to pick a model (${MAGENTA}Parakeet V3${RESET} recommended, auto-detects 25 languages) and let it download. Afterwards, ${YELLOW}CTRL+SUPER+F8${RESET} launches it on demand and toggles transcription. To autostart it again, uncomment the hl.exec_cmd line in ${SKY_BLUE}Startup_Apps.lua${RESET}.\n"
 printf "\n%.0s" {1..2}

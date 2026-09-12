@@ -44,7 +44,7 @@ Item {
     // Open/Focus WhatsApp
     Process {
         id: whatsappOpenProc
-        command: ["sh", "-c", "hyprctl dispatch focuswindow class:whatsapp || hyprctl dispatch focuswindow class:WhatsApp || whatsapp-for-linux &"]
+        command: ["sh", "-c", "hyprctl dispatch 'hl.dsp.focus({ window = \"class:whatsapp\" })' || hyprctl dispatch 'hl.dsp.focus({ window = \"class:WhatsApp\" })' || whatsapp-for-linux &"]
     }
 
     // Update timer

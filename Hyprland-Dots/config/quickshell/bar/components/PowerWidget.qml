@@ -18,7 +18,7 @@ DropdownWidget {
 
     Process {
         id: logoutProc
-        command: ["hyprctl", "dispatch", "exit"]
+        command: ["hyprctl", "dispatch", "hl.dsp.exit()"]
     }
 
     Process {
