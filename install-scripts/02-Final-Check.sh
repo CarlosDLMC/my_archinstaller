@@ -21,7 +21,7 @@ packages=(
   rofi
   imagemagick
   # dunst, not mako: dunst is the notification daemon this setup runs
-  # (Startup_Apps.conf:31). Checking for mako made the final screen of every
+  # (configs/Startup_Apps.lua). Checking for mako made the final screen of every
   # single install report a missing essential package.
   dunst
   awww

@@ -44,7 +44,7 @@ Item {
     // Open/Focus Slack
     Process {
         id: slackOpenProc
-        command: ["sh", "-c", "hyprctl dispatch focuswindow class:Slack || slack &"]
+        command: ["sh", "-c", "hyprctl dispatch 'hl.dsp.focus({ window = \"class:Slack\" })' || slack &"]
     }
 
     // Update timer

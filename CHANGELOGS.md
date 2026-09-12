@@ -2,6 +2,20 @@
 
 ## September 2026
 
+Changed:
+
+- Hyprland config migrated from hyprlang `.conf` to Hyprland's Lua format (`hyprland.lua`, `configs/*.lua`, `UserConfigs/*.lua`, animation presets, monitor profiles). Hyprland 0.55 deprecated `.conf` and 0.57 removes it; there is no switch to silence the startup warning, only the migration
+  - Same file layout as before; `configs/Vars.lua` replaces the `$mainMod`/`$scriptsDir` variables, `UserConfigs/01-UserDefaults.lua` is a plain data table so shell scripts can read it with `lua`
+  - `hyprctl keyword` and legacy `hyprctl dispatch <string>` do not exist under Lua, so every caller was rewritten to `hyprctl eval 'hl.config({...})'` / `hyprctl dispatch 'hl.dsp.…'`: ChangeBlur, ChangeLayout, GameMode, TouchPad, Dropterminal, Tak0-Autodispatch, IdleDpms, MoveWorkspaceWindows.py, SovietLockGen.py, WallpaperSelect, hypridle.conf, swaync, wlogout's exit button and the quickshell bar/overview QML
+  - `KeyBinds.sh` / `KeyHints.sh` list the live binds from `hyprctl binds` instead of parsing config text; every bind carries a description
+  - Number-row workspace binds are by keysym (`SUPER + 1`) rather than keycode — identical keys on us/es/ru, and `hyprctl binds` cannot report keycodes for Lua binds
+  - `KeybindsLayoutInit.sh` removed: SUPER+J/K are plain binds now
+  - wallust renders `wallust-hyprland.lua` (a Lua module) instead of a `.conf`; the seed in `defaults/` follows
+  - Two animation presets clamped to Lua's limits (`borderangle` speed 180 → 100, one bezier point 6.9 → 2); `XF86AudioPlayPause` bind dropped (the keysym never existed)
+  - `TouchPad.sh` finds the touchpad through udev instead of a hard-coded ASUS device name that never matched
+- Clipboard manager (`SUPER ALT V`) pastes the chosen entry into the focused window (Ctrl+Shift+V in terminals, Ctrl+V elsewhere) via `wtype`
+- Bar: layout widget and switcher ignore `activelayout` events from virtual keyboards (`hl-virtual-keyboard-*`) — every `wtype`/Handy paste used to open the layout popup and flash "ER"/"NO"
+
 Added:
 
 - Soviet-brutalist TUI lock screen, replacing the stock blurred-wallpaper hyprlock

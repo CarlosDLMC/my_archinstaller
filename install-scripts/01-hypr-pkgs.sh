@@ -43,7 +43,7 @@ hypr_package=(
   python-pyquery
   # SovietLockGen.py imports gi/Pango (python-gobject) and cairo (python-cairo)
   # to measure text before it sizes the lock screen widgets. It runs from
-  # Startup_Apps.conf on every login, and without these it fails silently -
+  # Startup_Apps.lua on every login, and without these it fails silently -
   # hyprlock-monitors.conf is then never regenerated and the lock screen keeps
   # whatever geometry the committed file was built for.
   python-gobject

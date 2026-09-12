@@ -14,7 +14,7 @@
 # Cheap: one `tail -F`, no polling. Note Hyprland writes little here unless
 # `debug { disable_logs = false }` is set - abort/stderr messages still land.
 #
-# Started from configs/Startup_Apps.conf as exec-once.
+# Started from configs/Startup_Apps.lua (hyprland.start handler).
 
 LOGDIR="$HOME/.cache/hypr-logs"
 SRC="$HOME/.local/state/ly-session.log"

@@ -5,8 +5,8 @@
 #    Example:
 #    ./dispatch.sh discord 2
 #
-# 2) Call from Hyprland config (in hyprland.conf file):
-#    exec-once = /path/to/dispatch.sh <application_command> <target_workspace_number>
+# 2) Call from Hyprland config (in hyprland.lua / configs/Startup_Apps.lua):
+#    hl.exec_cmd("/path/to/dispatch.sh <application_command> <target_workspace_number>")  -- inside hl.on("hyprland.start", ...)
 #
 # Logs are saved in dispatch.log file next to the script.
 # If the window doesn't appear or is dispatched incorrectly — info will be there.
@@ -22,7 +22,7 @@
 #    ./dispatch.sh discord 2
 #
 # 2) Виклик з конфігурації Hyprland (у файлі hyprland.conf):
-#    exec-once = /path/to/dispatch.sh <application_command> <target_workspace_number>
+#    hl.exec_cmd("/path/to/dispatch.sh <application_command> <target_workspace_number>")  -- inside hl.on("hyprland.start", ...)
 #
 # Логи зберігаються у файлі dispatch.log поруч зі скриптом.
 # Якщо вікно не з'явилось або неправильно диспатчилось — інформація там.
@@ -56,7 +56,7 @@ echo "Starting dispatch of '$APP' to workspace $TARGET_WORKSPACE at $(date)" >> 
 
 # Avoid early workspace focus issues by switching workspace first.
 # Уникаємо проблем з раннім фокусом, спочатку переключаємо воркспейс.
-hyprctl dispatch workspace "$TARGET_WORKSPACE" >> "$LOGFILE" 2>&1
+hyprctl dispatch "hl.dsp.focus({ workspace = '$TARGET_WORKSPACE' })" >> "$LOGFILE" 2>&1
 sleep 0.4
 
 # Launch the application in the background and disown it.
@@ -78,7 +78,7 @@ for i in {1..30}; do
         echo "Found window $win for app '$APP', moving to workspace $TARGET_WORKSPACE" >> "$LOGFILE"
         # Move the window to the target workspace.
         # Переміщаємо вікно на цільовий воркспейс.
-        hyprctl dispatch movetoworkspace "$TARGET_WORKSPACE,address:$win" >> "$LOGFILE" 2>&1
+        hyprctl dispatch "hl.dsp.window.move({ workspace = '$TARGET_WORKSPACE', window = 'address:$win' })" >> "$LOGFILE" 2>&1
         exit 0
     fi
     sleep 0.3

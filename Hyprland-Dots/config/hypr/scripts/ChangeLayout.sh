@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
 # /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  ##
-# for changing Hyprland Layouts (Master or Dwindle) on the fly
+# Change Hyprland layout (Master or Dwindle) on the fly.
+# Runtime-only: a config reload goes back to general.layout from SystemSettings.lua.
 
 notif="$HOME/.config/swaync/images/ja.png"
 
-LAYOUT=$(hyprctl -j getoption general:layout | jq '.str' | sed 's/"//g')
+LAYOUT=$(hyprctl -j getoption general.layout | jq -r '.str')
 
 case $LAYOUT in
 "master")
-	hyprctl keyword general:layout dwindle
-	# SUPER+J/K are global and managed by KeybindsLayoutInit.sh; only manage SUPER+O here
-	hyprctl keyword bind SUPER,O,layoutmsg,togglesplit
-  notify-send -e -u low -i "$notif" " Dwindle Layout"
+	hyprctl eval 'hl.config({ general = { layout = "dwindle" } })'
+	# SUPER+J/K are global (configs/Keybinds.lua); only SUPER+O is layout-specific
+	hyprctl eval 'hl.bind("SUPER + O", hl.dsp.layout("togglesplit"), { description = "toggle split (dwindle)" })'
+	notify-send -e -u low -i "$notif" " Dwindle Layout"
 	;;
 "dwindle")
-	hyprctl keyword general:layout master
-	# Drop togglesplit binding on SUPER+O when switching back to master
-	hyprctl keyword unbind SUPER,O
-  notify-send -e -u low -i "$notif" " Master Layout"
+	hyprctl eval 'hl.config({ general = { layout = "master" } })'
+	# Drop the togglesplit bind on SUPER+O when switching back to master
+	hyprctl eval 'hl.unbind("SUPER + O")'
+	notify-send -e -u low -i "$notif" " Master Layout"
 	;;
 *) ;;
-
 esac

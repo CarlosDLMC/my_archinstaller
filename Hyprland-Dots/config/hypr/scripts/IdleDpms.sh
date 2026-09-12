@@ -33,4 +33,4 @@ if pidof hyprlock >/dev/null 2>&1 && on_ac; then
     exit 0
 fi
 
-"$HYPRCTL" dispatch dpms off
+"$HYPRCTL" dispatch 'hl.dsp.dpms({ action = "off" })'
