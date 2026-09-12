@@ -88,7 +88,14 @@ install_package_pacman() {
   fi
 }
 
-ISAUR=$(command -v yay || command -v paru)
+# `|| true` is load-bearing. This file starts with `set -e`, and on a machine
+# with no AUR helper yet both `command -v` calls fail, so the assignment's
+# status is 1 and set -e kills whichever script is sourcing this file - before
+# it has run a single line of its own, with no message. Any script that runs
+# before yay.sh and sources this with a bare `source` (locales.sh did) simply
+# never happened on a fresh install: the Russian locale was not generated, and
+# the clock, calendar and lock screen quietly fell back to C.
+ISAUR=$(command -v yay || command -v paru || true)
 # Function to install packages with either yay or paru
 install_package() {
   if $ISAUR -Q "$1" &>> /dev/null ; then

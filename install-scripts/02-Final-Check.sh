@@ -100,10 +100,105 @@ if [ -f "$FAILED_PACKAGES_MANIFEST" ]; then
     done < "$FAILED_PACKAGES_MANIFEST"
 fi
 
+# Outcome checks: did each selected component actually produce what it exists
+# to produce? Package presence alone missed the failures that matter most. A
+# copy.sh that died left vanilla Hyprland with every package "installed"; a
+# locales.sh killed by set -e left LC_TIME pointing at a locale that was never
+# generated; a chsh that failed left bash as the login shell. None of those is
+# a package, so none of them stopped the reboot, and install.sh used to clear
+# the screen right before this point so the evidence was gone as well.
+#
+# install.sh exports the selection as INSTALL_SELECTED_OPTIONS. Checks that
+# do not depend on a selection always run.
+outcome_failures=()
+sel=" ${INSTALL_SELECTED_OPTIONS:-} "
+
+selected() { [[ "$sel" == *" $1 "* ]]; }
+
+# check_outcome <what failed> <command...>
+check_outcome() {
+    local what="$1"; shift
+    if ! "$@" &>/dev/null; then
+        outcome_failures+=("$what")
+    fi
+}
+
+# Always: these run on every install regardless of the preset.
+check_outcome "ru_RU.UTF-8 locale not generated - clock, calendar and lock screen fall back to English (install-scripts/locales.sh)" \
+    bash -c 'locale -a | grep -qi "^ru_RU\.utf8$"'
+check_outcome "no AUR helper on PATH (install-scripts/yay.sh)" \
+    bash -c 'command -v yay || command -v paru'
+check_outcome "NetworkManager.service is not enabled (install-scripts/services.sh)" \
+    systemctl is-enabled NetworkManager.service
+if pacman -Qi systemd-resolvconf &>/dev/null; then
+    check_outcome "systemd-resolvconf is installed but systemd-resolved is not enabled - DNS will fail (install-scripts/services.sh)" \
+        systemctl is-enabled systemd-resolved.service
+fi
+
+if selected dots; then
+    check_outcome "dotfiles not deployed: ~/.config/hypr/hyprland.lua is missing (install-scripts/dotfiles-main.sh)" \
+        test -f "$HOME/.config/hypr/hyprland.lua"
+    check_outcome "dotfiles not deployed: ~/.config/quickshell/bar/shell.qml is missing (install-scripts/dotfiles-main.sh)" \
+        test -f "$HOME/.config/quickshell/bar/shell.qml"
+    check_outcome "dotfiles not deployed: ~/.zshrc is missing (install-scripts/dotfiles-main.sh)" \
+        test -f "$HOME/.zshrc"
+    check_outcome "wallpaper not seeded: ~/.config/hypr/wallpaper_effects/.wallpaper_current is missing (Hyprland-Dots/copy.sh)" \
+        test -f "$HOME/.config/hypr/wallpaper_effects/.wallpaper_current"
+fi
+
+if selected ly; then
+    check_outcome "ly@tty2.service is not enabled (install-scripts/ly.sh)" \
+        systemctl is-enabled ly@tty2.service
+    check_outcome "/etc/ly/config.ini does not match assets/ly/config.ini (install-scripts/ly_config.sh)" \
+        cmp -s /etc/ly/config.ini "assets/ly/config.ini"
+fi
+
+if selected zsh; then
+    check_outcome "login shell is not zsh (install-scripts/zsh.sh)" \
+        bash -c '[[ "$(getent passwd "$USER" | cut -d: -f7)" == */zsh ]]'
+    check_outcome "~/.oh-my-zsh is missing (install-scripts/zsh.sh)" \
+        test -d "$HOME/.oh-my-zsh"
+fi
+
+if selected pokemon; then
+    check_outcome "pokemon-colorscripts is not on PATH - every terminal prints an error (install-scripts/zsh_pokemon.sh)" \
+        command -v pokemon-colorscripts
+fi
+
+if selected gtk_themes; then
+    check_outcome "icon theme Flat-Remix-Blue-Dark not extracted to ~/.icons (GTK-themes-icons/auto-extract.sh)" \
+        test -d "$HOME/.icons/Flat-Remix-Blue-Dark"
+    check_outcome "cursor theme Bibata-Modern-Ice not extracted to ~/.icons (GTK-themes-icons/auto-extract.sh)" \
+        test -d "$HOME/.icons/Bibata-Modern-Ice"
+fi
+
+if selected nopasswd_sudo; then
+    check_outcome "sudo still asks for a password - the bar's VPN widget will not work (install-scripts/sudoers_nopasswd.sh)" \
+        sudo -n true
+fi
+
+if selected printing; then
+    check_outcome "cups.socket is not enabled (install-scripts/printing.sh)" \
+        systemctl is-enabled cups.socket
+fi
+
+if selected handy; then
+    check_outcome "handy is not on PATH (install-scripts/handy.sh)" \
+        command -v handy
+fi
+
 # Log missing packages
-if [ ${#missing[@]} -eq 0 ] && [ ${#local_missing[@]} -eq 0 ]; then
-    echo "${OK} GREAT! All ${YELLOW}essential packages${RESET} have been successfully installed." | tee -a "$LOG"
+if [ ${#missing[@]} -eq 0 ] && [ ${#local_missing[@]} -eq 0 ] && [ ${#outcome_failures[@]} -eq 0 ]; then
+    echo "${OK} GREAT! All ${YELLOW}essential packages${RESET} are installed and every selected component checked out." | tee -a "$LOG"
     exit 0
+fi
+
+if [ ${#outcome_failures[@]} -ne 0 ]; then
+    echo "${WARN} The following components did NOT land as expected:"
+    for f in "${outcome_failures[@]}"; do
+        echo "  ${WARNING}$f${RESET}"
+        echo "OUTCOME: $f" >> "$LOG"
+    done
 fi
 
 if [ ${#missing[@]} -ne 0 ]; then

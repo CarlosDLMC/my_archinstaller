@@ -28,6 +28,45 @@ else
   echo "${WARN} NetworkManager failed to start. Network connectivity may not work." | tee -a "$LOG"
 fi
 
+# systemd-resolved, because 01-hypr-pkgs.sh installs systemd-resolvconf.
+#
+# systemd-resolvconf replaces the classic resolvconf with a shim over
+# resolvectl, and that shim only works while systemd-resolved is running. A
+# stock archinstall + NetworkManager system has no resolvconf and no resolved,
+# so NM writes /etc/resolv.conf itself and DNS works. Add the shim without the
+# daemon and NM switches to the resolvconf path, which then fails: the link
+# comes up, nothing resolves, and nothing says why. wg-quick has the same
+# dependency for the DNS= line every WireGuard config here carries, so the
+# bar's VPN selector was broken too. This machine only worked because resolved
+# had been enabled by hand months before the installer existed.
+printf "\n${NOTE} Enabling ${SKY_BLUE}systemd-resolved${RESET}...\n" | tee -a "$LOG"
+if ! pacman -Qi systemd-resolvconf &>/dev/null; then
+  echo "${INFO} systemd-resolvconf is not installed; leaving DNS to NetworkManager." | tee -a "$LOG"
+else
+  sudo systemctl enable --now systemd-resolved.service 2>&1 | tee -a "$LOG"
+  if systemctl is-active --quiet systemd-resolved.service; then
+    echo "${OK} systemd-resolved is running." | tee -a "$LOG"
+    # Point /etc/resolv.conf at the stub so every resolver, not just NM, goes
+    # through resolved. Kept as a backup rather than deleted if it is a real
+    # file (NM or archinstall wrote it).
+    stub="/run/systemd/resolve/stub-resolv.conf"
+    if [ "$(readlink -f /etc/resolv.conf)" != "$stub" ]; then
+      if [ -f /etc/resolv.conf ] && [ ! -L /etc/resolv.conf ]; then
+        sudo cp /etc/resolv.conf /etc/resolv.conf.bak-"$(date +%Y%m%d-%H%M%S)"
+      fi
+      sudo ln -sf "$stub" /etc/resolv.conf
+      echo "${OK} /etc/resolv.conf -> $stub" | tee -a "$LOG"
+    else
+      echo "${OK} /etc/resolv.conf already points at the resolved stub." | tee -a "$LOG"
+    fi
+    # NM picks resolved up on its own when the service is active; a restart
+    # makes it re-evaluate now instead of on the next connection change.
+    sudo systemctl try-restart NetworkManager.service 2>&1 | tee -a "$LOG"
+  else
+    echo "${WARN} systemd-resolved failed to start. DNS may not work with systemd-resolvconf installed." | tee -a "$LOG"
+  fi
+fi
+
 # Enable whichever daemon provides the power-profiles-daemon D-Bus API.
 #
 # The unit name is not fixed. power-profiles-daemon.service on Arch;

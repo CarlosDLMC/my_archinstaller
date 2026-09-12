@@ -92,6 +92,12 @@ fi
 printf "\n%s - Performing a full system update to avoid issues.... \n" "${NOTE}"
 ISAUR=$(command -v yay || command -v paru)
 
-$ISAUR -Syu --noconfirm 2>&1 | tee -a "$LOG" || { printf "%s - Failed to update system\n" "${ERROR}"; exit 1; }
+# PIPESTATUS, not the pipeline status: `cmd | tee` reports tee's exit code, so
+# a failed system upgrade used to pass this check every time.
+$ISAUR -Syu --noconfirm 2>&1 | tee -a "$LOG"
+if [ "${PIPESTATUS[0]}" -ne 0 ]; then
+  printf "%s - Failed to update system\n" "${ERROR}"
+  exit 1
+fi
 
 printf "\n%.0s" {1..2}

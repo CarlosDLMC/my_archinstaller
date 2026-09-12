@@ -15,7 +15,7 @@ REPO_NAME="$(basename "$REPO_DIR")"
 printf "\n${NOTE} Verifying $REPO_NAME directory is ready for transfer...\n\n"
 
 # Check if we're in the right directory
-if [ ! -f "install.sh" ]; then
+if [ ! -f "$REPO_DIR/install.sh" ]; then
     printf "${ERROR} This script must be run from the $REPO_NAME directory\n"
     printf "${INFO} Run: cd $REPO_DIR && ./verify-before-transfer.sh\n"
     exit 1

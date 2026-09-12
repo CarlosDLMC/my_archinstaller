@@ -37,4 +37,3 @@ sudo cp "$PARENT_DIR/assets/ly/lang/soviet.ini" /etc/ly/lang/soviet.ini 2>&1 | t
 
 printf "${OK} ly display manager configured successfully!\n"
 
-clear

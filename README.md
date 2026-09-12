@@ -57,9 +57,10 @@ EDITOR=nano visudo                          # uncomment: %wheel ALL=(ALL:ALL) AL
 ```
 
 Group changes only take effect on a new login, so log out and back in before
-running the installer. The `nopasswd_sudo` preset option later replaces that
-prompt with a passwordless rule — but it runs *during* the install, so you need
-working password sudo to get that far.
+running the installer. The `nopasswd_sudo` preset option replaces that prompt
+with a passwordless rule as the very first step of the install — but it is
+installed *by* the installer, so you need working password sudo for that one
+first prompt.
 
 ### Installation Steps
 
@@ -76,25 +77,39 @@ working password sudo to get that far.
    ./install.sh --preset custom-preset.conf
    ```
 
-   With `--preset`, the installer runs **fully non-interactively**: no welcome
-   box, no confirmation prompt, no AUR-helper picker and no component menu. The
+   With `--preset`, the installer runs **non-interactively**: no welcome box,
+   no confirmation prompt, no AUR-helper picker and no component menu. The
    selection comes from `custom-preset.conf`, and if no AUR helper is present
    yet it builds `yay` from the vendored `yay-bin/` PKGBUILD automatically.
    Run `./install.sh` with no arguments to pick components from a menu instead;
    that interactive path is unchanged.
 
-3. **It reboots itself — but only if everything installed.**
+   **You type your sudo password exactly once**, right after the selection is
+   printed, and never again. With `nopasswd_sudo="ON"` (the shipped preset)
+   the passwordless rule is installed *first*, before the first package, so
+   nothing later in the run can prompt. A background `sudo -v` keepalive also
+   runs for the whole install, which covers the interactive path and any
+   machine where the rule is off. Before this, sudo's 5-minute timestamp
+   expired during the first long step and the next package call sat on a
+   spinner waiting for a password nobody could see.
 
-   A preset run ends with `02-Final-Check.sh`. If every package is accounted
-   for, you get a 15-second countdown and then a reboot, so the whole install
-   is unattended; press any key during the countdown to cancel and stay in the
-   session. An interactive run (no `--preset`) still asks.
+3. **It reboots itself — but only if everything landed.**
 
-   If the check finds anything missing, the installer **stops instead of
-   rebooting** and leaves the list on screen. This matters because a package
-   failure is not fatal on its own — the install carries on — so rebooting
-   would scroll the only warning away and hand you a desktop that is subtly
-   wrong with nothing on screen saying why. See
+   A preset run ends with `02-Final-Check.sh`. It checks two things: that
+   every package is accounted for, and that each selected component produced
+   what it exists to produce — the dotfiles are in `~/.config`, `ly@tty2` is
+   enabled and its config matches the repo, zsh is the login shell, the
+   Russian locale was generated, `systemd-resolved` is enabled, passwordless
+   sudo works, and so on. If all of that passes you get a 15-second countdown
+   and then a reboot; press any key during the countdown to cancel and stay in
+   the session. An interactive run (no `--preset`) still asks.
+
+   If anything is missing, the installer **stops instead of rebooting** and
+   leaves the list on screen. This matters because a package or script failure
+   is not fatal on its own — the install carries on — so rebooting would
+   scroll the only warning away and hand you a desktop that is subtly wrong
+   with nothing on screen saying why. The screen is no longer cleared before
+   the check, so whatever a script printed during the run is still above it. See
    [When the installer stops without rebooting](#when-the-installer-stops-without-rebooting).
 
 4. **Fill in your machine-local secrets.**
@@ -139,7 +154,8 @@ working password sudo to get that far.
 - Hyprland, hypridle, hyprlock
 - ly display manager with large font
 - PipeWire audio
-- NetworkManager (plus `nss-mdns`, wired into `nsswitch.conf` for `.local` names)
+- NetworkManager (plus `nss-mdns`, wired into `nsswitch.conf` for `.local` names,
+  and `systemd-resolved` — see [DNS](#dns))
 - GPU video-acceleration drivers, detected per machine (see [Graphics](#graphics))
 - CPU microcode, detected per machine (see [Microcode](#microcode))
 - A power profile daemon, whichever one the distro provides (see [Power profiles](#power-profiles))
@@ -150,7 +166,7 @@ working password sudo to get that far.
 - foot (terminal)
 - rofi (launcher)
 - wlogout (power menu)
-- swaync (notifications)
+- dunst (notifications — swaync is removed if present)
 - awww (wallpaper daemon)
 - wallust (color scheme generator)
 
@@ -164,7 +180,8 @@ working password sudo to get that far.
 - Whole-workspace move that preserves the dwindle layout
 
 ### Applications
-- LibreWolf (browser)
+- LibreWolf (browser, `extra/librewolf` — `librewolf-bin` no longer exists in the AUR)
+- vim (the `$EDITOR` the Hyprland config names) and nano
 - Thunar (file manager)
 - btop, cava, fastfetch
 - mpv, pavucontrol
@@ -243,6 +260,13 @@ Adwaita is built into `gtk3` itself, so unlike a downloaded theme it needs no
 package and can never go missing. Dark mode comes from
 `gtk-application-prefer-dark-theme=1` plus `color-scheme=prefer-dark`, not from
 a separate dark theme name.
+
+The GTK **application font** (`JetBrainsMono Nerd Font 16`, monospace
+`JetBrainsMono Nerd Font Mono 16`) is set by `initial-boot.sh` over `gsettings`
+too. It has to be: that value lives in dconf, which no dotfile carries, so a
+fresh machine used to come up at `settings.ini`'s 14pt (or the portal's
+Cantarell default in GTK4 apps) while this one showed 16pt. Change it with
+`gtk_font` / `gtk_mono_font` at the top of `initial-boot.sh`.
 
 The **icon** theme (`Flat-Remix-Blue-Dark`) and **cursor** (`Bibata-Modern-Ice`)
 are unchanged and still come from `GTK-themes-icons/` via `gtk_themes.sh`, which
@@ -334,6 +358,27 @@ After rebooting, confirm it took:
 
 ```bash
 journalctl -k -b | grep microcode      # want: "microcode updated early"
+```
+
+### DNS
+
+`01-hypr-pkgs.sh` installs `systemd-resolvconf`, which replaces the classic
+`resolvconf` with a shim over `resolvectl` — and that shim only works while
+`systemd-resolved` is running. A stock `archinstall` + NetworkManager system has
+neither, so NetworkManager writes `/etc/resolv.conf` itself and DNS just works.
+Add the shim without the daemon and NetworkManager switches to the resolvconf
+path, which then fails: the link comes up, nothing resolves, and nothing says
+why. `wg-quick` has the same dependency for the `DNS=` line in every WireGuard
+config here, so the bar's VPN selector was broken by it too.
+
+`services.sh` therefore enables `systemd-resolved` and points `/etc/resolv.conf`
+at its stub whenever `systemd-resolvconf` is installed. This machine only ever
+worked because resolved had been enabled by hand, months before the installer
+existed — which is exactly the kind of gap a fresh install exposes. Check with:
+
+```bash
+resolvectl status | head -5     # should list a DNS server per link
+readlink /etc/resolv.conf       # ../run/systemd/resolve/stub-resolv.conf
 ```
 
 ### Power profiles
@@ -437,6 +482,10 @@ only uses `PanelWindow`, `PopupWindow`, `Variants`, `ShellRoot`, `Singleton`,
 
 `Hyprland-Dots/wallpapers/` is copied to `~/Pictures/wallpapers/`, which is the
 directory `WallpaperSelect.sh`, `WallpaperRandom.sh` and the rofi picker all read.
+It ships the full set in use on this machine (fourteen files, about 49 MB,
+including the `Dynamic-Wallpapers/` light and dark pair) so the picker on a
+fresh install offers the same choices. The copy is additive: wallpapers you add
+locally are never removed by a re-run.
 The default wallpaper is set by `DEFAULT_WALLPAPER` near the bottom of
 `Hyprland-Dots/copy.sh` — currently `sovietpunk/sovietpunk_2k_2560x1440.png`.
 copy.sh seeds it into `~/.config/hypr/wallpaper_effects/.wallpaper_current`, which
@@ -716,6 +765,14 @@ This is also why there is no CPU/GPU vendor prompt: `--preset` runs
 unattended by design, so a dialog could only appear in the interactive path —
 the one that already worked.
 
+The kernel module installed is `nvidia-open-dkms`. The closed-source
+`nvidia-dkms` this script used to name no longer exists in the repos — only
+the open modules do — and asking for the old name installed nothing while the
+rest of the script still added the modules to `mkinitcpio.conf` and blacklisted
+nouveau, so an NVIDIA machine rebooted with no GPU driver at all. The open
+modules support Turing (GTX 16xx / RTX 20xx) and newer; anything older needs
+`nvidia-390xx-dkms` or `nvidia-470xx-dkms` from the AUR, set by hand.
+
 Note that enabling `nvidia` does **not** touch your bootloader. The driver's
 `modeset=1 fbdev=1` settings are written to `/etc/modprobe.d/nvidia.conf`,
 which the module reads when it loads and which works identically under
@@ -745,19 +802,30 @@ A preset run that ends with
 [WARN] NOT rebooting: the final check found missing packages.
 ```
 
-did most of its work — Hyprland is installed and the dotfiles are deployed —
-but at least one package did not land. The names are printed above that line
-and saved to `Install-Logs/00_CHECK-*_installed.log`.
+did most of its work, but at least one package or component did not land. The
+names are printed above that line and saved to
+`Install-Logs/00_CHECK-*_installed.log`.
 
-Two things feed that list. `02-Final-Check.sh` verifies a hardcoded set of
-sixteen essentials, which catches a package that was never even attempted
-because its script was skipped or died early. Everything else comes from
-`Install-Logs/.failed-packages`, which `record_package_failure()` in
-`Global_functions.sh` appends to whenever any `install_*` function's
-post-install verification fails — so the check covers every package the install
-actually tried, not just the sixteen. Anything that failed but was later pulled
-in as a dependency of something else is re-verified and dropped from the list,
-so what you see is genuinely still absent.
+Three things feed that list. `02-Final-Check.sh` verifies a hardcoded set of
+sixteen essential packages, which catches a package that was never even
+attempted because its script was skipped or died early. Everything else on the
+package side comes from `Install-Logs/.failed-packages`, which
+`record_package_failure()` in `Global_functions.sh` appends to whenever any
+`install_*` function's post-install verification fails — so the check covers
+every package the install actually tried, not just the sixteen. Anything that
+failed but was later pulled in as a dependency of something else is re-verified
+and dropped from the list, so what you see is genuinely still absent.
+
+The third source is the **outcome checks**: for each component the preset
+selected, the script verifies the result rather than the package — the
+dotfiles are actually in `~/.config`, `ly@tty2.service` is enabled and
+`/etc/ly/config.ini` matches the repo, zsh is your login shell, the
+`ru_RU.UTF-8` locale is generated, `systemd-resolved` is enabled, `sudo -n`
+works, the icon and cursor themes are extracted. Each failure names the script
+to re-run. These exist because the failures that hurt most were never
+packages: a `copy.sh` that died left vanilla Hyprland with every package
+"installed", and a `locales.sh` that was killed before it ran left the clock in
+English — and both used to reboot as if nothing were wrong.
 
 In practice these are almost always AUR builds (`awww`, `handy-bin`,
 `pokemon-colorscripts`), which break for reasons that have nothing to do with
@@ -834,16 +902,24 @@ chmod +x install.sh
 
 ## Verification
 
-After installation, verify everything was installed correctly:
+`02-Final-Check.sh` is the post-install verification, and `install.sh` runs it
+for you at the end of every run. To re-run it by hand, with the same selection
+the shipped preset makes:
 
 ```bash
 cd ~/Documents/my_archinstaller
-./verify-before-transfer.sh
+INSTALL_SELECTED_OPTIONS="ly gtk_themes bluetooth thunar quickshell xdph zsh pokemon dots handy nopasswd_sudo printing" \
+  ./install-scripts/02-Final-Check.sh
 ```
+
+`verify-before-transfer.sh` is something else: it checks that the **repo** is
+complete before you copy or push it (every script and asset present), not that
+anything was installed. Run it on the old machine before you clone on the new one.
 
 ## Notes
 
-- The installation will backup existing configs to `~/.config/<app>.backup`
+- The installation backs up existing configs to `~/.config/<app>.backup-<YYYYMMDD-HHMMSS>`
+  (one per run, never overwritten)
 - Event-based monitoring reduces CPU usage significantly
 - All scripts are logged to `Install-Logs/` (untracked - they are per-run output)
 - First boot runs `initial-boot.sh` to set the wallpaper, run wallust, and apply
@@ -851,7 +927,8 @@ cd ~/Documents/my_archinstaller
   `~/.config/hypr/.initial_startup_done`. That marker is gitignored on purpose:
   if it is ever committed, copy.sh deploys it to the new machine and the whole
   first-boot setup silently skips itself.
-
-## License
-
-See LICENSE.md file.
+- Several packages the scripts name have moved from the official repos to the
+  AUR since they were written (`wlogout`, `wallust`, `ttf-victor-mono`,
+  `gtk-engine-murrine`). They still install, through `yay`, but they are now
+  source builds and the most likely thing to fail on a given day — see
+  [When the installer stops without rebooting](#when-the-installer-stops-without-rebooting).
