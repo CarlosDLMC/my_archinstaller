@@ -57,10 +57,34 @@ for file in user-dirs.dirs user-dirs.locale; do
     fi
 done
 
-# Create XDG user directories with proper icons
-if command -v xdg-user-dirs-update &> /dev/null; then
+# Create the XDG user directories (Downloads, Pictures, ...) so Thunar shows
+# them with their special icons.
+#
+# The directories are created here, by hand, BEFORE xdg-user-dirs-update runs.
+# That order matters: with a user-dirs.dirs already in place (copied just
+# above), xdg-user-dirs-update treats every configured directory that does not
+# exist as one the user deleted and rewrites its entry to "$HOME/" instead of
+# creating it. On the first CachyOS desktop install that left a home with no
+# Downloads/Pictures/... at all, and a `mkdir ~/Downloads` afterwards got a plain
+# folder icon because the config no longer pointed at it. Only Documents, which
+# existed for the git clone, came out right.
+if [ -f "$HOME/.config/user-dirs.dirs" ]; then
     printf "${INFO} Creating XDG user directories...\n"
-    xdg-user-dirs-update 2>/dev/null && echo "  ${OK} Created user directories (Documents, Downloads, Videos, etc.)"
+    (
+        # shellcheck disable=SC1091
+        source "$HOME/.config/user-dirs.dirs"
+        for d in "$XDG_DESKTOP_DIR" "$XDG_DOWNLOAD_DIR" "$XDG_TEMPLATES_DIR" \
+                 "$XDG_PUBLICSHARE_DIR" "$XDG_DOCUMENTS_DIR" "$XDG_MUSIC_DIR" \
+                 "$XDG_PICTURES_DIR" "$XDG_VIDEOS_DIR"; do
+            [ -n "$d" ] && [ "$d" != "$HOME" ] && [ "$d" != "$HOME/" ] && mkdir -p "$d"
+        done
+    )
+    echo "  ${OK} Created user directories (Documents, Downloads, Videos, etc.)"
+fi
+# Now the update only registers what exists (and adds any newer defaults such
+# as Projects) instead of un-configuring the missing ones.
+if command -v xdg-user-dirs-update &> /dev/null; then
+    xdg-user-dirs-update 2>/dev/null || true
 fi
 
 # Copy mimeapps.list

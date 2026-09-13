@@ -586,32 +586,63 @@ dropdown is empty until you copy your configs over. `/etc/wireguard` is
 `root:root 0700` and the `.conf` files hold private keys — treat them like
 secrets, and never put them in this repo.
 
-**On the old machine**, pack them up (the tarball lands in your home directory,
-not in the repo):
+The configs are not tied to a machine (a provider config carries a key pair the
+provider registered to your account), so the same files work on every computer
+you copy them to.
+
+**On the old machine**, fix the permissions first — configs added by hand often
+end up owned by your user and world-readable, and `wg-quick` refuses to use a
+config that is group- or world-readable:
 
 ```bash
-sudo tar -czf ~/wireguard-configs.tar.gz -C /etc wireguard
-sudo chown "$USER" ~/wireguard-configs.tar.gz
-```
-
-**Move the tarball across** — over the network, if both machines are up:
-
-```bash
-scp ~/wireguard-configs.tar.gz user@newmachine:~
-```
-
-or copy it to a USB stick. Either way, delete it once it has landed.
-
-**On the new machine**, unpack it and fix the ownership and modes — `wg-quick`
-refuses to use a config that is group- or world-readable:
-
-```bash
-sudo tar -xzf ~/wireguard-configs.tar.gz -C /etc
 sudo chown -R root:root /etc/wireguard
 sudo chmod 700 /etc/wireguard
-sudo chmod 600 /etc/wireguard/*.conf
-rm ~/wireguard-configs.tar.gz
+sudo find /etc/wireguard -name '*.conf' -exec chmod 600 {} +   # zsh cannot glob a root-only dir
 ```
+
+Then pack them into a **passphrase-encrypted** archive. `tar` pipes straight
+into `gpg`, so the plaintext never touches disk and the resulting `.gpg` file is
+safe to park in cloud storage or e-mail to yourself:
+
+```bash
+sudo tar -cz -C /etc wireguard | gpg --symmetric --cipher-algo AES256 -o ~/wireguard-configs.tar.gz.gpg
+```
+
+`gpg` asks for a passphrase twice. That passphrase is the entire protection —
+anyone who gets the file can guess offline at full speed — so use a long one
+(five or six random words, or 20+ random characters) and keep it in your
+password manager, not next to the file. Do not use a password-protected zip
+instead: the classic ZipCrypto scheme is broken.
+
+**Move the `.gpg` file across** — cloud storage, `scp`, or a USB stick all work
+because it is encrypted:
+
+```bash
+scp ~/wireguard-configs.tar.gz.gpg user@newmachine:~
+```
+
+**On the new machine**, decrypt and unpack in one go (`gpg` ships with every
+Arch install), then lock the ownership and modes down again:
+
+```bash
+gpg --decrypt ~/wireguard-configs.tar.gz.gpg | sudo tar -xz -C /etc
+sudo chown -R root:root /etc/wireguard
+sudo chmod 700 /etc/wireguard
+sudo find /etc/wireguard -name '*.conf' -exec chmod 600 {} +   # zsh cannot glob a root-only dir
+rm ~/wireguard-configs.tar.gz.gpg
+```
+
+**Check the two things the widget depends on.** Both commands must succeed —
+the first without a password prompt, the second printing `active`:
+
+```bash
+sudo -n true && echo "passwordless sudo OK"
+systemctl is-active systemd-resolved
+```
+
+If `sudo` prompts, run `install-scripts/sudoers_nopasswd.sh` (see below). If
+resolved is inactive, `sudo systemctl enable --now systemd-resolved` — every
+config here has a `DNS=` line and `wg-quick` fails on it without resolved.
 
 **Check it worked.** The first command is exactly what the widget runs to build
 its list, so if it prints your VPN names the dropdown will be populated:
@@ -620,6 +651,7 @@ its list, so if it prints your VPN names the dropdown will be populated:
 sudo find /etc/wireguard -name '*.conf' -exec basename {} .conf \; | sort
 sudo wg-quick up de-ber     # replace with one of your own config names
 wg show interfaces          # should print the interface that just came up
+curl -s https://ipinfo.io/country   # should print the server's country
 sudo wg-quick down de-ber
 ```
 
