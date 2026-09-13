@@ -54,7 +54,7 @@ fi
 # root-only (fmask=0077), so a plain [ -f ] or a *.conf glob is evaluated by
 # the unprivileged shell, finds nothing, and reports success - a false OK is
 # the one outcome worse than a warning here.
-ucode_img=$(pacman -Qlq "$ucode_pkg" | grep -m1 'ucode\.img$')
+ucode_img=$(pacman -Qlq "$ucode_pkg" | grep -m1 'ucode\.img$' || true)
 if [ -z "$ucode_img" ] || ! sudo test -f "$ucode_img"; then
   printf "${WARN} Could not find the microcode image from ${ucode_pkg}.\n" | tee -a "$LOG"
   printf "\n%.0s" {1..2}

@@ -23,7 +23,9 @@ fi
 
 LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_graphics.log"
 
-gpu_info=$(lspci -nn 2>/dev/null | grep -iE 'vga|3d controller|display controller')
+# `|| true`: under set -e a grep with no match would kill the script here, before
+# the "no Intel/AMD GPU" branch that installs the loaders anyway.
+gpu_info=$(lspci -nn 2>/dev/null | grep -iE 'vga|3d controller|display controller' || true)
 
 # Common to every vendor. lib32-mesa is the 32-bit OpenGL stack: multilib is
 # enabled by pacman.sh, and without it 32-bit games and wine fall back to

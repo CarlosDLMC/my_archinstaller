@@ -78,7 +78,17 @@ fi
 
 printf "\n%.0s" {1..1}
 printf "${INFO} Rebuilding ${YELLOW}Initramfs${RESET}...\n" 2>&1 | tee -a "$LOG"
-sudo mkinitcpio -P 2>&1 | tee -a "$LOG"
+# CachyOS + Limine keeps its initramfs under /boot/<machine-id>/<kernel>/ and
+# regenerates the hashed limine.conf entries through limine-mkinitcpio; a plain
+# `mkinitcpio -P` there writes an image nothing boots. Use the distro's path.
+if command -v limine-mkinitcpio &>/dev/null; then
+  sudo limine-mkinitcpio 2>&1 | tee -a "$LOG"
+else
+  sudo mkinitcpio -P 2>&1 | tee -a "$LOG"
+fi
+if [ "${PIPESTATUS[0]}" -ne 0 ]; then
+  echo "${ERROR} initramfs rebuild failed - the nvidia modules are not in the image yet. Check $LOG" | tee -a "$LOG"
+fi
 
 printf "\n%.0s" {1..1}
 

@@ -46,8 +46,12 @@ fi
 # Install Oh My Zsh, plugins, and set zsh as default shell
 if command -v zsh >/dev/null; then
   printf "${NOTE} Installing ${SKY_BLUE}Oh My Zsh and plugins${RESET} ...\n"
-  if [ ! -d "$HOME/.oh-my-zsh" ]; then  
-    sh -c "$(curl -fsSL https://install.ohmyz.sh)" "" --unattended  	       
+  # Test for the file .zshrc sources, not the directory: the plugin clones below
+  # create ~/.oh-my-zsh themselves, so after one failed download the directory
+  # existed, this branch was skipped forever, and .zshrc sourced nothing.
+  if [ ! -f "$HOME/.oh-my-zsh/oh-my-zsh.sh" ]; then
+    omz_installer="$(curl -fsSL https://install.ohmyz.sh)" || { echo "${ERROR} Could not download the Oh My Zsh installer (network?)" | tee -a "$LOG"; exit 1; }
+    sh -c "$omz_installer" "" --unattended || { echo "${ERROR} Oh My Zsh installer failed" | tee -a "$LOG"; exit 1; }
   else
     echo "${INFO} Directory .oh-my-zsh already exists. Skipping re-installation." 2>&1 | tee -a "$LOG"
   fi

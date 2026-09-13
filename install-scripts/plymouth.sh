@@ -72,15 +72,21 @@ else
 fi
 
 # Report-only: what the splash needs from files this repo does not write.
-if ! grep -qE '^HOOKS=.*\bplymouth\b' /etc/mkinitcpio.conf; then
-  echo "${WARN} 'plymouth' is not in HOOKS in /etc/mkinitcpio.conf. Add it after 'systemd' (or after 'base udev'), then run: sudo mkinitcpio -P" | tee -a "$LOG"
+hooks_have_plymouth=false
+while IFS= read -r conf; do
+  [ -n "$conf" ] || continue
+  if grep -qsE '^HOOKS=.*[ (]plymouth[ )]' "$conf"; then hooks_have_plymouth=true; break; fi
+done <<< "$(printf '/etc/mkinitcpio.conf\n'; find /etc/mkinitcpio.conf.d -maxdepth 1 -name '*.conf' 2>/dev/null)"
+if [ "$hooks_have_plymouth" != "true" ]; then
+  echo "${WARN} 'plymouth' is not in HOOKS (/etc/mkinitcpio.conf or /etc/mkinitcpio.conf.d/*.conf). Add it after 'systemd' (or after 'base udev'), then run: sudo mkinitcpio -P" | tee -a "$LOG"
 fi
 if ! grep -qw splash /proc/cmdline; then
   echo "${WARN} 'splash' is not on the kernel command line, so plymouth will show text, not the logo." | tee -a "$LOG"
   echo "${NOTE} Add 'splash' (and 'quiet') to the cmdline in your bootloader entry. This repo does not edit bootloaders." | tee -a "$LOG"
 fi
 echo "${NOTE} To hide the motherboard's own logo as well, disable 'Boot Logo Display' in the BIOS." | tee -a "$LOG"
-if [ -f /boot/limine.conf ] && ! grep -q 'my_archinstaller Limine theme' /boot/limine.conf 2>/dev/null; then
+# /boot is root-only on CachyOS, so test through sudo or this is always false.
+if sudo test -f /boot/limine.conf && ! sudo grep -q 'my_archinstaller Limine theme' /boot/limine.conf 2>/dev/null; then
   echo "${NOTE} Limine is installed and unthemed. The 'limine' preset option (install-scripts/limine.sh) applies the matching boot-menu theme; see README 'Limine boot menu theme'." | tee -a "$LOG"
 fi
 
