@@ -81,7 +81,7 @@ if ! grep -qw splash /proc/cmdline; then
 fi
 echo "${NOTE} To hide the motherboard's own logo as well, disable 'Boot Logo Display' in the BIOS." | tee -a "$LOG"
 if [ -f /boot/limine.conf ] && ! grep -q 'my_archinstaller Limine theme' /boot/limine.conf 2>/dev/null; then
-  echo "${NOTE} Limine is installed and unthemed. The matching boot-menu theme is in assets/limine/ - see README 'Limine boot menu theme' for the two commands (not applied here: this repo does not write to bootloaders)." | tee -a "$LOG"
+  echo "${NOTE} Limine is installed and unthemed. The 'limine' preset option (install-scripts/limine.sh) applies the matching boot-menu theme; see README 'Limine boot menu theme'." | tee -a "$LOG"
 fi
 
 printf "\n%.0s" {1..1}

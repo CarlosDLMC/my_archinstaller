@@ -512,27 +512,31 @@ Limine's terminal maps text onto a 256-glyph CP437 font and cannot show Cyrillic
 Cyrillic title into a copy of the wallpaper and darkens the left side for the menu
 text; point `wallpaper:` at its output and raise `term_margin` if you use it.
 
-Applying it is two commands, done by hand on purpose (this repo never writes to a
-bootloader):
+The `limine` preset option (`install-scripts/limine.sh`, `limine="auto"` in the
+shipped preset) applies it wherever a `limine.conf` exists: wallpaper onto the ESP,
+theme block prepended, and `timeout: no` so the menu waits for a choice instead of
+booting the default after a countdown. This is the one place the repo edits a
+bootloader config, added knowingly on 2026-09-13; the safeguards are a backup kept
+as `limine.conf.pre-theme`, an edit confined to the marked block plus the `timeout:`
+line, a before/after comparison of the OS entries that aborts the write if they
+differ, and a re-enroll when `ENABLE_ENROLL_LIMINE_CONFIG` is on in
+`/etc/default/limine`. Re-running replaces the block rather than duplicating it.
+To do it by hand instead:
 
 ```bash
 sudo cp assets/limine/limine-wallpaper.png /boot/limine-wallpaper.png   # /boot is the ESP on CachyOS
 sudo cp /boot/limine.conf /boot/limine.conf.pre-theme
 cat assets/limine/theme.conf <(sudo cat /boot/limine.conf) | sudo tee /boot/limine.conf.new >/dev/null && sudo mv /boot/limine.conf.new /boot/limine.conf
+sudo sed -i 's/^timeout: .*/timeout: no/' /boot/limine.conf
 ```
-
-To make the menu wait for a choice instead of booting the default after a
-countdown, change the installer's `timeout: 5` line in the same file to
-`timeout: no` (the countdown line disappears with it).
 
 `limine-entry-tool` only rewrites the kernel entries under the CachyOS heading, so
 the global block survives kernel updates (`timeout` and `default_entry` already do).
-Config enrollment (`ENABLE_ENROLL_LIMINE_CONFIG` in `/etc/default/limine`) is off by
-default; if you turned it on, run `sudo limine-enroll-config` after editing. A
-missing wallpaper is skipped silently, an unknown key is ignored, so a typo degrades
-the look rather than the boot. The selected entry is drawn in reverse video, which is
-why the highlight bar takes the `term_foreground` colour. Limine still draws its box
-frame around the entries; that is part of the program, not the theme.
+A missing wallpaper is skipped silently, an unknown key is ignored, so a typo
+degrades the look rather than the boot. The selected entry is drawn in reverse video,
+which is why the highlight bar takes the `term_foreground` colour. Limine still draws
+its box frame around the entries; that is part of the program, not the theme. Revert
+everything with `sudo cp /boot/limine.conf.pre-theme /boot/limine.conf`.
 
 ### Firmware boot logo (the picture before the bootloader)
 

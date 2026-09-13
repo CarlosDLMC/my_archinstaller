@@ -108,6 +108,8 @@ nopasswd_sudo="OFF"
 printing="OFF"
 # "auto": only where plymouth is already installed and hooked into the initramfs.
 plymouth="auto"
+# "auto": only where a limine.conf exists (Limine is the bootloader).
+limine="auto"
 
 # Function to load preset file
 load_preset() {
@@ -336,16 +338,26 @@ if pacman -Qi plymouth &>/dev/null && grep -qE '^HOOKS=.*\bplymouth\b' /etc/mkin
     echo "${NOTE} Plymouth is installed and in the initramfs HOOKS." | tee -a "$LOG"
 fi
 
+# Limine: the theme edits its config, so only offer it where that config exists.
+limine_detected=false
+for _lc in /boot/limine.conf /efi/limine.conf /boot/efi/limine.conf /boot/limine/limine.conf /efi/limine/limine.conf; do
+    if sudo test -f "$_lc" 2>/dev/null; then limine_detected=true; break; fi
+done
+if [ "$limine_detected" == "true" ]; then
+    echo "${NOTE} Limine bootloader detected." | tee -a "$LOG"
+fi
+
 # Resolve "auto" into ON/OFF from what was just detected. Only the preset loop
 # reads these - the interactive checklist below ships its own defaults - so an
 # interactive run is unaffected.
-for _hw in nvidia nouveau rog bluetooth plymouth; do
+for _hw in nvidia nouveau rog bluetooth plymouth limine; do
     [ "${!_hw}" == "auto" ] || continue
     case "$_hw" in
         nvidia|nouveau) _want="$nvidia_detected" ;;
         rog)            _want="$rog_detected" ;;
         bluetooth)      _want="$bluetooth_detected" ;;
         plymouth)       _want="$plymouth_detected" ;;
+        limine)         _want="$limine_detected" ;;
     esac
     if [ "$_want" == "true" ]; then
         printf -v "$_hw" "ON"
@@ -408,6 +420,7 @@ options_command+=(
     "nopasswd_sudo" "Passwordless sudo for wheel? (needed by the bar's VPN widget)" "OFF"
     "printing" "Install CUPS printing? (nothing else pulls in a print stack)" "OFF"
     "plymouth" "Plymouth boot splash with the repo logo? (replaces the distro's)" "OFF"
+    "limine" "Theme the Limine boot menu and disable its countdown? (edits limine.conf, backup kept)" "OFF"
 )
 
 # With a preset, skip the menu entirely and derive the selection from the
@@ -419,7 +432,7 @@ if [ "$preset_mode" == "true" ]; then
     selected_options=""
     for _opt in ly nvidia nouveau input_group gtk_themes bluetooth thunar \
                 quickshell xdph zsh pokemon rog dots handy nopasswd_sudo \
-                printing plymouth; do
+                printing plymouth limine; do
         [ "${!_opt}" == "ON" ] || continue
 
         # Respect the same conditions the interactive menu applies before it
@@ -734,6 +747,10 @@ for option in "${options[@]}"; do
         plymouth)
             echo "${INFO} Installing the ${SKY_BLUE}Plymouth boot splash${RESET} theme..." | tee -a "$LOG"
             execute_script "plymouth.sh"
+            ;;
+        limine)
+            echo "${INFO} Theming the ${SKY_BLUE}Limine boot menu${RESET}..." | tee -a "$LOG"
+            execute_script "limine.sh"
             ;;
         *)
             echo "Unknown option: $option" | tee -a "$LOG"

@@ -4,6 +4,7 @@
 
 Added:
 
+- `limine` preset option (`install-scripts/limine.sh`, `auto` = a limine.conf exists): applies the Limine theme and sets `timeout: no`. The one bootloader-config edit in the repo, added knowingly: backup as `limine.conf.pre-theme`, marked block + one line only, OS entries compared before/after with rollback, re-enroll if config enrollment is on
 - `assets/limine/`: Limine boot-menu theme - a 4K KGB server-hall render used as delivered, green CRT palette, `theme.conf` global block, optional `make-wallpaper.sh` to paint a Cyrillic title into a copy (Limine's font has no Cyrillic); the two commands to apply it by hand. The live ISO's pretty menu was GRUB, the installed Limine ships bare
 - `bios-logo/`: `mod-bios-logo.sh detect|build|usb` puts `LOGO.JPG` into a motherboard firmware image (finds the EDK2 Logo file, builds a same-format bitmap that fits the volume's free space, replaces it with UEFIReplace, verifies the tree is otherwise identical, prepares the FlashBack stick), plus a README with the per-vendor flash procedures and `boards.conf`. Verified on the TUF GAMING B650M-PLUS WIFI (BIOS 3886, USB BIOS FlashBack accepted the modified capsule)
 - `plymouth` preset option (`install-scripts/plymouth.sh`, `assets/plymouth/soviet/`): a Plymouth theme with the repo logo on black instead of the CachyOS watermark over the motherboard logo. `auto` acts only where plymouth is already installed and hooked (CachyOS); it never edits `HOOKS` or the kernel command line
