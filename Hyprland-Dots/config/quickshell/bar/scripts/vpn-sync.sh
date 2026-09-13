@@ -49,9 +49,23 @@ echo "OFFSET: $OFFSET" >> "$LOG_FILE"
 
 echo "Syncing to $CITY ($TIMEZONE, UTC$OFFSET)..."
 
-# Set timezone using timedatectl
+# Remember the machine's own timezone the first time we move away from it, so
+# vpn-reset.sh can restore THAT rather than a hardcoded city.
+mkdir -p ~/.cache/quickshell
+if [ ! -s ~/.cache/quickshell/timezone_default ]; then
+    timedatectl show -p Timezone --value 2>/dev/null > ~/.cache/quickshell/timezone_default || true
+fi
+
+# Set timezone using timedatectl. This runs from a QML Process with no tty, so
+# `sudo -n`: fail now rather than hang on a password prompt, and do not write the
+# caches below if the clock did not actually move (the bar would show a city time
+# the system does not have).
 if command -v timedatectl &> /dev/null; then
-    sudo timedatectl set-timezone "$TIMEZONE"
+    if ! sudo -n timedatectl set-timezone "$TIMEZONE" 2>>"$LOG_FILE"; then
+        echo "Error: sudo refused timedatectl (no NOPASSWD rule for this user?)" | tee -a "$LOG_FILE"
+        notify-send -u critical "VPN" "Could not change the timezone: sudo needs a password. See README 'VPN configs'." 2>/dev/null
+        exit 1
+    fi
     echo "Timezone set to $TIMEZONE"
 else
     echo "Warning: timedatectl not found, skipping timezone change"

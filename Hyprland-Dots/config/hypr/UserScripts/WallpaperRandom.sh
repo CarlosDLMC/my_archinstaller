@@ -32,7 +32,8 @@ SWWW_PARAMS="--transition-fps $FPS --transition-type $TYPE --transition-duration
 # every output, which is what changing "the wallpaper" should mean. It used
 # to pass -o "$focused_monitor", so on a multi-monitor setup only the screen
 # you happened to be on changed and the others kept the old wallpaper.
-awww query || awww-daemon --format argb && awww img "${RANDOMPICS}" $SWWW_PARAMS
+awww query >/dev/null 2>&1 || { awww-daemon --format argb >/dev/null 2>&1 & sleep 0.5; }
+awww img "${RANDOMPICS}" $SWWW_PARAMS
 
 wait $!
 "$SCRIPTSDIR/WallustSwww.sh" &&

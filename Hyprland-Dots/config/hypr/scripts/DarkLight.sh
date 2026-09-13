@@ -24,7 +24,7 @@ done
 
 
 # Initialize swww if needed
-awww query || awww-daemon --format argb
+awww query >/dev/null 2>&1 || { awww-daemon --format argb >/dev/null 2>&1 & sleep 0.5; }
 
 # Set swww options
 awww="awww img"
@@ -108,8 +108,10 @@ else
     #qt6ct_color_scheme="$HOME/.config/qt6ct/colors/Catppuccin-Latte.conf"
 fi
 
-sed -i "s|^color_scheme_path=.*$|color_scheme_path=$qt5ct_color_scheme|" "$HOME/.config/qt5ct/qt5ct.conf"
-sed -i "s|^color_scheme_path=.*$|color_scheme_path=$qt6ct_color_scheme|" "$HOME/.config/qt6ct/qt6ct.conf"
+# The scheme variables are optional (commented out above): with them unset this used
+# to write "color_scheme_path=" and every Qt app lost its palette on the first toggle.
+[ -n "${qt5ct_color_scheme:-}" ] && sed -i "s|^color_scheme_path=.*$|color_scheme_path=$qt5ct_color_scheme|" "$HOME/.config/qt5ct/qt5ct.conf"
+[ -n "${qt6ct_color_scheme:-}" ] && sed -i "s|^color_scheme_path=.*$|color_scheme_path=$qt6ct_color_scheme|" "$HOME/.config/qt6ct/qt6ct.conf"
 kvantummanager --set "$kvantum_theme"
 
 
