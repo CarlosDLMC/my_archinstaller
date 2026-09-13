@@ -5,7 +5,9 @@
 --   old binde  -> repeating = true        old bindr -> release = true
 --   old bindn  -> non_consuming = true    old bindm -> mouse binds (window.drag / window.resize)
 -- Give every bind a description: KeyHints.sh / KeyBinds.sh (SUPER H / SUPER SHIFT K)
--- list the LIVE binds via `hyprctl binds`, and a bind without one shows up blank.
+-- list the LIVE binds via `hyprctl binds`, and a bind without one shows up as
+-- "(no description)". Use modifier NAMES (SUPER/CTRL/ALT/SHIFT) before the "+";
+-- a keysym such as ALT_L there is ignored and the bind ends up with no modifier.
 
 local V    = require("configs.Vars")
 local D    = require("UserConfigs.01-UserDefaults")
@@ -19,11 +21,11 @@ local bind = hl.bind
 bind(M .. " + D",      exec("pkill rofi || true && rofi -show drun -modi drun,filebrowser,run,window"), { description = "app launcher" })
 bind(M .. " + B",      exec("librewolf"),                  { description = "open browser" })
 bind(M .. " + A",      exec(S .. "/OverviewToggle.sh"),    { description = "desktop overview" }) -- quickshell overview, AGS fallback
-bind(M .. " + Return", exec(D.term),                       { description = "Open terminal" })
+bind(M .. " + Return", exec(D.term),                       { description = "open terminal" })
 bind(M .. " + E",      exec(D.files),                      { description = "file manager" })
 
 -- FEATURES / EXTRAS
-bind(M .. " + H",         exec(S .. "/KeyHints.sh"),     { description = "help / cheat sheet" })
+bind(M .. " + H",         exec(S .. "/KeyHints.sh"),     { description = "cheat sheet (searchable list of keybinds)" })
 bind(M .. " + ALT + R",   exec(S .. "/Refresh.sh"),      { description = "refresh bar and menus" })
 bind(M .. " + ALT + E",   exec(S .. "/RofiEmoji.sh"),    { description = "emoji menu" })
 bind(M .. " + S",         exec(S .. "/RofiSearch.sh"),   { description = "web search" })
@@ -43,7 +45,7 @@ bind(M .. " + CTRL + B", exec([[pkill -f "^qs -c bar"; sleep 0.5; qs -c bar]]), 
 bind(M .. " + SHIFT + F", hl.dsp.window.fullscreen(),                       { description = "fullscreen" })
 bind(M .. " + CTRL + F",  hl.dsp.window.fullscreen({ mode = "maximized" }), { description = "maximize window" })
 bind(M .. " + space",     hl.dsp.global("quickshell:layoutNext"),           { description = "switch keyboard layout", locked = true })
-bind(M .. " + SHIFT + space", hl.dsp.window.float(),                        { description = "Float current window" })
+bind(M .. " + SHIFT + space", hl.dsp.window.float(),                        { description = "toggle floating (active window)" })
 
 -- Float / tile every window on the current workspace (was `workspaceopt allfloat`).
 bind(M .. " + ALT + space", function()
@@ -57,9 +59,9 @@ bind(M .. " + ALT + space", function()
     for _, w in ipairs(windows) do
         hl.dispatch(hl.dsp.window.float({ action = anyTiled and "set" or "unset", window = w }))
     end
-end, { description = "Float all windows" })
+end, { description = "float / tile every window on this workspace" })
 
-bind(M .. " + SHIFT + Return", exec(S .. "/Dropterminal.sh " .. D.term), { description = "DropDown terminal" })
+bind(M .. " + SHIFT + Return", exec(S .. "/Dropterminal.sh " .. D.term), { description = "dropdown terminal" })
 
 -- Desktop zooming / magnifier
 bind(M .. " + ALT + mouse_up",   V.zoom_by(2.0), { description = "zoom in" })
@@ -76,16 +78,20 @@ bind(M .. " + SHIFT + M", exec(U .. "/RofiBeats.sh"),         { description = "o
 bind(M .. " + W",         exec(U .. "/WallpaperSelect.sh"),   { description = "select wallpaper" })
 bind(M .. " + SHIFT + W", exec(U .. "/WallpaperEffects.sh"),  { description = "wallpaper effects" })
 bind("CTRL + ALT + W",    exec(U .. "/WallpaperRandom.sh"),   { description = "random wallpaper" })
-bind(M .. " + CTRL + O",  hl.dsp.window.set_prop({ prop = "opaque", value = "toggle" }), { description = "toggle active window opacity" })
-bind(M .. " + SHIFT + K", exec(S .. "/KeyBinds.sh"),          { description = "search keybinds" })
+bind(M .. " + CTRL + O",  hl.dsp.window.set_prop({ prop = "opaque", value = "toggle" }), { description = "toggle opaque (no transparency) for active window" })
+bind(M .. " + SHIFT + K", exec(S .. "/KeyBinds.sh"),          { description = "search keybinds (rofi)" })
 bind(M .. " + SHIFT + A", exec(S .. "/Animations.sh"),        { description = "animations menu" })
 
 -- Both press orders of ALT+SHIFT, so the gesture works whichever modifier lands
 -- first. Both go through quickshell, which owns the MRU ordering and the OSD -
 -- a direct `hyprctl switchxkblayout` here would switch the layout but leave the
 -- bar showing the old one. Both are locked, so they work on the lock screen.
-bind("ALT_L + SHIFT_L", hl.dsp.global("quickshell:layoutNext"), { description = "switch keyboard layout", locked = true })
-bind("SHIFT_L + ALT_L", hl.dsp.global("quickshell:layoutNext"), { description = "switch keyboard layout", locked = true, non_consuming = true })
+-- The modifier half must be a modifier NAME (ALT / SHIFT): "ALT_L" and
+-- "SHIFT_L" are keysyms, and hl.bind("ALT_L + SHIFT_L") silently gave a bind
+-- with no modifier at all (`hyprctl binds` showed modmask 0), so it never fired
+-- and the cheat sheet listed a bare "SHIFT_L".
+bind("ALT + SHIFT_L", hl.dsp.global("quickshell:layoutNext"), { description = "switch keyboard layout", locked = true })
+bind("SHIFT + ALT_L", hl.dsp.global("quickshell:layoutNext"), { description = "switch keyboard layout", locked = true, non_consuming = true })
 
 bind(M .. " + ALT + C", exec(U .. "/RofiCalc.sh"), { description = "calculator" })
 
@@ -98,10 +104,10 @@ bind(M .. " + CTRL + F12", hl.dsp.workspace.move({ monitor = "d" }), { descripti
 ---- SYSTEM ----
 bind("CTRL + ALT + Delete", hl.dsp.exit(),                          { description = "exit Hyprland" })
 bind(M .. " + Q",           hl.dsp.window.close(),                  { description = "close active window" })
-bind(M .. " + SHIFT + Q",   exec(S .. "/KillActiveProcess.sh"),     { description = "Terminate active process" })
+bind(M .. " + SHIFT + Q",   exec(S .. "/KillActiveProcess.sh"),     { description = "kill active window process (force)" })
 bind("CTRL + ALT + L",      exec(S .. "/LockScreen.sh"),            { description = "lock screen" })
 bind("CTRL + ALT + P",      exec(S .. "/Wlogout.sh"),               { description = "powermenu" })
-bind(M .. " + SHIFT + E",   exec(S .. "/Quick_Settings.sh"),   { description = "Quick settings menu" })
+bind(M .. " + SHIFT + E",   exec(S .. "/Quick_Settings.sh"),   { description = "quick settings menu" })
 
 -- Master layout
 bind(M .. " + CTRL + D",      hl.dsp.layout("removemaster"),   { description = "remove master" })
@@ -119,13 +125,13 @@ bind(M .. " + SHIFT + I", hl.dsp.layout("togglesplit"), { description = "toggle 
 bind(M .. " + P",         hl.dsp.window.pseudo(),        { description = "toggle pseudo (dwindle)" })
 
 -- Works on either layout
-bind(M .. " + M", hl.dsp.layout("splitratio 0.3"), { description = "set split ratio 0.3" })
+bind(M .. " + M", hl.dsp.layout("splitratio 0.3"), { description = "set split ratio to 0.3" })
 
 -- Cycle windows; if floating bring to top
 bind("ALT + Tab", function()
     hl.dispatch(hl.dsp.window.cycle_next())
     hl.dispatch(hl.dsp.window.bring_to_top())
-end, { description = "cycle next window" })
+end, { description = "cycle windows (floating ones come to top)" })
 
 -- Special keys / hot keys
 bind("XF86AudioRaiseVolume", exec(S .. "/Volume.sh --inc"),        { description = "volume up",       repeating = true, locked = true })
@@ -136,8 +142,8 @@ bind("XF86Sleep",            exec("systemctl suspend"),            { description
 bind("XF86RFKill",           exec(S .. "/AirplaneMode.sh"),        { description = "airplane mode",   locked = true, non_consuming = true })
 
 -- Media controls
-bind("XF86AudioPause", exec(S .. "/MediaCtrl.sh --pause"), { description = "pause",          locked = true, non_consuming = true })
-bind("XF86AudioPlay",  exec(S .. "/MediaCtrl.sh --pause"), { description = "play",           locked = true, non_consuming = true })
+bind("XF86AudioPause", exec(S .. "/MediaCtrl.sh --pause"), { description = "play / pause",   locked = true, non_consuming = true })
+bind("XF86AudioPlay",  exec(S .. "/MediaCtrl.sh --pause"), { description = "play / pause",   locked = true, non_consuming = true })
 bind("XF86AudioNext",  exec(S .. "/MediaCtrl.sh --nxt"),   { description = "next track",     locked = true, non_consuming = true })
 bind("XF86AudioPrev",  exec(S .. "/MediaCtrl.sh --prv"),   { description = "previous track", locked = true, non_consuming = true })
 bind("XF86AudioStop",  exec(S .. "/MediaCtrl.sh --stop"),  { description = "stop",           locked = true, non_consuming = true })
@@ -180,12 +186,12 @@ bind(M .. " + ALT + down",  hl.dsp.window.swap({ direction = "down" }),  { descr
 
 -- Groups
 bind(M .. " + G",           hl.dsp.group.toggle(), { description = "toggle group" })
-bind(M .. " + Tab",         hl.dsp.group.next(),   { description = "Change Group Forward" })
-bind(M .. " + CTRL + Tab",  hl.dsp.group.next(),   { description = "change active in group" })
-bind(M .. " + SHIFT + Tab", hl.dsp.group.prev(),   { description = "Change Group Back" })
-bind(M .. " + CTRL + K",    hl.dsp.window.move({ into_group = "l" }),    { description = "Move left into group" })
-bind(M .. " + CTRL + L",    hl.dsp.window.move({ into_group = "r" }),    { description = "Move Right into group" })
-bind(M .. " + CTRL + H",    hl.dsp.window.move({ out_of_group = true }), { description = "Move active out of group" })
+bind(M .. " + Tab",         hl.dsp.group.next(),   { description = "next window in group" })
+bind(M .. " + CTRL + Tab",  hl.dsp.group.next(),   { description = "next window in group" })
+bind(M .. " + SHIFT + Tab", hl.dsp.group.prev(),   { description = "previous window in group" })
+bind(M .. " + CTRL + K",    hl.dsp.window.move({ into_group = "l" }),    { description = "move window into the group on the left" })
+bind(M .. " + CTRL + L",    hl.dsp.window.move({ into_group = "r" }),    { description = "move window into the group on the right" })
+bind(M .. " + CTRL + H",    hl.dsp.window.move({ out_of_group = true }), { description = "move window out of its group" })
 
 -- Move focus
 bind(M .. " + left",  hl.dsp.focus({ direction = "left" }),  { description = "focus left" })

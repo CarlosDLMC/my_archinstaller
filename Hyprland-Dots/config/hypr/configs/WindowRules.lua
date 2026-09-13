@@ -45,6 +45,7 @@ for tag, classes in pairs(class_tags) do
 end
 -- tags matched on the title instead of the class
 rule({ match = { title = "^(Quick Cheat Sheet)$" }, tag = "+Cheat_Sheet" })
+rule({ match = { class = "^(hypr-cheat-sheet)$" },  tag = "+Cheat_Sheet" }) -- scripts/KeyHints.py (SUPER H)
 rule({ match = { title = "^(Hyprland Settings)$" }, tag = "+Hypr_Settings" })
 rule({ match = { title = "^([Ll]utris)$" },              tag = "+gamestore" })
 rule({ match = { title = "^(ROG Control)$" },            tag = "+settings" })

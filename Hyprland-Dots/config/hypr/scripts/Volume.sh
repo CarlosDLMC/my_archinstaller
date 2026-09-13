@@ -112,7 +112,7 @@ inc_mic_volume() {
 # Decrease MIC Volume
 dec_mic_volume() {
     if [ "$(pamixer --default-source --get-mute)" == "true" ]; then
-        toggle-mic
+        toggle_mic
     else
         pamixer --default-source -d 5 && notify_mic_user
     fi
