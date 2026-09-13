@@ -504,7 +504,7 @@ CachyOS installs Limine bare: the pretty menu on the live ISO is GRUB with the
 CachyOS GRUB theme, not Limine. `assets/limine/` carries a theme for the installed
 Limine: `limine-wallpaper.png` (a 3840x2160 KGB server-hall render, used exactly as
 delivered; Limine scales it to the screen) and `theme.conf`, the global options that
-go at the top of `/boot/limine.conf`: wallpaper, Limine's own key help lines
+go at the top of `/boot/limine.conf`: wallpaper, no "Limine vX.Y.Z" header (empty `interface_branding:`), Limine's own key help lines
 (they name the hotkeys: S reboots into the firmware setup, E edits an entry, B types a
 one-off entry), a fully transparent text box, phosphor-green text matching the CRTs,
 2x font scale.
