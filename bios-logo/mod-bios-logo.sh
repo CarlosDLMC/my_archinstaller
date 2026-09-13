@@ -138,7 +138,14 @@ cmd_build() {
   local lineno; lineno=$(grep -n -F "$fline" "$report" | head -1 | cut -d: -f1)
   local block; block=$(tail -n +"$((lineno+1))" "$report" | awk '/^ ?File|^ ?Free space|^ ?Volume/ {exit} {print}')
   local compressed="no"; [[ "$block" == *"GUID defined"* || "$block" == *Compressed* ]] && compressed="yes"
-  local free_hex; free_hex=$(tail -n +"$((lineno+1))" "$report" | grep -m1 -E '^ ?Free space' | awk -F'|' '{gsub(/ /,"",$4); print $4}')
+  # Free space of THIS volume only: stop at the next Volume line, otherwise a fully
+  # packed volume would borrow the next volume's free space and the size check lies.
+  local free_hex; free_hex=$(tail -n +"$((lineno+1))" "$report" | awk -F'|' '/^ ?Volume/{exit} /^ ?Free space/{gsub(/ /,"",$4); print $4; exit}')
+  # The enclosing volume (last Volume line above the file with a real base): the
+  # modified bytes must all fall inside it.
+  local vol_base_hex vol_size_hex
+  read -r vol_base_hex vol_size_hex < <(head -n "$lineno" "$report" | awk -F'|' '/^ ?Volume/ {gsub(/ /,"",$3); gsub(/ /,"",$4); if ($3!="N/A") {b=$3; s=$4}} END{print b, s}')
+  [ -n "$vol_base_hex" ] || die "could not determine the volume that holds the logo file"
   local free=$(( 16#${free_hex:-0} )); local budget=$(( free + 16#$fsize_hex ))
   say "Section is $( [ $compressed = yes ] && echo 'compressed (LZMA/Tiano) - the replacement must compress small' || echo 'uncompressed - the replacement must be no larger than the original')."
   say "Room in the volume: $free bytes free + $(( 16#$fsize_hex )) currently used = budget $budget bytes"
@@ -153,11 +160,12 @@ d=open(sys.argv[1],'rb').read()
 if d[:2]==b'BM':
     w,h=struct.unpack_from('<ii',d,18); bpp,=struct.unpack_from('<H',d,28); print("BMP",w,abs(h),bpp)
 elif d[:3]==b'\xff\xd8\xff':
-    i=2
-    while i<len(d):
+    i=2; found=False
+    while i+9<=len(d):
         m,l=struct.unpack_from('>HH',d,i)
-        if m in (0xFFC0,0xFFC2): h,w=struct.unpack_from('>HH',d,i+5); print("JPEG",w,h,24); break
+        if m in (0xFFC0,0xFFC1,0xFFC2): h,w=struct.unpack_from('>HH',d,i+5); print("JPEG",w,h,24); found=True; break
         i+=2+l
+    if not found: print("UNKNOWN",0,0,0)
 elif d[:8]==b'\x89PNG\r\n\x1a\n':
     w,h=struct.unpack_from('>II',d,16); print("PNG",w,h,24)
 else: print("UNKNOWN",0,0,0)
@@ -200,7 +208,10 @@ EOF
 
   # 5. Replace
   say "Replacing the raw section with UEFIReplace..."
-  uefireplace "$WORK/stock.bin" "$guid" 19 "$new" -o "$WORK/modded.bin" 2>&1 | grep -vE 'parseSection: GUID defined section (with unknown processing method|can not be processed)' || true
+  if ! uefireplace "$WORK/stock.bin" "$guid" 19 "$new" -o "$WORK/modded.bin" > "$WORK/replace.log" 2>&1; then
+    die "UEFIReplace failed: $(grep -vE 'parseSection: GUID defined section' "$WORK/replace.log" | tail -3 | tr '\n' ' ')"
+  fi
+  grep -vE 'parseSection: GUID defined section (with unknown processing method|can not be processed)' "$WORK/replace.log" || true
   [ -f "$WORK/modded.bin" ] || die "UEFIReplace produced no output"
 
   # 6. Verify
@@ -209,17 +220,22 @@ EOF
   rm -rf "$WORK/check"; "$UEFIEXTRACT" "$WORK/modded.bin" "$guid" -t 19 -m body -o "$WORK/check" >/dev/null 2>&1 || true
   local back; back=$(find "$WORK/check" -type f -size +1k | xargs -r ls -S | head -1)
   cmp -s "$back" "$new" || die "the logo read back from the modified image differs from what was inserted"
-  python3 - "$WORK/stock.bin" "$WORK/modded.bin" "$report" "$WORK/modded.bin.report.txt" <<'EOF' || exit 1
+  # Every check here is fatal. A build that fails any of them is not delivered.
+  python3 - "$WORK/stock.bin" "$WORK/modded.bin" "$report" "$WORK/modded.bin.report.txt" "$vol_base_hex" "$vol_size_hex" <<'EOF' || die "verification failed - do NOT flash"
 import sys
 a=open(sys.argv[1],'rb').read(); b=open(sys.argv[2],'rb').read()
-if len(a)!=len(b): print(f"[ERROR] length changed: {len(a)} -> {len(b)} - do NOT flash"); sys.exit(1)
+vbase=int(sys.argv[5],16); vsize=int(sys.argv[6],16)
+def fail(msg): print(f"\033[31m[ERROR]\033[0m {msg}"); sys.exit(1)
+if len(a)!=len(b): fail(f"length changed: {len(a)} -> {len(b)}")
 first=next((i for i in range(len(a)) if a[i]!=b[i]),None); last=next((i for i in range(len(a)-1,-1,-1) if a[i]!=b[i]),None)
+if first is None: fail("output is identical to the input - nothing was replaced")
+if a[:0x800]!=b[:0x800]: fail("the first 2 KiB (capsule header) changed")
+if first < vbase or last >= vbase+vsize: fail(f"bytes changed outside the logo's volume: {first:#x}-{last:#x} vs volume {vbase:#x}-{vbase+vsize:#x}")
 ra=open(sys.argv[3]).read().splitlines(); rb=open(sys.argv[4]).read().splitlines()
-if len(ra)!=len(rb): print(f"[ERROR] tree changed: {len(ra)} vs {len(rb)} items - do NOT flash"); sys.exit(1)
+if len(ra)!=len(rb): fail(f"tree changed: {len(ra)} vs {len(rb)} items")
 names=lambda L:[ '|'.join(x.split('|')[i] for i in (0,1) if i<len(x.split('|'))) for x in L]
-if names(ra)!=names(rb): print("[ERROR] item types changed - do NOT flash"); sys.exit(1)
-print(f"\033[32m[OK]\033[0m same length ({len(a)} bytes); differences confined to {first:#x}-{last:#x} ({last-first+1} bytes); parse tree identical ({len(ra)} items)")
-print(f"\033[32m[OK]\033[0m first 2 KiB (capsule header, if any) {'identical' if a[:0x800]==b[:0x800] else 'CHANGED - unexpected, check before flashing'}")
+if names(ra)!=names(rb): fail("item types changed")
+print(f"\033[32m[OK]\033[0m same length ({len(a)} bytes); differences confined to {first:#x}-{last:#x} ({last-first+1} bytes) inside volume {vbase:#x}-{vbase+vsize:#x}; header identical; parse tree identical ({len(ra)} items)")
 EOF
 
   # 7. Deliver
@@ -252,8 +268,16 @@ cmd_usb() {
   done
   [ -b "$dev" ] || die "--device /dev/sdX is required"
   [ -f "$file" ] || die "--file <modded firmware> is required"
-  case "$dev" in *[0-9]) die "give the whole disk (/dev/sdb), not a partition ($dev)";; esac
+  dev=$(readlink -f "$dev")   # /dev/disk/by-*/... symlinks resolve to the real node
+  [ "$(lsblk -dno TYPE "$dev")" = disk ] || die "$dev is not a whole disk (lsblk TYPE=$(lsblk -dno TYPE "$dev")) - give /dev/sdX, not a partition"
   [ "$(lsblk -dno TRAN "$dev")" = usb ] || die "$dev is not a USB device - refusing"
+  # Never the disk the system runs from, even if it is a USB SSD.
+  if lsblk -no MOUNTPOINTS "$dev" | grep -qE '^(/|/boot|/boot/efi|/efi|/home|/var|/usr|\[SWAP\])$'; then
+    die "$dev holds a system mount point - refusing"
+  fi
+  if lsblk -no TYPE "$dev" | grep -qE 'crypt|lvm|raid'; then
+    die "$dev has LUKS/LVM/RAID members - refusing"
+  fi
   command -v mkfs.vfat >/dev/null || die "mkfs.vfat missing (pacman -S dosfstools)"
 
   echo "This will ERASE $dev:"; lsblk -o NAME,SIZE,FSTYPE,LABEL,MOUNTPOINTS "$dev"
@@ -267,6 +291,7 @@ cmd_usb() {
   local part; part=$(lsblk -lno NAME "$dev" | sed -n 2p); part="/dev/$part"
   sudo mkfs.vfat -F 32 "$part" >/dev/null              # no -n: FlashBack/Q-Flash want a blank label
   local m; m=$(mktemp -d); sudo mount "$part" "$m"
+  trap 'sudo umount "$m" 2>/dev/null; rmdir "$m" 2>/dev/null' EXIT   # a failure below must not leave the stick mounted in /tmp
   sudo cp "$file" "$m/$(basename "$file")"; sync
   local a b; a=$(sha256sum "$file" | cut -c1-64); b=$(sudo sha256sum "$m/$(basename "$file")" | cut -c1-64)
   sudo umount "$m"; rmdir "$m"; sync

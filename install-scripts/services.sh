@@ -107,16 +107,38 @@ fi
 printf "\n${NOTE} Wiring ${SKY_BLUE}nss-mdns${RESET} into /etc/nsswitch.conf...\n" | tee -a "$LOG"
 if ! pacman -Qi nss-mdns &>/dev/null; then
   echo "${WARN} nss-mdns is not installed. Skipping .local name resolution." | tee -a "$LOG"
-elif grep -q 'mdns_minimal' /etc/nsswitch.conf; then
+elif grep -E '^hosts:' /etc/nsswitch.conf | grep -qE 'mdns_minimal.*\bresolve\b|mdns_minimal.*\bdns\b' && ! grep -E '^hosts:' /etc/nsswitch.conf | grep -qE '\bresolve\b.*mdns_minimal'; then
   echo "${OK} nsswitch.conf already resolves .local names." | tee -a "$LOG"
 else
   sudo cp /etc/nsswitch.conf /etc/nsswitch.conf.bak-"$(date +%Y%m%d-%H%M%S)"
-  # Insert before "dns" so mDNS is consulted first, and keep the rest intact.
-  sudo sed -i -E '/^hosts:/ s/\bdns\b/mdns_minimal [NOTFOUND=return] dns/' /etc/nsswitch.conf
-  if grep -q 'mdns_minimal' /etc/nsswitch.conf; then
-    echo "${OK} .local name resolution enabled." | tee -a "$LOG"
+  # mdns_minimal must come BEFORE `resolve [!UNAVAIL=return]`, otherwise resolved
+  # answers (or fails) every .local lookup first and the module is never consulted -
+  # which is exactly where the old edit ("before dns") put it on a resolved system.
+  # Remove any earlier insertion, then insert before resolve if present, else before dns.
+  sudo sed -i -E '/^hosts:/ s/mdns_minimal \[NOTFOUND=return\] //g' /etc/nsswitch.conf
+  if grep -E '^hosts:' /etc/nsswitch.conf | grep -qw resolve; then
+    sudo sed -i -E '/^hosts:/ s/\bresolve\b/mdns_minimal [NOTFOUND=return] resolve/' /etc/nsswitch.conf
+  else
+    sudo sed -i -E '/^hosts:/ s/\bdns\b/mdns_minimal [NOTFOUND=return] dns/' /etc/nsswitch.conf
+  fi
+  if grep -E '^hosts:' /etc/nsswitch.conf | grep -q 'mdns_minimal'; then
+    echo "${OK} .local name resolution enabled: $(grep -E '^hosts:' /etc/nsswitch.conf)" | tee -a "$LOG"
   else
     echo "${WARN} Could not edit nsswitch.conf. .local names will not resolve." | tee -a "$LOG"
+  fi
+fi
+
+# Two mDNS responders on one host make mDNS unreliable (avahi says so in the journal).
+# thunar.sh enables avahi for NAS discovery; when it is installed, let avahi own mDNS
+# and turn off systemd-resolved's responder. nss-mdns above answers .local via avahi.
+if pacman -Qi avahi &>/dev/null && systemctl is-enabled systemd-resolved.service &>/dev/null; then
+  if [ ! -f /etc/systemd/resolved.conf.d/10-avahi-owns-mdns.conf ]; then
+    sudo mkdir -p /etc/systemd/resolved.conf.d
+    printf '# Installed by my_archinstaller (install-scripts/services.sh): avahi-daemon is the\n# mDNS responder on this machine; two responders make mDNS unreliable.\n[Resolve]\nMulticastDNS=no\n' | sudo tee /etc/systemd/resolved.conf.d/10-avahi-owns-mdns.conf >/dev/null
+    sudo systemctl try-restart systemd-resolved.service 2>&1 | tee -a "$LOG"
+    echo "${OK} systemd-resolved's mDNS responder disabled; avahi owns mDNS." | tee -a "$LOG"
+  else
+    echo "${OK} systemd-resolved mDNS already handed to avahi." | tee -a "$LOG"
   fi
 fi
 
