@@ -502,19 +502,17 @@ black or transparent background) and re-run:
 
 CachyOS installs Limine bare: the pretty menu on the live ISO is GRUB with the
 CachyOS GRUB theme, not Limine. `assets/limine/` carries a theme for the installed
-Limine: `limine-wallpaper.jpg` (a KGB data-centre scene, 2560x1440, stretched to any
-16:9 screen, with the title "ЗАГРУЗОЧНОЕ МЕНЮ" painted in) and `theme.conf`, the
-global options that go at the top of `/boot/limine.conf`: wallpaper, hidden key help,
-a fully transparent text box with a large top margin so the menu sits below the
-title, phosphor-green text matching the CRTs, 2x font scale.
+Limine: `limine-wallpaper.jpg` (a KGB server hall, 2560x1440, with the title
+"ЗАГРУЗОЧНОЕ МЕНЮ" painted in) and `theme.conf`, the global options that go at the
+top of `/boot/limine.conf`: wallpaper, hidden key help, a fully transparent text box
+with a large top margin so the menu sits below the title, phosphor-green text
+matching the CRTs, 2x font scale.
 
 The title is in the picture, not in `interface_branding`, because Limine's terminal
 maps text onto a 256-glyph CP437 font and cannot show Cyrillic. `make-wallpaper.sh`
-regenerates the wallpaper for another resolution or title. It prefers
-`source-soviet_db-4x.jpg`, a Real-ESRGAN 4x upscale of the 1168 px original
-(`realesrgan-ncnn-vulkan-bin` from the AUR, model `realesrgan-x4plus`, seven seconds
-on the Radeon), so the 2560 px crop scales down and stays sharp instead of being a
-2.2x blow-up of the original.
+regenerates the wallpaper from `source-kgb_server_hall_4k.png`, a native 16:9
+3840x2160 render, so any 16:9 target only scales down and nothing is cropped; pass
+another resolution or title as arguments.
 
 Applying it is two commands, done by hand on purpose (this repo never writes to a
 bootloader):
