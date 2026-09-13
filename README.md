@@ -8,6 +8,32 @@ month names that match the Soviet theme. `LANG` stays `en_US.UTF-8`, so
 interfaces are in English and only dates and times are localised. See
 [Locales](#locales) to change it.
 
+## Also works on CachyOS
+
+This installs cleanly on top of a **CachyOS "No Desktop"** install and was
+written with it in mind (it already knows about `tuned-cachy-ppd` and
+`cachyos-hyprland-settings`). On the installer's **Additional packages** page,
+select exactly this and nothing else:
+
+- **CachyOS Packages**: keep `cachyos-settings`, `cachyos-micro-settings` and
+  `cachyos-kernel-manager`. Uncheck `cachyos-hello`, `cachyos-packageinstaller`
+  and `cachyos-wallpapers` (the dots ship their own wallpapers).
+- **Base-devel + Common packages**: keep only the **Network** and **hardware**
+  sub-groups. Network gives you NetworkManager to get online on first boot;
+  hardware carries `linux-firmware`, which nothing else on the page or in this
+  repo installs. Every other sub-group is duplicated by the install scripts.
+- Uncheck everything else: the shell configuration, every desktop entry
+  (especially **Hyprland** - it brings SDDM and its own bar, which would fight
+  ly and the Quickshell bar), Firefox, both printing groups and accessibility.
+
+git is not part of that selection, so after the first login:
+
+```bash
+sudo pacman -S git
+```
+
+then continue with the [Installation Steps](#installation-steps) below.
+
 ## Features
 
 - **Custom Quickshell Bar** with event-based monitoring (no polling)
@@ -616,7 +642,9 @@ those three commands — the VPN widget is the only thing here that depends on i
 - `CTRL + ALT + P` - Power menu (wlogout)
 
 See `Hyprland-Dots/config/hypr/configs/Keybinds.lua` for all keybindings, or press
-`SUPER H` (cheat sheet) / `SUPER SHIFT K` (search) — both list the live binds from `hyprctl binds`.
+`SUPER H` for the cheat sheet: a window listing every live bind (from `hyprctl binds`) with a
+search box, so typing `screenshot` or `super shift` filters by action or keys. `SUPER SHIFT K`
+shows the same list in rofi.
 
 The Hyprland config is Lua (`hyprland.lua` + `configs/*.lua` + `UserConfigs/*.lua`); the
 hyprlang `.conf` format is deprecated since Hyprland 0.55 and removed in 0.57.
