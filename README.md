@@ -498,6 +498,16 @@ black or transparent background) and re-run:
 ./install-scripts/plymouth.sh
 ```
 
+### Firmware boot logo (the picture before the bootloader)
+
+`bios-logo/` puts `LOGO.JPG` into the motherboard firmware itself, so the vendor logo
+at power-on is replaced too. It is vendor-independent for the image surgery (AMI
+Aptio V, which ASUS, Gigabyte, MSI and ASRock all use) and documents the vendor
+specific parts: where to download the stock file, what to name it, and which
+button-driven recovery flasher writes a modified image. Verified on the ASUS TUF
+GAMING B650M-PLUS WIFI via USB BIOS FlashBack. Not part of `install.sh` on purpose -
+it is a firmware flash the user does by hand. See `bios-logo/README.md`.
+
 ### Printing
 
 `install-scripts/printing.sh` installs `cups`, `cups-filters` and `cups-pdf`.
