@@ -38,7 +38,15 @@ done
 
 # Size the widgets for whatever monitors are attached right now.
 python3 "$HOME/.config/hypr/scripts/SovietLockGen.py" >>"$LOG" 2>&1
-echo "  generator rc=$?" >>"$LOG" 2>&1
+_gen_rc=$?
+echo "  generator rc=$_gen_rc" >>"$LOG" 2>&1
+
+# If the generator failed, the shipped hyprlock-monitors.conf may name outputs this
+# machine does not have (a black lock screen with no clock or input field). Blank the
+# monitor selectors so every widget block applies to whatever monitor is present.
+if [ "$_gen_rc" -ne 0 ] && [ -f "$HOME/.config/hypr/hyprlock-monitors.conf" ]; then
+    sed -i -E 's/^([[:space:]]*monitor[[:space:]]*=).*/\1/' "$HOME/.config/hypr/hyprlock-monitors.conf"
+fi
 
 echo "--- hyprlock ---" >>"$LOG" 2>&1
 hyprlock >>"$LOG" 2>&1

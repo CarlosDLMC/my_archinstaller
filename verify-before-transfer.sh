@@ -11,6 +11,8 @@ RESET="$(tput sgr0)"
 # hardcoding the upstream project's name.
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_NAME="$(basename "$REPO_DIR")"
+# Every check below uses repo-relative paths.
+cd "$REPO_DIR" || exit 1
 
 printf "\n${NOTE} Verifying $REPO_NAME directory is ready for transfer...\n\n"
 

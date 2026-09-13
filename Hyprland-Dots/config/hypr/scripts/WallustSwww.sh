@@ -6,7 +6,6 @@ set -euo pipefail
 
 # Inputs and paths
 passed_path="${1:-}"
-cache_dir="$HOME/.cache/awww/"
 rofi_link="$HOME/.config/rofi/.current_wallpaper"
 wallpaper_current="$HOME/.config/hypr/wallpaper_effects/.wallpaper_current"
 
@@ -24,23 +23,17 @@ wallpaper_path=""
 if [[ -n "$passed_path" && -f "$passed_path" ]]; then
   wallpaper_path="$passed_path"
 else
-  # Try to read from swww cache for the focused monitor, with a short retry loop
+  # Ask the daemon. `awww query` prints one line per output:
+  #   : DP-3: 2560x1440, scale: 1, currently displaying: image: /path/with spaces.png
+  # Everything after "image: " is the path, so take it whole - an awk field would cut
+  # "Lofi - Anime Girl2.png" at the first space. (The old ~/.cache/awww/<output> lookup
+  # broke when awww started versioning that directory; the daemon is the source of truth.)
   current_monitor="$(get_focused_monitor)"
-  cache_file="$cache_dir$current_monitor"
-
-  # Wait briefly for swww to write its cache after an image change
   for i in {1..10}; do
-    if [[ -f "$cache_file" ]]; then
-      break
-    fi
+    wallpaper_path="$(awww query 2>/dev/null | sed -n "s/^: ${current_monitor}: .*image: //p" | head -n 1)"
+    [[ -n "$wallpaper_path" && -f "$wallpaper_path" ]] && break
     sleep 0.1
   done
-
-  if [[ -f "$cache_file" ]]; then
-    # The first non-filter line is the original wallpaper path
-    # wallpaper_path="$(grep -v 'Lanczos3' "$cache_file" | head -n 1)"
-    wallpaper_path=$(awww query | grep $current_monitor | awk '{print $9}')
-  fi
 fi
 
 if [[ -z "${wallpaper_path:-}" || ! -f "$wallpaper_path" ]]; then

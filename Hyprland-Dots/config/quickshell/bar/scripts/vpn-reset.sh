@@ -3,14 +3,21 @@
 
 echo "Resetting to local timezone and weather..."
 
-# Get system's default timezone (usually the one you set initially)
-# You may want to change this to your actual local timezone
-DEFAULT_TZ="Europe/Madrid"
+# The machine's own timezone, saved by vpn-sync.sh before the first change. If it
+# was never saved (reset pressed before any sync) there is nothing to restore.
+DEFAULT_TZ="$(cat ~/.cache/quickshell/timezone_default 2>/dev/null || true)"
 
 # Set timezone back
-if command -v timedatectl &> /dev/null; then
-    sudo timedatectl set-timezone "$DEFAULT_TZ"
-    echo "Timezone reset to $DEFAULT_TZ"
+if [ -z "$DEFAULT_TZ" ]; then
+    echo "No saved local timezone - leaving the clock as it is"
+elif command -v timedatectl &> /dev/null; then
+    if sudo -n timedatectl set-timezone "$DEFAULT_TZ" 2>/dev/null; then
+        echo "Timezone reset to $DEFAULT_TZ"
+    else
+        echo "Error: sudo refused timedatectl (no NOPASSWD rule for this user?)"
+        notify-send -u critical "VPN" "Could not reset the timezone: sudo needs a password." 2>/dev/null
+        exit 1
+    fi
 fi
 
 # Clear city preference (will use IP-based location)

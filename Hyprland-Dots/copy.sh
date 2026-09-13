@@ -14,10 +14,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 printf "\n${NOTE} Copying customized dotfiles to your home directory...\n\n"
 
-# Copy shell configuration files
+# One stamp for the whole run, so a single invocation's backups group together.
+BACKUP_STAMP="$(date +%Y%m%d-%H%M%S)"
+
+# Copy shell configuration files - backing up the existing ones like every config
+# directory below. ZshChangeTheme.sh edits ~/.zshrc in place and people add aliases;
+# a re-run used to discard that silently.
 printf "${INFO} Copying shell configuration files...\n"
 for file in .zshrc .zprofile .bashrc .bash_profile pokefetch_perfect; do
     if [ -f "$SCRIPT_DIR/$file" ]; then
+        if [ -f "$HOME/$file" ] && ! cmp -s "$SCRIPT_DIR/$file" "$HOME/$file"; then
+            cp "$HOME/$file" "$HOME/$file.backup-$BACKUP_STAMP" && echo "  ${NOTE} Backed up existing $file to $file.backup-$BACKUP_STAMP"
+        fi
         cp "$SCRIPT_DIR/$file" "$HOME/" 2>/dev/null && echo "  ${OK} Copied $file"
     fi
 done
@@ -141,9 +149,6 @@ config_dirs=(
     # gets ligatures everywhere - ->, =>, != rendered as single glyphs.
     "fontconfig"
 )
-
-# One stamp for the whole run, so a single invocation's backups group together.
-BACKUP_STAMP="$(date +%Y%m%d-%H%M%S)"
 
 # Where each directory's backup ended up, keyed by directory name. The wallust
 # seeding further down reads this to recover the live palette from the copy it
@@ -328,9 +333,24 @@ fi
 # the default gets chosen.
 DEFAULT_WALLPAPER="sovietpunk/sovietpunk_2k_2560x1440.png"
 
+# On a re-run, hypr/ was just moved aside - and with it the first-boot marker and the
+# active wallpaper. Recover them first, or the next login runs initial-boot.sh again on
+# the default wallpaper and undoes the palette this script just preserved above.
+_hypr_bak="${BACKUP_OF[hypr]:-}"
+if [ -n "$_hypr_bak" ]; then
+    for _state in .initial_startup_done wallpaper_effects/.wallpaper_current wallpaper_effects/.wallpaper_modified; do
+        if [ -f "$_hypr_bak/$_state" ] && [ ! -e "$HOME/.config/hypr/$_state" ]; then
+            mkdir -p "$(dirname "$HOME/.config/hypr/$_state")"
+            cp "$_hypr_bak/$_state" "$HOME/.config/hypr/$_state" && echo "  ${OK} Kept your $_state from the previous install"
+        fi
+    done
+fi
+
 printf "\n${INFO} Setting default wallpaper...\n"
 _default_src="$SCRIPT_DIR/wallpapers/$DEFAULT_WALLPAPER"
-if [ -f "$_default_src" ]; then
+if [ -f "$HOME/.config/hypr/wallpaper_effects/.wallpaper_current" ]; then
+    echo "  ${NOTE} Active wallpaper already present - left alone"
+elif [ -f "$_default_src" ]; then
     mkdir -p "$HOME/.config/hypr/wallpaper_effects"
     # .wallpaper_modified is the WallpaperEffects.sh output and the background
     # of the rofi effect picker. Seed it with the unmodified image so the picker

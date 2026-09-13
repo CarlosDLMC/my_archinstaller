@@ -34,7 +34,10 @@ if [ ! -f "$HOME/.config/hypr/.initial_startup_done" ]; then
     # Initialize wallust and wallpaper
 	if [ -f "$wallpaper" ]; then
 		wallust run -s $wallpaper > /dev/null 
-		awww query || awww-daemon && $awww $wallpaper $effect
+		# awww-daemon does not fork: `query || daemon && img` would block here forever
+		# when the daemon is not up yet. Start it in the background, then set the image.
+		awww query >/dev/null 2>&1 || { awww-daemon --format argb >/dev/null 2>&1 & sleep 0.5; }
+		$awww $wallpaper $effect
 	    "$scriptsDir/WallustSwww.sh" > /dev/null 2>&1 & 
 	fi
      
@@ -61,8 +64,10 @@ if [ ! -f "$HOME/.config/hypr/.initial_startup_done" ]; then
     # initiate kvantum theme
     kvantummanager --set "$kvantum_theme" > /dev/null 2>&1 &
 
-    # initiate the kb_layout
-    "$scriptsDir/SwitchKeyboardLayout.sh" > /dev/null 2>&1 &
+    # No "initiate the kb_layout" call here any more: SwitchKeyboardLayout.sh CYCLES
+    # to the next layout, and with kb_layout = "us,es,ru" that put every keyboard on
+    # Spanish at first login. Hyprland already starts on the first layout; the bar's
+    # SUPER+SPACE (quickshell:layoutNext) owns switching.
 
 
     # Create a marker file to indicate that the script has been executed.
