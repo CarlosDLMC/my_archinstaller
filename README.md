@@ -521,6 +521,10 @@ sudo cp /boot/limine.conf /boot/limine.conf.pre-theme
 cat assets/limine/theme.conf <(sudo cat /boot/limine.conf) | sudo tee /boot/limine.conf.new >/dev/null && sudo mv /boot/limine.conf.new /boot/limine.conf
 ```
 
+To make the menu wait for a choice instead of booting the default after a
+countdown, change the installer's `timeout: 5` line in the same file to
+`timeout: no` (the countdown line disappears with it).
+
 `limine-entry-tool` only rewrites the kernel entries under the CachyOS heading, so
 the global block survives kernel updates (`timeout` and `default_entry` already do).
 Config enrollment (`ENABLE_ENROLL_LIMINE_CONFIG` in `/etc/default/limine`) is off by
