@@ -34,6 +34,7 @@ Changed:
   - `TouchPad.sh` finds the touchpad through udev instead of a hard-coded ASUS device name that never matched
 - Clipboard manager (`SUPER ALT V`) pastes the chosen entry into the focused window (Ctrl+Shift+V in terminals, Ctrl+V elsewhere) via `wtype`
 - Bar: layout widget and switcher ignore `activelayout` events from virtual keyboards (`hl-virtual-keyboard-*`) — every `wtype`/Handy paste used to open the layout popup and flash "ER"/"NO"
+- README: the VPN-configs section moves `/etc/wireguard` between machines as a `gpg --symmetric` (AES-256) archive piped straight from `tar`, so the file can sit in cloud storage; fixes the permissions on the old machine first, and checks `sudo -n` and `systemd-resolved` before testing the tunnel
 
 Added:
 
