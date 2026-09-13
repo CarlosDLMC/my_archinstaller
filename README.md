@@ -502,23 +502,21 @@ black or transparent background) and re-run:
 
 CachyOS installs Limine bare: the pretty menu on the live ISO is GRUB with the
 CachyOS GRUB theme, not Limine. `assets/limine/` carries a theme for the installed
-Limine: `limine-wallpaper.jpg` (a KGB server hall, 2560x1440, with the title
-"ЗАГРУЗОЧНОЕ МЕНЮ" painted in) and `theme.conf`, the global options that go at the
-top of `/boot/limine.conf`: wallpaper, hidden key help, a fully transparent text box
-with a large top margin so the menu sits below the title, phosphor-green text
-matching the CRTs, 2x font scale.
+Limine: `limine-wallpaper.png` (a 3840x2160 KGB server-hall render, used exactly as
+delivered; Limine scales it to the screen) and `theme.conf`, the global options that
+go at the top of `/boot/limine.conf`: wallpaper, hidden key help, a fully
+transparent text box, phosphor-green text matching the CRTs, 2x font scale.
 
-The title is in the picture, not in `interface_branding`, because Limine's terminal
-maps text onto a 256-glyph CP437 font and cannot show Cyrillic. `make-wallpaper.sh`
-regenerates the wallpaper from `source-kgb_server_hall_4k.png`, a native 16:9
-3840x2160 render, so any 16:9 target only scales down and nothing is cropped; pass
-another resolution or title as arguments.
+Limine's terminal maps text onto a 256-glyph CP437 font and cannot show Cyrillic, so
+`interface_branding` stays unset. `make-wallpaper.sh` is optional: it paints a
+Cyrillic title into a copy of the wallpaper and darkens the left side for the menu
+text; point `wallpaper:` at its output and raise `term_margin` if you use it.
 
 Applying it is two commands, done by hand on purpose (this repo never writes to a
 bootloader):
 
 ```bash
-sudo cp assets/limine/limine-wallpaper.jpg /boot/limine-wallpaper.jpg   # /boot is the ESP on CachyOS
+sudo cp assets/limine/limine-wallpaper.png /boot/limine-wallpaper.png   # /boot is the ESP on CachyOS
 sudo cp /boot/limine.conf /boot/limine.conf.pre-theme
 cat assets/limine/theme.conf <(sudo cat /boot/limine.conf) | sudo tee /boot/limine.conf.new >/dev/null && sudo mv /boot/limine.conf.new /boot/limine.conf
 ```
