@@ -1,8 +1,21 @@
 #!/bin/bash
-# Handy - free, open-source, offline speech-to-text
-# Adds a Hyprland keybind (CTRL+SUPER+F8) that toggles transcription
-# and an autostart entry so Handy is ready to receive the IPC toggle.
-# NOTE: must run AFTER dotfiles-main.sh so the UserConfigs/ files exist.
+# Handy - free, open-source, offline speech-to-text.
+#
+# This script only installs the packages. Everything Handy needs on the desktop
+# side is owned by the dotfiles and arrives with dotfiles-main.sh:
+#   - UserScripts/handy-start.sh     the launcher (visible until a model is picked,
+#                                    hidden afterwards; exits quietly if handy is missing)
+#   - UserConfigs/UserKeybinds.lua   CTRL+SUPER+F8 -> notify + handy --toggle-transcription
+#   - UserConfigs/Startup_Apps.lua   the (commented-out) autostart line
+#
+# It used to write its own copy of the launcher over the shipped one and append a
+# second keybind and a second autostart handler. The two launchers drifted (one
+# checked settings.json, the real file is settings_store.json), the copy lacked the
+# missing-binary guard and the first-login hint, and the appended autostart baked
+# this machine's absolute $HOME into an otherwise portable config. Removed 2026-09-13:
+# a file has one owner, and for these three it is the dotfiles.
+#
+# NOTE: runs AFTER dotfiles-main.sh in install.sh, so the check below sees the files.
 
 handy_pkg=(
   handy-bin
@@ -32,78 +45,16 @@ for PKG in "${handy_pkg[@]}"; do
   install_package "$PKG" "$LOG"
 done
 
+# Report-only: the desktop integration comes from the dotfiles. Say so if it is not
+# there, rather than writing a second copy of it.
+HANDY_LAUNCHER="$HOME/.config/hypr/UserScripts/handy-start.sh"
 USER_KEYBINDS="$HOME/.config/hypr/UserConfigs/UserKeybinds.lua"
-STARTUP_APPS="$HOME/.config/hypr/UserConfigs/Startup_Apps.lua"
-USER_SCRIPTS_DIR="$HOME/.config/hypr/UserScripts"
-HANDY_LAUNCHER="$USER_SCRIPTS_DIR/handy-start.sh"
-
-# Wrapper that opens Handy visibly until a model is selected, then hidden after.
-# Lets the user see the UI on first login (to pick Parakeet V3) without it
-# popping up every subsequent boot.
-if [ -d "$USER_SCRIPTS_DIR" ]; then
-  cat > "$HANDY_LAUNCHER" <<'LAUNCHER'
-#!/bin/bash
-# First login → open Handy visibly so the user picks a model.
-# After a model is selected, start hidden on every subsequent login.
-SETTINGS="$HOME/.local/share/com.pais.handy/settings.json"
-if grep -q '"selected_model"[[:space:]]*:[[:space:]]*"[^"]\+"' "$SETTINGS" 2>/dev/null; then
-  exec handy --start-hidden
+if [ -x "$HANDY_LAUNCHER" ] && grep -q 'handy --toggle-transcription' "$USER_KEYBINDS" 2>/dev/null; then
+  echo "${OK} Launcher and CTRL+SUPER+F8 keybind are in place (from the dotfiles)." | tee -a "$LOG"
 else
-  exec handy
-fi
-LAUNCHER
-  chmod +x "$HANDY_LAUNCHER"
-  echo "${OK} Wrote $HANDY_LAUNCHER" | tee -a "$LOG"
-else
-  echo "${WARN} $USER_SCRIPTS_DIR not found — Handy will autostart hidden (model picker won't open on first login)." | tee -a "$LOG"
+  echo "${WARN} The dotfiles' Handy launcher/keybind were not found under ~/.config/hypr." | tee -a "$LOG"
+  echo "${NOTE} Select the 'dots' option (or run install-scripts/dotfiles-main.sh); handy.sh no longer writes them itself." | tee -a "$LOG"
 fi
 
-# Add Hyprland keybind (CTRL+SUPER+F8 → notify + toggle Handy)
-if [ -f "$USER_KEYBINDS" ]; then
-  if ! grep -q "handy --toggle-transcription" "$USER_KEYBINDS"; then
-    {
-      echo ""
-      echo "-- Handy speech-to-text: press to start, press again to stop & transcribe"
-      echo 'hl.bind("CTRL + SUPER + F8", hl.dsp.exec_cmd([[notify-send -t 1500 -i audio-input-microphone "Handy" "Toggling transcription" && handy --toggle-transcription]]), { description = "Handy toggle transcription" })'
-    } >> "$USER_KEYBINDS"
-    echo "${OK} Added Handy keybind (CTRL+SUPER+F8) to UserKeybinds.lua" | tee -a "$LOG"
-  else
-    echo "${INFO} Handy keybind already present in UserKeybinds.lua, skipping." | tee -a "$LOG"
-  fi
-else
-  echo "${WARN} $USER_KEYBINDS not found — install the dotfiles first to get the keybind." | tee -a "$LOG"
-fi
-
-# Autostart DISABLED by default to save RAM (~460MB: Handy + its embedded WebKit
-# processes). Handy is rarely used, so it's launched on demand via CTRL+SUPER+F8
-# instead. The line below is written commented-out so it's easy to re-enable:
-# uncomment it in ~/.config/hypr/UserConfigs/Startup_Apps.lua. The launcher's
-# visible-then-hidden logic is preserved in $HANDY_LAUNCHER for when you do.
-# NOTE: with autostart off, the first-login model picker won't open automatically —
-# run `handy` once manually to pick a model (Parakeet V3).
-if [ -f "$STARTUP_APPS" ]; then
-  if [ -x "$HANDY_LAUNCHER" ]; then
-    AUTOSTART_LINE="    -- hl.exec_cmd(\"$HANDY_LAUNCHER\")"
-  else
-    AUTOSTART_LINE="    -- hl.exec_cmd(\"handy --start-hidden\")"
-  fi
-  # The Lua config runs autostart from a hyprland.start handler, so the hint is
-  # a complete (commented-out) handler that works as soon as the line is uncommented.
-  if ! grep -qE 'hl\.exec_cmd\(.*(handy-start\.sh|"handy )' "$STARTUP_APPS"; then
-    {
-      echo ""
-      echo "-- Handy autostart disabled by default to save RAM — uncomment the hl.exec_cmd line to enable (launch on demand via CTRL+SUPER+F8)"
-      echo 'hl.on("hyprland.start", function()'
-      echo "$AUTOSTART_LINE"
-      echo "end)"
-    } >> "$STARTUP_APPS"
-    echo "${OK} Added Handy autostart (commented/disabled) to Startup_Apps.lua" | tee -a "$LOG"
-  else
-    echo "${INFO} Handy autostart already present in Startup_Apps.lua, skipping." | tee -a "$LOG"
-  fi
-else
-  echo "${WARN} $STARTUP_APPS not found — autostart not added." | tee -a "$LOG"
-fi
-
-printf "\n${NOTE} ${SKY_BLUE}Handy${RESET} installed. Autostart is ${YELLOW}disabled${RESET} to save RAM — run ${MAGENTA}handy${RESET} once manually to pick a model (${MAGENTA}Parakeet V3${RESET} recommended, auto-detects 25 languages) and let it download. Afterwards, ${YELLOW}CTRL+SUPER+F8${RESET} launches it on demand and toggles transcription. To autostart it again, uncomment the hl.exec_cmd line in ${SKY_BLUE}Startup_Apps.lua${RESET}.\n"
+printf "\n${NOTE} ${SKY_BLUE}Handy${RESET} installed. Autostart is ${YELLOW}disabled${RESET} to save RAM - run ${MAGENTA}handy${RESET} once to pick a model (${MAGENTA}Parakeet V3${RESET} recommended, auto-detects 25 languages) and let it download. Afterwards ${YELLOW}CTRL+SUPER+F8${RESET} toggles transcription. To autostart it, uncomment the handy-start.sh line in ${SKY_BLUE}~/.config/hypr/UserConfigs/Startup_Apps.lua${RESET}.\n"
 printf "\n%.0s" {1..2}
