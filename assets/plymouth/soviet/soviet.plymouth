@@ -1,0 +1,74 @@
+[Plymouth Theme]
+Name=Soviet
+Description=The repo logo on black, with the stock spinner and the LUKS prompt underneath. Ignores the firmware (BGRT) logo.
+ModuleName=two-step
+
+[two-step]
+Font=Cantarell 12
+TitleFont=Cantarell Light 30
+MonospaceFont=Adwaita Mono 12
+ImageDir=/usr/share/plymouth/themes/soviet
+# Layout, as fractions of (screen - element) so it scales from 1080p to 4K:
+#   logo (watermark.png)   0.35  -> roughly the upper-middle of the screen
+#   password dialog/title  0.68  -> clear of the 400 px logo even at 1080p
+#   spinner (animation)    0.80
+DialogHorizontalAlignment=.5
+DialogVerticalAlignment=.68
+TitleHorizontalAlignment=.5
+TitleVerticalAlignment=.68
+HorizontalAlignment=.5
+VerticalAlignment=.80
+WatermarkHorizontalAlignment=.5
+WatermarkVerticalAlignment=.35
+Transition=none
+TransitionDuration=0.0
+BackgroundStartColor=0x000000
+BackgroundEndColor=0x000000
+ProgressBarBackgroundColor=0x606060
+ProgressBarForegroundColor=0xffffff
+DialogClearsFirmwareBackground=true
+MessageBelowAnimation=true
+
+# UseFirmwareBackground=false is the whole point: the CachyOS theme paints the
+# motherboard's own logo (ACPI BGRT) as the background and adds a small
+# watermark. This one paints black and shows the repo logo instead, so with
+# "Boot Logo Display" disabled in the BIOS the vendor logo never appears.
+[boot-up]
+UseEndAnimation=false
+UseFirmwareBackground=false
+
+[shutdown]
+UseEndAnimation=false
+UseFirmwareBackground=false
+
+[reboot]
+UseEndAnimation=false
+UseFirmwareBackground=false
+
+[updates]
+SuppressMessages=true
+ProgressBarShowPercentComplete=true
+UseProgressBar=true
+Title=Installing Updates...
+SubTitle=Do not turn off your computer
+
+[system-upgrade]
+SuppressMessages=true
+ProgressBarShowPercentComplete=true
+UseProgressBar=true
+Title=Upgrading System...
+SubTitle=Do not turn off your computer
+
+[firmware-upgrade]
+SuppressMessages=true
+ProgressBarShowPercentComplete=true
+UseProgressBar=true
+Title=Upgrading Firmware...
+SubTitle=Do not turn off your computer
+
+[system-reset]
+SuppressMessages=true
+ProgressBarShowPercentComplete=true
+UseProgressBar=true
+Title=Resetting System...
+SubTitle=Do not turn off your computer

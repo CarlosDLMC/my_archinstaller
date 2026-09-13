@@ -2,6 +2,10 @@
 
 ## September 2026
 
+Added:
+
+- `plymouth` preset option (`install-scripts/plymouth.sh`, `assets/plymouth/soviet/`): a Plymouth theme with the repo logo on black instead of the CachyOS watermark over the motherboard logo. `auto` acts only where plymouth is already installed and hooked (CachyOS); it never edits `HOOKS` or the kernel command line
+
 Fixed (first audit of a fresh-machine run against this machine):
 
 - `Global_functions.sh`: `ISAUR=$(command -v yay || command -v paru)` under `set -e` killed any script that sourced it before an AUR helper existed. `locales.sh` runs before `yay.sh`, so on a fresh install the Russian locale was never generated and the clock, calendar and lock-screen date fell back to English with no error. Now `|| true`

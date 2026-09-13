@@ -106,6 +106,8 @@ handy="OFF"
 ly="OFF"
 nopasswd_sudo="OFF"
 printing="OFF"
+# "auto": only where plymouth is already installed and hooked into the initramfs.
+plymouth="auto"
 
 # Function to load preset file
 load_preset() {
@@ -325,15 +327,25 @@ if [ "$bluetooth_detected" == "true" ]; then
     echo "${NOTE} Bluetooth controller detected." | tee -a "$LOG"
 fi
 
+# Plymouth counts as "present" only when the distro also hooked it into the
+# initramfs - CachyOS does; a plain archinstall has neither. The theme alone is
+# harmless, but "auto" should not pull plymouth onto a machine that never asked.
+plymouth_detected=false
+if pacman -Qi plymouth &>/dev/null && grep -qE '^HOOKS=.*\bplymouth\b' /etc/mkinitcpio.conf 2>/dev/null; then
+    plymouth_detected=true
+    echo "${NOTE} Plymouth is installed and in the initramfs HOOKS." | tee -a "$LOG"
+fi
+
 # Resolve "auto" into ON/OFF from what was just detected. Only the preset loop
 # reads these - the interactive checklist below ships its own defaults - so an
 # interactive run is unaffected.
-for _hw in nvidia nouveau rog bluetooth; do
+for _hw in nvidia nouveau rog bluetooth plymouth; do
     [ "${!_hw}" == "auto" ] || continue
     case "$_hw" in
         nvidia|nouveau) _want="$nvidia_detected" ;;
         rog)            _want="$rog_detected" ;;
         bluetooth)      _want="$bluetooth_detected" ;;
+        plymouth)       _want="$plymouth_detected" ;;
     esac
     if [ "$_want" == "true" ]; then
         printf -v "$_hw" "ON"
@@ -395,6 +407,7 @@ options_command+=(
     "handy" "Install Handy speech-to-text (CTRL+SUPER+F8 toggle)?" "OFF"
     "nopasswd_sudo" "Passwordless sudo for wheel? (needed by the bar's VPN widget)" "OFF"
     "printing" "Install CUPS printing? (nothing else pulls in a print stack)" "OFF"
+    "plymouth" "Plymouth boot splash with the repo logo? (replaces the distro's)" "OFF"
 )
 
 # With a preset, skip the menu entirely and derive the selection from the
@@ -406,7 +419,7 @@ if [ "$preset_mode" == "true" ]; then
     selected_options=""
     for _opt in ly nvidia nouveau input_group gtk_themes bluetooth thunar \
                 quickshell xdph zsh pokemon rog dots handy nopasswd_sudo \
-                printing; do
+                printing plymouth; do
         [ "${!_opt}" == "ON" ] || continue
 
         # Respect the same conditions the interactive menu applies before it
@@ -717,6 +730,10 @@ for option in "${options[@]}"; do
         printing)
             echo "${INFO} Installing ${SKY_BLUE}CUPS printing...${RESET}" | tee -a "$LOG"
             execute_script "printing.sh"
+            ;;
+        plymouth)
+            echo "${INFO} Installing the ${SKY_BLUE}Plymouth boot splash${RESET} theme..." | tee -a "$LOG"
+            execute_script "plymouth.sh"
             ;;
         *)
             echo "Unknown option: $option" | tee -a "$LOG"

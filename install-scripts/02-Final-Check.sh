@@ -187,6 +187,11 @@ if selected handy; then
         command -v handy
 fi
 
+if selected plymouth; then
+    check_outcome "plymouth default theme is not 'soviet' (install-scripts/plymouth.sh)" \
+        bash -c '[ "$(plymouth-set-default-theme 2>/dev/null)" = soviet ]'
+fi
+
 # Log missing packages
 if [ ${#missing[@]} -eq 0 ] && [ ${#local_missing[@]} -eq 0 ] && [ ${#outcome_failures[@]} -eq 0 ]; then
     echo "${OK} GREAT! All ${YELLOW}essential packages${RESET} are installed and every selected component checked out." | tee -a "$LOG"
