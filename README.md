@@ -510,7 +510,11 @@ title, phosphor-green text matching the CRTs, 2x font scale.
 
 The title is in the picture, not in `interface_branding`, because Limine's terminal
 maps text onto a 256-glyph CP437 font and cannot show Cyrillic. `make-wallpaper.sh`
-regenerates the wallpaper from `source-soviet_db.jpg` for another resolution or title.
+regenerates the wallpaper for another resolution or title. It prefers
+`source-soviet_db-4x.jpg`, a Real-ESRGAN 4x upscale of the 1168 px original
+(`realesrgan-ncnn-vulkan-bin` from the AUR, model `realesrgan-x4plus`, seven seconds
+on the Radeon), so the 2560 px crop scales down and stays sharp instead of being a
+2.2x blow-up of the original.
 
 Applying it is two commands, done by hand on purpose (this repo never writes to a
 bootloader):
