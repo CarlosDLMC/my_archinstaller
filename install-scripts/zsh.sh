@@ -105,7 +105,13 @@ if command -v zsh >/dev/null; then
 
   # Copy pokefetch.jsonc fastfetch config - from the dotfiles, which are the
   # single copy now that the duplicate assets/fastfetch/ has gone.
-  if [ -f 'Hyprland-Dots/config/fastfetch/pokefetch.jsonc' ]; then
+  #
+  # Skipped when 'dots' is selected: copy.sh deploys the whole fastfetch/
+  # directory later and backs up anything already there, so creating it here
+  # left a fastfetch.backup-<stamp> holding this one file on every fresh install.
+  if [[ " ${INSTALL_SELECTED_OPTIONS:-} " == *" dots "* ]]; then
+      echo "${NOTE} pokefetch.jsonc comes with the dotfiles (dots selected), not copied here." 2>&1 | tee -a "$LOG"
+  elif [ -f 'Hyprland-Dots/config/fastfetch/pokefetch.jsonc' ]; then
       mkdir -p ~/.config/fastfetch
       cp 'Hyprland-Dots/config/fastfetch/pokefetch.jsonc' ~/.config/fastfetch/
   fi

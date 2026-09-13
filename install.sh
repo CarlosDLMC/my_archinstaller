@@ -378,7 +378,13 @@ fi
 for _hw in nvidia nouveau rog bluetooth plymouth limine; do
     [ "${!_hw}" == "auto" ] || continue
     case "$_hw" in
-        nvidia|nouveau) _want="$nvidia_detected" ;;
+        nvidia)         _want="$nvidia_detected" ;;
+        # nouveau follows the *decision* on nvidia, not the detection. It used to
+        # follow nvidia_detected, so nvidia="OFF" plus nouveau="auto" on an NVIDIA
+        # machine blacklisted nouveau without installing the proprietary driver -
+        # no GPU driver at all. nvidia is resolved earlier in this loop, so it is
+        # already ON/OFF here.
+        nouveau)        if [ "$nvidia" == "ON" ]; then _want=true; else _want=false; fi ;;
         rog)            _want="$rog_detected" ;;
         bluetooth)      _want="$bluetooth_detected" ;;
         plymouth)       _want="$plymouth_detected" ;;
@@ -603,10 +609,24 @@ if [[ " $selected_options " == *" nopasswd_sudo "* ]]; then
     fi
 fi
 
+# The three steps below are the base everything else installs onto. Each exits
+# non-zero when it fails (pacman.sh on a failed full upgrade, locales.sh on a
+# failed locale-gen), and used to be ignored here: the run carried on and put
+# ~150 packages onto a partial upgrade, which is exactly what pacman.sh's own
+# error message says not to do. Stop while the real error is still on screen.
+run_required() {
+    local script="$1"
+    if ! execute_script "$script"; then
+        echo "${ERROR} ${script} failed. Nothing after it can be trusted, so the install stops here." | tee -a "$LOG"
+        echo "${NOTE} Read the error above (also in Install-Logs/), fix it, and re-run the installer." | tee -a "$LOG"
+        exit 1
+    fi
+}
+
 # Ensuring base-devel is installed
-execute_script "00-base.sh"
+run_required "00-base.sh"
 sleep 1
-execute_script "pacman.sh"
+run_required "pacman.sh"
 sleep 1
 
 # Generate the locales the dots reference. Runs before the dotfiles are copied,
@@ -614,7 +634,7 @@ sleep 1
 # LC_TIME=ru_RU.UTF-8, that locale actually exists. Setting LC_TIME to an
 # ungenerated locale does not fail - glibc falls back to C in silence.
 echo "${INFO} Generating ${SKY_BLUE}locales${RESET}..." | tee -a "$LOG"
-execute_script "locales.sh"
+run_required "locales.sh"
 sleep 1
 
 # Execute AUR helper script after other installations if applicable
