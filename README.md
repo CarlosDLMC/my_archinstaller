@@ -502,16 +502,21 @@ black or transparent background) and re-run:
 
 CachyOS installs Limine bare: the pretty menu on the live ISO is GRUB with the
 CachyOS GRUB theme, not Limine. `assets/limine/` carries a theme for the installed
-Limine: `limine-wallpaper.png` (2560x1440, the logo on a dark red glow, stretched to
-any 16:9 screen) and `theme.conf`, the global options that go at the top of
-`/boot/limine.conf` - wallpaper, gold branding line, hidden key help, transparent
-text box, a Soviet palette and 2x font scale.
+Limine: `limine-wallpaper.jpg` (a KGB data-centre scene, 2560x1440, stretched to any
+16:9 screen, with the title "ЗАГРУЗОЧНОЕ МЕНЮ" painted in) and `theme.conf`, the
+global options that go at the top of `/boot/limine.conf`: wallpaper, hidden key help,
+a fully transparent text box with a large top margin so the menu sits below the
+title, phosphor-green text matching the CRTs, 2x font scale.
+
+The title is in the picture, not in `interface_branding`, because Limine's terminal
+maps text onto a 256-glyph CP437 font and cannot show Cyrillic. `make-wallpaper.sh`
+regenerates the wallpaper from `source-soviet_db.jpg` for another resolution or title.
 
 Applying it is two commands, done by hand on purpose (this repo never writes to a
 bootloader):
 
 ```bash
-sudo cp assets/limine/limine-wallpaper.png /boot/limine-wallpaper.png   # /boot is the ESP on CachyOS
+sudo cp assets/limine/limine-wallpaper.jpg /boot/limine-wallpaper.jpg   # /boot is the ESP on CachyOS
 sudo cp /boot/limine.conf /boot/limine.conf.pre-theme
 cat assets/limine/theme.conf <(sudo cat /boot/limine.conf) | sudo tee /boot/limine.conf.new >/dev/null && sudo mv /boot/limine.conf.new /boot/limine.conf
 ```
@@ -522,7 +527,8 @@ Config enrollment (`ENABLE_ENROLL_LIMINE_CONFIG` in `/etc/default/limine`) is of
 default; if you turned it on, run `sudo limine-enroll-config` after editing. A
 missing wallpaper is skipped silently, an unknown key is ignored, so a typo degrades
 the look rather than the boot. The selected entry is drawn in reverse video, which is
-why the highlight bar takes the `term_foreground` colour.
+why the highlight bar takes the `term_foreground` colour. Limine still draws its box
+frame around the entries; that is part of the program, not the theme.
 
 ### Firmware boot logo (the picture before the bootloader)
 
