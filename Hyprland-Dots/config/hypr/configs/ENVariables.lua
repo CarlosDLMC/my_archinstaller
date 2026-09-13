@@ -48,12 +48,28 @@ hl.env("MOZ_ENABLE_WAYLAND", "1")
 ---- Electron > 28 (auto picks Wayland if possible, X11 otherwise) ----
 hl.env("ELECTRON_OZONE_PLATFORM_HINT", "auto")
 
----- NVIDIA (uncomment when an nvidia GPU is detected) ----
+---- NVIDIA ----
 -- https://wiki.hypr.land/Nvidia/
--- hl.env("LIBVA_DRIVER_NAME", "nvidia")
--- hl.env("__GLX_VENDOR_LIBRARY_NAME", "nvidia")
--- hl.env("NVD_BACKEND", "direct")
--- hl.env("GSK_RENDERER", "ngl")
+-- Set automatically when every GPU in the machine is NVIDIA (PCI vendor 0x10de
+-- in /sys/class/drm). On a hybrid laptop the iGPU drives the desktop and
+-- forcing GLX/VA-API to NVIDIA would be wrong, so nothing is set there.
+local function nvidia_only()
+    local p = io.popen("cat /sys/class/drm/card*/device/vendor 2>/dev/null | sort -u")
+    if not p then return false end
+    local seen, only = false, true
+    for v in p:lines() do
+        seen = true
+        if v ~= "0x10de" then only = false end
+    end
+    p:close()
+    return seen and only
+end
+if nvidia_only() then
+    hl.env("LIBVA_DRIVER_NAME", "nvidia")
+    hl.env("__GLX_VENDOR_LIBRARY_NAME", "nvidia")
+    hl.env("NVD_BACKEND", "direct")
+    hl.env("GSK_RENDERER", "ngl")
+end
 -- Additional nvidia ENVs, activate with care:
 -- hl.env("GBM_BACKEND", "nvidia-drm")
 -- hl.env("__GL_GSYNC_ALLOWED", "1")           -- adaptive Vsync

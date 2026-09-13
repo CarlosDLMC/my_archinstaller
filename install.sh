@@ -235,7 +235,7 @@ else
 fi
 
 # List of services to check for active login managers
-services=("gdm.service" "gdm3.service" "lightdm.service" "lxdm.service")
+services=("gdm.service" "gdm3.service" "lightdm.service" "lxdm.service" "sddm.service")
 
 # Function to check if any login services are active
 check_services_running() {

@@ -13,6 +13,24 @@ DropdownWidget {
     popupHeight: Math.min(wifiNetworks.length * 40 + 50, 420)
     popupXOffset: 250
 
+    // Hidden on a machine without a wireless interface (a wired desktop), the
+    // same way the battery and bluetooth widgets hide themselves. Otherwise
+    // the bar showed a permanent "disconnected" icon whose popup listed
+    // nothing, since nmcli has no wifi device to scan with.
+    property bool hasWifi: false
+    visible: hasWifi
+
+    Process {
+        id: wifiPresenceProc
+        command: ["sh", "-c", "ls -d /sys/class/net/*/wireless >/dev/null 2>&1 && echo yes || echo no"]
+        stdout: SplitParser {
+            onRead: data => {
+                if (data) wifiWidget.hasWifi = (data.trim() === "yes")
+            }
+        }
+        running: true
+    }
+
     // Widest SSID in the current list, measured in the real font.
     property string longestSsid: {
         var best = wifiSSID || ""
