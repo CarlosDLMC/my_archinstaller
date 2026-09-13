@@ -80,5 +80,8 @@ if ! grep -qw splash /proc/cmdline; then
   echo "${NOTE} Add 'splash' (and 'quiet') to the cmdline in your bootloader entry. This repo does not edit bootloaders." | tee -a "$LOG"
 fi
 echo "${NOTE} To hide the motherboard's own logo as well, disable 'Boot Logo Display' in the BIOS." | tee -a "$LOG"
+if [ -f /boot/limine.conf ] && ! grep -q 'my_archinstaller Limine theme' /boot/limine.conf 2>/dev/null; then
+  echo "${NOTE} Limine is installed and unthemed. The matching boot-menu theme is in assets/limine/ - see README 'Limine boot menu theme' for the two commands (not applied here: this repo does not write to bootloaders)." | tee -a "$LOG"
+fi
 
 printf "\n%.0s" {1..1}
