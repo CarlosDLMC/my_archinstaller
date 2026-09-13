@@ -124,7 +124,6 @@ config_dirs=(
     "cava"
     "Kvantum"
     "Mousepad"
-    "mpv"
     "qt5ct"
     "qt6ct"
     "Thunar"
@@ -162,7 +161,16 @@ for dir in "${config_dirs[@]}"; do
         # and the third fails outright with "Directory not empty" - silently,
         # since the error was discarded - leaving the old config in place to be
         # merged over rather than replaced.
-        if [ -d "$HOME/.config/$dir" ]; then
+        # An existing directory that is byte-for-byte the repo copy holds
+        # nothing worth keeping (diff -rq also reports files that exist on one
+        # side only, so a hypr/ carrying the first-boot marker or a rofi/ with
+        # its wallpaper link still counts as different and is still backed up).
+        # Without this, anything another install script had already put in
+        # place - or a re-run right after a clean install - left a *.backup-<stamp>
+        # directory of identical content behind.
+        if [ -d "$HOME/.config/$dir" ] && diff -rq "$SCRIPT_DIR/config/$dir" "$HOME/.config/$dir" >/dev/null 2>&1; then
+            echo "  ${NOTE} Existing $dir is identical to the repo copy - no backup needed"
+        elif [ -d "$HOME/.config/$dir" ]; then
             # The stamp only has second resolution, so two runs inside the same
             # second would collide and mv would nest again. Find a free name.
             backup="$HOME/.config/$dir.backup-$BACKUP_STAMP"

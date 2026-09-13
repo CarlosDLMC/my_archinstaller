@@ -22,9 +22,16 @@ LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_ly.log"
 printf "${NOTE} Installing ly display manager...\n"
 
 for PKG1 in "${ly_package[@]}"; do
-  install_package "$PKG1" 2>&1 | tee -a "$LOG"
-  if [ "${PIPESTATUS[0]}" -ne 0 ]; then
-    echo -e "\e[1A\e[K${ERROR} - $PKG1 Package installation failed, Please check the installation logs"
+  install_package "$PKG1" "$LOG"
+done
+
+# install_package records a failure in the manifest but returns 0, so the old
+# PIPESTATUS test here could never fire. Check the package itself: without ly
+# there is nothing to enable, and disabling the other display managers would
+# leave the machine with no login screen at all.
+for PKG1 in "${ly_package[@]}"; do
+  if ! pacman -Qi "$PKG1" &>/dev/null; then
+    echo "${ERROR} $PKG1 did not install - leaving the display managers alone. Check $LOG" | tee -a "$LOG"
     exit 1
   fi
 done

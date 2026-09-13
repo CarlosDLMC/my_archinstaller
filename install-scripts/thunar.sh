@@ -47,7 +47,19 @@ printf "\n%.0s" {1..1}
  #
  # gtk-3.0 is in this list and never was in assets/ at all, so this arm printed
  # a copy error on every single fresh install.
-for DIR1 in gtk-3.0 Thunar xfce4; do
+#
+# Only when the dotfiles are NOT selected. With 'dots' on, dotfiles-main.sh
+# deploys these three directories a few steps later - and copy.sh backs up
+# whatever is already there, so pre-copying them here only produced three
+# *.backup-<stamp> directories of identical content on every fresh install.
+# install.sh exports the selection as INSTALL_SELECTED_OPTIONS.
+if [[ " ${INSTALL_SELECTED_OPTIONS:-} " == *" dots "* ]]; then
+  echo -e "${NOTE} Thunar/GTK configs come with the dotfiles (dots selected), not copied here." 2>&1 | tee -a "$LOG"
+  DIRS_TO_COPY=()
+else
+  DIRS_TO_COPY=(gtk-3.0 Thunar xfce4)
+fi
+for DIR1 in "${DIRS_TO_COPY[@]}"; do
   DIRPATH=~/.config/$DIR1
   if [ -d "$DIRPATH" ]; then
     echo -e "${NOTE} Config for ${MAGENTA}$DIR1${RESET} found, no need to copy." 2>&1 | tee -a "$LOG"

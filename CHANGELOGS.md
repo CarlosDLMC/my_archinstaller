@@ -2,6 +2,15 @@
 
 ## September 2026
 
+Fixed (2026-09-13, review of the whole install path):
+
+- `install.sh`: `nouveau="auto"` followed GPU *detection*, so `nvidia="OFF"` plus the default `nouveau="auto"` on an NVIDIA machine blacklisted nouveau without installing the proprietary driver - no GPU driver at all. It now follows the resolved `nvidia` decision, as the preset comment always claimed
+- `install.sh`: `00-base.sh`, `pacman.sh` and `locales.sh` exit non-zero on failure but the run ignored it and carried on - a failed full upgrade was followed by ~150 installs onto a partial upgrade. These three now abort the run (`run_required`)
+- `ly.sh`: the post-install PIPESTATUS check could never fire (`install_package` returns 0 on failure); the package itself is checked now, and the other display managers are left alone when ly did not land
+- Backup clutter on a clean install: `thunar.sh` pre-copied `gtk-3.0`/`Thunar`/`xfce4` and `zsh.sh` created `fastfetch/` before the dotfiles step, so `copy.sh` backed up four directories of identical content on every fresh run. Both now skip that when `dots` is selected, and `copy.sh` skips the backup whenever the existing directory is byte-for-byte the repo copy (a directory carrying runtime state - the first-boot marker, wallust output, the rofi wallpaper link - still differs and is still backed up)
+- `copy.sh`: dropped `mpv` from the directory list; the repo has no `config/mpv`, so it warned on every run
+- Removed `assets/hyprland-install/`, unused upstream leftovers nothing referenced
+
 Added:
 
 - Review pass (2026-09-13, four reviewers over the whole repo), fixed:
