@@ -54,6 +54,7 @@ then continue with the [Installation Steps](#installation-steps) below.
 - **Soviet TUI Lock Screen** matching ly, auto-sized to any display (720p → 4K)
 - **Offline Speech-to-Text** with Handy (toggle via SUPER + CTRL + F8)
 - **Whole-Workspace Move** with SUPER + ALT + number, rebuilding the tiling layout window for window
+- **Boot Splash** with the repo logo (Plymouth, optional - replaces the CachyOS one)
 - **All Essential Packages** pre-configured
 
 ## Quick Install (Fresh Arch System)
@@ -465,6 +466,37 @@ have to remember to flip when you move the preset to another machine.
 Laptop detection lives in `V.is_laptop` (`configs/Vars.lua`). A battery is the
 primary signal; DMI `chassis_type` is the fallback, so a laptop running with a
 dead or removed battery is still treated as one.
+
+### Boot splash (Plymouth)
+
+The `plymouth` preset option installs a Plymouth theme (`assets/plymouth/soviet/`)
+that paints the repo logo on black, with the stock spinner and the LUKS password
+prompt underneath. It is what you see between the firmware and ly.
+
+On CachyOS the stock theme keeps the motherboard's own logo (the ACPI BGRT
+image) as background and adds a CachyOS watermark at the bottom. This theme
+ignores the firmware image entirely, so disabling **Boot Logo Display** in the
+BIOS leaves only black, then the logo. That is the closest you can get to a
+custom vendor logo without flashing modified firmware, which ASUS boards reject
+through every official path.
+
+- `plymouth="auto"` (the shipped preset) acts only where plymouth is already
+  installed **and** in the mkinitcpio `HOOKS` - CachyOS does both. On a plain
+  Arch install it does nothing.
+- `plymouth="ON"` installs plymouth and the theme anywhere, then prints the two
+  steps it deliberately does not do: adding the `plymouth` hook to
+  `/etc/mkinitcpio.conf` and `splash` to the kernel command line. The command
+  line lives in the bootloader entry, and this repo never writes to a
+  bootloader.
+
+Only `soviet.plymouth` and `watermark.png` are in the repo; the spinner frames
+and dialog artwork are copied at install time from plymouth's own `spinner`
+theme. To change the picture, replace `watermark.png` (about 400 px tall, on a
+black or transparent background) and re-run:
+
+```bash
+./install-scripts/plymouth.sh
+```
 
 ### Printing
 
