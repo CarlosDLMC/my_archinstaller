@@ -65,13 +65,27 @@ echo "${OK} Backup kept at $CONF.pre-theme" | tee -a "$LOG"
 sudo cp "$WALL" "$ESP_DIR/limine-wallpaper.png"
 echo "${OK} Wallpaper copied to $ESP_DIR/limine-wallpaper.png ($(stat -c %s "$WALL") bytes)" | tee -a "$LOG"
 
+# Enrollment on but the enroll tool missing would leave a config Limine refuses at
+# boot - decide that BEFORE touching the file.
+ENROLL=no
+if grep -qE '^\s*ENABLE_ENROLL_LIMINE_CONFIG\s*=\s*"?yes"?' /etc/default/limine 2>/dev/null; then
+  if command -v limine-enroll-config &>/dev/null; then
+    ENROLL=yes
+  else
+    echo "${ERROR} ENABLE_ENROLL_LIMINE_CONFIG=yes but limine-enroll-config is not installed - not editing $CONF." | tee -a "$LOG"
+    exit 1
+  fi
+fi
+
 # 3. Rewrite: theme block on top (replacing an existing one), `timeout: no`, rest untouched.
 TMP="$(mktemp)"
 sudo cat "$CONF" > "$TMP.orig"
 python3 - "$TMP.orig" "$THEME" "$TMP" "$MARK_START" "$MARK_END" <<'EOF'
 import sys
 orig, theme, out, ms, me = sys.argv[1:6]
-cur = open(orig).read(); block = open(theme).read().rstrip('\n') + '\n\n'
+cur = open(orig, newline='').read(); block = open(theme).read().rstrip('\n') + '\n\n'
+nl = '\r\n' if '\r\n' in cur else '\n'
+cur = cur.replace('\r\n', '\n')
 if ms in cur and me in cur:
     a = cur.index(ms); b = cur.index(me) + len(me) + 1
     rest = cur[b:].lstrip('\n')
@@ -83,7 +97,7 @@ for i, l in enumerate(lines):
         lines[i] = 'timeout: no'; seen = True; break
 if not seen:
     lines.insert(0, 'timeout: no')
-open(out, 'w').write(block + '\n'.join(lines))
+open(out, 'w', newline='').write((block + '\n'.join(lines)).replace('\n', nl))
 EOF
 
 # 4. Safety check: everything from the first OS entry ("/" at column 0) down must be identical.
@@ -94,19 +108,22 @@ if ! diff -q <(entries "$TMP.orig") <(entries "$TMP") >/dev/null; then
   rm -f "$TMP" "$TMP.orig"; exit 1
 fi
 sudo cp "$TMP" "$CONF"; sudo sync
-rm -f "$TMP" "$TMP.orig"
+# $TMP.orig is THIS run's pre-image and stays until enrollment is settled: the
+# .pre-theme file is the first-ever backup and may predate kernel updates.
+rm -f "$TMP"
 echo "${OK} Theme block written, timeout set to 'no' (menu waits for a choice)." | tee -a "$LOG"
 
 # 5. Enrolled config? Then the new hash must be enrolled or Limine will refuse the file.
-if grep -qE '^\s*ENABLE_ENROLL_LIMINE_CONFIG\s*=\s*"?yes"?' /etc/default/limine 2>/dev/null && command -v limine-enroll-config &>/dev/null; then
+if [ "$ENROLL" = yes ]; then
   echo "${NOTE} Config enrollment is enabled - re-enrolling the new limine.conf hash..." | tee -a "$LOG"
   if sudo limine-enroll-config >> "$LOG" 2>&1; then
     echo "${OK} Config hash enrolled." | tee -a "$LOG"
   else
-    echo "${ERROR} limine-enroll-config failed. Restoring the backup so the machine still boots." | tee -a "$LOG"
-    sudo cp "$CONF.pre-theme" "$CONF"; sudo sync; exit 1
+    echo "${ERROR} limine-enroll-config failed. Restoring the config from before this run so the machine still boots." | tee -a "$LOG"
+    sudo cp "$TMP.orig" "$CONF"; sudo sync; rm -f "$TMP.orig"; exit 1
   fi
 fi
+rm -f "$TMP.orig"
 
 sudo grep -qE '^wallpaper: boot\(\):/limine-wallpaper.png' "$CONF" && sudo grep -qE '^timeout: no' "$CONF" \
   && echo "${OK} Limine menu themed. Revert any time with: sudo cp $CONF.pre-theme $CONF" | tee -a "$LOG"

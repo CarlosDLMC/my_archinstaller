@@ -37,8 +37,23 @@ printf " You can enable it from the bar widget when needed.\n"
 
 # Add sudoers rule for passwordless bluetooth control
 printf " Setting up ${YELLOW}passwordless bluetooth control${RESET}...\n"
-echo "$USER ALL=(ALL) NOPASSWD: /usr/bin/rfkill, /usr/bin/systemctl start bluetooth, /usr/bin/systemctl stop bluetooth" | sudo tee /etc/sudoers.d/bluetooth-toggle 2>&1 | tee -a "$LOG"
-sudo chmod 440 /etc/sudoers.d/bluetooth-toggle 2>&1 | tee -a "$LOG"
+# Built in a temp file and validated with visudo first: a malformed file in
+# sudoers.d (e.g. an empty $USER) makes EVERY sudo refuse to run.
+BT_USER="${USER:-$(id -un)}"
+if [ -z "$BT_USER" ]; then
+  echo "${ERROR} Cannot determine the user name - not writing a sudoers rule." | tee -a "$LOG"
+else
+  BT_RULE="$(mktemp)"
+  echo "$BT_USER ALL=(ALL) NOPASSWD: /usr/bin/rfkill, /usr/bin/systemctl start bluetooth, /usr/bin/systemctl stop bluetooth" > "$BT_RULE"
+  if sudo visudo -c -f "$BT_RULE" >/dev/null 2>&1; then
+    sudo install -m 0440 -o root -g root "$BT_RULE" /etc/sudoers.d/bluetooth-toggle 2>&1 | tee -a "$LOG"
+    echo "${OK} sudoers rule for the bar's bluetooth toggle installed" | tee -a "$LOG"
+  else
+    echo "${ERROR} Generated sudoers rule failed validation - NOT installing it" | tee -a "$LOG"
+    sudo visudo -c -f "$BT_RULE" 2>&1 | tee -a "$LOG"
+  fi
+  rm -f "$BT_RULE"
+fi
 
 # Disable blueman auto-start to save RAM (bar widget handles bluetooth)
 printf " Disabling ${YELLOW}blueman auto-start${RESET} (saves ~130MB RAM)...\n"
