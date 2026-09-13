@@ -43,10 +43,27 @@ if pacman -Qs hyprland > /dev/null; then
     done
 fi
 
+# A kernel module may already be installed. CachyOS's installer (chwd) puts
+# the prebuilt `linux-cachyos-nvidia-open` on NVIDIA machines; it provides
+# NVIDIA-MODULE, and nvidia-open-dkms conflicts with that. Under --noconfirm
+# pacman refuses the swap, the final check reports it missing and the run
+# refuses to reboot - for a GPU that already works. So when NVIDIA-MODULE is
+# satisfied by something other than nvidia-open-dkms, keep that module and
+# skip the dkms package and the kernel headers it would need.
+skip_dkms=false
+if pacman -T NVIDIA-MODULE >/dev/null 2>&1 && ! pacman -Q nvidia-open-dkms >/dev/null 2>&1; then
+  skip_dkms=true
+  provider=$(pacman -Qsq 'nvidia' | grep -E 'nvidia-open|nvidia.*dkms|linux-.*-nvidia' | head -1)
+  echo "${NOTE} NVIDIA kernel module already installed (${SKY_BLUE}${provider:-unknown package}${RESET}); keeping it, not installing nvidia-open-dkms." | tee -a "$LOG"
+fi
+
 # Install additional Nvidia packages
 printf "${YELLOW} Installing ${SKY_BLUE}Nvidia Packages and Linux headers${RESET}...\n"
 for krnl in $(cat /usr/lib/modules/*/pkgbase); do
   for NVIDIA in "${krnl}-headers" "${nvidia_pkg[@]}"; do
+    if [ "$skip_dkms" == "true" ] && [[ "$NVIDIA" == "nvidia-open-dkms" || "$NVIDIA" == "${krnl}-headers" ]]; then
+      continue
+    fi
     install_package "$NVIDIA" "$LOG"
   done
 done

@@ -73,8 +73,13 @@ fi
 echo -e "${CAT} ${MAGENTA}Pacman.conf${RESET} spicing up completed ${RESET}" 2>&1 | tee -a "$LOG"
 
 
-# updating pacman.conf
-printf "\n%s - ${SKY_BLUE}Synchronizing Pacman Repo${RESET}\n" "${INFO}"
-sudo pacman -Sy
+# Full upgrade, not a bare `-Sy`. Everything after this point installs ~150
+# packages against the freshly synced databases; on a system that was not
+# upgraded first (a fresh ISO install, in particular CachyOS with an AUR helper
+# already present, where yay.sh/paru.sh and their -Syu never run) that is a
+# partial upgrade and Hyprland/quickshell fail at first login with missing
+# libraries. Upgrading here makes the run safe on every path.
+printf "\n%s - ${SKY_BLUE}Synchronizing repos and upgrading the system${RESET}\n" "${INFO}"
+sudo pacman -Syu --noconfirm 2>&1 | tee -a "$LOG"
 
 printf "\n%.0s" {1..2}

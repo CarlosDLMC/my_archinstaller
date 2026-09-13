@@ -26,6 +26,14 @@ select exactly this and nothing else:
   (especially **Hyprland** - it brings SDDM and its own bar, which would fight
   ly and the Quickshell bar), Firefox, both printing groups and accessibility.
 
+If the machine has an NVIDIA GPU, the CachyOS installer already puts its
+prebuilt kernel module (`linux-cachyos-nvidia-open`) on it. `nvidia.sh` sees
+that and keeps it instead of installing `nvidia-open-dkms`, which would
+conflict with it; the rest of the NVIDIA setup (mkinitcpio modules, modeset
+options, nouveau blacklist) runs the same either way. The NVIDIA environment
+variables in `configs/ENVariables.lua` turn themselves on when every GPU in the
+machine is NVIDIA, and stay off on hybrid laptops.
+
 git is not part of that selection, so after the first login:
 
 ```bash
