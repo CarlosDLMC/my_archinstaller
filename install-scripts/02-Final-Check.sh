@@ -192,6 +192,11 @@ if selected plymouth; then
         bash -c '[ "$(plymouth-set-default-theme 2>/dev/null)" = soviet ]'
 fi
 
+if selected limine; then
+    check_outcome "limine.conf has no theme block / wallpaper missing (install-scripts/limine.sh)" \
+        bash -c 'for c in /boot/limine.conf /efi/limine.conf /boot/efi/limine.conf; do sudo test -f "$c" || continue; sudo grep -q "my_archinstaller Limine theme" "$c" && sudo test -f "$(dirname "$c")/limine-wallpaper.png" && exit 0; done; exit 1'
+fi
+
 # Log missing packages
 if [ ${#missing[@]} -eq 0 ] && [ ${#local_missing[@]} -eq 0 ] && [ ${#outcome_failures[@]} -eq 0 ]; then
     echo "${OK} GREAT! All ${YELLOW}essential packages${RESET} are installed and every selected component checked out." | tee -a "$LOG"
