@@ -18,6 +18,18 @@ BLUE="$(tput setaf 4)"
 SKY_BLUE="$(tput setaf 6)"
 RESET="$(tput sgr0)"
 
+# Check if running as root. If root, script will exit.
+#
+# Before anything touches the filesystem: this used to come after the
+# Install-Logs mkdir, so a stray `sudo ./install.sh` created a root-owned
+# Install-Logs/ and log file, exited here, and the next (correct) run as the
+# user died with "permission denied" truncating the failed-package manifest.
+if [[ $EUID -eq 0 ]]; then
+    echo "${ERROR}  This script should ${WARNING}NOT${RESET} be executed as root!! Run it as your user: ./install.sh ... - it calls sudo itself. Exiting......."
+    printf "\n%.0s" {1..2} 
+    exit 1
+fi
+
 # Create Directory for Install Logs
 if [ ! -d Install-Logs ]; then
     mkdir Install-Logs
@@ -25,13 +37,6 @@ fi
 
 # Set the name of the log file to include the current date and time
 LOG="Install-Logs/01-Hyprland-Install-Scripts-$(date +%Y%m%d-%H%M%S).log"
-
-# Check if running as root. If root, script will exit
-if [[ $EUID -eq 0 ]]; then
-    echo "${ERROR}  This script should ${WARNING}NOT${RESET} be executed as root!! Exiting......." | tee -a "$LOG"
-    printf "\n%.0s" {1..2} 
-    exit 1
-fi
 
 # Reset the failed-package manifest that Global_functions.sh appends to and
 # 02-Final-Check.sh reads. Truncated per run so a failure from a previous
@@ -279,12 +284,31 @@ if lspci | grep -i "nvidia" &> /dev/null; then
     fi
 fi
 
-# Check if this is an ASUS laptop (asusctl/supergfxctl target ROG hardware).
-# DMI is the same question rog="ON" was asking the user to answer by hand.
+# Check if this is an ASUS LAPTOP (asusctl/supergfxctl target ROG laptops: fan
+# curves, keyboard backlight, hybrid-GPU switching). DMI is the same question
+# rog="ON" was asking the user to answer by hand.
+#
+# Vendor alone is not enough: a desktop built on an ASUS motherboard reports
+# sys_vendor "ASUS" too, and got asusctl plus an enabled supergfxd for a GPU
+# switch it does not have. So it must also look like a laptop - a battery in
+# /sys/class/power_supply, or a portable DMI chassis type (8-11 and 14), the
+# same test configs/Vars.lua uses to skip the laptop keybinds.
+is_laptop=false
+if ls -d /sys/class/power_supply/BAT* >/dev/null 2>&1; then
+    is_laptop=true
+else
+    case "$(cat /sys/class/dmi/id/chassis_type 2>/dev/null)" in
+        8|9|10|11|14) is_laptop=true ;;
+    esac
+fi
 rog_detected=false
 if grep -qi 'asus' /sys/class/dmi/id/sys_vendor 2>/dev/null; then
-    rog_detected=true
-    echo "${NOTE} ASUS hardware detected (${SKY_BLUE}$(cat /sys/class/dmi/id/sys_vendor)${RESET})." | tee -a "$LOG"
+    if [ "$is_laptop" == "true" ]; then
+        rog_detected=true
+        echo "${NOTE} ASUS laptop detected (${SKY_BLUE}$(cat /sys/class/dmi/id/sys_vendor)${RESET})." | tee -a "$LOG"
+    else
+        echo "${NOTE} ASUS motherboard, but not a laptop: skipping the ROG laptop tools." | tee -a "$LOG"
+    fi
 fi
 
 # Check for a Bluetooth controller. The kernel creates /sys/class/bluetooth/hci*
