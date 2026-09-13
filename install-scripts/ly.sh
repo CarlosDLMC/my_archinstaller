@@ -23,7 +23,7 @@ printf "${NOTE} Installing ly display manager...\n"
 
 for PKG1 in "${ly_package[@]}"; do
   install_package "$PKG1" 2>&1 | tee -a "$LOG"
-  if [ $? -ne 0 ]; then
+  if [ "${PIPESTATUS[0]}" -ne 0 ]; then
     echo -e "\e[1A\e[K${ERROR} - $PKG1 Package installation failed, Please check the installation logs"
     exit 1
   fi

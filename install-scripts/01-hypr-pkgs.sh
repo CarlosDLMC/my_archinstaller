@@ -147,7 +147,7 @@ overall_failed=0
 printf "\n%s - ${SKY_BLUE}Removing some packages${RESET} as they conflict with these Hyprland dotfiles \n" "${NOTE}"
 for PKG in "${uninstall[@]}"; do
   uninstall_package "$PKG" 2>&1 | tee -a "$LOG"
-  if [ $? -ne 0 ]; then
+  if [ "${PIPESTATUS[0]}" -ne 0 ]; then
     overall_failed=1
   fi
 done

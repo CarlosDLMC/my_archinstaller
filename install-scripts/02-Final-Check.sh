@@ -25,7 +25,6 @@ packages=(
   dunst
   awww
   wallust
-  quickshell
   wl-clipboard
   wlogout
   foot
@@ -33,7 +32,6 @@ packages=(
   hyprlock
   hyprland
   hyprpolkitagent
-  xdg-desktop-portal-hyprland
 )
 
 # Local packages that should be in /usr/local/bin/
@@ -173,8 +171,20 @@ if selected gtk_themes; then
 fi
 
 if selected nopasswd_sudo; then
-    check_outcome "sudo still asks for a password - the bar's VPN widget will not work (install-scripts/sudoers_nopasswd.sh)" \
-        sudo -n true
+    # Not `sudo -n true`: the installer's keepalive refreshes the sudo timestamp,
+    # so that passes whether or not the rule landed. Look for the rule itself.
+    check_outcome "no NOPASSWD rule applies to $USER - the bar's VPN widget will not work (install-scripts/sudoers_nopasswd.sh)" \
+        bash -c 'sudo -n -l 2>/dev/null | grep -q "NOPASSWD:"'
+fi
+
+if selected quickshell; then
+    check_outcome "quickshell is not installed (install-scripts/quickshell.sh)" \
+        pacman -Qi quickshell
+fi
+
+if selected xdph; then
+    check_outcome "xdg-desktop-portal-hyprland is not installed (install-scripts/xdph.sh)" \
+        pacman -Qi xdg-desktop-portal-hyprland
 fi
 
 if selected printing; then
@@ -194,7 +204,7 @@ fi
 
 if selected limine; then
     check_outcome "limine.conf has no theme block / wallpaper missing (install-scripts/limine.sh)" \
-        bash -c 'for c in /boot/limine.conf /efi/limine.conf /boot/efi/limine.conf; do sudo test -f "$c" || continue; sudo grep -q "my_archinstaller Limine theme" "$c" && sudo test -f "$(dirname "$c")/limine-wallpaper.png" && exit 0; done; exit 1'
+        bash -c 'for c in /boot/limine.conf /efi/limine.conf /boot/efi/limine.conf /boot/limine/limine.conf /efi/limine/limine.conf; do sudo test -f "$c" || continue; sudo grep -q "my_archinstaller Limine theme" "$c" && sudo test -f "$(dirname "$c")/limine-wallpaper.png" && exit 0; done; exit 1'
 fi
 
 # Log missing packages

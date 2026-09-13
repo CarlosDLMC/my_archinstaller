@@ -30,6 +30,14 @@ if [[ $EUID -eq 0 ]]; then
     exit 1
 fi
 
+# Everything below is relative to the repo root (Install-Logs/, install-scripts/,
+# Hyprland-Dots/), so run from there wherever the script was invoked from. A
+# relative --preset path is resolved first, against the caller's directory.
+if [[ "${1:-}" == "--preset" && -n "${2:-}" && "${2:0:1}" != "/" ]]; then
+    set -- "$1" "$(readlink -f "$2")"
+fi
+cd "$(dirname "$(readlink -f "$0")")" || { echo "${ERROR} Cannot cd to the repo directory"; exit 1; }
+
 # Create Directory for Install Logs
 if [ ! -d Install-Logs ]; then
     mkdir Install-Logs
@@ -333,10 +341,27 @@ fi
 # initramfs - CachyOS does; a plain archinstall has neither. The theme alone is
 # harmless, but "auto" should not pull plymouth onto a machine that never asked.
 plymouth_detected=false
-if pacman -Qi plymouth &>/dev/null && grep -qE '^HOOKS=.*\bplymouth\b' /etc/mkinitcpio.conf 2>/dev/null; then
+_hooks_have_plymouth=false
+while IFS= read -r _conf; do
+    [ -n "$_conf" ] || continue
+    if grep -qsE '^HOOKS=.*[ (]plymouth[ )]' "$_conf"; then _hooks_have_plymouth=true; break; fi
+done <<< "$(printf '/etc/mkinitcpio.conf\n'; find /etc/mkinitcpio.conf.d -maxdepth 1 -name '*.conf' 2>/dev/null)"
+if pacman -Qi plymouth &>/dev/null && [ "$_hooks_have_plymouth" == "true" ]; then
     plymouth_detected=true
     echo "${NOTE} Plymouth is installed and in the initramfs HOOKS." | tee -a "$LOG"
 fi
+
+# From here on the run needs root (the ESP is root-only, so even detecting Limine
+# does). Authenticate once, up front, with a message - not from inside a detection
+# test with stderr discarded - and keep the timestamp alive for the whole run.
+echo "${INFO} Authenticating ${SKY_BLUE}sudo${RESET} once for the whole run..." | tee -a "$LOG"
+if ! sudo -v; then
+    echo "${ERROR} sudo did not accept your password, or $USER is not allowed to sudo. See README: Prerequisites." | tee -a "$LOG"
+    exit 1
+fi
+( while true; do sudo -n true 2>/dev/null; sleep 60; kill -0 "$$" 2>/dev/null || exit; done ) &
+sudo_keepalive_pid=$!
+trap 'kill "$sudo_keepalive_pid" 2>/dev/null' EXIT
 
 # Limine: the theme edits its config, so only offer it where that config exists.
 limine_detected=false
@@ -444,17 +469,10 @@ if [ "$preset_mode" == "true" ]; then
                     continue
                 fi
                 ;;
-            rog)
-                if [ "$rog_detected" != "true" ]; then
-                    echo "${NOTE} Preset forces 'rog' but this is not ASUS hardware. Skipping." | tee -a "$LOG"
-                    continue
-                fi
-                ;;
-            bluetooth)
-                if [ "$bluetooth_detected" != "true" ]; then
-                    echo "${NOTE} Preset forces 'bluetooth' but no controller was detected. Skipping." | tee -a "$LOG"
-                    continue
-                fi
+            rog|bluetooth)
+                # No gate: "auto" already resolved to OFF when nothing was detected, so an
+                # ON that reaches this point is an explicit force-on (e.g. a Bluetooth
+                # controller whose firmware is not loaded yet, or lsusb not installed).
                 ;;
             input_group)
                 if [ "$input_group_detected" != "true" ]; then
@@ -574,15 +592,7 @@ export INSTALL_SELECTED_OPTIONS="$selected_options"
 # prompt at all. And regardless, keep the sudo timestamp alive from a
 # background loop for the whole run, which covers the interactive path and
 # the few seconds before the rule lands.
-echo "${INFO} Authenticating ${SKY_BLUE}sudo${RESET} once for the whole run..." | tee -a "$LOG"
-if ! sudo -v; then
-    echo "${ERROR} sudo did not accept your password, or $USER is not allowed to sudo. See README: Prerequisites." | tee -a "$LOG"
-    exit 1
-fi
-( while true; do sudo -n true 2>/dev/null; sleep 60; kill -0 "$$" 2>/dev/null || exit; done ) &
-sudo_keepalive_pid=$!
-trap 'kill "$sudo_keepalive_pid" 2>/dev/null' EXIT
-
+# (sudo was authenticated and the keepalive started before hardware detection.)
 if [[ " $selected_options " == *" nopasswd_sudo "* ]]; then
     echo "${INFO} Configuring ${SKY_BLUE}passwordless sudo for wheel${RESET} first, so nothing below can prompt..." | tee -a "$LOG"
     execute_script "sudoers_nopasswd.sh"

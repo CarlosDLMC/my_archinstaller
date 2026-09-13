@@ -81,5 +81,10 @@ echo -e "${CAT} ${MAGENTA}Pacman.conf${RESET} spicing up completed ${RESET}" 2>&
 # libraries. Upgrading here makes the run safe on every path.
 printf "\n%s - ${SKY_BLUE}Synchronizing repos and upgrading the system${RESET}\n" "${INFO}"
 sudo pacman -Syu --noconfirm 2>&1 | tee -a "$LOG"
+# PIPESTATUS, not the pipeline status: `cmd | tee` reports tee's exit code.
+if [ "${PIPESTATUS[0]}" -ne 0 ]; then
+  printf "%s - The full system upgrade failed. Fix the repos/keyring and re-run; installing on a partial upgrade breaks Hyprland at first login.\n" "${ERROR}" | tee -a "$LOG"
+  exit 1
+fi
 
 printf "\n%.0s" {1..2}

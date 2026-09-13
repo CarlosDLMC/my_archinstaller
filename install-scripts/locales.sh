@@ -77,7 +77,8 @@ done
 # locale-gen rebuilds every enabled locale, so only run it if something moved.
 if [ "$changed" -eq 1 ]; then
   printf "${NOTE} Running locale-gen (this takes a few seconds)...\n"
-  if sudo locale-gen 2>&1 | tee -a "$LOG"; then
+  sudo locale-gen 2>&1 | tee -a "$LOG"
+  if [ "${PIPESTATUS[0]}" -eq 0 ]; then
     echo "${OK} Locales generated" | tee -a "$LOG"
   else
     echo "${ERROR} locale-gen failed - check $LOG" | tee -a "$LOG"
