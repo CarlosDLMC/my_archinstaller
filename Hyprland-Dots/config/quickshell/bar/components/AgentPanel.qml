@@ -53,6 +53,20 @@ Item {
         return m + "m"
     }
 
+    // How far back the model chart actually reaches, in the same voice as the
+    // day chart's "LAST 7 DAYS".
+    readonly property string spanLabel: {
+        if (AgentUsage.oldestHour <= 0)
+            return "NO DATA"
+        var days = Math.floor((Date.now() / 1000 - AgentUsage.oldestHour * 3600) / 86400)
+        if (days < 1) return "TODAY"
+        if (days < 2) return "LAST 24 HOURS"
+        if (days < 95) return "LAST " + days + " DAYS"
+        var months = Math.round(days / 30.44)
+        if (months < 24) return "LAST " + months + " MONTHS"
+        return "LAST " + (days / 365.25).toFixed(1) + " YEARS"
+    }
+
     // "6m ago" for a cached reading, so a stale number is never mistaken for
     // a current one.
     function agoText(epochSeconds) {
@@ -384,7 +398,15 @@ Item {
             // -------------------------------------------------- by model
             Divider { visible: AgentUsage.byModel.length > 0 }
             SectionHeader {
-                label: "TOKENS BY MODEL · ALL TIME"
+                // Neither "ALL TIME" nor a start date. Claude Code deletes
+                // transcripts older than cleanupPeriodDays, so this is a
+                // rolling window over whatever survived - and a fixed-looking
+                // "SINCE 10 AUG" that silently walks forward each day reads as
+                // a milestone rather than as a limit. The span is measured from
+                // the oldest record actually on disk, so it stays true whatever
+                // the retention is set to, and it matches how the day chart
+                // above states its own window.
+                label: "TOKENS BY MODEL · " + panel.spanLabel
                 visible: AgentUsage.byModel.length > 0
             }
 

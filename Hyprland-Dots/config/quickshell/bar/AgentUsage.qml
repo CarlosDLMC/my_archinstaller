@@ -25,6 +25,10 @@ Singleton {
     property string limitsError: ""
     property var byDay: []           // [{day, tokens}]
     property var byModel: []         // [{model, tokens, input, output, cacheRead, cacheCreate}]
+    // Epoch hour of the earliest record still on disk. Claude Code prunes its
+    // own transcripts, so the model chart cannot reach further back than this
+    // and should not claim to.
+    property real oldestHour: 0
     property bool loaded: false
     property bool busy: false
 
@@ -85,6 +89,7 @@ Singleton {
 
             // A "limits" run reports no transcript data; keep what we had
             // rather than blanking the charts.
+            if (j.oldestHour) root.oldestHour = j.oldestHour
             if (j.byDay && j.byDay.length > 0) root.byDay = j.byDay
             if (j.byModel && j.byModel.length > 0) root.byModel = j.byModel
             root.loaded = true

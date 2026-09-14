@@ -116,8 +116,20 @@ components/         # Modular widget components
   input/output/cache split - upstream puts that in a tooltip, and this bar has
   no tooltip layer to put it in.
 
-  The headers carry the scope (`· LAST 7 DAYS`, `· ALL TIME`), which upstream
-  does not: with two windows in one card and no labels, the numbers invite a
+  The model chart's header states the span it actually measures - `· LAST 35
+  DAYS`, computed from the oldest record still on disk and switching to months
+  or years as it grows. It is **not** "all time": Claude Code prunes its own
+  transcripts (`cleanupPeriodDays`, 30 by default), so the chart only ever
+  reaches as far back as the oldest survivor. A start date was tried too
+  (`· SINCE 10 AUG`) and rejected: it is literally true but reads as a
+  milestone rather than a limit, and silently walks forward a day at a time.
+  Nothing is derived from the retention setting - the span is measured from the
+  data, so it stays honest if that setting changes. Deleted transcripts drop
+  out cleanly: the scan rebuilds its cache from the files that exist, so both
+  the date and the totals shrink (tested).
+
+  The headers carry the scope (`· LAST 7 DAYS`, `· LAST 35 DAYS`), which
+  upstream does not: with two windows in one card and no labels, the numbers invite a
   comparison that does not hold. "Tokens" is prompt + completion only: cache
   reads are around 200x larger (2,712M against 11.9M for opus-5 here) and would
   flatten every other bar. Ported from Omarchy's agents plugin, reduced to the one
