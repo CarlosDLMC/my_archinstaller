@@ -18,7 +18,14 @@ set -euo pipefail
 
 VARIANT="${1:-static}"
 VT="${2:-8}"
-PREVIEW_DIR=/tmp/ly-flag-preview
+# /run, not /tmp. ly-dm is started as root below and reads config.ini from this
+# directory - and config.ini names commands ly executes (login_cmd, setup_cmd,
+# shutdown_cmd...). A fixed path in world-writable /tmp meant anything that could
+# create /tmp/ly-flag-preview first - a symlink, or a directory owned by someone
+# else - chose where `sudo tee` wrote and what root then ran. /run is writable
+# only by root, so the path cannot be claimed before this script gets there, and
+# it is tmpfs so nothing survives a reboot.
+PREVIEW_DIR=/run/ly-flag-preview
 PATTERN="ly-dm -c $PREVIEW_DIR"
 
 if [ "$VARIANT" = "--stop" ]; then
@@ -45,7 +52,9 @@ HOME_VT=$(sed 's/[^0-9]//g' /sys/class/tty/tty0/active)
 
 command -v openvt >/dev/null || { echo "openvt not found (kbd package)" >&2; exit 1; }
 
-sudo mkdir -p "$PREVIEW_DIR"
+# install -d rather than mkdir -p: the mode and ownership are stated rather than
+# inherited from root's umask, so the directory is root-owned 0755 on every run.
+sudo install -d -o root -g root -m 0755 "$PREVIEW_DIR"
 sudo cp -rT /etc/ly/lang "$PREVIEW_DIR/lang" 2>/dev/null || true
 # The greeter's own action keys would really fire, so neutralise them.
 sudo sed -e "s#^dur_file_path.*#dur_file_path = $DUR#" \
@@ -61,9 +70,15 @@ sudo deallocvt "$VT" 2>/dev/null || true
 sudo setsid openvt -c "$VT" -- /usr/bin/ly-dm -c "$PREVIEW_DIR" >/dev/null 2>&1 </dev/null &
 
 pid=""
+# Poll for up to ~6s. The sleep is load-bearing: without it all 60 iterations ran
+# in a few milliseconds - long before openvt had spawned ly-dm - so the loop fell
+# through to the failure message below even when the preview came up fine a
+# moment later. Sleeping after the test, not before it, keeps an already-running
+# preview instant.
 for _ in $(seq 60); do
     pid=$(pgrep -f "$PATTERN" 2>/dev/null | head -1 || true)
     [ -n "$pid" ] && break
+    sleep 0.1
 done
 if [ -z "$pid" ]; then
     echo "preview failed to start on VT $VT (already in use?)" >&2

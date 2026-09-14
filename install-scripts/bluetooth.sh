@@ -46,8 +46,17 @@ else
   BT_RULE="$(mktemp)"
   echo "$BT_USER ALL=(ALL) NOPASSWD: /usr/bin/rfkill, /usr/bin/systemctl start bluetooth, /usr/bin/systemctl stop bluetooth" > "$BT_RULE"
   if sudo visudo -c -f "$BT_RULE" >/dev/null 2>&1; then
+    # PIPESTATUS, not the pipeline status: `sudo install ... | tee` reports
+    # tee's exit code, so the OK line below was printed whether or not the rule
+    # landed. Unlike the wheel rule, nothing in 02-Final-Check.sh looks for this
+    # one, so a failure here was invisible - the bar's bluetooth toggle just did
+    # nothing, with no message anywhere saying why.
     sudo install -m 0440 -o root -g root "$BT_RULE" /etc/sudoers.d/bluetooth-toggle 2>&1 | tee -a "$LOG"
-    echo "${OK} sudoers rule for the bar's bluetooth toggle installed" | tee -a "$LOG"
+    if [ "${PIPESTATUS[0]}" -eq 0 ] && sudo test -f /etc/sudoers.d/bluetooth-toggle; then
+      echo "${OK} sudoers rule for the bar's bluetooth toggle installed" | tee -a "$LOG"
+    else
+      echo "${ERROR} Could not install /etc/sudoers.d/bluetooth-toggle - the bar's bluetooth toggle will not work" | tee -a "$LOG"
+    fi
   else
     echo "${ERROR} Generated sudoers rule failed validation - NOT installing it" | tee -a "$LOG"
     sudo visudo -c -f "$BT_RULE" 2>&1 | tee -a "$LOG"
