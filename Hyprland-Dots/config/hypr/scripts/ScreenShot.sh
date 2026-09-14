@@ -106,11 +106,31 @@ edit_shot() {
 	rm -f "$tmpfile"
 }
 
+# PNG compression level 1 on every path that SAVES a shot, not the default 6.
+# Measured on a 2560x1440 monitor:
+#
+#   -l 0   108ms   11.1 MB      -l 2   415ms   3.7 MB
+#   -l 1   366ms    3.8 MB      -l 6  1647ms   3.3 MB   (grim's default)
+#
+# So the default spent 1.3 seconds to save half a megabyte, on every single
+# screenshot. Level 1 is 4.5x faster for 14% more disk.
+#
+# Note this is NOT the -l 0 that edit_shot uses: that writes a temp file which
+# satty reads and deletes, where 11MB costs nothing. These files stay in
+# ~/Pictures/Screenshots forever, so the size does matter here.
+#
+# The `sleep` that used to sit between the capture and notify_view is gone
+# from every one of these. The pipeline is synchronous - when `grim | tee |
+# wl-copy` returns, the file is already complete on disk and the clipboard
+# already holds the image (verified, not assumed) - so those were up to two
+# seconds of waiting for something that had already happened. The `sleep 1`
+# before the capture in shot5/shot10 stays: that one is real, it lets the
+# countdown notification leave the screen before the shutter.
+
 # take shots
 shotnow() {
 	[[ $annotate == true ]] && { edit_shot; return; }
-	cd ${dir} && grim - | tee "$file" | wl-copy
-	sleep 2
+	cd ${dir} && grim -l 1 - | tee "$file" | wl-copy
 	notify_view
 }
 
@@ -160,23 +180,21 @@ shotmonitor() {
 	fi
 
 	[[ $annotate == true ]] && { edit_shot -o "$output"; return; }
-	cd ${dir} && grim -o "$output" - | tee "$file" | wl-copy
-	sleep 1
+	cd ${dir} && grim -l 1 -o "$output" - | tee "$file" | wl-copy
 	notify_view
 }
 
 shot5() {
 	countdown '5'
 	[[ $annotate == true ]] && { sleep 1; edit_shot; return; }
-	sleep 1 && cd ${dir} && grim - | tee "$file" | wl-copy
-	sleep 1
+	sleep 1 && cd ${dir} && grim -l 1 - | tee "$file" | wl-copy
 	notify_view
 }
 
 shot10() {
 	countdown '10'
 	[[ $annotate == true ]] && { sleep 1; edit_shot; return; }
-	sleep 1 && cd ${dir} && grim - | tee "$file" | wl-copy
+	sleep 1 && cd ${dir} && grim -l 1 - | tee "$file" | wl-copy
 	notify_view
 }
 
@@ -184,7 +202,7 @@ shotwin() {
 	w_pos=$(hyprctl activewindow | grep 'at:' | cut -d':' -f2 | tr -d ' ' | tail -n1)
 	w_size=$(hyprctl activewindow | grep 'size:' | cut -d':' -f2 | tr -d ' ' | tail -n1 | sed s/,/x/g)
 	[[ $annotate == true ]] && { edit_shot -g "$w_pos $w_size"; return; }
-	cd ${dir} && grim -g "$w_pos $w_size" - | tee "$file" | wl-copy
+	cd ${dir} && grim -l 1 -g "$w_pos $w_size" - | tee "$file" | wl-copy
 	notify_view
 }
 
@@ -192,7 +210,7 @@ shotarea() {
 	[[ $annotate == true ]] && { edit_shot -g "$(slurp)"; return; }
 
 	tmpfile=$(mktemp)
-	grim -g "$(slurp)" - >"$tmpfile"
+	grim -l 1 -g "$(slurp)" - >"$tmpfile"
 
   # Copy with saving
 	if [[ -s "$tmpfile" ]]; then
@@ -212,8 +230,7 @@ shotactive() {
 
 	[[ $annotate == true ]] && { edit_shot -g "$geom"; return; }
 
-    grim -g "$geom" "${active_window_path}"
-	sleep 1
+    grim -l 1 -g "$geom" "${active_window_path}"
     notify_view "active"
 }
 
