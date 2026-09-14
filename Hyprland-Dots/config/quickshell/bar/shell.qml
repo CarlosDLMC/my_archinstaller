@@ -141,7 +141,11 @@ ShellRoot {
 
                     //Separator {}
 
-                    VolumeWidget {}
+                    // barWindow: the volume readout is a DropdownWidget now -
+                    // right-click opens the audio card.
+                    VolumeWidget {
+                        barWindow: barWindow
+                    }
 
                     Separator {}
 
