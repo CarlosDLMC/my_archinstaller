@@ -315,10 +315,14 @@ DropdownWidget {
         onTriggered: wifiWidget.updateWifiStatus()
     }
 
+    // Gated on the interface existing. `visible: hasWifi` hides the pixels but
+    // does not stop the work behind them: on a wired desktop this kept an
+    // `nmcli monitor` alive for the life of the session, feeding a widget
+    // nobody can see.
     Process {
         id: nmMonitor
         command: ["nmcli", "monitor"]
-        running: true
+        running: wifiWidget.hasWifi
         stdout: SplitParser {
             onRead: data => {
                 if (!data) return

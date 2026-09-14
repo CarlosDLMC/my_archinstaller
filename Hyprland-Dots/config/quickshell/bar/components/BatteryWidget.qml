@@ -179,10 +179,13 @@ DropdownWidget {
     }
 
     // Event-based battery monitoring using udevadm
+    // Both gated on the battery existing. `visible: hasBattery` only hides the
+    // widget - it left `udevadm monitor` and the backup poll running on every
+    // desktop, watching a power supply that is not there.
     Process {
         id: batteryMonitor
         command: ["udevadm", "monitor", "--udev", "--subsystem-match=power_supply"]
-        running: true
+        running: batteryWidget.hasBattery
         stdout: SplitParser {
             onRead: data => {
                 if (data && (data.includes("BAT") || data.includes("AC"))) {
@@ -190,13 +193,12 @@ DropdownWidget {
                 }
             }
         }
-        Component.onCompleted: running = true
     }
 
     // Backup timer (in case udevadm fails)
     Timer {
         interval: 60000
-        running: true
+        running: batteryWidget.hasBattery
         repeat: true
         onTriggered: batteryWidget.updateBatteries()
     }

@@ -27,18 +27,19 @@ qmldir              # QML module definition for the singletons
 Monitors.qml        # Singleton: connected monitors, shared by the capture dialogs
 RecordState.qml     # Singleton: screen-recording dialog state + global shortcuts
 ShotState.qml       # Singleton: screenshot dialog state + global shortcut
+SystemStats.qml     # Singleton: CPU usage/temp + memory, read from /proc via FileView
+NightLight.qml      # Singleton: night-light state, watched off Hyprsunset.sh's state file
 components/         # Modular widget components
   ├── DropdownWidget.qml   # Base component for click-to-open dropdown widgets (notch design)
   ├── WeatherStatItem.qml  # Reusable stat row for weather popup
   ├── WorkspaceBar.qml     # Hyprland workspaces with app icons (pill-shaped)
   ├── WindowInfo.qml       # Current window title
   ├── CenterInfo.qml       # Date/DND/weather with click popup showing detailed forecast
-  ├── CpuWidget.qml        # CPU usage percentage
-  ├── MemoryWidget.qml     # Memory usage percentage
+  ├── CpuWidget.qml        # CPU usage + temperature (renders SystemStats)
+  ├── MemoryWidget.qml     # Memory in use (renders SystemStats)
   ├── DiskWidget.qml       # Disk usage percentage
   ├── VolumeWidget.qml     # Volume with mute/sink detection (speaker/headphone/bluetooth/hdmi)
   ├── BatteryWidget.qml    # Battery level with charging status
-  ├── Clock.qml            # Time display
   ├── WifiWidget.qml       # WiFi status with network speeds (extends DropdownWidget)
   ├── BluetoothWidget.qml  # Bluetooth status with dropdown (extends DropdownWidget)
   ├── PowerProfileWidget.qml # Power profile selector (extends DropdownWidget)
@@ -80,6 +81,16 @@ components/         # Modular widget components
   no `-o` on a multi-monitor setup falls back to an interactive stdin prompt and
   silently records the laptop panel; grim with no `-o` captures the whole layout
   (both screens stitched together with the dead space between them).
+- **SystemStats.qml**: CPU usage, CPU temperature and memory in use, sampled once
+  every 5s for the whole shell. `CpuWidget` and `MemoryWidget` are pure renderers
+  over it. Reads `/proc/stat`, `/proc/meminfo` and the hwmon sensor with `FileView`,
+  so it costs no subprocesses at all; the sensor path is resolved once at startup
+  rather than probed on every tick.
+- **NightLight.qml**: night-light state and toggle. `Hyprsunset.sh` records what it
+  did in `~/.cache/.hyprsunset_state` and rewrites it in place, so a `FileView` with
+  `watchChanges` sees every change instantly - whether it came from the bar or from
+  `SUPER + N`. A 60s check against `pgrep` runs only while the file says "on", to
+  catch hyprsunset having died and left the file lying.
 - **CenterInfo.qml**: DND toggle + date + weather. Click shows popup with notch design connecting to bar. Displays location, temperature, condition, feels-like, min/max, and hourly rain forecast bars. Weather icon/temp colored by temperature. Caches weather data for offline use.
 - **CpuWidget.qml / MemoryWidget.qml / DiskWidget.qml**: Simple percentage displays with themed colors
 - **VolumeWidget.qml**: Volume with mute detection and audio sink icons (speaker/headphone/bluetooth/HDMI). Click opens pavucontrol
@@ -132,7 +143,40 @@ Ordinal data (temperature, load) is encoded as a brightness ramp, with
 
 ### Key Patterns
 
-- **Process + SplitParser**: All system data comes from shell commands via `Process` components with `SplitParser` for output
+**The bar is instantiated once per screen.** `shell.qml` wraps it in
+`Variants { model: Quickshell.screens }`, so anything a widget polls, it polls N
+times on an N-monitor machine. Data that is the same on every screen belongs in a
+singleton that the widgets render; only the rendering should be per-screen. See
+`SystemStats.qml`.
+
+**Prefer, in this order:**
+
+1. **A Hyprland event payload.** `Hyprland.onRawEvent` carries the data with the
+   event - `activewindow` is `"<class>,<title>"`, `windowtitlev2` is
+   `"<address>,<title>"`, `activelayout` is `"<device>,<layout>"`. Parse the
+   payload; do not shell out to `hyprctl` to re-fetch what you were just handed.
+   **Always filter on `event.name` first** - Hyprland fires a great many events
+   (ten `activelayout`s per keyboard switch), and an unfiltered handler runs on
+   all of them. See `WindowInfo.qml` and `KeyboardLayoutWidget.qml`.
+2. **`FileView`**, for anything that lives in a file - `/proc`, `/sys`, and the
+   caches under `~/.cache/quickshell`. With `watchChanges: true` it updates on
+   inotify, which is both cheaper and faster than polling an mtime by hand. Set
+   `printErrors: false` where a missing file is a normal state. `blockLoading:
+   true` makes `reload()` + `text()` synchronous, which is what you want for
+   `/proc`.
+3. **A D-Bus / netlink monitor process** (`nmcli monitor`, `dbus-monitor`,
+   `udevadm monitor`), for hardware state with no file to watch. Gate these on the
+   hardware actually existing - see below.
+4. **A `Process` on a timer**, only when none of the above applies. Pick the
+   interval from how often the value really changes: a clock showing `HH:MM`
+   needs a minute, not a second.
+
+- **Hiding is not stopping**: `visible: false` drops a widget from the layout but
+  leaves its timers and monitor processes running. Every widget that hides itself
+  on absent hardware (`hasWifi`, `hasBattery`, `hasAdapter`) must also gate its
+  timers and processes on the same property, or a desktop pays for a wifi scanner
+  it cannot use.
+- **Process + SplitParser**: how the remaining shell-command data is fetched
 - **Theme singleton**: Components access theme via `import ".."` then use `Theme.colFg`, `Theme.fontSize`, etc.
 - **PopupWindows**: Dropdowns use `PopupWindow` with `visible` bound to `*DropdownOpen` properties
 - **HyprlandFocusGrab**: Used to close popups when clicking outside. Requires `import Quickshell.Hyprland`. Example:

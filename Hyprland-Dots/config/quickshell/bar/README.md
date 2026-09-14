@@ -128,7 +128,7 @@ scripts/
 ## Key Patterns
 
 - **Hot Reload**: Changes are applied automatically on save
-- **Process + SplitParser**: Shell commands for data fetching
+- **Process + SplitParser**: Shell commands for data fetching (but prefer event payloads and FileView - see CLAUDE.md)
 - **HyprlandFocusGrab**: Click-outside to close popups
 - **Notch Design**: Dropdowns use Canvas-drawn shapes with concave corners
 

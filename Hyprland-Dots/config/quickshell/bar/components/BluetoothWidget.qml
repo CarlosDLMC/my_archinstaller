@@ -181,10 +181,13 @@ DropdownWidget {
     }
 
     // Event-based monitoring using dbus-monitor
+    // Gated on the adapter existing, like the status probes below. This is an
+    // `sh` wrapping a `dbus-monitor` piped into a `while read` loop - three
+    // processes that stayed alive on a machine with no bluetooth at all.
     Process {
         id: btMonitor
         command: ["sh", "-c", "dbus-monitor --system \"type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path_namespace='/org/bluez'\" 2>/dev/null | while read line; do echo 'bt_changed'; done"]
-        running: true
+        running: btWidget.hasAdapter
         stdout: SplitParser {
             onRead: data => {
                 if (data) {
@@ -193,21 +196,27 @@ DropdownWidget {
                 }
             }
         }
-        Component.onCompleted: running = true
     }
 
     // Every Process above fires once at startup and then only on user action,
     // so a radio that came or went after the bar started stayed invisible until
     // the bar was restarted. dbus-monitor does not cover it either: bluez has
     // no adapter to emit PropertiesChanged for while the radio is blocked.
+    //
+    // The presence probe stays unconditional - it is what notices an adapter
+    // arriving - but the two bluetoothctl reads behind it are gated, so a
+    // machine with no radio pays for one cheap sysfs check here and nothing
+    // else.
     Timer {
         interval: 10000
         running: true
         repeat: true
         onTriggered: {
             btPresenceProc.running = true
-            btStatusProc.running = true
-            btConnectedProc.running = true
+            if (btWidget.hasAdapter) {
+                btStatusProc.running = true
+                btConnectedProc.running = true
+            }
         }
     }
 
