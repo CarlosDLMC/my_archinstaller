@@ -8,9 +8,15 @@ machine runs, and given an incremental cache, because a full rescan of
 ~/.claude/projects reads 160MB and takes about 1.5s - far too slow to sit
 behind a panel that opens on a click.
 
-Two modes:
-  limits   the OAuth probe only (fast; this is what the bar readout needs)
-  full     limits plus the transcript scan (tokens by day and by model)
+Three modes:
+  limits   the OAuth probe only
+  stats    the transcript scan only - NO network call whatsoever
+  full     both
+
+The split exists to keep the endpoint quiet. The allowance figures describe a
+5-hour and a 7-day window, so re-probing them every half minute is pointless
+as well as rude; the transcript counts are local and change as you work, so
+those are what a refresh while the card is open should re-read.
 
 Prints one JSON object on stdout. Failures are reported inside it rather than
 on stderr, so the card can say what went wrong instead of going blank.
@@ -102,7 +108,16 @@ def parse_pct(value):
 
 
 def probe_limits(token: str):
-    """Session and weekly utilisation, or a human reason why not."""
+    """Session and weekly utilisation, or a human reason why not.
+
+    Returns (limits, error, retry_advised). retry_advised is True only when the
+    endpoint was never reached at all - no route, no DNS, typically the seconds
+    after login before the network is up. An HTTP status, 429 included, means a
+    server answered: retrying sooner is pointless, and against a rate limiter it
+    is how you stay rate limited. This is the distinction Omarchy's collector
+    draws with its `transport` flag, and honouring it is why there is no retry
+    treadmill here.
+    """
     req = urllib.request.Request(USAGE_ENDPOINT, headers={
         "Authorization": "Bearer " + token,
         "anthropic-beta": "oauth-2025-04-20",
@@ -123,12 +138,13 @@ def probe_limits(token: str):
                     suffix = f" (retry in {retry}s)"
             except ValueError:
                 pass
-            return [], "Anthropic is rate limiting usage checks" + suffix + "."
+            return [], "Anthropic is rate limiting usage checks" + suffix + ".", False
         if e.code in (401, 403):
-            return [], "Claude Code is not signed in, or its token expired."
-        return [], f"Anthropic's usage endpoint returned {e.code}."
+            return [], "Claude Code is not signed in, or its token expired.", False
+        return [], f"Anthropic's usage endpoint returned {e.code}.", False
     except Exception:
-        return [], "Couldn't reach Anthropic's usage endpoint."
+        # Nothing answered. This is the one case worth trying again soon.
+        return [], "Couldn't reach Anthropic's usage endpoint.", True
 
     buckets = [
         ("Session", "5 hours", payload.get("five_hour")),
@@ -344,7 +360,10 @@ def scan_transcripts():
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else "full"
     out = {"ok": False, "plan": "", "limits": [], "limitsError": "",
-           "byDay": [], "byModel": [], "at": int(time.time())}
+           "byDay": [], "byModel": [], "at": int(time.time()),
+           # Whether this run talked to the network at all. The reader must not
+           # treat a stats-only run's empty limits as "the probe failed".
+           "probed": mode in ("limits", "full")}
 
     # Whether Claude Code exists on this machine at all, which is a different
     # question from whether this probe returned anything. The widget hides
@@ -353,12 +372,22 @@ def main():
     d = claude_dir()
     out["installed"] = (d / ".credentials.json").exists() or (d / "projects").is_dir()
 
+    if not out["probed"]:
+        try:
+            out["byDay"], out["byModel"] = scan_transcripts()
+        except Exception as e:
+            out["scanError"] = type(e).__name__
+        out["ok"] = bool(out["byDay"])
+        json.dump(out, sys.stdout)
+        sys.stdout.write("\n")
+        return
+
     token, plan = oauth_login()
     out["plan"] = plan
     if not token:
         out["limitsError"] = "No Claude Code credentials found."
     else:
-        out["limits"], out["limitsError"] = probe_limits(token)
+        out["limits"], out["limitsError"], out["retryAdvised"] = probe_limits(token)
 
     if out["limits"]:
         try:
