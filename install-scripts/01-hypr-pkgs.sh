@@ -37,6 +37,11 @@ hypr_package=(
   pamixer
   pavucontrol
   playerctl
+  # wtype: the clipboard picker pastes into the window that had focus, which
+  # needs a virtual-keyboard typer. It was already a silent dependency of the
+  # rofi ClipManager.sh this replaced - installed here, but in no package list,
+  # so a fresh machine got a picker that quietly failed to paste.
+  wtype
   # qrencode: the bar's network card turns the current Wi-Fi into a join QR
   # (config/quickshell/bar/scripts/network-qr.sh). Without it that button
   # reports the package as missing rather than failing silently.

@@ -260,6 +260,12 @@ ShellRoot {
         RecordOsd {}
     }
 
+    // Clipboard picker, same deal. Driven by the clipMenu global shortcut.
+    Variants {
+        model: Quickshell.screens
+        ClipboardOsd {}
+    }
+
     // Screenshot dialog, same deal. Driven by the shotMenu global shortcut.
     Variants {
         model: Quickshell.screens
