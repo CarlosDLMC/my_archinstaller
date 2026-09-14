@@ -53,18 +53,18 @@ Item {
         return m + "m"
     }
 
-    // How far back the model chart actually reaches, in the same voice as the
-    // day chart's "LAST 7 DAYS".
-    readonly property string spanLabel: {
+    // The date of the oldest record still on disk. Claude Code prunes its own
+    // transcripts (cleanupPeriodDays), so this is where the model chart's
+    // history actually begins - and it moves forward as old files are deleted.
+    //
+    // The year is only shown once the history crosses into a previous one:
+    // "SINCE 10 AUG" is unambiguous within the current year and shorter.
+    readonly property string sinceLabel: {
         if (AgentUsage.oldestHour <= 0)
             return "NO DATA"
-        var days = Math.floor((Date.now() / 1000 - AgentUsage.oldestHour * 3600) / 86400)
-        if (days < 1) return "TODAY"
-        if (days < 2) return "LAST 24 HOURS"
-        if (days < 95) return "LAST " + days + " DAYS"
-        var months = Math.round(days / 30.44)
-        if (months < 24) return "LAST " + months + " MONTHS"
-        return "LAST " + (days / 365.25).toFixed(1) + " YEARS"
+        var d = new Date(AgentUsage.oldestHour * 3600 * 1000)
+        var fmt = d.getFullYear() === new Date().getFullYear() ? "d MMM" : "d MMM yyyy"
+        return "SINCE " + Qt.formatDateTime(d, fmt).toUpperCase()
     }
 
     // "6m ago" for a cached reading, so a stale number is never mistaken for
@@ -398,15 +398,12 @@ Item {
             // -------------------------------------------------- by model
             Divider { visible: AgentUsage.byModel.length > 0 }
             SectionHeader {
-                // Neither "ALL TIME" nor a start date. Claude Code deletes
-                // transcripts older than cleanupPeriodDays, so this is a
-                // rolling window over whatever survived - and a fixed-looking
-                // "SINCE 10 AUG" that silently walks forward each day reads as
-                // a milestone rather than as a limit. The span is measured from
-                // the oldest record actually on disk, so it stays true whatever
-                // the retention is set to, and it matches how the day chart
-                // above states its own window.
-                label: "TOKENS BY MODEL · " + panel.spanLabel
+                // Not "ALL TIME": Claude Code deletes transcripts older than
+                // cleanupPeriodDays, so the chart begins wherever the oldest
+                // survivor does. The date comes from the data, not from the
+                // retention setting, so it stays true whatever that is set to
+                // and moves forward on its own as old files are pruned.
+                label: "TOKENS BY MODEL · " + panel.sinceLabel
                 visible: AgentUsage.byModel.length > 0
             }
 
