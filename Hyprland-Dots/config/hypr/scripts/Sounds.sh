@@ -72,5 +72,11 @@ if ! test -f "$sound_file"; then
     fi
 fi
 
-# pipewire priority, fallback pulseaudio
-pw-play "$sound_file" || pa-play "$sound_file"
+# pipewire priority, fallback pulseaudio.
+#
+# Backgrounded on purpose: pw-play does not return until the clip has finished,
+# and the shutter sound is ~0.9s long. Blocking here put that second between
+# the capture and whatever the caller does next - the screenshot editor sat
+# waiting for the sound to play out before it opened, and every volume keypress
+# paid for it too.
+{ pw-play "$sound_file" || pa-play "$sound_file"; } &
