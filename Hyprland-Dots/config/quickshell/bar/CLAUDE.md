@@ -103,13 +103,16 @@ components/         # Modular widget components
   The bar shows the share of the 5-hour session spent (the number that says
   whether you are about to be cut off); the card adds the plan, weekly and
   per-model allowances with reset countdowns, tokens by day, and tokens by
-  model. Both charts cover **the current allowance week** - anchored to the
-  weekly reset the endpoint reports, not the last seven calendar days - so the
-  bars describe the period the meter above them is measuring. The card says
-  which window it is drawing, and falls back to 7 rolling days when no reset
-  time is known. "Tokens" is prompt + completion only: cache reads are around
-  200x larger (2,712M against 11.9M for opus-5 here) and would flatten every
-  other bar. Ported from Omarchy's agents plugin, reduced to the one
+  model. The two charts cover **deliberately different periods**, matching
+  Omarchy: by day is the last 7 **calendar** days (`today-6 .. today`), by
+  model is **all time**. Anchoring the day chart to the weekly allowance window
+  was tried and reverted - upstream's `recent_date_strings()` is plainly 7
+  rolling days, and the meter above is the thing that tracks the allowance.
+  The headers carry the scope (`· LAST 7 DAYS`, `· ALL TIME`), which upstream
+  does not: with two windows in one card and no labels, the numbers invite a
+  comparison that does not hold. "Tokens" is prompt + completion only: cache
+  reads are around 200x larger (2,712M against 11.9M for opus-5 here) and would
+  flatten every other bar. Ported from Omarchy's agents plugin, reduced to the one
   agent this machine runs.
 
   `AgentUsage` is a **singleton** for the same reason `SystemStats` is: the bar
@@ -124,12 +127,15 @@ components/         # Modular widget components
   of Anthropic's usage endpoint; it is never printed or cached, and only the
   plan label reaches the output. The transcript scan caches **per file**, keyed
   by (mtime, size): a cold scan reads 160MB and costs ~1.3s of CPU, a repeat
-  costs ~0.1s because only the session you are in has changed. It stores raw
-  **hour buckets**, not days - the window can start at an arbitrary instant
-  (16:00 UTC), and epoch hours also survive the timezone moving under it, which
-  the VPN widget does. Keeping the cache window-independent is deliberate: it
-  is keyed on the file, and must not quietly become wrong when the window
-  moves.
+  costs ~0.1s because only the session you are in has changed. **Every**
+  transcript is read, not just recent ones, because the model totals are all
+  time - 2.46s cold, 0.58s warm. It stores raw **hour buckets** rather than
+  whole days, keyed on epoch hours, so the cache stays independent of whatever
+  window is applied later and survives the timezone moving under it, which the
+  VPN widget does.
+
+  `scripts/clip.sh`'s thumbnail cache is capped and cleaned - see the clipboard
+  entry above for why.
 
   The widget hides on `installed` - whether `~/.claude` exists at all - and not
   on whether a probe returned anything. Those were conflated at first, and the
@@ -172,6 +178,13 @@ components/         # Modular widget components
      `jq` to build JSON cost 28ms and doubled the payload, so that JavaScript
      could parse it back. Quickshell's own process overhead is 2ms - the
      script was the entire cost.
+  Decoded image previews are capped at 12 files while the picker is open and
+  deleted when it closes. Clearing only the in-memory map left every decode on
+  disk - 72MB of full-size screenshots, each a byte-for-byte duplicate of what
+  cliphist already stores. Downscaling them instead was measured and rejected:
+  `magick -resize 900x900` is 489ms against 25ms to decode, which would be felt
+  on every scroll, and a thumbnail that cheap to rebuild is not worth keeping.
+
   3. The list is loaded **at startup** and kept, so the picker opens on a
      populated list with no wait, and the refresh lands behind it. That
      refresh only swaps the model when the history actually moved (head id or

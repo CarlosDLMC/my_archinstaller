@@ -287,27 +287,8 @@ Item {
             // ---------------------------------------------------- by day
             Divider { visible: AgentUsage.byDay.length > 0 }
             SectionHeader {
-                label: "TOKENS BY DAY"
+                label: "TOKENS BY DAY · LAST 7 DAYS"
                 visible: AgentUsage.byDay.length > 0
-            }
-
-            // Say which window these bars cover. They are anchored to the same
-            // weekly allowance the meter above measures, not to the last seven
-            // calendar days - otherwise the card shows two different periods
-            // and invites you to compare numbers that do not relate.
-            Text {
-                width: parent.width
-                visible: AgentUsage.byDay.length > 0 && AgentUsage.windowStart > 0
-                text: {
-                    var d = new Date(AgentUsage.windowStart * 1000)
-                    return (AgentUsage.windowAnchored
-                            ? "this allowance week, since "
-                            : "last 7 days, since ")
-                           + Qt.formatDateTime(d, "ddd d MMM HH:mm")
-                }
-                color: Theme.colMuted
-                font.pixelSize: panel.headerSize
-                font.family: Theme.fontFamily
             }
 
             Repeater {
@@ -333,7 +314,7 @@ Item {
             // -------------------------------------------------- by model
             Divider { visible: AgentUsage.byModel.length > 0 }
             SectionHeader {
-                label: "TOKENS BY MODEL"
+                label: "TOKENS BY MODEL · ALL TIME"
                 visible: AgentUsage.byModel.length > 0
             }
 
