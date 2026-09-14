@@ -2,6 +2,73 @@
 
 ## September 2026
 
+Added (2026-09-14) - four bar widgets, functionality taken from Omarchy Quattro
+(omacom/omarchy, MIT, DHH) and rebuilt in this bar's style. None of his code,
+styling or plugin scaffolding was copied; the ports keep the monochrome palette,
+`Theme.col*` roles, Terminess, and the existing `DropdownWidget` notch card:
+
+- **Audio card** on right-click of the volume readout, replacing a `pavucontrol`
+  launch. Output and input device pickers with levels, and a level per running
+  application, read straight from `Quickshell.Services.Pipewire` - no polling and
+  no subprocess. Left-click still mutes and the wheel still adjusts;
+  `DropdownWidget` grew a `triggerButton` and hands non-trigger clicks back, so a
+  widget keeps its own gestures. Two details are load-bearing and carried over
+  deliberately: the Repeaters are fed *copies* of the PipeWire lists behind a 75ms
+  debounce (rebuilding one from inside a node-removal signal crashes the PipeWire
+  service), and `node.properties` is read only once a node reports `ready`
+- **Network card** on right-click of the wifi icon, replacing `nm-connection-editor`.
+  Link quality, IP/gateway/DNS, live throughput and latency, a DNS provider picker,
+  the radio toggle, a speed test and a share-QR. Facts sit two to a row in a
+  `GridLayout(columns: 4)`. `scripts/network-status.sh` reports the **radio and the
+  default route separately**: with WireGuard up the route interface is the tunnel,
+  so keying SSID and signal off it - as upstream does - drops them for as long as
+  the VPN is connected. It reads the radio through `nmcli`, not `iw`, which is not
+  a dependency of this repo and is not installed. `scripts/network-speedtest.sh`
+  **stops on its own** rather than running until killed, so a card closed mid-test
+  cannot leave eight curl workers saturating the link
+- **Claude Code usage** widget: an icon in the bar, and a card with the plan,
+  every allowance the endpoint reports - including the **model-scoped weekly
+  budgets that live in the `limits` array** rather than the top-level buckets,
+  which is where the limit nearest to being spent usually is - tokens by day for
+  the last week and by model since the oldest surviving transcript. The token
+  reaches exactly one place, the Authorization header of Anthropic's usage
+  endpoint. `AgentUsage` is a singleton, and the transcript scan caches per file
+  by (mtime, size): 2.46s cold, 0.58s warm
+- **Clipboard picker** on `SUPER + ALT + V`, replacing a rofi list that could only
+  print text - a copied screenshot appeared as `[[ binary data 3 MiB png ]]`.
+  Entries with inline thumbnails, a large preview, type to filter. **cliphist stays
+  the store**: it was already installed and already capturing images, so only the
+  picker changed. `clip-paste.sh` is kept from the old script, pasting into the
+  window that had focus, which needs `wtype` - a silent dependency that was
+  installed here but in no package list
+- `components/Spinner.qml`, a ring of dots for indeterminate waits. Drawn rather
+  than set in type: a Nerd Font spinner glyph turned with a `RotationAnimator`
+  wobbles, because the ink is not centred in its character cell
+- `qrencode` and `wtype` join `01-hypr-pkgs.sh` **and** `02-Final-Check.sh`. That
+  check keeps its own hand-maintained list rather than reading the install array,
+  so a package can be listed, fail to install, and still let the run reboot
+  reporting success
+
+Fixed (2026-09-14, the bar and screenshots):
+
+- The bar was spending about **45% of a core on subprocesses**, now about 5%.
+  Measured as the CPU its reaped children burn over a 40s window on two monitors:
+  ~1790 jiffies before, ~200 after. `/proc` and the hwmon sensor are `FileView`
+  reads; the clock stopped running `date` every second for a readout that changes
+  once a minute; `WindowInfo` reads the Hyprland event payload instead of running
+  `hyprctl | jq` on *every* raw event; CPU/memory and night light became singletons
+  rather than running once per screen; and hardware monitors are gated on the
+  hardware existing, since `visible: false` hides a widget without stopping it
+- Screenshots that **save** - which is what bare `Print` uses - took ~2.6s to
+  produce a sound and a notification, now ~400ms. `grim` was at its default
+  compression (1647ms against 366ms at `-l 1`, for 0.5MB of disk), and a `sleep`
+  sat between the capture and the notification in four places, waiting for a
+  pipeline that had already finished. `SUPER + Print` now takes the same shot into
+  the editor, and no path plays a shutter sound any more
+- The night light glyph was `☀`, U+2600 - a plain Unicode character Terminess has
+  no glyph for, so it was drawn by a fallback font and never matched its
+  neighbours. It is `nf-md-brightness_4` now
+
 Fresh-install audit (2026-09-14) - install.sh, all install scripts, copy.sh and the dots
 were checked against this laptop; nothing blocked a fresh install, these did drift:
 
