@@ -128,6 +128,15 @@ ShellRoot {
                         Layout.fillWidth: true
                     }
 
+                    // Claude Code usage. Hides itself on a machine that has
+                    // never run it, so the separator is tied to it.
+                    AgentWidget {
+                        id: agentWidget
+                        barWindow: barWindow
+                    }
+
+                    Separator { visible: agentWidget.visible }
+
                     // System stats
                     CpuWidget {}
 
