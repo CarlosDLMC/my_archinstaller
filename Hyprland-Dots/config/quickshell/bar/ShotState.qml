@@ -8,6 +8,10 @@ import Quickshell.Hyprland
 // State for the screenshot dialog. Mirrors RecordState: the dialog only
 // collects intent, ScreenShot.sh takes the picture, so the dialog and the bare
 // keybinds share one code path.
+//
+// Every route out of the dialog passes --edit, so the capture opens in satty
+// to be drawn on, saved (Ctrl+S) or copied (Ctrl+C). The dialog is the "let me
+// look at it first" path; the bare Print binds stay fire-and-forget.
 Singleton {
     id: root
 
@@ -40,19 +44,15 @@ Singleton {
     }
 
     function shotFullscreen() {
-        run("--monitor " + Monitors.resolveTarget(targetMonitor))
+        run("--monitor " + Monitors.resolveTarget(targetMonitor) + " --edit")
     }
 
     function shotRegion() {
-        run("--area")
+        run("--area --edit")
     }
 
     function shotWindow() {
-        run("--active")
-    }
-
-    function shotSwappy() {
-        run("--swappy")
+        run("--active --edit")
     }
 
     Timer {
