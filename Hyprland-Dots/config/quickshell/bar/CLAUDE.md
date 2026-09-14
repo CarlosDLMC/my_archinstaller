@@ -108,6 +108,13 @@ components/         # Modular widget components
   model is **all time**. Anchoring the day chart to the weekly allowance window
   was tried and reverted - upstream's `recent_date_strings()` is plainly 7
   rolling days, and the meter above is the thing that tracks the allowance.
+  The two charts are also drawn differently, which is upstream's choice and not
+  an inconsistency: a day is a label, a thin track and a value, while a model is
+  one filled row with its name and total *inside* the bar, scaled so the
+  heaviest model is full. Hovering a model row swaps its name for the
+  input/output/cache split - upstream puts that in a tooltip, and this bar has
+  no tooltip layer to put it in.
+
   The headers carry the scope (`· LAST 7 DAYS`, `· ALL TIME`), which upstream
   does not: with two windows in one card and no labels, the numbers invite a
   comparison that does not hold. "Tokens" is prompt + completion only: cache
