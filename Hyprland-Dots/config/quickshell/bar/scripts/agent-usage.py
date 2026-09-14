@@ -327,6 +327,7 @@ def scan_transcripts():
 
     days = defaultdict(lambda: [0, 0])
     models = defaultdict(lambda: [0, 0, 0, 0])
+    all_hours = []
 
     if root.is_dir():
         for path in root.rglob("*.jsonl"):
@@ -342,6 +343,7 @@ def scan_transcripts():
             fresh[key] = entry
 
             for hour, model, i, o, cr, cc in entry.get("b", []):
+                all_hours.append(hour)
                 # Models: everything, all time.
                 m = models[model]
                 m[0] += i
@@ -370,6 +372,13 @@ def scan_transcripts():
         i, o = days.get(key, [0, 0])
         by_day.append({"day": key, "tokens": i + o})
 
+    # The earliest record still on disk. Claude Code prunes its own transcripts
+    # (cleanupPeriodDays, 30 by default), so the model chart's "all time" only
+    # ever reaches back as far as the oldest surviving one - and that moves
+    # forward as old files are deleted. The card shows this date rather than
+    # claiming a total it cannot have.
+    oldest = min((h for h in all_hours), default=0)
+
     models = {k: v for k, v in models.items() if not k.startswith("<")}
 
     by_model = sorted(
@@ -380,7 +389,7 @@ def scan_transcripts():
          for name, v in models.items()),
         key=lambda r: r["tokens"], reverse=True)
 
-    return by_day, by_model[:6]
+    return by_day, by_model[:6], oldest
 
 
 # ----------------------------------------------------------------------- main
@@ -402,7 +411,7 @@ def main():
 
     if not out["probed"]:
         try:
-            out["byDay"], out["byModel"] = scan_transcripts()
+            out["byDay"], out["byModel"], out["oldestHour"] = scan_transcripts()
         except Exception as e:
             out["scanError"] = type(e).__name__
         out["ok"] = bool(out["byDay"])
@@ -441,7 +450,7 @@ def main():
 
     if mode == "full":
         try:
-            out["byDay"], out["byModel"] = scan_transcripts()
+            out["byDay"], out["byModel"], out["oldestHour"] = scan_transcripts()
         except Exception as e:
             out["scanError"] = type(e).__name__
 
