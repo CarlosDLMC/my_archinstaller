@@ -31,6 +31,8 @@ SystemStats.qml     # Singleton: CPU usage/temp + memory, read from /proc via Fi
 NightLight.qml      # Singleton: night-light state, watched off Hyprsunset.sh's state file
 components/         # Modular widget components
   ├── DropdownWidget.qml   # Base component for click-to-open dropdown widgets (notch design)
+  ├── AudioPanel.qml       # Audio card body: output/input device + level, per-app levels
+  ├── VolumeSlider.qml     # Draggable level track, shared by every row of the audio card
   ├── WeatherStatItem.qml  # Reusable stat row for weather popup
   ├── WorkspaceBar.qml     # Hyprland workspaces with app icons (pill-shaped)
   ├── WindowInfo.qml       # Current window title
@@ -93,7 +95,22 @@ components/         # Modular widget components
   catch hyprsunset having died and left the file lying.
 - **CenterInfo.qml**: DND toggle + date + weather. Click shows popup with notch design connecting to bar. Displays location, temperature, condition, feels-like, min/max, and hourly rain forecast bars. Weather icon/temp colored by temperature. Caches weather data for offline use.
 - **CpuWidget.qml / MemoryWidget.qml / DiskWidget.qml**: Simple percentage displays with themed colors
-- **VolumeWidget.qml**: Volume with mute detection and audio sink icons (speaker/headphone/bluetooth/HDMI). Click opens pavucontrol
+- **VolumeWidget.qml**: Volume with mute detection and audio sink icons
+  (speaker/headphone/bluetooth/HDMI). Left-click mutes, wheel adjusts,
+  **right-click opens the audio card** (`AudioPanel.qml`) - output device and
+  level, input device and level, and a level per running application. It reads
+  `Quickshell.Services.Pipewire` directly, so there is nothing to poll and no
+  subprocess; it replaced launching pavucontrol.
+
+  Two things in there are load-bearing and easy to undo by accident. The
+  Repeaters are fed *copies* of the PipeWire lists, refreshed through a 75ms
+  debounce and only while the card is open: PipeWire can remove a node while
+  Quickshell is still dispatching the removal, and rebuilding a Repeater from
+  inside that signal crashes the PipeWire service. And `node.properties` is only
+  read once the node reports `ready` (see `nodeProps()`), because it is not valid
+  before the node is bound. The card's height comes from what the body measured,
+  not from arithmetic over row counts - text height follows the font's line
+  metrics, not the pixelSize, so counting rows clips the last one
 - **BatteryWidget.qml**: Battery level with charging status and tiered icons
 - **WifiWidget.qml**: WiFi status with network speed display (upload/download), dropdown for network selection
 - **BluetoothWidget.qml**: Bluetooth status with dropdown. Icon turns green when device connected
@@ -233,4 +250,10 @@ singleton that the widgets render; only the rendering should be per-screen. See
    }
    ```
    The base component handles: barWindow connection, dropdownOpen state, MouseArea toggle, HyprlandFocusGrab, and PopupWindow with notch design (concave corners connecting narrow stem to wider body). Popup is automatically centered on the icon.
+
+   `triggerButton` picks which button opens the card (left by default).
+   Whichever buttons are *not* the trigger arrive as `onOtherClicked(button)`,
+   and the wheel as `onWheelMoved(deltaY)`, so a widget keeps its own gestures
+   instead of having them swallowed by the card's hit area - that is how
+   `VolumeWidget` opens on right-click while left-click still mutes.
 - no need to restart quickshell, it hot reloads the config on save.

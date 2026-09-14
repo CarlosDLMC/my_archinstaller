@@ -18,7 +18,17 @@ Item {
     property string stemAlignment: "center"  // "left", "center", or "right"
     property alias popupContent: popupLoader.sourceComponent
 
+    // Which button opens the card. Left by default, so every existing widget
+    // behaves exactly as before; VolumeWidget sets this to Right, because its
+    // left-click already means mute and that is worth more than consistency.
+    property int triggerButton: Qt.LeftButton
+
     signal opened()
+    // Clicks on a button that is NOT the trigger, and wheel events, are handed
+    // back to the widget instead of being swallowed by the card's hit area -
+    // a widget can carry its own gestures and still have a dropdown.
+    signal otherClicked(int button)
+    signal wheelMoved(real deltaY)
 
     default property alias iconContent: iconContainer.data
 
@@ -39,12 +49,18 @@ Item {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        onClicked: {
+        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+        onClicked: mouse => {
+            if (mouse.button !== root.triggerButton) {
+                root.otherClicked(mouse.button)
+                return
+            }
             dropdownOpen = !dropdownOpen
             if (dropdownOpen) {
                 root.opened()
             }
         }
+        onWheel: wheel => root.wheelMoved(wheel.angleDelta.y)
     }
 
     HyprlandFocusGrab {
