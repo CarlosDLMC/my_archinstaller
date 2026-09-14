@@ -33,7 +33,12 @@ iDIR="$HOME/.config/swaync/icons"
 iDoR="$HOME/.config/swaync/images"
 
 notify_cmd_base="notify-send -t 5000 -h string:x-canonical-private-synchronous:record-notify"
-notify_cmd_rec="${notify_cmd_base} -i ${iDIR}/video.png"
+# picture.png, not video.png: $iDIR is swaync/icons and it has never contained
+# a video.png - no video or record icon exists anywhere in the repo - so every
+# "Recording Started"/"Recording Stopped" notification rendered without an icon.
+# ScreenShot.sh, which this script mirrors, uses icons/picture.png for exactly
+# this role. Swap in a real video icon here if one is ever added.
+notify_cmd_rec="${notify_cmd_base} -i ${iDIR}/picture.png"
 notify_cmd_NOT="notify-send -u low -i ${iDoR}/note.png"
 
 # Check if recording is in progress
