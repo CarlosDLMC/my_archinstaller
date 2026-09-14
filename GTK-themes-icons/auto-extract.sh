@@ -49,3 +49,34 @@ extract_files "theme" ~/.themes "tar" 2>&1 | tee -a "$SLOG"
 
 # Extract files from 'icon' directory to ~/.icons using unzip and log output
 extract_files "icon" ~/.icons "unzip" 2>&1 | tee -a "$SLOG"
+
+# Rebuild the icon caches after extracting.
+#
+# The shipped archives carry an icon-theme.cache from whenever upstream built
+# them, and extracting stamps the theme directory with the current time - so the
+# cache is always older than the directory it describes, which is exactly how
+# GTK decides a cache is stale. It then walks the whole theme on every GTK
+# application start instead; Flat-Remix-Blue-Dark is ~40k files over 319MB.
+# Rebuilding takes well under a second per theme.
+#
+# Cursor themes (Bibata) have an index.theme but no icon directories.
+# gtk-update-icon-cache exits 0 and writes nothing for those, so they need no
+# special case.
+refresh_icon_caches() {
+    if ! command -v gtk-update-icon-cache >/dev/null 2>&1; then
+        echo "${ERROR} gtk-update-icon-cache not found - icon caches left stale"
+        return 1
+    fi
+
+    for theme_dir in "$HOME"/.icons/*/; do
+        [ -f "${theme_dir}index.theme" ] || continue
+
+        if gtk-update-icon-cache -f -t "$theme_dir" >/dev/null 2>&1; then
+            echo "$OK Refreshed icon cache for $(basename "$theme_dir")"
+        else
+            echo "${ERROR} Could not refresh icon cache for $(basename "$theme_dir")"
+        fi
+    done
+}
+
+refresh_icon_caches 2>&1 | tee -a "$SLOG"
