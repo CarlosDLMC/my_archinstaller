@@ -6,12 +6,47 @@ import ".."
 
 DropdownWidget {
     id: wifiWidget
+
+    // The same card carries two views. Left-click opens the network list;
+    // right-click opens the details card, which is what nm-connection-editor
+    // used to be launched for. One popup rather than two, so there is still
+    // only one notch card, one focus grab, and one thing open at a time.
+    property string panelMode: "networks"     // "networks" | "details"
+
     // Width follows the longest SSID instead of a fixed 240px, which was
     // only wide enough for ~14 characters and elided anything longer.
     // Clamped so one absurd name cannot stretch the popup off-screen.
-    popupWidth: Math.max(260, Math.min(560, Math.ceil(ssidMetrics.width) + 104))
-    popupHeight: Math.min(wifiNetworks.length * 40 + 50, 420)
+    popupWidth: panelMode === "details"
+        ? 520
+        : Math.max(260, Math.min(560, Math.ceil(ssidMetrics.width) + 104))
+    // The details card carries a lot, so its cap follows the screen rather than
+    // a fixed number: a 620px ceiling left the DNS pills, the saved networks
+    // and the radio toggle below the fold on every monitor. Past the cap the
+    // body still scrolls, which on the 1080p panel it will.
+    readonly property real detailsMaxHeight:
+        (barWindow && barWindow.screen ? barWindow.screen.height : 1080) * 0.85
+    popupHeight: panelMode === "details"
+        ? Math.max(200, Math.min(Math.ceil(detailsHeight) + 30, detailsMaxHeight))
+        : Math.min(wifiNetworks.length * 40 + 50, 420)
     popupXOffset: 250
+
+    // Reported by NetworkPanel, so the details card is sized to what it
+    // measured rather than to arithmetic over row counts.
+    property real detailsHeight: 0
+
+    // Right-click toggles the details view. Note it sets dropdownOpen directly
+    // instead of going through opened(): that signal starts a Wi-Fi rescan for
+    // the network list, which the details view neither shows nor needs.
+    onOtherClicked: button => {
+        if (button !== Qt.RightButton)
+            return
+        if (dropdownOpen && panelMode === "details") {
+            dropdownOpen = false
+        } else {
+            panelMode = "details"
+            dropdownOpen = true
+        }
+    }
 
     // Hidden on a machine without a wireless interface (a wired desktop), the
     // same way the battery and bluetooth widgets hide themselves. Otherwise
@@ -136,6 +171,8 @@ DropdownWidget {
     }
 
     onOpened: {
+        // Left-click always means the network list, whichever view was last up.
+        panelMode = "networks"
         // Paint from cache straight away...
         wifiScanProc.running = true
         savedProfilesProc.running = true
@@ -332,12 +369,6 @@ DropdownWidget {
         Component.onCompleted: running = true
     }
 
-    // Process to open nm-connection-editor
-    Process {
-        id: nmEditorProc
-        command: ["nm-connection-editor"]
-    }
-
     // Icon content
     Text {
         id: wifiText
@@ -363,20 +394,23 @@ DropdownWidget {
             NumberAnimation { from: 0.35; to: 1.0; duration: 450; easing.type: Easing.InOutQuad }
         }
 
-        MouseArea {
-            anchors.fill: parent
-            acceptedButtons: Qt.RightButton
-            onClicked: function(mouse) {
-                if (mouse.button === Qt.RightButton) {
-                    nmEditorProc.running = true
-                }
-            }
-        }
     }
 
-    // Popup content
+    // Popup content. One of two views, chosen by panelMode.
     popupContent: Component {
+        Item {
+            anchors.fill: parent
+
+            NetworkPanel {
+                anchors.fill: parent
+                visible: wifiWidget.panelMode === "details"
+                ctl: wifiWidget
+                onContentHeightChanged: wifiWidget.detailsHeight = contentHeight
+                Component.onCompleted: wifiWidget.detailsHeight = contentHeight
+            }
+
         Column {
+            visible: wifiWidget.panelMode === "networks"
             // Fill the Loader explicitly. Without this the Column's height is
             // implicit from its children, while the ListView below sizes
             // itself from parent.height - a circular dependency that resolved
@@ -591,6 +625,7 @@ DropdownWidget {
                     }
                 }
             }
+        }
         }
     }
 }

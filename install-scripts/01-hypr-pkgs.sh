@@ -37,6 +37,10 @@ hypr_package=(
   pamixer
   pavucontrol
   playerctl
+  # qrencode: the bar's network card turns the current Wi-Fi into a join QR
+  # (config/quickshell/bar/scripts/network-qr.sh). Without it that button
+  # reports the package as missing rather than failing silently.
+  qrencode
   # power-profiles-daemon is deliberately NOT here: on CachyOS the API is
   # provided by tuned-cachy-ppd, which conflicts with it, and a conflicting
   # --noconfirm transaction stops the install. power_profiles.sh installs it
