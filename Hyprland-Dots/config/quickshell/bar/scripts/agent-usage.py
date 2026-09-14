@@ -229,17 +229,35 @@ def probe_limits(token: str):
 
 # ----------------------------------------------------------------- transcripts
 
-def day_of(ts: str) -> str:
+def hour_of(ts: str):
+    """The UTC hour a record falls in, as an integer epoch hour."""
     try:
-        return datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone().strftime("%Y-%m-%d")
+        return int(datetime.fromisoformat(
+            ts.replace("Z", "+00:00")).timestamp() // 3600)
     except Exception:
-        return ""
+        return None
+
+
+# Cache format version. Bump when the shape of a scanned file's record
+# changes, so an old cache is discarded rather than misread.
+SCAN_VERSION = 2
 
 
 def scan_file(path: Path):
-    """Per-day and per-model token counts for one transcript."""
-    days = defaultdict(lambda: [0, 0])          # day -> [input, output]
-    models = defaultdict(lambda: [0, 0, 0, 0])  # model -> [in, out, cacheRead, cacheCreate]
+    """One transcript, bucketed by UTC hour and model.
+
+    Hour buckets rather than whole days because the window this is later
+    filtered to can start at an arbitrary instant - Anthropic's weekly
+    allowance resets at 16:00 UTC, not at midnight. Storing epoch hours rather
+    than formatted dates also keeps the cache correct across a timezone change,
+    which matters here: the VPN widget moves the system timezone.
+
+    The bucket is (epoch_hour, model) so both charts can be filtered by exactly
+    the same window afterwards. Keeping the cache window-independent is the
+    point - it is keyed on the file's mtime and size, and must not silently
+    become wrong when the window moves.
+    """
+    buckets = defaultdict(lambda: [0, 0, 0, 0])  # (hour, model) -> [in, out, cr, cc]
     try:
         with path.open("r", encoding="utf-8", errors="replace") as fh:
             for line in fh:
@@ -257,47 +275,50 @@ def scan_file(path: Path):
                 usage = msg.get("usage")
                 if not isinstance(usage, dict):
                     continue
-                i = int(usage.get("input_tokens") or 0)
-                o = int(usage.get("output_tokens") or 0)
-                cr = int(usage.get("cache_read_input_tokens") or 0)
-                cc = int(usage.get("cache_creation_input_tokens") or 0)
-                day = day_of(str(rec.get("timestamp") or ""))
-                if day:
-                    d = days[day]
-                    d[0] += i
-                    d[1] += o
+                hour = hour_of(str(rec.get("timestamp") or ""))
+                if hour is None:
+                    continue
                 model = str(msg.get("model") or "")
-                if model:
-                    m = models[model]
-                    m[0] += i
-                    m[1] += o
-                    m[2] += cr
-                    m[3] += cc
+                if not model:
+                    continue
+                b = buckets[(hour, model)]
+                b[0] += int(usage.get("input_tokens") or 0)
+                b[1] += int(usage.get("output_tokens") or 0)
+                b[2] += int(usage.get("cache_read_input_tokens") or 0)
+                b[3] += int(usage.get("cache_creation_input_tokens") or 0)
     except OSError:
         pass
-    return {"days": {k: v for k, v in days.items()},
-            "models": {k: v for k, v in models.items()}}
+    return {"b": [[h, m] + v for (h, m), v in buckets.items()]}
 
 
-def scan_transcripts():
-    """Aggregate the last week, reusing per-file results that have not changed.
+def scan_transcripts(window_start: float):
+    """Aggregate everything at or after `window_start`, reusing unchanged files.
 
-    The cache is keyed by path and invalidated by (mtime, size). Between two
-    runs usually one transcript has changed - the session you are in - so a
-    refresh re-reads one file rather than 160MB.
+    Both charts are built from the same buckets and the same cutoff, so their
+    totals reconcile. They did not before: the day chart filtered by record
+    timestamp while the model chart summed every record in any file whose
+    *mtime* fell in the window - and a file touched yesterday can hold sessions
+    from weeks ago. That made the model chart a superset, 1.37M tokens larger
+    than the day chart on this machine.
+
+    The per-file cache is keyed by (mtime, size) and holds raw hour buckets, so
+    it stays valid no matter where the window starts.
     """
     root = claude_dir() / "projects"
-    cutoff = time.time() - (WINDOW_DAYS + SCAN_SLACK_DAYS) * 86400
+    # Files untouched since before the window cannot contribute to it. A day of
+    # slack covers clock skew and a session that began just before the boundary.
+    file_cutoff = window_start - SCAN_SLACK_DAYS * 86400
 
     try:
         cache = json.loads(cache_path().read_text(encoding="utf-8"))
-        if not isinstance(cache, dict):
+        if not isinstance(cache, dict) or cache.get("v") != SCAN_VERSION:
             cache = {}
     except Exception:
         cache = {}
     files = cache.get("files") if isinstance(cache.get("files"), dict) else {}
 
     fresh = {}
+    start_hour = int(window_start // 3600)
     days = defaultdict(lambda: [0, 0])
     models = defaultdict(lambda: [0, 0, 0, 0])
 
@@ -307,41 +328,46 @@ def scan_transcripts():
                 st = path.stat()
             except OSError:
                 continue
-            if st.st_mtime < cutoff:
+            if st.st_mtime < file_cutoff:
                 continue
             key = str(path)
             sig = [int(st.st_mtime), st.st_size]
             hit = files.get(key)
-            if isinstance(hit, dict) and hit.get("sig") == sig:
-                entry = hit
-            else:
-                entry = {"sig": sig, **scan_file(path)}
+            entry = hit if isinstance(hit, dict) and hit.get("sig") == sig \
+                else {"sig": sig, **scan_file(path)}
             fresh[key] = entry
 
-            for day, (i, o) in entry["days"].items():
+            for hour, model, i, o, cr, cc in entry.get("b", []):
+                if hour < start_hour:
+                    continue
+                day = datetime.fromtimestamp(hour * 3600).astimezone().strftime("%Y-%m-%d")
                 d = days[day]
                 d[0] += i
                 d[1] += o
-            for model, vals in entry["models"].items():
                 m = models[model]
-                for idx in range(4):
-                    m[idx] += vals[idx]
+                m[0] += i
+                m[1] += o
+                m[2] += cr
+                m[3] += cc
 
     try:
-        cache_path().write_text(json.dumps({"files": fresh}), encoding="utf-8")
+        cache_path().write_text(
+            json.dumps({"v": SCAN_VERSION, "files": fresh}), encoding="utf-8")
     except OSError:
         pass
 
-    today = datetime.now().astimezone().date()
+    # One row per local day the window touches, oldest first, so a short window
+    # draws a short chart rather than padding with zeroes.
     by_day = []
-    for back in range(WINDOW_DAYS - 1, -1, -1):
-        key = (today.fromordinal(today.toordinal() - back)).strftime("%Y-%m-%d")
+    first = datetime.fromtimestamp(window_start).astimezone().date()
+    last = datetime.now().astimezone().date()
+    cur = first
+    while cur <= last:
+        key = cur.strftime("%Y-%m-%d")
         i, o = days.get(key, [0, 0])
         by_day.append({"day": key, "tokens": i + o})
+        cur = cur.fromordinal(cur.toordinal() + 1)
 
-    # Claude Code records a "<synthetic>" pseudo-model for its own bookkeeping
-    # turns. It is not a model anyone chose and it distorts the chart, so it
-    # never reaches the card.
     models = {k: v for k, v in models.items() if not k.startswith("<")}
 
     by_model = sorted(
@@ -353,6 +379,31 @@ def scan_transcripts():
         key=lambda r: r["tokens"], reverse=True)
 
     return by_day, by_model[:6]
+
+
+def weekly_window_start(limits) -> tuple:
+    """When the current allowance week began, and whether we actually know.
+
+    Anthropic reports when the weekly window *resets*; it is seven days long,
+    so it opened seven days before that. Anchoring the charts to it means the
+    card tells one story - the bars underneath the meter cover the period the
+    meter is measuring, rather than the last seven calendar days, which is a
+    different window that happens to be the same length.
+    """
+    for entry in limits or []:
+        if entry.get("label") != "Weekly":
+            continue
+        try:
+            reset = datetime.fromisoformat(
+                str(entry.get("resetsAt")).replace("Z", "+00:00")).timestamp()
+        except Exception:
+            continue
+        start = reset - WINDOW_DAYS * 86400
+        # Only trust it if it actually brackets now; a stale reset time from a
+        # cached reading can sit in the past.
+        if start <= time.time() <= reset:
+            return start, True
+    return time.time() - WINDOW_DAYS * 86400, False
 
 
 # ----------------------------------------------------------------------- main
@@ -373,8 +424,20 @@ def main():
     out["installed"] = (d / ".credentials.json").exists() or (d / "projects").is_dir()
 
     if not out["probed"]:
+        # No probe in this mode, so the weekly window comes from the last good
+        # reading on disk. Without one the charts fall back to 7 rolling days.
+        cached_limits = []
         try:
-            out["byDay"], out["byModel"] = scan_transcripts()
+            cached = json.loads(last_good_path().read_text(encoding="utf-8"))
+            if isinstance(cached, dict):
+                cached_limits = cached.get("limits") or []
+        except Exception:
+            pass
+        start, anchored = weekly_window_start(cached_limits)
+        out["windowStart"] = int(start)
+        out["windowAnchored"] = anchored
+        try:
+            out["byDay"], out["byModel"] = scan_transcripts(start)
         except Exception as e:
             out["scanError"] = type(e).__name__
         out["ok"] = bool(out["byDay"])
@@ -412,8 +475,11 @@ def main():
             pass
 
     if mode == "full":
+        start, anchored = weekly_window_start(out["limits"])
+        out["windowStart"] = int(start)
+        out["windowAnchored"] = anchored
         try:
-            out["byDay"], out["byModel"] = scan_transcripts()
+            out["byDay"], out["byModel"] = scan_transcripts(start)
         except Exception as e:
             out["scanError"] = type(e).__name__
 

@@ -102,8 +102,14 @@ components/         # Modular widget components
 - **AgentWidget.qml / AgentPanel.qml / AgentUsage.qml**: Claude Code usage.
   The bar shows the share of the 5-hour session spent (the number that says
   whether you are about to be cut off); the card adds the plan, weekly and
-  per-model allowances with reset countdowns, tokens by day for the last week,
-  and tokens by model. Ported from Omarchy's agents plugin, reduced to the one
+  per-model allowances with reset countdowns, tokens by day, and tokens by
+  model. Both charts cover **the current allowance week** - anchored to the
+  weekly reset the endpoint reports, not the last seven calendar days - so the
+  bars describe the period the meter above them is measuring. The card says
+  which window it is drawing, and falls back to 7 rolling days when no reset
+  time is known. "Tokens" is prompt + completion only: cache reads are around
+  200x larger (2,712M against 11.9M for opus-5 here) and would flatten every
+  other bar. Ported from Omarchy's agents plugin, reduced to the one
   agent this machine runs.
 
   `AgentUsage` is a **singleton** for the same reason `SystemStats` is: the bar
@@ -118,7 +124,12 @@ components/         # Modular widget components
   of Anthropic's usage endpoint; it is never printed or cached, and only the
   plan label reaches the output. The transcript scan caches **per file**, keyed
   by (mtime, size): a cold scan reads 160MB and costs ~1.3s of CPU, a repeat
-  costs ~0.1s because only the session you are in has changed.
+  costs ~0.1s because only the session you are in has changed. It stores raw
+  **hour buckets**, not days - the window can start at an arbitrary instant
+  (16:00 UTC), and epoch hours also survive the timezone moving under it, which
+  the VPN widget does. Keeping the cache window-independent is deliberate: it
+  is keyed on the file, and must not quietly become wrong when the window
+  moves.
 
   The widget hides on `installed` - whether `~/.claude` exists at all - and not
   on whether a probe returned anything. Those were conflated at first, and the

@@ -24,6 +24,10 @@ Singleton {
     property var limits: []          // [{label, window, percent, resetsAt}]
     property string limitsError: ""
     property var byDay: []           // [{day, tokens}]
+    // When the charts' window opened, and whether it is Anthropic's own weekly
+    // window or a 7-day fallback because no reset time was available.
+    property real windowStart: 0
+    property bool windowAnchored: false
     property var byModel: []         // [{model, tokens, input, output, cacheRead, cacheCreate}]
     property bool loaded: false
     property bool busy: false
@@ -85,6 +89,10 @@ Singleton {
 
             // A "limits" run reports no transcript data; keep what we had
             // rather than blanking the charts.
+            if (j.windowStart) {
+                root.windowStart = j.windowStart
+                root.windowAnchored = j.windowAnchored === true
+            }
             if (j.byDay && j.byDay.length > 0) root.byDay = j.byDay
             if (j.byModel && j.byModel.length > 0) root.byModel = j.byModel
             root.loaded = true
