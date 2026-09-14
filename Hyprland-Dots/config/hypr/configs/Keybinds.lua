@@ -158,7 +158,7 @@ bind(M .. " + CTRL + Print",     exec(S .. "/ScreenShot.sh --in5"),    { descrip
 bind(M .. " + CTRL + SHIFT + Print", exec(S .. "/ScreenShot.sh --in10"), { description = "screenshot in 10s" })
 bind("ALT + Print",              exec(S .. "/ScreenShot.sh --active"), { description = "screenshot active window" })
 bind(M .. " + SHIFT + S",        hl.dsp.global("quickshell:shotMenu"), { description = "screenshot dialog", locked = true })
-bind(M .. " + ALT + S",          exec(S .. "/ScreenShot.sh --swappy"), { description = "screenshot (annotate with satty)" })
+bind(M .. " + ALT + S",          exec(S .. "/ScreenShot.sh --area --edit"), { description = "screenshot area, open in editor" })
 
 -- Screen recording
 bind(M .. " + SHIFT + R",        hl.dsp.global("quickshell:recordMenu"),    { description = "screen recording dialog", locked = true })

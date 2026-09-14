@@ -80,8 +80,47 @@ countdown() {
 	done
 }
 
+# Set by --edit. Without it a capture goes straight to $dir and the clipboard
+# and is announced by notify_view; with it satty gets the image instead and
+# saving is whatever the user does in there (Ctrl+S saves, Ctrl+C copies).
+annotate=false
+
+# satty, sized to 80% of the focused monitor so the editor never opens bigger
+# than the screen it lands on. Reads the image on stdin.
+satty_open() {
+	local res w h
+	res=$(hyprctl monitors -j | jq -r '.[] | select(.focused==true) | "\(.width / .scale | floor)x\(.height / .scale | floor)"')
+	w=$(echo "$res" | cut -dx -f1)
+	h=$(echo "$res" | cut -dx -f2)
+	w=$(( w * 80 / 100 ))
+	h=$(( h * 80 / 100 ))
+
+	satty -f - \
+		--output-filename "${dir}/Screenshot_%Y-%m-%d_%H-%M-%S.png" \
+		--copy-command wl-copy \
+		--resize "${w}x${h}" \
+		--early-exit
+}
+
+# grim straight into satty. Arguments are passed to grim verbatim. A cancelled
+# selection leaves grim with nothing to capture and satty on an empty stdin
+# only shows an error box, so go through a file and check it first.
+edit_shot() {
+	local tmpfile
+	tmpfile=$(mktemp --suffix=.png)
+	grim "$@" - >"$tmpfile" 2>/dev/null
+
+	if [[ -s "$tmpfile" ]]; then
+		"${sDIR}/Sounds.sh" --screenshot
+		satty_open <"$tmpfile"
+	fi
+
+	rm -f "$tmpfile"
+}
+
 # take shots
 shotnow() {
+	[[ $annotate == true ]] && { edit_shot; return; }
 	cd ${dir} && grim - | tee "$file" | wl-copy
 	sleep 2
 	notify_view
@@ -132,6 +171,7 @@ shotmonitor() {
 		return 1
 	fi
 
+	[[ $annotate == true ]] && { edit_shot -o "$output"; return; }
 	cd ${dir} && grim -o "$output" - | tee "$file" | wl-copy
 	sleep 1
 	notify_view
@@ -139,6 +179,7 @@ shotmonitor() {
 
 shot5() {
 	countdown '5'
+	[[ $annotate == true ]] && { sleep 1; edit_shot; return; }
 	sleep 1 && cd ${dir} && grim - | tee "$file" | wl-copy
 	sleep 1
 	notify_view
@@ -146,6 +187,7 @@ shot5() {
 
 shot10() {
 	countdown '10'
+	[[ $annotate == true ]] && { sleep 1; edit_shot; return; }
 	sleep 1 && cd ${dir} && grim - | tee "$file" | wl-copy
 	notify_view
 }
@@ -153,11 +195,14 @@ shot10() {
 shotwin() {
 	w_pos=$(hyprctl activewindow | grep 'at:' | cut -d':' -f2 | tr -d ' ' | tail -n1)
 	w_size=$(hyprctl activewindow | grep 'size:' | cut -d':' -f2 | tr -d ' ' | tail -n1 | sed s/,/x/g)
+	[[ $annotate == true ]] && { edit_shot -g "$w_pos $w_size"; return; }
 	cd ${dir} && grim -g "$w_pos $w_size" - | tee "$file" | wl-copy
 	notify_view
 }
 
 shotarea() {
+	[[ $annotate == true ]] && { edit_shot -g "$(slurp)"; return; }
+
 	tmpfile=$(mktemp)
 	grim -g "$(slurp)" - >"$tmpfile"
 
@@ -174,30 +219,31 @@ shotactive() {
     active_window_file="Screenshot_${time}_${active_window_class}.png"
     active_window_path="${dir}/${active_window_file}"
 
-    hyprctl -j activewindow | jq -r '"\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"' | grim -g - "${active_window_path}"
+    local geom
+    geom=$(hyprctl -j activewindow | jq -r '"\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"')
+
+	[[ $annotate == true ]] && { edit_shot -g "$geom"; return; }
+
+    grim -g "$geom" "${active_window_path}"
 	sleep 1
     notify_view "active"
-}
-
-shotswappy() {
-	local res
-	res=$(hyprctl monitors -j | jq -r '.[] | select(.focused==true) | "\(.width / .scale | floor)x\(.height / .scale | floor)"')
-	local w h
-	w=$(echo "$res" | cut -dx -f1)
-	h=$(echo "$res" | cut -dx -f2)
-	w=$(( w * 80 / 100 ))
-	h=$(( h * 80 / 100 ))
-
-	grim -g "$(slurp)" - | satty -f - \
-		--output-filename "$(xdg-user-dir PICTURES)/Screenshots/Screenshot_%Y-%m-%d_%H-%M-%S.png" \
-		--copy-command wl-copy \
-		--resize "${w}x${h}" \
-		--early-exit
 }
 
 if [[ ! -d "$dir" ]]; then
 	mkdir -p "$dir"
 fi
+
+# --edit can sit anywhere in the arguments; strip it out before dispatching so
+# the mode is still $1 and "--monitor DP-1 --edit" works.
+args=()
+for arg in "$@"; do
+	if [[ "$arg" == "--edit" ]]; then
+		annotate=true
+	else
+		args+=("$arg")
+	fi
+done
+set -- "${args[@]}"
 
 if [[ "$1" == "--now" ]]; then
 	shotnow
@@ -216,9 +262,11 @@ elif [[ "$1" == "--area" ]]; then
 elif [[ "$1" == "--active" ]]; then
 	shotactive
 elif [[ "$1" == "--swappy" ]]; then
-	shotswappy
+	# Old name for what is now "--area --edit". Kept so stale binds still work.
+	annotate=true
+	shotarea
 else
-	echo -e "Available Options : --now --mouse --monitor [output] --in5 --in10 --win --area --active --swappy"
+	echo -e "Available Options : --now --mouse --monitor [output] --in5 --in10 --win --area --active [--edit]"
 fi
 
 exit 0

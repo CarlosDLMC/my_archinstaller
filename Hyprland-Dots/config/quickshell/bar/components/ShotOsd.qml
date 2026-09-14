@@ -82,7 +82,6 @@ PanelWindow {
             if (event.key === Qt.Key_F) ShotState.shotFullscreen()
             else if (event.key === Qt.Key_R) ShotState.shotRegion()
             else if (event.key === Qt.Key_W) ShotState.shotWindow()
-            else if (event.key === Qt.Key_E) ShotState.shotSwappy()
         }
 
         Rectangle {
@@ -224,7 +223,7 @@ PanelWindow {
                 }
 
                 Text {
-                    text: "W  active window     E  annotate"
+                    text: "W  active window          opens in the editor"
                     color: Theme.colDim
                     opacity: 0.7
                     font.family: Theme.fontFamily
