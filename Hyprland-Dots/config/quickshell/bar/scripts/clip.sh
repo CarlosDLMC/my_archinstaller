@@ -30,15 +30,40 @@ line_for() {
   cliphist list 2>/dev/null | awk -F'\t' -v want="$1" '$1 == want && !seen { print; seen = 1 }'
 }
 
+# How many decoded previews to keep on disk at once. The list shows about ten
+# rows plus one large preview, so a dozen covers what can be on screen. Without
+# a cap this directory grew to 72MB of full-size screenshots - every one of
+# them a byte-for-byte duplicate of something cliphist already stores.
+#
+# Downscaling them instead was measured and rejected: `magick -resize 900x900`
+# takes 489ms against 25ms to decode, which would be felt on every scroll.
+THUMB_KEEP=12
+
 cmd_thumb() {
-  local line out
+  local line out dir
   line=$(line_for "$1") || exit 1
   [[ -n $line ]] || exit 1
   out=$2
-  mkdir -p "$(dirname "$out")"
+  dir=$(dirname "$out")
+  mkdir -p "$dir"
   printf '%s' "$line" | cliphist decode > "$out" 2>/dev/null || exit 1
   [[ -s $out ]] || { rm -f "$out"; exit 1; }
+
+  # Drop all but the newest THUMB_KEEP, so a long scroll cannot fill the disk.
+  ls -1t "$dir" 2>/dev/null | tail -n +$((THUMB_KEEP + 1)) | while IFS= read -r old_file; do
+    [[ -n $old_file ]] && rm -f -- "$dir/$old_file"
+  done
+
   printf '%s\n' "$out"
+}
+
+# Everything here is reconstructible from cliphist in 25ms a piece, so nothing
+# is kept between uses of the picker.
+cmd_thumbclean() {
+  local dir=$1
+  [[ -n $dir && $dir == *clip-thumbs ]] || exit 2
+  rm -f -- "$dir"/*.img 2>/dev/null
+  exit 0
 }
 
 cmd_copy() {
@@ -57,8 +82,9 @@ cmd_delete() {
 
 case "${1:-}" in
   thumb)  cmd_thumb "${2:?id}" "${3:?outfile}" ;;
+  thumbclean) cmd_thumbclean "${2:?dir}" ;;
   copy)   cmd_copy "${2:?id}" ;;
   delete) cmd_delete "${2:?id}" ;;
   wipe)   cliphist wipe ;;
-  *) echo "usage: clip.sh thumb <id> <file>|copy <id>|delete <id>|wipe" >&2; exit 2 ;;
+  *) echo "usage: clip.sh thumb <id> <file>|thumbclean <dir>|copy <id>|delete <id>|wipe" >&2; exit 2 ;;
 esac

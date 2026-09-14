@@ -126,11 +126,31 @@ Singleton {
         reload()
     }
 
+    Process { id: thumbCleanProc }
+
     function close() {
         dialogOpen = false
         // Let go of the decoded images: a session's worth of 3MB screenshots
         // held as QML Image sources is real memory for a dialog that is shut.
         thumbs = ({})
+        pendingThumbs = []
+        // And delete them from disk. Clearing the map alone left every decoded
+        // preview behind - 72MB of full-size screenshots that cliphist already
+        // holds. Deferred past the fade so the images being drawn on the way
+        // out still have their files.
+        thumbCleanTimer.restart()
+    }
+
+    Timer {
+        id: thumbCleanTimer
+        interval: 400
+        repeat: false
+        onTriggered: {
+            if (root.dialogOpen || thumbCleanProc.running) return
+            thumbCleanProc.command = ["sh", "-c",
+                root.script + " thumbclean " + root.thumbDir]
+            thumbCleanProc.running = true
+        }
     }
 
     function toggle() {
