@@ -606,35 +606,39 @@ Item {
             //  its right - the shape DHH uses. The SSID lives here rather than
             //  as a "Network" row in LINK below, so the title and the actions
             //  share one line instead of taking two.
+            //
+            //  The wifi glyph on the left IS the radio toggle. It used to be a
+            //  static mark with the toggle sitting off on the right, which put
+            //  the control furthest from the thing it controls and left a dead
+            //  icon in the most prominent spot on the card.
             Item {
                 width: parent.width
                 height: Math.round(panel.labelSize * 2.2)
 
-                Row {
+                IconButton {
+                    id: radioToggle
                     anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    glyph: panel.busy !== "" ? "󰔟" : (panel.wifiRadioOn ? "󰤨" : "󰤮")
+                    // No persistent fill here: at the head of the card that
+                    // reads as a selected tab rather than as "the radio is on",
+                    // which the glyph and its brightness already say.
+                    current: false
+                    onPicked: panel.toggleRadio()
+                }
+
+                Text {
+                    anchors.left: radioToggle.right
+                    anchors.leftMargin: 4
                     anchors.right: headerActions.left
                     anchors.rightMargin: 8
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 6
-
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: panel.wifiRadioOn ? "󰤨" : "󰤮"
-                        color: panel.wifiRadioOn ? Theme.colWhite : Theme.colMuted
-                        font.pixelSize: panel.labelSize
-                        font.family: Theme.fontFamily
-                    }
-
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: parent.width - 26
-                        text: panel.field("ssid", "Not connected")
-                        color: Theme.colWhite
-                        font.pixelSize: panel.labelSize
-                        font.family: Theme.fontFamily
-                        font.bold: true
-                        elide: Text.ElideMiddle
-                    }
+                    text: panel.field("ssid", "Not connected")
+                    color: panel.wifiRadioOn ? Theme.colWhite : Theme.colMuted
+                    font.pixelSize: panel.labelSize
+                    font.family: Theme.fontFamily
+                    font.bold: true
+                    elide: Text.ElideMiddle
                 }
 
                 Row {
@@ -664,12 +668,6 @@ Item {
                             if (panel.view === "speed") { panel.stopSpeedTest(); panel.view = "info" }
                             else panel.view = "speed"
                         }
-                    }
-
-                    IconButton {
-                        glyph: panel.busy !== "" ? "󰔟" : (panel.wifiRadioOn ? "󰖩" : "󰖪")
-                        current: panel.wifiRadioOn
-                        onPicked: panel.toggleRadio()
                     }
                 }
             }
