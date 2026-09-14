@@ -32,6 +32,15 @@ packages=(
   hyprlock
   hyprland
   hyprpolkitagent
+  # wtype: the clipboard picker pastes into the window that had focus, and
+  # clip-paste.sh exits quietly when wtype is absent - so without it Enter
+  # copies and nothing appears, with no error anywhere. Exactly the kind of
+  # missing package this check exists to catch.
+  wtype
+  # qrencode: the network card's share-QR. It reports its own absence rather
+  # than failing silently, but it is a one-line package and a dead button on a
+  # fresh machine is still a bad first impression.
+  qrencode
 )
 
 # Local packages that should be in /usr/local/bin/
