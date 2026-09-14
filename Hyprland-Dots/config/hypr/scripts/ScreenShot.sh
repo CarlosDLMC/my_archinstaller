@@ -25,7 +25,6 @@ notify_cmd_NOT="notify-send -u low -i ${iDoR}/note.png "
 notify_view() {
     if [[ "$1" == "active" ]]; then
         if [[ -e "${active_window_path}" ]]; then
-			"${sDIR}/Sounds.sh" --screenshot        
             resp=$(timeout 5 ${notify_cmd_shot_win} " Screenshot of:" " ${active_window_class} Saved.")
             case "$resp" in
 				action1)
@@ -43,7 +42,6 @@ notify_view() {
     else
         local check_file="${dir}/${file}"
         if [[ -e "$check_file" ]]; then
-            "${sDIR}/Sounds.sh" --screenshot
             resp=$(timeout 5 ${notify_cmd_shot} " Screenshot" " Saved")
 			case "$resp" in
 				action1)
@@ -99,12 +97,16 @@ edit_shot() {
 	grim -l 0 "$@" - >"$tmpfile" 2>/dev/null
 
 	if [[ -s "$tmpfile" ]]; then
-		"${sDIR}/Sounds.sh" --screenshot
 		satty_open <"$tmpfile"
 	fi
 
 	rm -f "$tmpfile"
 }
+
+# No shutter sound anywhere in here, deliberately. The notification is the
+# feedback; a camera noise on every capture is just noise. Sounds.sh itself
+# stays - Volume.sh still uses it, and --error still fires when a shot could
+# not be saved.
 
 # PNG compression level 1 on every path that SAVES a shot, not the default 6.
 # Measured on a 2560x1440 monitor:
