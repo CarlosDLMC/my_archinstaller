@@ -151,8 +151,11 @@ bind("XF86AudioStop",  exec(S .. "/MediaCtrl.sh --stop"),  { description = "stop
 -- Screenshots. NOTE: you may need to press Fn as well.
 -- Bare Print: instant shot of whichever monitor the pointer is on - deliberately
 -- the pointer and not the focused monitor, they can be on different screens.
+-- SUPER + Print is the same capture but hands it to satty first, so it is the
+-- "let me crop or draw on it before it is saved" version of the same key.
+-- The screenshot dialog kept its other binding, SUPER + SHIFT + S.
 bind("Print",                    exec(S .. "/ScreenShot.sh --mouse"),  { description = "screenshot (monitor under pointer)" })
-bind(M .. " + Print",            hl.dsp.global("quickshell:shotMenu"), { description = "screenshot dialog", locked = true })
+bind(M .. " + Print",            exec(S .. "/ScreenShot.sh --mouse --edit"), { description = "screenshot (monitor under pointer), open in editor" })
 bind(M .. " + SHIFT + Print",    exec(S .. "/ScreenShot.sh --area"),   { description = "screenshot (area)" })
 bind(M .. " + CTRL + Print",     exec(S .. "/ScreenShot.sh --in5"),    { description = "screenshot in 5s" })
 bind(M .. " + CTRL + SHIFT + Print", exec(S .. "/ScreenShot.sh --in10"), { description = "screenshot in 10s" })
