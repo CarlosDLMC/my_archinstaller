@@ -15,17 +15,25 @@ DropdownWidget {
     property string btConnectedDevice: ""
     property var btDevices: []
 
-    // No controller bound means no /sys/class/bluetooth/hci*, which is the
-    // normal case on a desktop without a dongle. Without this the widget
-    // showed a permanently "off" icon whose dropdown listed nothing and whose
-    // toggle silently failed, because bluetoothctl had no adapter to talk to.
+    // Whether this machine has bluetooth hardware at all - which is not the
+    // same question as whether an adapter is live right now.
+    //
+    // A desktop without a dongle has neither, and still hides the widget, which
+    // is what this was added for. But blocking the radio also empties
+    // /sys/class/bluetooth while rfkill goes on listing it, and blocking is
+    // exactly what this widget's own power toggle does: keying visibility on
+    // hci* alone meant turning bluetooth off from the bar made the control
+    // vanish, leaving no way to turn it back on short of restarting the bar.
+    // Fall back to rfkill so a blocked radio still renders its "off" icon.
     property bool hasAdapter: false
 
     visible: hasAdapter
 
     Process {
         id: btPresenceProc
-        command: ["sh", "-c", "ls -d /sys/class/bluetooth/hci* >/dev/null 2>&1 && echo yes || echo no"]
+        command: ["sh", "-c",
+            "ls -d /sys/class/bluetooth/hci* >/dev/null 2>&1 && echo yes && exit 0; " +
+            "rfkill -n -o TYPE list bluetooth 2>/dev/null | grep -q bluetooth && echo yes || echo no"]
         stdout: SplitParser {
             onRead: data => {
                 if (data) btWidget.hasAdapter = (data.trim() === "yes")
@@ -49,7 +57,11 @@ DropdownWidget {
         onRunningChanged: {
             if (running) {
                 output = ""
-            } else if (output) {
+            } else {
+                // No output at all means bluetoothctl found no controller
+                // (blocked radio, stopped service). That is off, not unchanged
+                // - leaving the old value made the bar claim bluetooth was
+                // still on after the adapter went away.
                 btWidget.btPowered = output.includes("Powered: yes")
             }
         }
@@ -182,6 +194,21 @@ DropdownWidget {
             }
         }
         Component.onCompleted: running = true
+    }
+
+    // Every Process above fires once at startup and then only on user action,
+    // so a radio that came or went after the bar started stayed invisible until
+    // the bar was restarted. dbus-monitor does not cover it either: bluez has
+    // no adapter to emit PropertiesChanged for while the radio is blocked.
+    Timer {
+        interval: 10000
+        running: true
+        repeat: true
+        onTriggered: {
+            btPresenceProc.running = true
+            btStatusProc.running = true
+            btConnectedProc.running = true
+        }
     }
 
     // Icon content
