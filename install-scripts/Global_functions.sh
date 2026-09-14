@@ -42,6 +42,92 @@ record_package_failure() {
   echo "$1" >> "$FAILED_PACKAGES_MANIFEST"
 }
 
+# Packages that failed makepkg's source integrity check rather than failing to
+# build. Kept apart from the manifest above because the two need different
+# advice: a build failure is usually a missing dependency or a compiler error,
+# while a checksum failure is almost always an upstream tarball that was
+# regenerated - and the fix for it is a flag, not a code change. 02-Final-Check.sh
+# reports these separately with the exact command to run.
+CHECKSUM_FAILURES_MANIFEST="Install-Logs/.checksum-failures"
+
+record_checksum_failure() {
+  echo "$1" >> "$CHECKSUM_FAILURES_MANIFEST"
+}
+
+# Packages allowed to rebuild with integrity verification off. See the file
+# itself for what that means and what to check before adding a name.
+CHECKSUM_SKIP_LIST="install-scripts/checksum-skip.conf"
+
+checksum_skip_allowed() {
+  [ -f "$CHECKSUM_SKIP_LIST" ] || return 1
+  grep -vE '^[[:space:]]*(#|$)' "$CHECKSUM_SKIP_LIST" 2>/dev/null \
+    | tr -d '[:blank:]' | grep -qx "$1"
+}
+
+# Did THIS package's slice of the log show a checksum failure?
+#
+# The offset matters: $LOG is appended to by every package in the run, so
+# grepping the whole file would blame the current package for a mismatch that
+# happened twenty packages ago. Callers record the log size before they start
+# and pass it in.
+#
+# Matches makepkg's own wording (integrity/verify_checksum.sh). A PGP failure
+# prints "One or more PGP signatures could not be verified!" instead - that is
+# a different problem which --skipchecksums does not address, so it is
+# deliberately not matched here.
+log_shows_checksum_failure() {
+  local from="${1:-0}"
+  [ -f "$LOG" ] || return 1
+  tail -c "+$((from + 1))" "$LOG" 2>/dev/null \
+    | grep -q 'did not pass the validity check'
+}
+
+# Current size of $LOG, for the offset above.
+log_mark() {
+  stat -c %s "$LOG" 2>/dev/null || echo 0
+}
+
+# Retry one package with --skipchecksums, but only if it is allowlisted.
+# Returns 0 if the package is installed afterwards.
+retry_without_checksums() {
+  local pkg="$1" mark="$2"
+
+  log_shows_checksum_failure "$mark" || return 1
+
+  if ! checksum_skip_allowed "$pkg"; then
+    echo -e "\n${WARN} ${YELLOW}${pkg}${RESET} failed its ${YELLOW}source checksum${RESET}, not its build."
+    echo -e "${NOTE} The downloaded source does not match what the AUR PKGBUILD pins. Usually an"
+    echo -e "${NOTE} upstream tarball that was regenerated - but verify before assuming that."
+    echo -e "${NOTE} Check it, then either build it by hand:"
+    echo -e "${NOTE}   ${MAGENTA}$(basename "${ISAUR:-yay}") -S ${pkg} --mflags --skipchecksums${RESET}"
+    echo -e "${NOTE} or add ${MAGENTA}${pkg}${RESET} to ${MAGENTA}${CHECKSUM_SKIP_LIST}${RESET} to let re-runs do it."
+    record_checksum_failure "$pkg"
+    return 1
+  fi
+
+  echo -e "\n${WARN} ${YELLOW}${pkg}${RESET} failed its source checksum."
+  echo -e "${NOTE} It is listed in ${MAGENTA}${CHECKSUM_SKIP_LIST}${RESET}, so rebuilding it with"
+  echo -e "${NOTE} ${YELLOW}integrity verification disabled for this package${RESET}."
+  {
+    echo "=== checksum override: rebuilding $pkg with --skipchecksums ==="
+    echo "=== allowlisted in $CHECKSUM_SKIP_LIST ==="
+  } >> "$LOG"
+
+  (
+    stdbuf -oL $ISAUR -S --noconfirm --mflags --skipchecksums "$pkg" 2>&1
+  ) >> "$LOG" 2>&1 &
+  local pid=$!
+  show_progress "$pid" "$pkg (--skipchecksums)"
+
+  if $ISAUR -Q "$pkg" &>/dev/null; then
+    echo -e "${OK} ${YELLOW}${pkg}${RESET} installed with checksums skipped."
+    return 0
+  fi
+  echo -e "${ERROR} ${YELLOW}${pkg}${RESET} still failed with checksums skipped - this is not just a stale checksum."
+  record_checksum_failure "$pkg"
+  return 1
+}
+
 # Show progress function
 show_progress() {
     local pid=$1
@@ -101,12 +187,19 @@ install_package() {
   if $ISAUR -Q "$1" &>> /dev/null ; then
     echo -e "${INFO} ${MAGENTA}$1${RESET} is already installed. Skipping..."
   else
+    local _mark; _mark=$(log_mark)
     (
       stdbuf -oL $ISAUR -S --noconfirm "$1" 2>&1
     ) >> "$LOG" 2>&1 &
     PID=$!
     show_progress $PID "$1"  
-    
+
+    # A build that failed its source checksum gets one allowlisted retry with
+    # verification off; anything else is reported and left alone.
+    if ! $ISAUR -Q "$1" &>>/dev/null; then
+      retry_without_checksums "$1" "$_mark" || true
+    fi
+
     # Double check if package is installed
     if $ISAUR -Q "$1" &>> /dev/null ; then
       echo -e "${OK} Package ${YELLOW}$1${RESET} has been successfully installed!"
@@ -120,11 +213,16 @@ install_package() {
 
 # Function to just install packages with either yay or paru without checking if installed
 install_package_f() {
+  local _mark; _mark=$(log_mark)
   (
     stdbuf -oL $ISAUR -S --noconfirm "$1" 2>&1
   ) >> "$LOG" 2>&1 &
   PID=$!
   show_progress $PID "$1"  
+
+  if ! $ISAUR -Q "$1" &>>/dev/null; then
+    retry_without_checksums "$1" "$_mark" || true
+  fi
 
   # Double check if package is installed
   if $ISAUR -Q "$1" &>> /dev/null ; then

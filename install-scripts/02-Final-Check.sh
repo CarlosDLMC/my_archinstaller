@@ -216,8 +216,37 @@ if selected limine; then
         bash -c 'for c in /boot/limine.conf /efi/limine.conf /boot/efi/limine.conf /boot/limine/limine.conf /efi/limine/limine.conf; do sudo test -f "$c" || continue; sudo grep -q "my_archinstaller Limine theme" "$c" && sudo test -f "$(dirname "$c")/limine-wallpaper.png" && exit 0; done; exit 1'
 fi
 
+# Packages that failed their SOURCE CHECKSUM rather than their build.
+#
+# Reported apart from the list above because the cause and the fix are
+# different: not a missing dependency or a compiler error, but a source archive
+# whose bytes no longer match what the AUR PKGBUILD pins - almost always an
+# upstream forge regenerating a release tarball. Telling you that here saves
+# digging it out of a 40MB install log, and the command to finish the job is
+# one line. Re-verified like the others, so a package that was pulled in later
+# as somebody's dependency is not reported as outstanding.
+checksum_failed=()
+if [ -f "$CHECKSUM_FAILURES_MANIFEST" ]; then
+    while read -r pkg; do
+        [ -n "$pkg" ] || continue
+        is_installed_pacman "$pkg" && continue
+        already="no"
+        for seen in "${checksum_failed[@]}"; do
+            [ "$seen" == "$pkg" ] && already="yes" && break
+        done
+        [ "$already" == "yes" ] && continue
+        checksum_failed+=("$pkg")
+    done < "$CHECKSUM_FAILURES_MANIFEST"
+fi
+
 # Log missing packages
-if [ ${#missing[@]} -eq 0 ] && [ ${#local_missing[@]} -eq 0 ] && [ ${#outcome_failures[@]} -eq 0 ]; then
+# checksum_failed is in this condition on purpose. In a normal run a package
+# that failed its checksum is recorded in BOTH manifests, so `missing` already
+# covers it - but the two are written by different code paths, and if one ever
+# records without the other, leaving it out here would report a clean install
+# and exit 0, which is what lets a preset run reboot. Cheap insurance.
+if [ ${#missing[@]} -eq 0 ] && [ ${#local_missing[@]} -eq 0 ] && [ ${#outcome_failures[@]} -eq 0 ] \
+   && [ ${#checksum_failed[@]} -eq 0 ]; then
     echo "${OK} GREAT! All ${YELLOW}essential packages${RESET} are installed and every selected component checked out." | tee -a "$LOG"
     exit 0
 fi
@@ -244,6 +273,26 @@ if [ ${#local_missing[@]} -ne 0 ]; then
         echo "${WARNING}$pkg1${RESET} is not installed. Can't find it in /usr/local/bin/"
         echo "$pkg1" >> "$LOG"
     done
+fi
+
+if [ ${#checksum_failed[@]} -ne 0 ]; then
+    echo
+    echo "${WARN} These failed their ${WARNING}source checksum${RESET}, not their build:"
+    for pkg in "${checksum_failed[@]}"; do
+        echo "  ${WARNING}$pkg${RESET}"
+        echo "CHECKSUM: $pkg" >> "$LOG"
+    done
+    echo "${NOTE} The downloaded source did not match what the AUR PKGBUILD pins. That is"
+    echo "${NOTE} usually an upstream tarball that was regenerated - same code, different"
+    echo "${NOTE} archive bytes - but it is also what a tampered source looks like, so check"
+    echo "${NOTE} before overriding it. The repo README has the procedure under"
+    echo "${NOTE} \"Validating source files with sha256sums... FAILED\"."
+    echo "${NOTE} Once you are satisfied, build it with:"
+    for pkg in "${checksum_failed[@]}"; do
+        echo "   ${MAGENTA}$(basename "${ISAUR:-yay}") -S $pkg --mflags --skipchecksums${RESET}"
+    done
+    echo "${NOTE} To let future runs do that unattended, add the name to"
+    echo "${NOTE} ${MAGENTA}install-scripts/checksum-skip.conf${RESET}."
 fi
 
 echo "${NOTE} Missing packages logged at $(date)" >> "$LOG"
