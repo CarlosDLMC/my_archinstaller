@@ -654,12 +654,15 @@ Item {
                         }
                     }
 
+                    // Opens the view only. Running a test saturates the
+                    // connection, so it waits for an explicit Start rather
+                    // than firing the moment you look at the tab.
                     IconButton {
                         glyph: "󰓅"
                         current: panel.view === "speed"
                         onPicked: {
                             if (panel.view === "speed") { panel.stopSpeedTest(); panel.view = "info" }
-                            else panel.startSpeedTest()
+                            else panel.view = "speed"
                         }
                     }
 
@@ -902,7 +905,8 @@ Item {
                     // endpoints, and a restart additionally waits for the
                     // previous run's workers to die. Both showed as
                     // "Measuring… 0 Mb/s", which reads as broken.
-                    text: panel.speedPhase === "" ? "Stopped"
+                    text: panel.speedPhase === ""
+                            ? (panel.speedDown > 0 || panel.speedUp > 0 ? "Stopped" : "Ready")
                         : panel.speedPhase === "done" ? "Done - peak of each direction"
                         : panel.speedNow === 0
                             ? "Starting…"
@@ -934,12 +938,28 @@ Item {
                     font.family: Theme.fontFamily
                 }
 
-                // Only while something is actually running - the speedometer
-                // in the header is what leaves the view again.
-                Pill {
-                    visible: panel.speedPhase === "down" || panel.speedPhase === "up"
-                    label: "Stop"
-                    onPicked: panel.stopSpeedTest()
+                // Start while idle, Stop while running. The speedometer in
+                // the header is what leaves the view again, so neither of
+                // these has to double as a Back.
+                Row {
+                    spacing: 6
+
+                    readonly property bool busy:
+                        panel.speedPhase === "down" || panel.speedPhase === "up"
+
+                    Pill {
+                        visible: !parent.busy
+                        label: panel.speedPhase === "done" || panel.speedDown > 0 || panel.speedUp > 0
+                            ? "Run again" : "Start"
+                        current: true
+                        onPicked: panel.startSpeedTest()
+                    }
+
+                    Pill {
+                        visible: parent.busy
+                        label: "Stop"
+                        onPicked: panel.stopSpeedTest()
+                    }
                 }
             }
 
