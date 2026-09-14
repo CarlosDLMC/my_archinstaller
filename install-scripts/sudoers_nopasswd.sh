@@ -35,7 +35,11 @@ printf "\n${NOTE} Configuring ${SKY_BLUE}passwordless sudo${RESET} for the wheel
 # Make sure the user is actually in wheel, or the rule below does nothing.
 if ! groups "$USER" | grep -qw wheel; then
   printf "${NOTE} Adding $USER to the wheel group...\n"
-  if sudo usermod -aG wheel "$USER" 2>&1 | tee -a "$LOG"; then
+  # PIPESTATUS, not the pipeline status: `cmd | tee` reports tee's exit code,
+  # which is 0 whatever the command did, so this used to print the OK line on
+  # every run and the error branch below could never be reached.
+  sudo usermod -aG wheel "$USER" 2>&1 | tee -a "$LOG"
+  if [ "${PIPESTATUS[0]}" -eq 0 ]; then
     echo "${OK} $USER added to wheel (takes effect on next login)" | tee -a "$LOG"
   else
     echo "${ERROR} Could not add $USER to wheel - the rule below will not apply" | tee -a "$LOG"
@@ -68,10 +72,24 @@ else
 fi
 
 # 0440 root:root, which is what sudo requires of files in sudoers.d.
-if sudo install -o root -g root -m 0440 "$TMP_RULE" "$RULE_FILE" 2>&1 | tee -a "$LOG"; then
-  echo "${OK} Installed $RULE_FILE" | tee -a "$LOG"
-else
+#
+# PIPESTATUS, not the pipeline status. `sudo install ... | tee` reports *tee's*
+# exit code, so a failed install took the success branch: the script printed
+# "Installed /etc/sudoers.d/10-wheel-nopasswd", the visudo -c below still passed
+# (an absent file is a valid sudoers tree), and the run ended claiming a rule
+# that was never written - with the bar's VPN widget silently dead afterwards.
+sudo install -o root -g root -m 0440 "$TMP_RULE" "$RULE_FILE" 2>&1 | tee -a "$LOG"
+if [ "${PIPESTATUS[0]}" -ne 0 ]; then
   echo "${ERROR} Failed to install $RULE_FILE" | tee -a "$LOG"
+  exit 1
+fi
+echo "${OK} Installed $RULE_FILE" | tee -a "$LOG"
+
+# The install said it worked; confirm the file is actually there and readable by
+# sudo before reporting success. Cheap, and it is the thing that was being
+# assumed for as long as the bug above was in place.
+if ! sudo test -f "$RULE_FILE"; then
+  echo "${ERROR} $RULE_FILE is missing after a successful install - not continuing" | tee -a "$LOG"
   exit 1
 fi
 
