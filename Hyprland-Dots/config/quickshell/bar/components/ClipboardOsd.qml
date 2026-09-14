@@ -27,14 +27,19 @@ PanelWindow {
     readonly property int fadeMs: 160
     readonly property real uiScale: 1.35
 
-    readonly property int cardW: Math.round(720 * uiScale)
-    readonly property int cardH: Math.round(420 * uiScale)
+    // Sizes track ShotOsd and RecordOsd, which are the other full-screen
+    // dialogs: title 14, body 15, secondary 12, all at the same 1.35 scale.
+    // These were smaller at first - the entry list sat at 11 (15px), below
+    // what those dialogs use for their *secondary* text, even though it is
+    // this dialog's primary reading surface.
+    readonly property int cardW: Math.round(820 * uiScale)
+    readonly property int cardH: Math.round(480 * uiScale)
     readonly property int pad: Math.round(18 * uiScale)
     readonly property int radius: Math.round(18 * uiScale)
-    readonly property int rowH: Math.round(34 * uiScale)
-    readonly property int titleSize: Math.round(13 * uiScale)
-    readonly property int rowSize: Math.round(11 * uiScale)
-    readonly property int hintSize: Math.round(9 * uiScale)
+    readonly property int rowH: Math.round(38 * uiScale)
+    readonly property int titleSize: Math.round(14 * uiScale)
+    readonly property int rowSize: Math.round(13 * uiScale)
+    readonly property int hintSize: Math.round(11 * uiScale)
 
     visible: windowVisible
 
