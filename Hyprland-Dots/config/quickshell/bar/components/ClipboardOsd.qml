@@ -59,6 +59,31 @@ PanelWindow {
         }
     }
 
+    // Shared by the window and by the search field, which sees keys first.
+    function handleKey(event) {
+            if (event.key === Qt.Key_Escape) {
+                ClipboardState.close(); event.accepted = true
+            } else if (event.key === Qt.Key_Down) {
+                ClipboardState.move(1); event.accepted = true
+            } else if (event.key === Qt.Key_Up) {
+                ClipboardState.move(-1); event.accepted = true
+            } else if (event.key === Qt.Key_PageDown) {
+                ClipboardState.move(8); event.accepted = true
+            } else if (event.key === Qt.Key_PageUp) {
+                ClipboardState.move(-8); event.accepted = true
+            } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                ClipboardState.pick(ClipboardState.current); event.accepted = true
+            } else if (event.key === Qt.Key_Delete) {
+                // Same bindings the rofi picker used, so the muscle memory
+                // carries over: Ctrl+Del removes one entry, Alt+Del wipes.
+                if (event.modifiers & Qt.ControlModifier) {
+                    ClipboardState.remove(ClipboardState.current); event.accepted = true
+                } else if (event.modifiers & Qt.AltModifier) {
+                    ClipboardState.wipe(); event.accepted = true
+                }
+            }
+    }
+
     Timer {
         id: goneTimer
         interval: osd.fadeMs
@@ -83,32 +108,15 @@ PanelWindow {
         anchors.fill: parent
         focus: true
 
-        // Keys.BeforeItem so navigation is seen before the text field consumes
-        // it - the field holds focus the whole time so you can just type.
+        // The search field holds focus the whole time so you can just type, and
+        // key events start there and travel outwards. That is fine for arrows
+        // and Enter, which a single-line TextInput ignores - but Delete is an
+        // EDITING key, so the field swallowed it and Ctrl+Del did nothing at
+        // all. The handler is shared with the field itself (see below), which
+        // sees keys first and hands the ones meant for the list back here.
         Keys.priority: Keys.BeforeItem
-        Keys.onPressed: function (event) {
-            if (event.key === Qt.Key_Escape) {
-                ClipboardState.close(); event.accepted = true
-            } else if (event.key === Qt.Key_Down) {
-                ClipboardState.move(1); event.accepted = true
-            } else if (event.key === Qt.Key_Up) {
-                ClipboardState.move(-1); event.accepted = true
-            } else if (event.key === Qt.Key_PageDown) {
-                ClipboardState.move(8); event.accepted = true
-            } else if (event.key === Qt.Key_PageUp) {
-                ClipboardState.move(-8); event.accepted = true
-            } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                ClipboardState.pick(ClipboardState.current); event.accepted = true
-            } else if (event.key === Qt.Key_Delete) {
-                // Same bindings the rofi picker used, so the muscle memory
-                // carries over: Ctrl+Del removes one entry, Alt+Del wipes.
-                if (event.modifiers & Qt.ControlModifier) {
-                    ClipboardState.remove(ClipboardState.current); event.accepted = true
-                } else if (event.modifiers & Qt.AltModifier) {
-                    ClipboardState.wipe(); event.accepted = true
-                }
-            }
-        }
+        Keys.onPressed: event => osd.handleKey(event)
+
 
         Rectangle {
             id: card
@@ -163,6 +171,13 @@ PanelWindow {
                         clip: true
                         focus: true
                         onTextChanged: ClipboardState.filter = text
+
+                        // BeforeItem: this runs ahead of the field's own
+                        // editing behaviour, which is the only way Delete ever
+                        // reaches the list - TextInput treats it as "delete the
+                        // character to the right" and accepts it.
+                        Keys.priority: Keys.BeforeItem
+                        Keys.onPressed: event => osd.handleKey(event)
 
                         // Reset the box whenever the dialog opens.
                         Connections {
