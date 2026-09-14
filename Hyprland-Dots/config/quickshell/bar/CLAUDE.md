@@ -29,11 +29,13 @@ RecordState.qml     # Singleton: screen-recording dialog state + global shortcut
 ShotState.qml       # Singleton: screenshot dialog state + global shortcut
 SystemStats.qml     # Singleton: CPU usage/temp + memory, read from /proc via FileView
 AgentUsage.qml      # Singleton: Claude Code allowance + token stats
+ClipboardState.qml  # Singleton: clipboard history state + the clipMenu shortcut
 NightLight.qml      # Singleton: night-light state, watched off Hyprsunset.sh's state file
 components/         # Modular widget components
   ├── DropdownWidget.qml   # Base component for click-to-open dropdown widgets (notch design)
   ├── AudioPanel.qml       # Audio card body: output/input device + level, per-app levels
   ├── NetworkPanel.qml     # Network card body: link, connection, traffic, DNS, speed test, share QR
+  ├── ClipboardOsd.qml     # Clipboard picker (centred overlay, list + preview)
   ├── AgentWidget.qml      # Claude Code usage: session % in the bar, card on click
   ├── AgentPanel.qml       # Agents card body: plan, allowance meters, tokens by day/model
   ├── VolumeSlider.qml     # Draggable level track, shared by every row of the audio card
@@ -135,6 +137,35 @@ components/         # Modular widget components
   reading is over two minutes old. Worst case is about 4-6 requests an hour; an
   earlier version ran a full probe every 30s while the card was open, which is
   120.
+- **ClipboardOsd.qml / ClipboardState.qml**: clipboard history on
+  `SUPER + ALT + V` (global shortcut `quickshell:clipMenu`), replacing a rofi
+  picker. Centred overlay built like `ShotOsd`; list on the left with inline
+  thumbnails, large preview on the right, type to filter. Keys: arrows move,
+  Enter pastes, `Ctrl+Del` removes one entry, `Alt+Del` wipes, `Esc` closes -
+  the Del bindings are the ones the rofi picker used.
+
+  **cliphist remains the store.** Omarchy's plugin runs its own `wl-paste
+  --watch` capture because Omarchy does not ship cliphist; this machine has it
+  already, populated and capturing images, so only the picker was replaced.
+  `scripts/clip-paste.sh` is kept from the old rofi script: picking an entry
+  pastes it into the window that had focus (`Ctrl+Shift+V` for terminals,
+  `Ctrl+V` elsewhere), which is better than merely filling the clipboard. That
+  needs `wtype`, now in `01-hypr-pkgs.sh` - it was a silent dependency before.
+
+  Three things here are about speed, and each was measured rather than guessed:
+
+  1. The list is read with **`StdioCollector`, never `SplitParser`**.
+     SplitParser emits once per *line*, and handing over 750 lines that way
+     took **2.1 seconds** for a payload the script produces in 30ms.
+  2. QML runs **`cliphist list` directly and parses it itself**. Going through
+     `jq` to build JSON cost 28ms and doubled the payload, so that JavaScript
+     could parse it back. Quickshell's own process overhead is 2ms - the
+     script was the entire cost.
+  3. The list is loaded **at startup** and kept, so the picker opens on a
+     populated list with no wait, and the refresh lands behind it. That
+     refresh only swaps the model when the history actually moved (head id or
+     count differs); reassigning it unconditionally rebuilt the ListView and
+     reset the scroll under the cursor a beat after opening.
 - **CenterInfo.qml**: DND toggle + date + weather. Click shows popup with notch design connecting to bar. Displays location, temperature, condition, feels-like, min/max, and hourly rain forecast bars. Weather icon/temp colored by temperature. Caches weather data for offline use.
 - **CpuWidget.qml / MemoryWidget.qml / DiskWidget.qml**: Simple percentage displays with themed colors
 - **VolumeWidget.qml**: Volume with mute detection and audio sink icons

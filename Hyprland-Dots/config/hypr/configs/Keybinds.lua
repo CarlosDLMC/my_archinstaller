@@ -33,7 +33,7 @@ bind(M .. " + CTRL + S",  exec("rofi -show window"),     { description = "window
 bind(M .. " + ALT + O",   exec(S .. "/ChangeBlur.sh"),   { description = "toggle blur" })
 bind(M .. " + SHIFT + G", exec(S .. "/GameMode.sh"),     { description = "toggle game mode" })
 bind(M .. " + ALT + L",   exec(S .. "/ChangeLayout.sh"), { description = "toggle master/dwindle layout" })
-bind(M .. " + ALT + V",   exec(S .. "/ClipManager.sh"),  { description = "clipboard manager" })
+bind(M .. " + ALT + V",   hl.dsp.global("quickshell:clipMenu"), { description = "clipboard history", locked = true })
 
 -- The bar runs as `qs -c bar`, so its process name is "qs", not "quickshell".
 -- The pattern is anchored with ^ on purpose: exec runs through `/bin/sh -c
