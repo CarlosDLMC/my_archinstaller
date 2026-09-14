@@ -54,6 +54,9 @@ LOG="Install-Logs/01-Hyprland-Install-Scripts-$(date +%Y%m%d-%H%M%S).log"
 # Below the root check on purpose: run as root this would leave a root-owned
 # file that every later non-root run then fails to truncate.
 : > "Install-Logs/.failed-packages"
+# Same treatment for the checksum-failure manifest, for the same reason: a
+# stale tarball from a previous run must not be reported against this one.
+: > "Install-Logs/.checksum-failures"
 
 # Check if PulseAudio package is installed
 if pacman -Qq | grep -qw '^pulseaudio$'; then
