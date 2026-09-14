@@ -118,7 +118,6 @@ config_dirs=(
     # is the icon/image asset store that 25 of the hypr scripts point at
     # (iDIR="$HOME/.config/swaync/icons"). Dropping it kills notification icons.
     "swaync"
-    "swappy"
     "fastfetch"
     "btop"
     "cava"

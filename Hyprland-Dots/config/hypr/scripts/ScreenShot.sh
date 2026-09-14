@@ -40,18 +40,6 @@ notify_view() {
             "${sDIR}/Sounds.sh" --error
         fi
 
-    elif [[ "$1" == "swappy" ]]; then
-		"${sDIR}/Sounds.sh" --screenshot
-		resp=$(${notify_cmd_shot} " Screenshot:" " Captured by Swappy")
-		case "$resp" in
-			action1)
-				swappy -f - <"$tmpfile"
-				;;
-			action2)
-				rm "$tmpfile"
-				;;
-		esac
-
     else
         local check_file="${dir}/${file}"
         if [[ -e "$check_file" ]]; then
@@ -261,10 +249,6 @@ elif [[ "$1" == "--area" ]]; then
 	shotarea
 elif [[ "$1" == "--active" ]]; then
 	shotactive
-elif [[ "$1" == "--swappy" ]]; then
-	# Old name for what is now "--area --edit". Kept so stale binds still work.
-	annotate=true
-	shotarea
 else
 	echo -e "Available Options : --now --mouse --monitor [output] --in5 --in10 --win --area --active [--edit]"
 fi
