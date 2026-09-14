@@ -123,8 +123,18 @@ components/         # Modular widget components
   whole widget vanished from the bar the first time the usage endpoint rate
   limited us. The endpoint does rate limit, returns no useful headers (only a
   `Retry-After: 0` that is wrong), and a refusal can last many minutes, so:
-  the last good reading is cached to disk and shown with its age, retries back
-  off 60s -> 300s, and the icon's colour is **fixed** - it never signals state.
+  the last good reading is cached to disk and shown with its age, and the
+  icon's colour is **fixed** - it never signals state.
+
+  Cadence matches Omarchy's: a 15-minute background probe (its
+  `refreshIntervalSec` default is 900 too), no network refresh at all while the
+  card is open - the 60s timer there re-reads only the local transcripts - and
+  one 30s retry **only** when the endpoint was never reached. An HTTP status,
+  429 included, never triggers a retry: a server answered, and answering back
+  sooner is how you stay rate limited. Opening the card probes only if the
+  reading is over two minutes old. Worst case is about 4-6 requests an hour; an
+  earlier version ran a full probe every 30s while the card was open, which is
+  120.
 - **CenterInfo.qml**: DND toggle + date + weather. Click shows popup with notch design connecting to bar. Displays location, temperature, condition, feels-like, min/max, and hourly rain forecast bars. Weather icon/temp colored by temperature. Caches weather data for offline use.
 - **CpuWidget.qml / MemoryWidget.qml / DiskWidget.qml**: Simple percentage displays with themed colors
 - **VolumeWidget.qml**: Volume with mute detection and audio sink icons
