@@ -20,7 +20,11 @@ UserScripts="$HOME/.config/hypr/UserScripts"
 
 # Function to show info notification
 show_info() {
-    notify-send -i "$iDIR/info.png" "Info" "$1"
+    # note.png, not info.png: $iDIR is swaync/images here and there is no
+    # info.png in it (nor anywhere in the repo), so every one of these
+    # notifications rendered without an icon. note.png is what ScreenShot.sh
+    # and ScreenRecord.sh already use for their informational notifications.
+    notify-send -i "$iDIR/note.png" "Info" "$1"
 }
 
 # Function to display the menu options without numbers
