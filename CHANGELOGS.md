@@ -2,6 +2,25 @@
 
 ## September 2026
 
+Fixed (2026-09-14, continued review):
+
+- `sudoers_nopasswd.sh`, `bluetooth.sh`: `if sudo install ... | tee` tests *tee's* status, which is 0 whatever the command did, so a failed sudoers install took the success branch and the run ended claiming a rule it had never written (`visudo -c` on the tree still passes - an absent file is valid sudoers). Both check `PIPESTATUS[0]` and confirm the file exists; the bluetooth one mattered more, since `02-Final-Check.sh` has no check for that rule
+- `flag-preview.sh`: started `ly-dm` as root with `-c /tmp/ly-flag-preview`, a fixed path in world-writable `/tmp`, and ly's `config.ini` names commands ly runs. Moved to `/run`, which only root can write; its wait loop also had no `sleep`, so 60 iterations ran in milliseconds and the preview always reported "failed to start"
+- `install.sh`: `docker.sh` was called unconditionally - the only component with no checkbox - so every machine got Docker and membership of the root-equivalent `docker` group. Now the `docker` option (default ON, so behaviour is unchanged), with an outcome check. Retired `sddm`/`sddm_theme` keys removed, and `load_preset()` now reports any preset key the installer does not act on, which a typo or a retired option used to hide
+- `ScreenRecord.sh`, `Dropterminal.sh`: pid, pulseaudio-module and window-address state moved from `/tmp` to `$XDG_RUNTIME_DIR`; `VpnWidget.qml` passes the config name to `vpn-sync.sh` as a positional parameter instead of concatenating it into a shell string (a name with a space silently synced the wrong location)
+- `WallpaperSelect.sh`: `modify_startup_config` runs before `apply_video_wallpaper`'s `mpvpaper` guard, so picking a video rewrote `Startup_Apps.lua` to launch a binary that was in no package list - the running session survived and the *next* login came up with no wallpaper, permanently. The check moved ahead of the rewrite, and `mpvpaper` joined `01-hypr-pkgs.sh`; both wallpaper scripts also guard the `exec` of the unshipped `scripts/sddm_wallpaper.sh`
+- `Global_functions.sh`: colours were set with bare `$(tput setaf N)` under `set -e`. `tput` exits non-zero with no colour capability (`TERM=dumb`, or unset - serial console, cron, CI), so sourcing this file killed the sourcing script at line 7 before it ran a line, silently, while `install.sh` (same block, no `set -e`) carried on. Colours and `show_progress`'s cursor calls go through a `_tput` wrapper now
+- `configs/WindowRules.lua`: the "Hyprland Settings" rule assigned `+Hypr_Settings` with an underscore while every rule that styles it matches `Hypr-Settings*` with a hyphen, so the tag was dead (upstream had the same typo under its own names)
+
+Added (2026-09-14):
+
+- `install-scripts/checksum-skip.conf` and an allowlisted retry for AUR source-checksum failures. `makepkg`'s "One or more files did not pass the validity check!" is now told apart from an ordinary build failure; a package named in that file is rebuilt once with `--skipchecksums`, anything else is reported by `02-Final-Check.sh` with the exact command. `wallust` is listed (Codeberg regenerates its release tarballs). An allowlist rather than a blanket retry because a mismatch is also what a tampered tarball looks like, and a PKGBUILD's `build()` runs as your user
+
+Removed (2026-09-14):
+
+- `config/hypr/scripts/Tak0-Autodispatch.sh` - a byte-identical duplicate of the `UserScripts/` copy, referenced from nothing; the `UserScripts/` one is kept, being a working standalone utility
+- `config/hypr/scripts/RofiThemeSelector-modified.sh` - an upstream public-domain variant, unreferenced and superseded by `RofiThemeSelector.sh`, which is what `Quick_Settings.sh` calls
+
 Fixed (2026-09-13, review of the whole install path):
 
 - `install.sh`: `nouveau="auto"` followed GPU *detection*, so `nvidia="OFF"` plus the default `nouveau="auto"` on an NVIDIA machine blacklisted nouveau without installing the proprietary driver - no GPU driver at all. It now follows the resolved `nvidia` decision, as the preset comment always claimed
