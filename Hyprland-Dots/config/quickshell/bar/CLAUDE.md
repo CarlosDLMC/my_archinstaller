@@ -239,6 +239,13 @@ components/         # Modular widget components
   Closing the card stops a running speed test - it saturates the link with
   eight parallel streams, so leaving it running would be a real cost.
 
+  The card's header is the wifi glyph, the SSID, then the QR and speed-test
+  icons. That glyph **is** the radio toggle - it was a static mark with the
+  toggle off on the far right, which put the control furthest from the thing it
+  controls and left a dead icon in the card's most prominent spot. It carries no
+  persistent fill, unlike the two view icons beside it: a lit box there reads as
+  "this tab is selected", which the radio is not.
+
   Both views share one popup, switched by `panelMode`, so there is still one
   notch card and one focus grab. The right-click path sets `dropdownOpen`
   directly rather than emitting `opened()`, because that signal kicks off a
