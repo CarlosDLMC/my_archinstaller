@@ -96,7 +96,7 @@ satty_open() {
 edit_shot() {
 	local tmpfile
 	tmpfile=$(mktemp --suffix=.png)
-	grim "$@" - >"$tmpfile" 2>/dev/null
+	grim -l 0 "$@" - >"$tmpfile" 2>/dev/null
 
 	if [[ -s "$tmpfile" ]]; then
 		"${sDIR}/Sounds.sh" --screenshot
