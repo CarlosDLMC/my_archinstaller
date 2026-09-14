@@ -65,7 +65,6 @@ hypr_package=(
   rofi
   slurp
   satty
-  swappy
   dunst
   awww
   systemd-resolvconf

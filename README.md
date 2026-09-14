@@ -220,7 +220,7 @@ first prompt.
 - Thunar (file manager)
 - btop, cava, fastfetch
 - mpv, pavucontrol
-- swappy (screenshot editor)
+- satty (screenshot annotation editor)
 - Handy (offline speech-to-text — Parakeet V3, auto-detects 25 languages)
 
 ## Configuration
