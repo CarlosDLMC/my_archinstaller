@@ -364,42 +364,6 @@ Item {
             }
             // If no output (offline), cached data remains displayed
         }
-        Component.onCompleted: {
-            // First load city preference, then cache, then fetch
-            weatherCityReadProc.running = true
-        }
-    }
-
-    // Weather city preference reader
-    Process {
-        id: weatherCityReadProc
-        property string output: ""
-        property int checkCounter: 0
-        command: ["sh", "-c", "cat ~/.cache/quickshell/weather_city 2>/dev/null || echo ''"]
-        running: checkCounter > 0
-        stdout: SplitParser {
-            onRead: data => {
-                if (data) weatherCityReadProc.output += data
-            }
-        }
-        onRunningChanged: {
-            if (running) {
-                output = ""
-            } else {
-                var city = output.trim()
-                var oldCity = centerInfo.weatherCity
-                centerInfo.weatherCity = city || ""
-                console.log("Weather city changed from '" + oldCity + "' to '" + centerInfo.weatherCity + "'")
-                // If city changed, fetch new weather immediately
-                if (oldCity !== centerInfo.weatherCity) {
-                    console.log("Fetching weather for new city...")
-                    weatherProc.running = true
-                } else {
-                    // Otherwise just load cache
-                    cacheReadProc.running = true
-                }
-            }
-        }
     }
 
     // Function to save weather cache
@@ -415,37 +379,134 @@ Item {
         id: cacheWriteProc
     }
 
-    // Cache read process
-    Process {
-        id: cacheReadProc
-        property string output: ""
-        command: ["sh", "-c", "cat ~/.cache/quickshell/weather.json 2>/dev/null || true"]
-        stdout: SplitParser {
-            onRead: data => {
-                if (data) cacheReadProc.output += data
-            }
+    // ------------------------------------------------------------------
+    //  Cache and preference files
+    // ------------------------------------------------------------------
+    //  These three files are tiny, they live in ~/.cache, and they change only
+    //  when the VPN widget or a weather fetch writes one. They used to be read
+    //  by shelling out: `cat` on a 10s timer for the weather cache and the city,
+    //  and - worse - `stat -c %Y` on a 1000ms timer to poll the timezone file's
+    //  mtime by hand. That was four processes a second, per screen, to notice
+    //  an edit that happens a few times a day.
+    //
+    //  FileView + watchChanges does the same job on inotify: no timer, no
+    //  subprocess, and the update lands immediately instead of up to a second
+    //  (or ten) later. Same pattern Theme.qml already uses for the palette.
+
+    readonly property string cacheDir: (Quickshell.env("HOME") || "") + "/.cache/quickshell"
+
+    function applyTimezoneText(text) {
+        var tz = (text || "").trim()
+        if (tz === centerInfo.customTimezone)
+            return
+        centerInfo.customTimezone = tz
+        centerInfo.updateClock(true)
+    }
+
+    function applyWeatherCityText(text) {
+        var city = (text || "").trim()
+        if (city === centerInfo.weatherCity)
+            return
+        centerInfo.weatherCity = city
+        centerInfo.requestWeather()
+    }
+
+    FileView {
+        id: timezoneFile
+        // Absent is the normal state - no VPN timezone override, no city
+        // preference - so do not log a read failure on every launch.
+        printErrors: false
+        path: centerInfo.cacheDir + "/timezone"
+        watchChanges: true
+        blockLoading: true
+        onFileChanged: {
+            reload()
+            centerInfo.applyTimezoneText(text())
         }
-        onRunningChanged: {
-            if (running) {
-                output = ""
-            } else {
-                // Load cached data first
-                if (output) {
-                    parseWeatherJson(output)
-                }
-                // Then try to fetch fresh data
-                weatherProc.running = true
-            }
+        onLoadedChanged: if (loaded) centerInfo.applyTimezoneText(text())
+        // No file means no VPN timezone override, which is the normal state.
+        onLoadFailed: centerInfo.applyTimezoneText("")
+    }
+
+    FileView {
+        id: weatherCityFile
+        // Absent is the normal state - no VPN timezone override, no city
+        // preference - so do not log a read failure on every launch.
+        printErrors: false
+        path: centerInfo.cacheDir + "/weather_city"
+        watchChanges: true
+        blockLoading: true
+        onFileChanged: {
+            reload()
+            centerInfo.applyWeatherCityText(text())
         }
+        onLoadedChanged: if (loaded) centerInfo.applyWeatherCityText(text())
+        onLoadFailed: centerInfo.applyWeatherCityText("")
+    }
+
+    //  Watching our own cache file is deliberate: saveWeatherCache writes it,
+    //  the watch fires, and the reading is re-parsed. That costs one extra
+    //  parse of data we already have and cannot loop, because only weatherProc
+    //  ever writes the file and parsing never writes it back. In exchange, a
+    //  fetch on one screen's bar updates the other screen's for free.
+    FileView {
+        id: weatherCacheFile
+        printErrors: false
+        path: centerInfo.cacheDir + "/weather.json"
+        watchChanges: true
+        blockLoading: true
+        onFileChanged: {
+            reload()
+            if (text().trim() !== "") centerInfo.parseWeatherJson(text())
+        }
+        onLoadedChanged: if (loaded && text().trim() !== "") centerInfo.parseWeatherJson(text())
+    }
+
+    // Kept as the public API: VpnWidget calls both the moment a tunnel comes up
+    // or goes down, rather than waiting for inotify to catch up.
+    function refreshTimezone() {
+        timezoneFile.reload()
+        applyTimezoneText(timezoneFile.text())
+    }
+
+    function refreshWeather() {
+        weatherCityFile.reload()
+        applyWeatherCityText(weatherCityFile.text())
+    }
+
+    // ------------------------------------------------------------------
+    //  Clock
+    // ------------------------------------------------------------------
+    //  The readout is HH:MM, so it changes once a minute - but it used to be
+    //  rebuilt by running `sh -c "date +%H:%M"` on a 1000ms timer: two
+    //  processes a second, per screen, for a string that was identical 59
+    //  times out of 60.
+    //
+    //  Now the tick is pure QML and only does anything when the minute rolls
+    //  over. With no VPN timezone set (the normal case) it never leaves the
+    //  process at all; with one, `date` runs once a minute, because working
+    //  out an arbitrary zone's offset is exactly what `date` is for and
+    //  reimplementing tzdata in QML to save 60 spawns an hour is a bad trade.
+
+    property int lastClockMinute: -1
+
+    function updateClock(force) {
+        var now = new Date()
+        if (!force && now.getMinutes() === centerInfo.lastClockMinute)
+            return
+        centerInfo.lastClockMinute = now.getMinutes()
+
+        if (centerInfo.customTimezone === "")
+            centerInfo.centerTime = Qt.formatDateTime(now, "HH:mm")
+        else
+            timeProc.running = true
     }
 
     // Process to get time in custom timezone
     Process {
         id: timeProc
         property string output: ""
-        command: customTimezone ?
-            ["sh", "-c", "TZ='" + customTimezone + "' date +%H:%M"] :
-            ["sh", "-c", "date +%H:%M"]
+        command: ["sh", "-c", "TZ='" + centerInfo.customTimezone + "' date +%H:%M"]
         stdout: SplitParser {
             onRead: data => {
                 if (data) timeProc.output += data
@@ -455,64 +516,38 @@ Item {
             if (running) {
                 output = ""
             } else if (output) {
-                var newTime = output.trim()
-                console.log("Time updated to: " + newTime + " (TZ: '" + centerInfo.customTimezone + "')")
-                centerInfo.centerTime = newTime
+                centerInfo.centerTime = output.trim()
             }
         }
     }
 
-    // Timezone file watcher - load custom timezone
-    Process {
-        id: tzReadProc
-        property string output: ""
-        property int checkCounter: 0
-        command: ["sh", "-c", "cat ~/.cache/quickshell/timezone 2>/dev/null || echo ''"]
-        running: checkCounter > 0
-        stdout: SplitParser {
-            onRead: data => {
-                if (data) tzReadProc.output += data
-            }
-        }
-        onRunningChanged: {
-            if (running) {
-                output = ""
-            } else {
-                var tz = output.trim()
-                var oldTz = centerInfo.customTimezone
-                if (tz && tz !== "") {
-                    centerInfo.customTimezone = tz
-                } else {
-                    centerInfo.customTimezone = ""
-                }
-                console.log("Timezone changed from '" + oldTz + "' to '" + centerInfo.customTimezone + "'")
-                // Trigger immediate time update
-                timeProc.running = true
-            }
-        }
+    // Coalesces fetch requests. At startup the city FileView loading and
+    // Component.onCompleted both want a fetch, and their order is not defined;
+    // without this the bar would fire two network requests on every launch.
+    // It also absorbs a burst of VPN up/down toggles into a single fetch.
+    Timer {
+        id: weatherFetchDebounce
+        interval: 250
+        repeat: false
+        onTriggered: weatherProc.running = true
     }
 
-    // Function to refresh timezone
-    function refreshTimezone() {
-        tzReadProc.checkCounter++
-    }
-
-    // Function to refresh weather
-    function refreshWeather() {
-        weatherCityReadProc.checkCounter++
+    function requestWeather() {
+        weatherFetchDebounce.restart()
     }
 
     Component.onCompleted: {
-        refreshTimezone()
-        refreshWeather()
+        updateClock(true)
+        requestWeather()
     }
 
-    // Date update timer - now triggers the time process
+    // A one-second tick, but a free one: it compares two integers and returns.
+    // The minute boundary is what actually drives a repaint.
     Timer {
         interval: 1000
         running: true
         repeat: true
-        onTriggered: timeProc.running = true
+        onTriggered: centerInfo.updateClock(false)
     }
 
     // Weather timer (hourly updates)
@@ -520,59 +555,7 @@ Item {
         interval: 3600000
         running: true
         repeat: true
-        onTriggered: weatherProc.running = true
-    }
-
-    // Cache refresh timer (check for manual updates every 10 seconds)
-    Timer {
-        interval: 10000
-        running: true
-        repeat: true
-        onTriggered: {
-            cacheReadProc.running = true
-            refreshTimezone()
-            refreshWeather()
-        }
-    }
-
-    // Timezone change watcher - monitors for file changes
-    Timer {
-        interval: 1000
-        running: true
-        repeat: true
-        property real lastMtime: 0
-        onTriggered: {
-            tzStatProc.running = true
-        }
-    }
-
-    // Check timezone file modification time
-    Process {
-        id: tzStatProc
-        property string output: ""
-        command: ["sh", "-c", "stat -c %Y ~/.cache/quickshell/timezone 2>/dev/null || echo '0'"]
-        stdout: SplitParser {
-            onRead: data => {
-                if (data) tzStatProc.output += data
-            }
-        }
-        onRunningChanged: {
-            if (running) {
-                output = ""
-            } else {
-                var mtime = parseFloat(output.trim())
-                if (mtime !== tzChangeWatcher.lastMtime) {
-                    tzChangeWatcher.lastMtime = mtime
-                    // File changed, refresh timezone
-                    refreshTimezone()
-                }
-            }
-        }
-    }
-
-    QtObject {
-        id: tzChangeWatcher
-        property real lastMtime: 0
+        onTriggered: centerInfo.requestWeather()
     }
 
     HyprlandFocusGrab {

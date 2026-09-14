@@ -2,6 +2,44 @@
 
 ## September 2026
 
+Performance (2026-09-14) - the bar stopped shelling out for things it can read itself:
+
+- The quickshell bar was spending about **45% of a core on subprocesses**, and is now at
+  about **5%**. Measured on the two-monitor setup as the CPU its reaped children burn
+  (`cutime`+`cstime` on the running `qs -c bar`, `CLK_TCK` 100) over a 40s window:
+  ~1790 jiffies before, ~200 after. Almost all of it was three mistakes, repeated
+- Shelling out for a file: `CpuWidget`/`MemoryWidget` ran `sh -c "head -1 /proc/stat"` and
+  `sh -c "free -m | grep Mem"` - three forks each - to read files this process can open.
+  `/proc/stat`, `/proc/meminfo` and the hwmon sensor are `FileView` reads now, and the
+  sensor path is resolved once at startup rather than re-probed with a shell loop every
+  five seconds
+- Polling something that announces itself: `CenterInfo` ran `date +%H:%M` **every second**
+  to redraw a clock that changes once a minute, and `stat -c %Y` every second to hand-poll
+  a cache file's mtime - four processes a second, per screen. The clock is native QML and
+  resamples on the minute (and only shells out at all when the VPN widget has set a
+  timezone); `timezone`, `weather_city` and `weather.json` are `FileView`s with
+  `watchChanges`, so they update on inotify. `WindowInfo` ran `hyprctl activewindow -j | jq`
+  on **every** raw Hyprland event, unfiltered - including the ten `activelayout` events each
+  keyboard switch fires - to re-fetch a title the event payload already carried.
+  `NightLightWidget` ran the hyprsunset script every 2s; that state lives in a file the
+  script rewrites in place, so it is watched
+- Doing it once per screen: `shell.qml` instantiates the bar per monitor, so every poll
+  above ran twice here. CPU/memory and night light moved into singletons (`SystemStats.qml`,
+  `NightLight.qml`) that the widgets render
+- `visible: false` hides a widget but does not stop it, so the `nmcli monitor`, `udevadm
+  monitor` and `dbus-monitor` behind wifi, battery and bluetooth kept running on machines
+  without the hardware. Each is gated on the same `has*` property that hides the widget.
+  `PowerProfileWidget`'s belt-and-braces poll went 3s -> 60s; its dbus-monitor is what
+  actually reports a change
+- Two behaviour fixes fell out: the window title now clears when the last window closes (it
+  used to keep the stale one, because the old handler only assigned on non-empty output),
+  and the memory readout is `MemTotal - MemAvailable`, which is the number `free` was
+  printing anyway
+- `config/quickshell/bar/CLAUDE.md` gained the priority order this establishes - event
+  payload, then `FileView`, then a D-Bus/netlink monitor, then a timer - plus the rule that
+  the bar is built once per screen, since its "Key Patterns" section previously said all
+  system data comes from shell commands
+
 Fixed (2026-09-14, continued review):
 
 - `sudoers_nopasswd.sh`, `bluetooth.sh`: `if sudo install ... | tee` tests *tee's* status, which is 0 whatever the command did, so a failed sudoers install took the success branch and the run ended claiming a rule it had never written (`visudo -c` on the tree still passes - an absent file is valid sudoers). Both check `PIPESTATUS[0]` and confirm the file exists; the bluetooth one mattered more, since `02-Final-Check.sh` has no check for that rule

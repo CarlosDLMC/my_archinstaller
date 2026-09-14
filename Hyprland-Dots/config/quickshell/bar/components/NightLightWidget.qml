@@ -1,12 +1,11 @@
 import QtQuick
 import QtQuick.Layouts
-import Quickshell.Io
 import ".."
 
+// Pure renderer - state and the toggle live in the NightLight singleton, which
+// watches Hyprsunset.sh's state file instead of polling it.
 Item {
     id: nightLightWidget
-
-    property bool isOn: false
 
     implicitWidth: nightLightText.implicitWidth
     implicitHeight: parent.height
@@ -15,7 +14,7 @@ Item {
         id: nightLightText
         anchors.centerIn: parent
         text: "☀"
-        color: isOn ? Theme.colWhite : Theme.colGrey  // white when on, grey when off
+        color: NightLight.isOn ? Theme.colWhite : Theme.colGrey  // white when on, grey when off
         font.pixelSize: Theme.fontSize + 4
         font.family: Theme.fontFamily
     }
@@ -23,54 +22,6 @@ Item {
     MouseArea {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
-        onClicked: {
-            toggleProcess.running = true
-        }
-    }
-
-    // Status check process
-    Process {
-        id: statusProc
-        command: ["bash", "-c", "$HOME/.config/hypr/scripts/Hyprsunset.sh status"]
-        stdout: SplitParser {
-            onRead: data => {
-                if (!data) return
-                try {
-                    const status = JSON.parse(data.trim())
-                    nightLightWidget.isOn = (status.class === "on")
-                } catch(e) {
-                    // Fallback: check if hyprsunset process is running
-                }
-            }
-        }
-        Component.onCompleted: running = true
-    }
-
-    // Toggle process
-    Process {
-        id: toggleProcess
-        command: ["bash", "-c", "$HOME/.config/hypr/scripts/Hyprsunset.sh toggle"]
-        running: false
-        onExited: {
-            // Refresh status after toggle (small delay to let process start/stop)
-            statusRefreshTimer.start()
-        }
-    }
-
-    // Single-shot timer to refresh status after toggle
-    Timer {
-        id: statusRefreshTimer
-        interval: 200
-        running: false
-        repeat: false
-        onTriggered: statusProc.running = true
-    }
-
-    // Periodic timer to keep status in sync across multiple monitors
-    Timer {
-        interval: 2000  // Check every 2 seconds
-        running: true
-        repeat: true
-        onTriggered: statusProc.running = true
+        onClicked: NightLight.toggle()
     }
 }

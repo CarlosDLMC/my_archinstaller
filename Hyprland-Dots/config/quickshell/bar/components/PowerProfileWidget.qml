@@ -166,8 +166,13 @@ DropdownWidget {
     }
 
     // Periodic timer to keep profile in sync across multiple monitors
+    // A safety net behind the dbus-monitor above, which is what actually
+    // reports a profile change. At 3000ms this was re-running powerprofilesctl
+    // twenty times a minute, per screen, to re-read a value that changes when
+    // you click this widget. The monitor covers the real case; this only has
+    // to catch it having died.
     Timer {
-        interval: 3000  // Check every 3 seconds
+        interval: 60000
         running: true
         repeat: true
         onTriggered: profileGetProc.running = true
