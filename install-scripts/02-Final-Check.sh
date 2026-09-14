@@ -192,6 +192,15 @@ if selected printing; then
         systemctl is-enabled cups.socket
 fi
 
+if selected docker; then
+    check_outcome "docker.socket is not enabled (install-scripts/docker.sh)" \
+        systemctl is-enabled docker.socket
+    # Membership is what makes `docker` usable without sudo, and usermod only
+    # takes effect at the next login - so check the group file, not `id`.
+    check_outcome "$USER is not in the 'docker' group (install-scripts/docker.sh)" \
+        bash -c 'getent group docker | cut -d: -f4 | tr "," "\n" | grep -qx "$USER"'
+fi
+
 if selected handy; then
     check_outcome "handy is not on PATH (install-scripts/handy.sh)" \
         command -v handy

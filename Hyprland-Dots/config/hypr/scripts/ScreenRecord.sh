@@ -8,10 +8,20 @@
 time=$(date "+%Y-%m-%d_%H-%M-%S")
 dir="$(xdg-user-dir VIDEOS)/Recordings"
 file="Recording_${time}.mp4"
-pidfile="/tmp/wf-recorder.pid"
+# Runtime state, so it belongs in the per-user runtime directory, not /tmp.
+# /run/user/$UID is mode 0700 and owned by us; /tmp is world-writable, which
+# meant any other uid on the box (a system daemon, another login) could create
+# these paths first and choose what this script read back - the pid it then
+# signals, and the pulseaudio module ids it unloads. Single-user machines were
+# never really exposed, but there is no reason to keep state anyone else can
+# reach. XDG_RUNTIME_DIR is always set inside a session; the fallback is for a
+# bare TTY without one.
+runtime_dir="${XDG_RUNTIME_DIR:-$HOME/.cache}"
+mkdir -p "$runtime_dir" 2>/dev/null
+pidfile="$runtime_dir/wf-recorder.pid"
 # Module IDs of the temporary null-sink + loopbacks used for "both" audio,
 # so stop_recording can tear them down again.
-mixfile="/tmp/wf-recorder.pamodules"
+mixfile="$runtime_dir/wf-recorder.pamodules"
 mixsink="wfrec_mix"
 
 # none | system | mic | both. Overridable with --audio=<mode>; the OSD writes

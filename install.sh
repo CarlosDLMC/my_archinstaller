@@ -89,8 +89,10 @@ gtk_themes="OFF"
 bluetooth="auto"
 thunar="OFF"
 quickshell="OFF"
-sddm="OFF"
-sddm_theme="OFF"
+# No sddm/sddm_theme keys here any more. They were defaults for options that
+# have no menu entry, no preset-loop entry, no case branch and no install
+# script - setting sddm="ON" in a preset did precisely nothing, silently. The
+# unknown-key warning in load_preset() now reports that instead of hiding it.
 xdph="OFF"
 zsh="OFF"
 pokemon="OFF"
@@ -114,16 +116,55 @@ handy="OFF"
 ly="OFF"
 nopasswd_sudo="OFF"
 printing="OFF"
+# Docker, with socket activation. "ON" because the call site below used to be
+# unconditional, so this is what every install has been doing already - the
+# difference is that it is now a choice you can see and switch off.
+#
+# Worth knowing what it grants: docker.sh adds you to the "docker" group, and
+# that group can talk to a root-owned daemon socket, so a member can start a
+# container that mounts / and become root without a password or a sudo log
+# entry. On a box where wheel already has NOPASSWD that changes nothing. On one
+# where it does not, this is a second, quieter path to root - set docker="OFF"
+# there.
+docker="ON"
 # "auto": only where plymouth is already installed and hooked into the initramfs.
 plymouth="auto"
 # "auto": only where a limine.conf exists (Limine is the bootloader).
 limine="auto"
+
+# Every option name the installer acts on. Kept next to load_preset() because
+# its only job is to catch a preset key that no longer matches one - see below.
+known_options="ly nvidia nouveau input_group gtk_themes bluetooth thunar \
+quickshell xdph zsh pokemon rog dots handy nopasswd_sudo printing plymouth \
+limine docker"
 
 # Function to load preset file
 load_preset() {
     if [ -f "$1" ]; then
         echo "✅ Loading preset: $1"
         source "$1"
+
+        # Collect any key the preset sets that this installer does not use.
+        #
+        # A preset is just a sourced shell file, so a retired option (sddm), a
+        # renamed one, or a plain typo (quickshel="ON") assigns a variable
+        # nobody ever reads and the installer carries on as if the line were not
+        # there. That is indistinguishable from the option being off, which is
+        # the worst way for a preset to fail: you get a machine missing a
+        # component you explicitly asked for, and nothing anywhere says so.
+        #
+        # Collected, not printed here: there is a `clear` between this function
+        # and the first thing anyone actually reads, so a warning printed at
+        # this point is wiped off the screen a second later. Reported below the
+        # banner instead, and into the log.
+        while IFS= read -r _key; do
+            [ -n "$_key" ] || continue
+            [[ " $known_options " == *" $_key "* ]] && continue
+            preset_unknown_keys+=("$_key")
+        # No [[:space:]] before the '=': a shell assignment cannot have one, so
+        # `docker = "OFF"` is not setting docker at all (it tries to *run*
+        # docker) and must not be counted as though it had.
+        done < <(grep -oE '^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=' "$1" | tr -d '[:blank:]=')
     else
         # Do not fall through to the defaults here: they are all "OFF", so a
         # mistyped preset path would run a fully non-interactive install that
@@ -135,6 +176,7 @@ load_preset() {
 
 # Check if --preset argument is passed
 preset_mode="false"
+preset_unknown_keys=()
 if [[ "$1" == "--preset" && -n "$2" ]]; then
     load_preset "$2"
     preset_mode="true"
@@ -149,6 +191,16 @@ echo -e "\e[35m
 	╩ ╩└─┘└─┘╩═╝  ╩ ╩ ┴ ┴  ┴└─┴─┘┴ ┴┘└┘─┴┘ Arch Linux
 \e[0m"
 printf "\n%.0s" {1..1} 
+
+# Preset keys this installer does not act on. Printed here rather than in
+# load_preset() because the `clear` above would have eaten them.
+if [ ${#preset_unknown_keys[@]} -ne 0 ]; then
+    for _key in "${preset_unknown_keys[@]}"; do
+        echo "${WARN} Preset sets ${YELLOW}${_key}${RESET}, which this installer does not use - ignored." | tee -a "$LOG"
+    done
+    echo "${NOTE} Retired or mistyped key? Valid options: ${SKY_BLUE}${known_options}${RESET}" | tee -a "$LOG"
+    printf "\n%.0s" {1..1}
+fi
 
 # The point of --preset is "git clone and hit install", so a preset run shows no
 # dialogs at all: not this welcome box, not the confirmation, not the AUR-helper
@@ -450,6 +502,7 @@ options_command+=(
     "handy" "Install Handy speech-to-text (CTRL+SUPER+F8 toggle)?" "OFF"
     "nopasswd_sudo" "Passwordless sudo for wheel? (needed by the bar's VPN widget)" "OFF"
     "printing" "Install CUPS printing? (nothing else pulls in a print stack)" "OFF"
+    "docker" "Install Docker, socket-activated? (adds you to the root-equivalent 'docker' group)" "ON"
     "plymouth" "Plymouth boot splash with the repo logo? (replaces the distro's)" "OFF"
     "limine" "Theme the Limine boot menu and disable its countdown? (edits limine.conf, backup kept)" "OFF"
 )
@@ -463,7 +516,7 @@ if [ "$preset_mode" == "true" ]; then
     selected_options=""
     for _opt in ly nvidia nouveau input_group gtk_themes bluetooth thunar \
                 quickshell xdph zsh pokemon rog dots handy nopasswd_sudo \
-                printing plymouth limine; do
+                printing plymouth limine docker; do
         [ "${!_opt}" == "ON" ] || continue
 
         # Respect the same conditions the interactive menu applies before it
@@ -814,10 +867,18 @@ fi
 
 sleep 1
 
-# Install Docker with socket activation (on-demand daemon, no boot autostart)
-echo "${INFO} Installing ${SKY_BLUE}Docker (socket-activated)...${RESET}" | tee -a "$LOG"
-sleep 1
-execute_script "docker.sh"
+# Docker with socket activation (on-demand daemon, no boot autostart).
+#
+# Gated now. This call used to be unconditional - the only component in the
+# installer with no checkbox - so every machine got Docker and, with it,
+# membership of the root-equivalent "docker" group whether or not that was
+# wanted. Keyed off selected_options so the interactive path and the preset
+# path behave the same, exactly like the thunar_sort block above.
+if [[ " $selected_options " == *" docker "* ]]; then
+    echo "${INFO} Installing ${SKY_BLUE}Docker (socket-activated)...${RESET}" | tee -a "$LOG"
+    sleep 1
+    execute_script "docker.sh"
+fi
 
 # Enable essential system services
 echo "${INFO} Enabling ${SKY_BLUE}essential system services...${RESET}" | tee -a "$LOG"

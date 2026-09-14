@@ -11,7 +11,14 @@
 
 DEBUG=false
 SPECIAL_WS="special:scratchpad"
-ADDR_FILE="/tmp/dropdown_terminal_addr"
+# Runtime state in the per-user runtime directory rather than /tmp: /run/user/$UID
+# is mode 0700 and ours alone, while /tmp is world-writable, so any other uid on
+# the box could have pre-created this path and chosen the window address this
+# script then drives. XDG_RUNTIME_DIR is always set inside a session; the
+# fallback covers a bare TTY without one.
+runtime_dir="${XDG_RUNTIME_DIR:-$HOME/.cache}"
+mkdir -p "$runtime_dir" 2>/dev/null
+ADDR_FILE="$runtime_dir/dropdown_terminal_addr"
 
 # Dropdown size and position configuration (percentages)
 WIDTH_PERCENT=65  # Width as percentage of screen width
