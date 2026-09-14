@@ -182,8 +182,21 @@ fi
 if selected nopasswd_sudo; then
     # Not `sudo -n true`: the installer's keepalive refreshes the sudo timestamp,
     # so that passes whether or not the rule landed. Look for the rule itself.
-    check_outcome "no NOPASSWD rule applies to $USER - the bar's VPN widget will not work (install-scripts/sudoers_nopasswd.sh)" \
-        bash -c 'sudo -n -l 2>/dev/null | grep -q "NOPASSWD:"'
+    # "NOPASSWD: ALL", not "NOPASSWD:" - bluetooth.sh installs a rule of its own
+    # (rfkill and systemctl start/stop bluetooth only), and a bare "NOPASSWD:"
+    # matched that one too, so a failed wheel rule passed whenever bluetooth
+    # was also selected.
+    check_outcome "no NOPASSWD: ALL rule applies to $USER - the bar's VPN widget will not work (install-scripts/sudoers_nopasswd.sh)" \
+        bash -c 'sudo -n -l 2>/dev/null | grep -q "NOPASSWD: ALL"'
+fi
+
+if selected bluetooth; then
+    check_outcome "bluez is not installed (install-scripts/bluetooth.sh)" \
+        pacman -Qi bluez
+    check_outcome "bluetooth.service is not enabled - Bluetooth is off at every boot (install-scripts/bluetooth.sh)" \
+        systemctl is-enabled bluetooth.service
+    check_outcome "/etc/sudoers.d/bluetooth-toggle is missing - the bar's bluetooth toggle will not work (install-scripts/bluetooth.sh)" \
+        sudo test -f /etc/sudoers.d/bluetooth-toggle
 fi
 
 if selected quickshell; then

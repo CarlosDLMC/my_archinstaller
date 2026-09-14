@@ -3,9 +3,10 @@
 
 # quickshell, NOT quickshell-git.
 #
-# This machine happens to run quickshell-git (0.3.0.r6.gb66495f) because that is
-# what was available when the bar was written, so the obvious "reproduce it
-# exactly" move is to install the -git package here too. That is a trap: a -git
+# The bar was written against quickshell-git (0.3.0.r6.gb66495f) because that
+# was what existed at the time; the reference machine has since moved to stable
+# 0.3.1 with no changes to the bar. Installing the -git package "to match" would
+# be a trap in either case: a -git
 # PKGBUILD builds whatever upstream HEAD is on the day you install, so it pins
 # nothing and can only drift further from what the bar was tested against.
 #

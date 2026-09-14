@@ -21,8 +21,13 @@ printf "${NOTE} Installing ly configuration...\n"
 # `install`, checked: config.ini points ly at every one of these files, so a
 # missing one used to give a login screen with no flag, no language and an OK.
 ly_install() { # mode src dst
-  if ! sudo install -D -m "$1" "$2" "$3" 2>&1 | tee -a "$LOG"; then :; fi
-  if [ "${PIPESTATUS[0]}" -ne 0 ]; then echo "${ERROR} Failed to install $3" | tee -a "$LOG"; exit 1; fi
+  local st
+  # Read PIPESTATUS straight after the pipeline. It used to sit behind an
+  # `if ! ... | tee; then :; fi` whose body, had tee ever failed, would have
+  # reset PIPESTATUS before it was read.
+  sudo install -D -m "$1" "$2" "$3" 2>&1 | tee -a "$LOG"
+  st="${PIPESTATUS[0]}"
+  if [ "$st" -ne 0 ]; then echo "${ERROR} Failed to install $3" | tee -a "$LOG"; exit 1; fi
 }
 ly_install 644 "$PARENT_DIR/assets/ly/config.ini" /etc/ly/config.ini
 

@@ -32,8 +32,20 @@ printf "${NOTE} Installing ${SKY_BLUE}Bluetooth${RESET} Packages...\n"
    install_package "$BLUE" "$LOG"
   done
 
-printf " Bluetooth service will be ${YELLOW}disabled${RESET} by default (saves battery)...\n"
-printf " You can enable it from the bar widget when needed.\n"
+# Enable the service, as on the machine this repo reproduces. It used to be left
+# disabled "to save battery", but the radio itself is what the bar toggles: its
+# off switch does `systemctl stop bluetooth && rfkill block bluetooth`, and
+# systemd-rfkill restores that block at boot, so an enabled service on a blocked
+# radio costs nothing. A disabled service instead meant Bluetooth was off after
+# every boot until the bar glyph was clicked, whatever the radio state was.
+printf " Enabling ${YELLOW}bluetooth.service${RESET}...\n"
+sudo systemctl enable bluetooth.service 2>&1 | tee -a "$LOG"
+if [ "${PIPESTATUS[0]}" -eq 0 ]; then
+  echo "${OK} bluetooth.service enabled" | tee -a "$LOG"
+else
+  echo "${ERROR} Could not enable bluetooth.service - Bluetooth will be off at every boot" | tee -a "$LOG"
+fi
+printf " The bar widget turns the radio on and off.\n"
 
 # Add sudoers rule for passwordless bluetooth control
 printf " Setting up ${YELLOW}passwordless bluetooth control${RESET}...\n"

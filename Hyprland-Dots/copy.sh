@@ -249,6 +249,11 @@ wallust_targets=(
     "rofi/wallust/colors-rofi.rasi"
     "wallust/output/colors-waybar.css"
     "quickshell/qml_color.json"
+    # bar/Theme.qml reads this through a FileView. The bar and initial-boot.sh's
+    # first `wallust run` start in parallel from hyprland.start, so without a
+    # seed the bar can load before the file exists and sit on its fallback
+    # palette until it is restarted.
+    "quickshell/bar/wallust-colors.json"
 )
 
 for _target in "${wallust_targets[@]}"; do
@@ -368,9 +373,19 @@ elif [ -f "$_default_src" ]; then
     else
         echo "  ${ERROR} Failed to set default wallpaper"
     fi
+else
+    echo "  ${ERROR} Default wallpaper $DEFAULT_WALLPAPER not found - first boot will have no wallpaper"
+fi
 
-    # Point the rofi background symlink at the deployed wallpaper.
-    #
+# Point the rofi background symlink at the deployed wallpaper.
+#
+# Outside the if/elif above on purpose. rofi/ is replaced wholesale by this
+# script and the link is gitignored, so it has to be recreated on EVERY run -
+# but it used to live in the elif branch, which a re-run never reaches (the
+# active wallpaper is recovered from the hypr/ backup, so the first branch
+# wins). Six rofi themes then had no background until the next wallpaper
+# change relinked it.
+if [ -f "$_default_src" ] || [ -n "${BACKUP_OF[rofi]:-}" ]; then
     # WallustSwww.sh re-links this on every wallpaper change, so it is runtime
     # state and is gitignored. It used to be tracked, and as a symlink git
     # stores the target verbatim: it was an absolute path into /home/mentefria
@@ -396,8 +411,6 @@ elif [ -f "$_default_src" ]; then
     else
         echo "  ${ERROR} Could not link $_rofi_link - rofi themes will have no background"
     fi
-else
-    echo "  ${ERROR} Default wallpaper $DEFAULT_WALLPAPER not found - first boot will have no wallpaper"
 fi
 
 printf "\n${OK} Dotfiles installation complete!\n\n"
