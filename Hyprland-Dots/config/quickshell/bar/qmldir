@@ -6,3 +6,4 @@ singleton Monitors 1.0 Monitors.qml
 singleton ShotState 1.0 ShotState.qml
 singleton SystemStats 1.0 SystemStats.qml
 singleton NightLight 1.0 NightLight.qml
+singleton AgentUsage 1.0 AgentUsage.qml

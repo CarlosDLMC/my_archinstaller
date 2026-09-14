@@ -28,11 +28,14 @@ Monitors.qml        # Singleton: connected monitors, shared by the capture dialo
 RecordState.qml     # Singleton: screen-recording dialog state + global shortcuts
 ShotState.qml       # Singleton: screenshot dialog state + global shortcut
 SystemStats.qml     # Singleton: CPU usage/temp + memory, read from /proc via FileView
+AgentUsage.qml      # Singleton: Claude Code allowance + token stats
 NightLight.qml      # Singleton: night-light state, watched off Hyprsunset.sh's state file
 components/         # Modular widget components
   ├── DropdownWidget.qml   # Base component for click-to-open dropdown widgets (notch design)
   ├── AudioPanel.qml       # Audio card body: output/input device + level, per-app levels
   ├── NetworkPanel.qml     # Network card body: link, connection, traffic, DNS, speed test, share QR
+  ├── AgentWidget.qml      # Claude Code usage: session % in the bar, card on click
+  ├── AgentPanel.qml       # Agents card body: plan, allowance meters, tokens by day/model
   ├── VolumeSlider.qml     # Draggable level track, shared by every row of the audio card
   ├── WeatherStatItem.qml  # Reusable stat row for weather popup
   ├── WorkspaceBar.qml     # Hyprland workspaces with app icons (pill-shaped)
@@ -94,6 +97,34 @@ components/         # Modular widget components
   `watchChanges` sees every change instantly - whether it came from the bar or from
   `SUPER + N`. A 60s check against `pgrep` runs only while the file says "on", to
   catch hyprsunset having died and left the file lying.
+- **AgentWidget.qml / AgentPanel.qml / AgentUsage.qml**: Claude Code usage.
+  The bar shows the share of the 5-hour session spent (the number that says
+  whether you are about to be cut off); the card adds the plan, weekly and
+  per-model allowances with reset countdowns, tokens by day for the last week,
+  and tokens by model. Ported from Omarchy's agents plugin, reduced to the one
+  agent this machine runs.
+
+  `AgentUsage` is a **singleton** for the same reason `SystemStats` is: the bar
+  is instantiated per screen, and this polls a network endpoint - two monitors
+  would otherwise mean two calls to Anthropic every five minutes for the same
+  number. It runs two cadences: the OAuth probe alone every 5 minutes (cheap,
+  always, because the bar readout needs it), and the probe plus a transcript
+  scan only while a card is open.
+
+  `scripts/agent-usage.py` is the collector. The access token comes from the
+  Claude CLI's own store and goes exactly one place - the Authorization header
+  of Anthropic's usage endpoint; it is never printed or cached, and only the
+  plan label reaches the output. The transcript scan caches **per file**, keyed
+  by (mtime, size): a cold scan reads 160MB and costs ~1.3s of CPU, a repeat
+  costs ~0.1s because only the session you are in has changed.
+
+  The widget hides on `installed` - whether `~/.claude` exists at all - and not
+  on whether a probe returned anything. Those were conflated at first, and the
+  whole widget vanished from the bar the first time the usage endpoint rate
+  limited us. The endpoint does rate limit, returns no useful headers (only a
+  `Retry-After: 0` that is wrong), and a refusal can last many minutes, so:
+  the last good reading is cached to disk and shown with its age, retries back
+  off 60s -> 300s, and the icon's colour is **fixed** - it never signals state.
 - **CenterInfo.qml**: DND toggle + date + weather. Click shows popup with notch design connecting to bar. Displays location, temperature, condition, feels-like, min/max, and hourly rain forecast bars. Weather icon/temp colored by temperature. Caches weather data for offline use.
 - **CpuWidget.qml / MemoryWidget.qml / DiskWidget.qml**: Simple percentage displays with themed colors
 - **VolumeWidget.qml**: Volume with mute detection and audio sink icons
