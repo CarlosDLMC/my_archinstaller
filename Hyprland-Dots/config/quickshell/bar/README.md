@@ -37,7 +37,8 @@ A modern, feature-rich status bar for Hyprland built with [Quickshell](https://q
 
 ### Included
 
-- `scripts/weather.py` - Weather data script (outputs JSON with waybar-compatible format). Uses weather.com and auto-detects location via IP. Requires `pyquery` (`pip install pyquery`).
+- `scripts/weather-fetch.sh` - Weather entry point. Reads the city preference the VPN widget writes to `~/.cache/quickshell/weather_city` and calls `weather-location.py` with it, or without it for IP-based location. This is what `CenterInfo.qml` runs.
+- `scripts/weather-location.py` - Fetches from Open-Meteo (forecast + air quality) and prints the JSON the bar parses. Needs `python-requests`.
 
 ## Installation
 
@@ -117,7 +118,8 @@ components/
 scripts/
   ├── weather-fetch.sh       # Picks the city, falls back to IP location
   ├── weather-location.py    # Weather fetch for a named city
-  ├── weather.py             # Original IP-based weather fetch
+  ├── weather-fetch.sh       # Weather entry point (city preference -> weather-location.py)
+  ├── weather-location.py    # Open-Meteo fetch, prints the JSON the bar parses
   ├── layouts.py             # Keyboard layout enumeration
   ├── vpn-sync.sh            # Point clock/weather at the VPN exit
   └── vpn-reset.sh           # Restore local timezone and weather
