@@ -37,8 +37,19 @@ hl.on("hyprland.start", function()
     -- run("qs -c overview")  -- Quickshell overview (started on demand by OverviewToggle.sh)
 
     -- Clipboard manager
-    run("wl-paste --type text --watch cliphist store")
-    run("wl-paste --type image --watch cliphist store")
+    -- -max-items goes BEFORE the subcommand. cliphist parses flags with Go's
+    -- flag package, which stops at the first positional argument, so
+    -- `cliphist store -max-items 50` is accepted and silently ignored - the
+    -- cap stays at the default 750 and nothing says otherwise.
+    --
+    -- 50, down from that default. The cap counts ITEMS, not bytes, so one
+    -- 3MB screenshot costs the same slot as a two-word snippet; at 750 the
+    -- database had grown to 123MB, 80MB of it images. Both watchers share one
+    -- database, so they must carry the same number: whichever stores last
+    -- applies its own cap to the whole store, and two different values would
+    -- simply fight.
+    run("wl-paste --type text --watch cliphist -max-items 50 store")
+    run("wl-paste --type image --watch cliphist -max-items 50 store")
 
     -- Rainbow borders
     -- run(U .. "/RainbowBorders.sh")
