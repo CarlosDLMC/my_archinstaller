@@ -1,0 +1,16 @@
+{
+    "_comment": "wallust template - quickshell bar. Monochrome ramp + one alert hue.",
+
+    "bg":     "#262625",
+    "fg":     "#E8C4C0",
+
+    "bright": "#D6A29C",
+    "dim":    "#96716D",
+    "muted":  "#524B47",
+    "faint":  "#4C4C4B",
+
+    "accent": "#D6A29C",
+    "alert":  "#BE564A",
+    "warn":   "#8E4137",
+    "border": "#59302D"
+}

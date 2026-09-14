@@ -14,7 +14,6 @@ fonts=(
   ttf-fantasque-nerd
   ttf-jetbrains-mono
   ttf-jetbrains-mono-nerd
-  ttf-victor-mono
   noto-fonts
 
   # REQUIRED by the quickshell bar. Theme.qml sets
@@ -90,7 +89,9 @@ done
 # "Fira Code" on this setup), which would make the check cry wolf.
 if command -v fc-list >/dev/null 2>&1; then
   printf "\n%s - Verifying required font families...\n" "${NOTE}"
-  fc-cache -f >/dev/null 2>&1
+  # `|| true`: Global_functions.sh sets -e, so a non-zero fc-cache (a broken
+  # font file is enough) would abort the script here and skip the check below.
+  fc-cache -f >/dev/null 2>&1 || true
 
   _installed_families=$(fc-list : family | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
 

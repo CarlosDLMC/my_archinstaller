@@ -232,12 +232,16 @@ echo "👌 ${OK} ${SKY_BLUE}Continuing with the installation...${RESET}" | tee -
 sleep 1
 printf "\n%.0s" {1..1}
 
-# install pciutils if detected not installed. Necessary for detecting GPU
-if ! pacman -Qs pciutils > /dev/null; then
-    echo "${NOTE} - pciutils is not installed. Installing..." | tee -a "$LOG"
-    sudo pacman -S --noconfirm pciutils
-    printf "\n%.0s" {1..1}
-fi
+# install pciutils if detected not installed. Necessary for detecting GPU.
+# usbutils too: the Bluetooth detection below falls back to lsusb, and a fresh
+# base system does not ship it - so that fallback was silently a no-op.
+for _tool in pciutils usbutils; do
+    if ! pacman -Qq "$_tool" &> /dev/null; then
+        echo "${NOTE} - $_tool is not installed. Installing..." | tee -a "$LOG"
+        sudo pacman -S --noconfirm "$_tool"
+        printf "\n%.0s" {1..1}
+    fi
+done
 
 # Path to the install-scripts directory
 script_directory=install-scripts
@@ -380,10 +384,20 @@ fi
 
 # Check for a Bluetooth controller. The kernel creates /sys/class/bluetooth/hci*
 # as soon as a driver binds one, with no help from bluez, so this is answerable
-# before anything is installed. lspci/lsusb is the fallback for a controller
-# whose driver has not loaded yet in the installer environment.
+# before anything is installed.
+#
+# rfkill is the second test, not lsusb. A radio that is soft-blocked (the bar's
+# own toggle blocks it, and systemd-rfkill restores that state at boot; on
+# ThinkPads the block also cuts power to the USB controller) has no hci*
+# directory and does not even show up in lsusb - but rfkill still lists the
+# switch. Without this test the T480 this preset was written on resolved
+# bluetooth="auto" to OFF whenever its radio happened to be off at install
+# time. rfkill is util-linux, so it is always present; lspci/lsusb stay as the
+# last resort for a controller whose driver has not loaded yet.
 bluetooth_detected=false
 if ls -d /sys/class/bluetooth/hci* >/dev/null 2>&1; then
+    bluetooth_detected=true
+elif rfkill -n -o TYPE list bluetooth 2>/dev/null | grep -q bluetooth; then
     bluetooth_detected=true
 elif lsusb 2>/dev/null | grep -qi bluetooth || lspci 2>/dev/null | grep -qi bluetooth; then
     bluetooth_detected=true

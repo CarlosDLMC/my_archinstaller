@@ -2,6 +2,31 @@
 
 ## September 2026
 
+Fresh-install audit (2026-09-14) - install.sh, all install scripts, copy.sh and the dots
+were checked against this laptop; nothing blocked a fresh install, these did drift:
+
+- Bluetooth auto-detection tests `rfkill` after `/sys/class/bluetooth/hci*`. A radio the
+  bar had switched off (rfkill soft block, restored by systemd-rfkill at boot) has no hci
+  directory and is invisible to lsusb, so on this very laptop `bluetooth="auto"` resolved
+  to OFF. `usbutils` is now installed next to `pciutils`, so the lsusb fallback is real
+- `bluetooth.sh` enables `bluetooth.service`, as this machine has it. It was left disabled
+  "to save battery", but the bar toggles the radio itself, so a disabled service only meant
+  Bluetooth was off after every boot until the glyph was clicked. `02-Final-Check.sh` now
+  verifies bluez, the service and `/etc/sudoers.d/bluetooth-toggle` when bluetooth is selected
+- `copy.sh` seeds `quickshell/bar/wallust-colors.json` from `defaults/` like the other five
+  wallust outputs. The bar and the first `wallust run` start in parallel at first login, so
+  without a seed the bar could load before the file existed and stay on its fallback palette
+- `copy.sh` relinks `rofi/.current_wallpaper` on every run, not only on the first. `rofi/` is
+  replaced wholesale, so a re-run used to leave six rofi themes without a background
+- The passwordless-sudo outcome check greps `NOPASSWD: ALL`; a bare `NOPASSWD:` also matched
+  the bluetooth toggle rule, so a failed wheel rule passed whenever bluetooth was selected
+- `yay.sh`/`paru.sh` no longer run a second full upgrade straight after `pacman.sh`'s; the
+  vendored `yay-bin` PKGBUILD is 13.0.1 (checksum verified against the release tarball), so
+  yay is built once, not built and then rebuilt
+- `fonts.sh` guards `fc-cache` against the inherited `set -e`; `ly_config.sh` reads
+  `PIPESTATUS` directly instead of through an `if` whose body would have reset it
+- Dropped packages nothing uses: `ttf-victor-mono`, `inotify-tools`, `umockdev`, `mercurial`
+
 Performance (2026-09-14) - the bar stopped shelling out for things it can read itself:
 
 - The quickshell bar was spending about **45% of a core on subprocesses**, and is now at

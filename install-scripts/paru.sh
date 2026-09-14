@@ -71,15 +71,8 @@ else
   trap - EXIT
 fi
 
-# Update system before proceeding
-printf "\n%s - Performing a full system update to avoid issues.... \n" "${NOTE}"
-ISAUR=$(command -v yay || command -v paru)
-
-# PIPESTATUS, not the pipeline status: `cmd | tee` reports tee's exit code.
-$ISAUR -Syu --noconfirm 2>&1 | tee -a "$LOG"
-if [ "${PIPESTATUS[0]}" -ne 0 ]; then
-  printf "%s - Failed to update system\n" "${ERROR}"
-  exit 1
-fi
+# No `-Syu` here, for the same reason as in yay.sh: pacman.sh ran a full
+# upgrade moments before, and this script only runs when no AUR helper existed
+# yet, so there are no foreign packages to upgrade besides the paru just built.
 
 printf "\n%.0s" {1..2}

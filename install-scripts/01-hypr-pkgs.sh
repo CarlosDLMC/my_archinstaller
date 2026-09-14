@@ -26,7 +26,6 @@ hypr_package=(
   hyprsunset
   hyprpolkitagent
   imagemagick
-  inotify-tools
   inxi
   jq
   kvantum

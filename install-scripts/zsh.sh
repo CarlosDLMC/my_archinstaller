@@ -3,7 +3,6 @@
 
 zsh_pkg=(
   lsd
-  mercurial
   zsh
   zsh-completions
 )
