@@ -25,9 +25,20 @@ DropdownWidget {
     // body still scrolls, which on the 1080p panel it will.
     readonly property real detailsMaxHeight:
         (barWindow && barWindow.screen ? barWindow.screen.height : 1080) * 0.85
+    // Rows are 36 high with 2 of spacing, and the header, its divider and the
+    // card's own padding take 68 before the list gets any room. The old
+    // `length * 40 + 50` was short of that, so a single-network list left the
+    // ListView 22px tall and drew half a row - which is exactly what the first
+    // moment after opening looks like, because the cached read usually returns
+    // only the network already connected.
+    //
+    // The floor of three rows keeps that moment from being a sliver: the scan
+    // fills it within a couple of seconds and the card does not resize under
+    // the pointer.
+    readonly property int listRows: Math.max(scanning ? 3 : 1, wifiNetworks.length)
     popupHeight: panelMode === "details"
         ? Math.max(200, Math.min(Math.ceil(detailsHeight) + 30, detailsMaxHeight))
-        : Math.min(wifiNetworks.length * 40 + 50, 420)
+        : Math.min(listRows * 38 + 72, 420)
     popupXOffset: 250
 
     // Reported by NetworkPanel, so the details card is sized to what it
@@ -93,6 +104,19 @@ DropdownWidget {
     // left the click with no visible effect at all - this is what the popup
     // and the bar icon key their "connecting" state off.
     readonly property bool connecting: wifiConnectProc.running
+
+    // True while a rescan is in flight. The first paint comes from
+    // NetworkManager's cache, which is usually just the connected AP, and the
+    // real results land at 1.4s and 3.2s - without this the card looked
+    // finished and wrong for those seconds, with nothing saying otherwise.
+    property bool scanning: false
+
+    Timer {
+        id: scanSettle
+        interval: 3400          // just past rescanRefresh2
+        repeat: false
+        onTriggered: wifiWidget.scanning = false
+    }
 
     // nmcli -t escapes literal colons in values as "\:", so a naive
     // split(':') corrupts any SSID containing one. Walk the string instead.
@@ -182,6 +206,8 @@ DropdownWidget {
         wifiRescanProc.running = true
         rescanRefresh1.restart()
         rescanRefresh2.restart()
+        scanning = true
+        scanSettle.restart()
         cancelPasswordEntry()
     }
 
@@ -431,8 +457,22 @@ DropdownWidget {
                     font.pixelSize: Theme.fontSize
                     font.family: Theme.fontFamily
                     font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
-                    width: parent.width - (disconnectBtn.visible ? disconnectBtn.width + 4 : 0)
+                    width: parent.width
+                           - (scanBadge.visible ? scanBadge.width + 4 : 0)
+                           - (disconnectBtn.visible ? disconnectBtn.width + 4 : 0)
                     elide: Text.ElideRight
+                }
+
+                // Says a scan is running, so the first seconds - when the list
+                // is whatever NetworkManager had cached, often just the network
+                // already connected - do not read as a finished, wrong answer.
+                Spinner {
+                    id: scanBadge
+                    visible: wifiWidget.scanning && !wifiWidget.passwordMode
+                             && !wifiWidget.connecting
+                    width: Theme.fontSize - 4
+                    height: width
+                    anchors.verticalCenter: parent.verticalCenter
                 }
 
                 Text {
@@ -554,6 +594,18 @@ DropdownWidget {
                         }
                     }
                 }
+            }
+
+            // While scanning with nothing but the cached entry to show, say so
+            // rather than leaving a one-row list looking like the whole answer.
+            Text {
+                visible: wifiWidget.scanning && wifiWidget.wifiNetworks.length <= 1
+                         && !wifiWidget.passwordMode
+                width: parent.width
+                text: "Looking for networks…"
+                color: Theme.colMuted
+                font.pixelSize: Theme.fontSize - 2
+                font.family: Theme.fontFamily
             }
 
             // Network list
