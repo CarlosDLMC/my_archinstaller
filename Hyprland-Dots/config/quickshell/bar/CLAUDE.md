@@ -58,6 +58,7 @@ components/         # Modular widget components
   ├── ToggleRow.qml        # Labelled switch, shared by both capture dialogs
   ├── SlackWidget.qml      # Slack indicator, click to focus app
   ├── WhatsAppWidget.qml   # WhatsApp indicator, click to focus app
+  ├── Spinner.qml          # Ring of dots for indeterminate waits (drawn, not a glyph)
   └── Separator.qml        # Visual separator line
 ```
 
@@ -216,7 +217,18 @@ components/         # Modular widget components
   not from arithmetic over row counts - text height follows the font's line
   metrics, not the pixelSize, so counting rows clips the last one
 - **BatteryWidget.qml**: Battery level with charging status and tiered icons
-- **WifiWidget.qml**: WiFi status. **Left-click** opens the network list (scan,
+- **WifiWidget.qml**: The network list paints instantly from NetworkManager's
+  cache (`--rescan no`), and the real results land at 1.4s and 3.2s. That first
+  paint is usually just the AP already connected, so the card carries a
+  `scanning` state for those seconds - a Spinner in the header and a "Looking
+  for networks…" line - rather than presenting a one-entry list as the answer.
+  Popup height is `rows * 38 + 72`: rows are 36 with 2 of spacing, and the
+  header, divider and padding take 68 before the list gets any room. The old
+  `length * 40 + 50` was short of that and drew a **half row** whenever the
+  cache returned one network. A floor of three rows while scanning keeps the
+  card from opening as a sliver and resizing under the pointer.
+
+  WiFi status. **Left-click** opens the network list (scan,
   connect, password entry, disconnect); **right-click** opens the details card
   (`NetworkPanel.qml`) - link quality, IP/gateway/DNS, live throughput and
   latency, a DNS provider picker, the radio toggle, and two actions: a speed
@@ -256,6 +268,12 @@ components/         # Modular widget components
   **default route separately**: with WireGuard up the route interface is the
   tunnel, so keying the radio details off it (as the original did) silently
   dropped SSID, signal and rate for as long as the VPN was connected
+- **Spinner.qml**: eight dots on a ring with the tail graded by opacity, for
+  waits with no known duration. **Drawn rather than set in type**: a Nerd Font
+  spinner glyph turned with a RotationAnimator visibly wobbles, because the ink
+  is not centred in its character cell, so spinning it about that cell makes it
+  orbit rather than rotate. Geometry cannot. `running` is bound to `visible`,
+  so a hidden one costs nothing.
 - **BluetoothWidget.qml**: Bluetooth status with dropdown. Icon turns green when device connected
 - **Widget components**: Each has its own Process components for data fetching and PopupWindow for dropdowns
 
