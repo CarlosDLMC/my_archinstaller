@@ -224,7 +224,7 @@ def probe_limits(token: str):
                 item["severity"] = str(entry.get("severity") or "")
                 item["active"] = entry.get("is_active") is True
 
-    return out, ""
+    return out, "", False
 
 
 # ----------------------------------------------------------------- transcripts
