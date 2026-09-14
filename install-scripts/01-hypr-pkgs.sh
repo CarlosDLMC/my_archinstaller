@@ -96,6 +96,14 @@ hypr_package_2=(
   vim
   mpv
   mpv-mpris
+  # UserScripts/WallpaperSelect.sh lists *.mp4/.mkv/.mov/.webm from
+  # ~/Pictures/wallpapers alongside the images and builds thumbnails for them,
+  # so video wallpapers are an offered feature - but mpvpaper, the only thing
+  # that can play one as a background, was in no package list at all. Picking a
+  # video rewrote Startup_Apps.lua to launch it and the next login came up with
+  # no wallpaper. The script now refuses when this is missing; installing it
+  # means it does not have to.
+  mpvpaper
   nvtop
   nwg-look
   nwg-displays
