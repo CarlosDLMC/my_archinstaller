@@ -175,6 +175,76 @@ Item {
         }
     }
 
+    // The model chart is a different shape from the day chart, and deliberately
+    // so upstream: days are a label, a thin track and a value, while a model is
+    // one filled row with its name and total sitting inside the bar. Scaled to
+    // the heaviest model, so the top row is always full.
+    component ModelRow: Item {
+        id: modelRow
+        property string name: ""
+        property string total: ""
+        property string detail: ""
+        property real share: 0
+
+        width: parent ? parent.width : 0
+        height: Math.round(panel.labelSize * 2.1)
+
+        Rectangle {
+            anchors.fill: parent
+            radius: 6
+            color: Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.05)
+        }
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: parent.width * Math.max(0, Math.min(1, modelRow.share))
+            radius: 6
+            color: Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.14)
+            Behavior on width {
+                NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+            }
+        }
+
+        Text {
+            id: modelName
+            // Hovering swaps the name for the split. Upstream puts this in a
+            // tooltip; this bar has no tooltip layer, and the row is the one
+            // place the numbers can go without adding one.
+            text: modelHover.containsMouse && modelRow.detail !== ""
+                ? modelRow.detail : modelRow.name
+            color: modelHover.containsMouse ? Theme.colDim : Theme.colWhite
+            font.pixelSize: modelHover.containsMouse ? panel.headerSize : panel.labelSize
+            font.family: Theme.fontFamily
+            elide: Text.ElideRight
+            anchors.left: parent.left
+            anchors.leftMargin: 8
+            anchors.right: modelTotal.left
+            anchors.rightMargin: 8
+            anchors.verticalCenter: parent.verticalCenter
+        }
+
+        Text {
+            id: modelTotal
+            text: modelRow.total
+            color: Theme.colDim
+            font.pixelSize: panel.labelSize
+            font.family: Theme.fontFamily
+            font.bold: true
+            anchors.right: parent.right
+            anchors.rightMargin: 8
+            anchors.verticalCenter: parent.verticalCenter
+        }
+
+        MouseArea {
+            id: modelHover
+            anchors.fill: parent
+            hoverEnabled: true
+            acceptedButtons: Qt.NoButton
+        }
+    }
+
     Flickable {
         anchors.fill: parent
         contentHeight: body.implicitHeight
@@ -333,15 +403,17 @@ Item {
             Repeater {
                 model: AgentUsage.byModel
 
-                MeterRow {
+                ModelRow {
                     required property var modelData
                     // "claude-opus-5" -> "opus-5"; the vendor prefix is the
                     // same on every row and only costs width.
-                    label: String(modelData.model).replace(/^claude-/, "")
-                                                  .replace(/-\d{8}$/, "")
-                    value: panel.compact(modelData.tokens)
-                    fraction: panel.maxModel > 0 ? modelData.tokens / panel.maxModel : 0
-                    fill: Theme.colWhite
+                    name: String(modelData.model).replace(/^claude-/, "")
+                                                 .replace(/-\d{8}$/, "")
+                    total: panel.compact(modelData.tokens)
+                    detail: "in " + panel.compact(modelData.input)
+                          + " · out " + panel.compact(modelData.output)
+                          + " · cache " + panel.compact(modelData.cacheRead)
+                    share: panel.maxModel > 0 ? modelData.tokens / panel.maxModel : 0
                 }
             }
 
