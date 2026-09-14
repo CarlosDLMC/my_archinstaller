@@ -3,21 +3,36 @@
 
 set -e
 
-# Set some colors for output messages
-OK="$(tput setaf 2)[OK]$(tput sgr0)"
-ERROR="$(tput setaf 1)[ERROR]$(tput sgr0)"
-NOTE="$(tput setaf 3)[NOTE]$(tput sgr0)"
-INFO="$(tput setaf 4)[INFO]$(tput sgr0)"
-WARN="$(tput setaf 1)[WARN]$(tput sgr0)"
-CAT="$(tput setaf 6)[ACTION]$(tput sgr0)"
-MAGENTA="$(tput setaf 5)"
-ORANGE="$(tput setaf 214)"
-WARNING="$(tput setaf 1)"
-YELLOW="$(tput setaf 3)"
-GREEN="$(tput setaf 2)"
-BLUE="$(tput setaf 4)"
-SKY_BLUE="$(tput setaf 6)"
-RESET="$(tput sgr0)"
+# Colour, via a wrapper that cannot fail.
+#
+# These used to be bare `$(tput setaf N)`. tput exits non-zero on a terminal
+# with no colour capability - TERM=dumb, or TERM unset, which is what a serial
+# console, a cron/systemd context or CI gives you - and with `set -e` directly
+# above, that non-zero status killed the script *sourcing* this file at line 7,
+# before it ran a single line of its own and with nothing printed. install.sh
+# has the same colour block but no set -e, so it survived: the installer would
+# appear to run normally while every one of its sub-scripts silently did
+# nothing. Verified: TERM=xterm-256color and TERM=linux source fine, TERM=dumb
+# and TERM unset died silently.
+#
+# _tput swallows both the output and the status, so a colourless terminal just
+# gets uncoloured text.
+_tput() { tput "$@" 2>/dev/null || true; }
+
+OK="$(_tput setaf 2)[OK]$(_tput sgr0)"
+ERROR="$(_tput setaf 1)[ERROR]$(_tput sgr0)"
+NOTE="$(_tput setaf 3)[NOTE]$(_tput sgr0)"
+INFO="$(_tput setaf 4)[INFO]$(_tput sgr0)"
+WARN="$(_tput setaf 1)[WARN]$(_tput sgr0)"
+CAT="$(_tput setaf 6)[ACTION]$(_tput sgr0)"
+MAGENTA="$(_tput setaf 5)"
+ORANGE="$(_tput setaf 214)"
+WARNING="$(_tput setaf 1)"
+YELLOW="$(_tput setaf 3)"
+GREEN="$(_tput setaf 2)"
+BLUE="$(_tput setaf 4)"
+SKY_BLUE="$(_tput setaf 6)"
+RESET="$(_tput sgr0)"
 
 # Create Directory for Install Logs
 if [ ! -d Install-Logs ]; then
@@ -136,7 +151,7 @@ show_progress() {
                       "○○○○○●○○○○" "○○○○○○●○○○" "○○○○○○○●○○" "○○○○○○○○●○" "○○○○○○○○○●") 
     local i=0
 
-    tput civis 
+    _tput civis
     printf "\r${NOTE} Installing ${YELLOW}%s${RESET} ..." "$package_name"
 
     while ps -p $pid &> /dev/null; do
@@ -146,7 +161,7 @@ show_progress() {
     done
 
     printf "\r${NOTE} Installing ${YELLOW}%s${RESET} ... Done!%-20s \n" "$package_name" ""
-    tput cnorm  
+    _tput cnorm
 }
 
 

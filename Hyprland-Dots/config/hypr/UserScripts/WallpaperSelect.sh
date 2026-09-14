@@ -135,6 +135,14 @@ set_sddm_wallpaper() {
         exit 1
       fi
 
+      # Guarded like Refresh.sh guards RainbowBorders.sh: this script is not
+      # shipped in the repo, and a bare exec of a missing file kills the shell
+      # with "No such file or directory" instead of doing nothing.
+      if [ ! -x "$SCRIPTSDIR/sddm_wallpaper.sh" ]; then
+        notify-send -i "$iDIR/error.png" "SDDM background" \
+          "scripts/sddm_wallpaper.sh is not installed - skipping." 2>/dev/null
+        return 0
+      fi
       exec "$SCRIPTSDIR/sddm_wallpaper.sh" --normal
 
     fi
@@ -232,6 +240,25 @@ main() {
 
   if [[ -z "$selected_file" ]]; then
     echo "File not found. Selected choice: $choice"
+    exit 1
+  fi
+
+  # A video selection needs mpvpaper, and that is checked HERE rather than only
+  # inside apply_video_wallpaper below.
+  #
+  # modify_startup_config runs unconditionally and, for a video, comments out
+  # run("awww-daemon --format argb") and uncomments the mpvpaper line in
+  # Startup_Apps.lua. apply_video_wallpaper's own guard then refuses and the
+  # running session is left alone - which is why this looked harmless. But the
+  # startup config has already been switched to a binary that is not installed,
+  # so the NEXT login comes up with no wallpaper at all and stays that way until
+  # the Lua is hand-edited or an image is picked again. Refuse before anything
+  # is written, not after.
+  if [[ "$selected_file" =~ \.(mp4|mkv|mov|webm|MP4|MKV|MOV|WEBM)$ ]] \
+     && ! command -v mpvpaper &>/dev/null; then
+    notify-send -i "$iDIR/error.png" "Video wallpaper unavailable" \
+      "mpvpaper is not installed, so $(basename "$selected_file") cannot be used. Nothing was changed." 2>/dev/null
+    echo "mpvpaper is not installed - refusing to switch to a video wallpaper."
     exit 1
   fi
 

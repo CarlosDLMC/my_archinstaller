@@ -139,6 +139,14 @@ if [[ -n "$choice" ]]; then
           exit 1
         fi
 
+        # See the same guard in WallpaperSelect.sh: sddm_wallpaper.sh is not
+        # shipped, and exec on a missing file kills the shell rather than
+        # falling through.
+        if [ ! -x "$SCRIPTSDIR/sddm_wallpaper.sh" ]; then
+          notify-send -i "$iDIR/ja.png" "SDDM background" \
+            "scripts/sddm_wallpaper.sh is not installed - skipping." 2>/dev/null
+          exit 0
+        fi
         exec "$SCRIPTSDIR/sddm_wallpaper.sh" --effects
       fi
     fi
