@@ -32,6 +32,7 @@ NightLight.qml      # Singleton: night-light state, watched off Hyprsunset.sh's 
 components/         # Modular widget components
   ├── DropdownWidget.qml   # Base component for click-to-open dropdown widgets (notch design)
   ├── AudioPanel.qml       # Audio card body: output/input device + level, per-app levels
+  ├── NetworkPanel.qml     # Network card body: link, connection, traffic, DNS, speed test, share QR
   ├── VolumeSlider.qml     # Draggable level track, shared by every row of the audio card
   ├── WeatherStatItem.qml  # Reusable stat row for weather popup
   ├── WorkspaceBar.qml     # Hyprland workspaces with app icons (pill-shaped)
@@ -112,7 +113,39 @@ components/         # Modular widget components
   not from arithmetic over row counts - text height follows the font's line
   metrics, not the pixelSize, so counting rows clips the last one
 - **BatteryWidget.qml**: Battery level with charging status and tiered icons
-- **WifiWidget.qml**: WiFi status with network speed display (upload/download), dropdown for network selection
+- **WifiWidget.qml**: WiFi status. **Left-click** opens the network list (scan,
+  connect, password entry, disconnect); **right-click** opens the details card
+  (`NetworkPanel.qml`) - link quality, IP/gateway/DNS, live throughput and
+  latency, a DNS provider picker, the radio toggle, and two actions: a speed
+  test and a share-QR for the current network. It replaced launching
+  `nm-connection-editor`, which is still installed for the things the card
+  deliberately leaves out - per-profile IP settings, 802.1X, VPN and wired
+  profiles, and **managing saved networks**, which was tried in the card and
+  removed: ten remembered profiles was more than half its height.
+
+  Facts are laid out as label/value pairs, two to a row, in a
+  `GridLayout { columns: 4 }` (the shape DHH uses). One pair per row made a
+  very tall card for mostly short values. The SSID spans the full width and
+  saved/long names elide in the **middle**, because several of these networks
+  are one router with different suffixes and right-eliding rendered them
+  identically.
+
+  The speed test and the QR replace the card's body rather than opening
+  windows of their own (DHH gives each a centred card, but this bar's cards
+  are dropdowns and a second layer surface would fight the focus grab).
+  Closing the card stops a running speed test - it saturates the link with
+  eight parallel streams, so leaving it running would be a real cost.
+
+  Both views share one popup, switched by `panelMode`, so there is still one
+  notch card and one focus grab. The right-click path sets `dropdownOpen`
+  directly rather than emitting `opened()`, because that signal kicks off a
+  Wi-Fi rescan the details view neither shows nor needs.
+
+  Every poll in the card is gated on it being open, and its data comes from
+  `scripts/network-status.sh`. Note that script reports the **radio** and the
+  **default route separately**: with WireGuard up the route interface is the
+  tunnel, so keying the radio details off it (as the original did) silently
+  dropped SSID, signal and rate for as long as the VPN was connected
 - **BluetoothWidget.qml**: Bluetooth status with dropdown. Icon turns green when device connected
 - **Widget components**: Each has its own Process components for data fetching and PopupWindow for dropdowns
 
@@ -217,6 +250,19 @@ singleton that the widgets render; only the rendering should be per-screen. See
 - `hyprctl` for workspace/window data
 - `jq` for JSON parsing
 - `scripts/weather-fetch.sh` -> `scripts/weather-location.py` for weather data (outputs JSON the bar parses)
+- `scripts/network-speedtest.sh <down|up> [seconds]` prints one Mb/s sample per second.
+  Saturates the link with 8 parallel curl workers against fast.com's CDN endpoints and
+  measures the result off `/sys` byte counters. Unlike the upstream version it **stops on
+  its own** rather than running until killed. The fast.com token in it is public (it
+  base64-decodes to a keyboard mash), identifies the fast.com app rather than the user,
+  and is overridable with `FAST_TOKEN`
+- `scripts/network-qr.sh` emits `meta` + a 0/1 matrix for a Wi-Fi join QR, drawn by the card
+  as plain rectangles. Needs `qrencode` (now in `01-hypr-pkgs.sh`); without it, it prints one
+  `error` line the card shows instead of failing silently
+- `scripts/network-status.sh` for the network card's status (tab-separated key/value lines).
+  Uses `nmcli` for the radio details rather than `iw`, which is **not** a dependency of this
+  repo and is not installed - the upstream version read the radio through `iw` and so produced
+  nothing at all here. `iw` is consulted only for the dBm reading, when it happens to exist
 
 ### Adding New Widgets
 
