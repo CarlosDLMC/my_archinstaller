@@ -26,7 +26,15 @@ RATIO_PASSES = 3       # resize sweeps used to restore split ratios
 
 
 def hypr(*args):
-    return subprocess.run(("hyprctl", *args), capture_output=True, text=True).stdout
+    # Timed out: this script disables animations and forces a split direction
+    # for the duration of the move, and restores both in a finally. A hyprctl
+    # that never returns would hang before that finally is reached and leave
+    # the session with animations off and dwindle.force_split pinned.
+    try:
+        return subprocess.run(("hyprctl", *args), capture_output=True,
+                              text=True, timeout=5).stdout
+    except Exception:
+        return ""
 
 
 def query(what):
@@ -251,9 +259,12 @@ def main():
                  for m in monitors.values()}
     mon_before = next(m["name"] for m in monitors.values() if m["focused"])
 
-    setopt("animations.enabled", False)
-    setopt("dwindle.force_split", 2)
+    # Both setopt calls are INSIDE the try, so the finally below always runs.
+    # Outside it, a failure in the second call skipped the finally entirely and
+    # left animations disabled for the rest of the session.
     try:
+        setopt("animations.enabled", False)
+        setopt("dwindle.force_split", 2)
         dispatch(d_focus_monitor(dst_mon["name"]), d_focus_workspace(target))
         time.sleep(SETTLE)
 

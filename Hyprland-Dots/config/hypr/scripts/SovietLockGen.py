@@ -212,8 +212,19 @@ def panel_shape():
     """Actual panel geometry. The row count is not fixed: a machine with no
     battery, no AC device or no weather cache renders fewer rows, and the
     overlaid widgets must follow. So ask the panel itself."""
-    out = subprocess.run(PANEL_CMD, capture_output=True, text=True)
-    lines = [ln for ln in out.stdout.splitlines() if ln]
+    # Timed out like every other subprocess in this file (sh() uses timeout=5).
+    # This one is the heavy call - it shells out to SovietLock.py - and it sits
+    # in the lock path: LockRun.sh runs this generator and only then starts
+    # hyprlock, so a hang here means the session never locks, including from
+    # hypridle's before_sleep_cmd (i.e. suspending unlocked). LockRun.sh already
+    # handles the generator *failing*; it cannot handle it hanging. Measured at
+    # 0.06s, so 5s is generous. On timeout fall through to the same defaults a
+    # missing panel gives.
+    try:
+        out = subprocess.run(PANEL_CMD, capture_output=True, text=True, timeout=5)
+        lines = [ln for ln in out.stdout.splitlines() if ln]
+    except Exception:
+        lines = []
     if not lines:
         return 25, 64, 6, 5
     cols = max(len(ln) for ln in lines)

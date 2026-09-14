@@ -13,7 +13,7 @@ This is a Quickshell configuration for a Hyprland Wayland desktop bar. The confi
 pkill -x quickshell; sleep 0.5; quickshell &
 
 # Test weather script
-~/.config/quickshell/scripts/weather.py | jq -r '.text'
+~/.config/quickshell/bar/scripts/weather-fetch.sh | jq -r '.text'
 ```
 
 ## Architecture
@@ -155,7 +155,7 @@ Ordinal data (temperature, load) is encoded as a brightness ramp, with
 - `wpctl` / `pactl` for volume control and audio sink detection
 - `hyprctl` for workspace/window data
 - `jq` for JSON parsing
-- `scripts/weather.py` for weather data (outputs JSON with waybar-compatible format)
+- `scripts/weather-fetch.sh` -> `scripts/weather-location.py` for weather data (outputs JSON the bar parses)
 
 ### Adding New Widgets
 

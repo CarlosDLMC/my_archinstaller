@@ -41,8 +41,12 @@ hypr_package=(
   # provided by tuned-cachy-ppd, which conflicts with it, and a conflicting
   # --noconfirm transaction stops the install. power_profiles.sh installs it
   # only when nothing already provides the interface.
+  # python-requests: UserScripts/Weather.py and the bar's weather-location.py.
   python-requests
-  python-pyquery
+  # python-pyquery is deliberately NOT here any more. Its only consumer was
+  # quickshell/bar/scripts/weather.py, which scraped weather.com and has been
+  # removed - the bar fetches from Open-Meteo through weather-fetch.sh ->
+  # weather-location.py, which needs requests and nothing else.
   # SovietLockGen.py imports gi/Pango (python-gobject) and cairo (python-cairo)
   # to measure text before it sizes the lock screen widgets. It runs from
   # Startup_Apps.lua on every login, and without these it fails silently -
