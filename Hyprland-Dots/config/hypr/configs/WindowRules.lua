@@ -46,7 +46,13 @@ end
 -- tags matched on the title instead of the class
 rule({ match = { title = "^(Quick Cheat Sheet)$" }, tag = "+Cheat_Sheet" })
 rule({ match = { class = "^(hypr-cheat-sheet)$" },  tag = "+Cheat_Sheet" }) -- scripts/KeyHints.py (SUPER H)
-rule({ match = { title = "^(Hyprland Settings)$" }, tag = "+Hypr_Settings" })
+-- Hypr-Settings, with a hyphen, matching the class_tags key above and the
+-- `tag = "Hypr-Settings*"` rules below. This said "+Hypr_Settings" with an
+-- underscore, which no rule styled, so the tag was assigned and then never used
+-- (upstream had the same typo as KooL-Settings/+KooL_Settings). Nothing in this
+-- repo currently opens a window with this title - it is kept so that one would
+-- float and centre like nwg-displays and nwg-look do.
+rule({ match = { title = "^(Hyprland Settings)$" }, tag = "+Hypr-Settings" })
 rule({ match = { title = "^([Ll]utris)$" },              tag = "+gamestore" })
 rule({ match = { title = "^(ROG Control)$" },            tag = "+settings" })
 rule({ match = { title = "(Kvantum Manager)" },          tag = "+settings" })
