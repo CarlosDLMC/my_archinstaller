@@ -123,7 +123,17 @@ DropdownWidget {
     Process {
         id: vpnSyncProc
         property string targetVpn: ""
-        command: ["sh", "-c", "$HOME/.config/quickshell/bar/scripts/vpn-sync.sh " + targetVpn]
+        // targetVpn goes in as a positional parameter, not glued onto the
+        // command string. Concatenated, the config name was re-parsed by sh:
+        // "us west" arrived as $1="us" with the rest dropped (a silent, wrong
+        // sync), and anything with a ;, | or $() in it would have run as a
+        // command. The names come from /etc/wireguard, which only root can
+        // write, so this was never reachable by anyone who was not already
+        // root - it is the quiet truncation that actually bites.
+        //
+        // Still sh -c rather than a bare argv array, because $HOME has to be
+        // expanded by something, and Process does not do it.
+        command: ["sh", "-c", "$HOME/.config/quickshell/bar/scripts/vpn-sync.sh \"$1\"", "sh", targetVpn]
         onRunningChanged: {
             if (!running) {
                 // Trigger immediate refresh in CenterInfo

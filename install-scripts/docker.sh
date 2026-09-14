@@ -36,7 +36,16 @@ done
 # Add the current user to the docker group (so `docker` works without sudo)
 printf "\n${NOTE} Adding ${SKY_BLUE}$USER${RESET} to the docker group...\n" | tee -a "$LOG"
 sudo usermod -aG docker "$USER" 2>&1 | tee -a "$LOG"
+if [ "${PIPESTATUS[0]}" -ne 0 ]; then
+  echo "${WARN} Could not add $USER to the docker group - docker will need sudo." | tee -a "$LOG"
+fi
 echo "${INFO} Log out/in (or reboot) for docker group membership to take effect." | tee -a "$LOG"
+# Said plainly, once, because it is easy to read "so docker works without sudo"
+# as a convenience and miss what it actually is: the docker group can reach a
+# root-owned daemon socket, and `docker run -v /:/host` from there is a root
+# shell on the host - no password, no sudo log entry. That is the trade, and it
+# is why this is now behind the 'docker' option rather than always-on.
+echo "${NOTE} Note: the ${YELLOW}docker${RESET} group is root-equivalent. Set ${MAGENTA}docker=\"OFF\"${RESET} in the preset to skip this." | tee -a "$LOG"
 
 # Socket activation: daemon starts on-demand, NOT at boot (saves ~350MB idle RAM).
 # Make sure the boot-autostart service is OFF and the socket is ON.
