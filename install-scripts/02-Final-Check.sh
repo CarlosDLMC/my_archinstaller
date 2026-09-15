@@ -151,6 +151,8 @@ if selected dots; then
         test -f "$HOME/.zshrc"
     check_outcome "wallpaper not seeded: ~/.config/hypr/wallpaper_effects/.wallpaper_current is missing (Hyprland-Dots/copy.sh)" \
         test -f "$HOME/.config/hypr/wallpaper_effects/.wallpaper_current"
+    check_outcome "dotfiles not deployed: ~/.config/zsh/herdr-layouts.zsh is missing - hdl/hds/hdlm/hsl will not exist (Hyprland-Dots/copy.sh)" \
+        test -f "$HOME/.config/zsh/herdr-layouts.zsh"
 fi
 
 if selected ly; then
@@ -226,6 +228,41 @@ fi
 if selected handy; then
     check_outcome "handy is not on PATH (install-scripts/handy.sh)" \
         command -v handy
+fi
+
+# herdr and hunk install into ~/.local/bin, which is NOT on PATH during the
+# install - nothing in the installer puts it there, and the .zshrc guard only
+# applies to shells started afterwards. So these test the path directly; a
+# `command -v` here would report a failure on a perfectly good install.
+if selected herdr; then
+    check_outcome "herdr is not installed at ~/.local/bin/herdr (install-scripts/herdr.sh)" \
+        test -x "$HOME/.local/bin/herdr"
+    check_outcome "~/.config/herdr/config.toml is missing (Hyprland-Dots/copy.sh)" \
+        test -f "$HOME/.config/herdr/config.toml"
+    # An unsubstituted __HOME__ leaves every CTRL+ALT+N tab bind and the ALT+Q
+    # close-workspace popup pointing at a path that does not exist. herdr reports
+    # nothing for it - the keys simply do nothing - so it has to be checked here.
+    check_outcome "__HOME__ placeholders left in ~/.config/herdr/config.toml - the tab and close-workspace binds will do nothing (install-scripts/herdr.sh)" \
+        bash -c '! grep -q "__HOME__" "$HOME/.config/herdr/config.toml"'
+    check_outcome "herdr-workspace-numbers.service is not enabled - the sidebar's number column stops updating after a server restart (install-scripts/herdr.sh)" \
+        systemctl --user is-enabled herdr-workspace-numbers.service
+fi
+
+if selected neovim; then
+    check_outcome "nvim is not installed (install-scripts/neovim.sh)" \
+        command -v nvim
+    check_outcome "LazyVim config missing: ~/.config/nvim/lua/config/lazy.lua - Space E has no file tree (install-scripts/neovim.sh)" \
+        test -f "$HOME/.config/nvim/lua/config/lazy.lua"
+    # nvim-treesitter's `main` branch builds parsers with the tree-sitter CLI and
+    # fails hard without it. mason cannot supply it from a headless run, which is
+    # why neovim.sh takes it from the repos - verify that actually happened.
+    check_outcome "tree-sitter CLI is not installed - nvim-treesitter cannot build parsers, so there is no syntax highlighting (install-scripts/neovim.sh)" \
+        command -v tree-sitter
+fi
+
+if selected hunk; then
+    check_outcome "hunk is not installed at ~/.local/bin/hunk (install-scripts/hunk.sh)" \
+        test -x "$HOME/.local/bin/hunk"
 fi
 
 if selected plymouth; then
