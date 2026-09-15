@@ -139,7 +139,7 @@ limine="auto"
 # its only job is to catch a preset key that no longer matches one - see below.
 known_options="ly nvidia nouveau input_group gtk_themes bluetooth thunar \
 quickshell xdph zsh pokemon rog dots handy nopasswd_sudo printing plymouth \
-limine docker"
+limine docker herdr"
 
 # Function to load preset file
 load_preset() {
@@ -522,6 +522,7 @@ options_command+=(
     "docker" "Install Docker, socket-activated? (adds you to the root-equivalent 'docker' group)" "ON"
     "plymouth" "Plymouth boot splash with the repo logo? (replaces the distro's)" "OFF"
     "limine" "Theme the Limine boot menu and disable its countdown? (edits limine.conf, backup kept)" "OFF"
+    "herdr" "Install Herdr terminal workspace manager for AI coding agents?" "OFF"
 )
 
 # With a preset, skip the menu entirely and derive the selection from the
@@ -533,7 +534,7 @@ if [ "$preset_mode" == "true" ]; then
     selected_options=""
     for _opt in ly nvidia nouveau input_group gtk_themes bluetooth thunar \
                 quickshell xdph zsh pokemon rog dots handy nopasswd_sudo \
-                printing plymouth limine docker; do
+                printing plymouth limine docker herdr; do
         [ "${!_opt}" == "ON" ] || continue
 
         # Respect the same conditions the interactive menu applies before it
@@ -899,6 +900,20 @@ if [[ " $selected_options " == *" docker "* ]]; then
     echo "${INFO} Installing ${SKY_BLUE}Docker (socket-activated)...${RESET}" | tee -a "$LOG"
     sleep 1
     execute_script "docker.sh"
+fi
+
+# Herdr - AFTER the dotfiles, for the same reason as thunar_sort above.
+#
+# herdr.sh downloads only the binary and writes only the systemd --user unit.
+# Its config.toml, notification sounds and the four herdr-* helper scripts are
+# dotfiles, and config.toml is shipped with __HOME__ placeholders that herdr.sh
+# rewrites in the installed copy. Run before dotfiles-main.sh and the
+# substitution would target a file that does not exist yet, then copy.sh would
+# lay the templated version down on top of it.
+if [[ " $selected_options " == *" herdr "* ]]; then
+    echo "${INFO} Installing ${SKY_BLUE}Herdr terminal workspace manager...${RESET}" | tee -a "$LOG"
+    sleep 1
+    execute_script "herdr.sh"
 fi
 
 # Enable essential system services

@@ -1,0 +1,61 @@
+#!/bin/sh
+# Close the focused herdr workspace. If it is a git worktree workspace,
+# also remove the worktree (herdr refuses if there are uncommitted changes).
+# Bound to Alt+Q as a popup so you see the prompt and any error.
+HERDR="$HOME/.local/bin/herdr"
+
+info=$("$HERDR" workspace list 2>/dev/null | python3 -c '
+import json,subprocess,sys,os
+H=os.path.expanduser("~/.local/bin/herdr")
+ws=[w for w in json.load(sys.stdin)["result"]["workspaces"] if w.get("focused")]
+if not ws: sys.exit(1)
+w=ws[0]
+g=json.loads(subprocess.run([H,"workspace","get",w["workspace_id"]],
+                            capture_output=True,text=True).stdout)["result"]["workspace"]
+wt=g.get("worktree") or {}
+print(w["workspace_id"])
+print(g.get("label") or "")
+print(wt.get("checkout_path") if wt.get("is_linked_worktree") else "")
+') || { echo "Could not determine the focused workspace."; sleep 3; exit 1; }
+
+id=$(echo "$info"   | sed -n 1p)
+label=$(echo "$info" | sed -n 2p)
+path=$(echo "$info"  | sed -n 3p)
+
+echo
+if [ -n "$path" ]; then
+    dirty=$(git -C "$path" status --porcelain 2>/dev/null | wc -l)
+    branch=$(git -C "$path" branch --show-current 2>/dev/null)
+    echo "  Workspace : $label  ($id)"
+    echo "  Worktree  : $path"
+    echo "  Branch    : $branch"
+    echo "  Uncommitted files: $dirty"
+    echo
+    echo "  This closes the workspace AND removes the worktree folder."
+    echo "  (Your branch and commits are kept.)"
+else
+    echo "  Workspace : $label  ($id)"
+    echo "  Not a worktree - only the workspace closes, no files removed."
+fi
+echo
+printf "  Proceed? [y/N] "
+read -r ans
+case "$ans" in
+  y|Y)
+    if [ -n "$path" ]; then
+        out=$("$HERDR" worktree remove --workspace "$id" 2>&1)
+    else
+        out=$("$HERDR" workspace close "$id" 2>&1)
+    fi
+    case "$out" in
+      *'"error"'*)
+        echo
+        echo "  REFUSED:"
+        echo "$out" | python3 -c 'import json,sys; print("   ",json.load(sys.stdin)["error"]["message"])' 2>/dev/null || echo "   $out"
+        echo
+        echo "  Nothing was deleted. Commit or stash your changes first."
+        printf "  Press Enter..."; read -r _ ;;
+      *) echo "  Done." ; sleep 1 ;;
+    esac ;;
+  *) echo "  Cancelled."; sleep 1 ;;
+esac

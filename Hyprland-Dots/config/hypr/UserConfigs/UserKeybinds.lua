@@ -34,3 +34,9 @@ bind("CTRL + " .. M .. " + F8", exec([[notify-send -t 1500 -i audio-input-microp
 for i = 1, 10 do
     bind(M .. " + ALT + " .. (i % 10), exec(U .. "/MoveWorkspaceWindows.py " .. i .. " --follow"), { description = "move whole workspace to " .. i })
 end
+
+-- Free ALT+Tab for herdr, which uses it to cycle terminal tabs. Hyprland's
+-- default binds it to window.cycle_next + bring_to_top; a compositor bind is
+-- consumed before any application sees it, so herdr could never receive it.
+-- Window cycling remains on SUPER+J / SUPER+K.
+hl.unbind("ALT + Tab")

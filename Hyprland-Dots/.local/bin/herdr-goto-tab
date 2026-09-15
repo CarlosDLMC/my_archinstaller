@@ -1,0 +1,30 @@
+#!/bin/sh
+# herdr-goto-tab N
+# Focus tab N in the focused workspace. If tab N doesn't exist and N is exactly
+# one past the last tab, create it. Otherwise do nothing (avoids tab spam from
+# a fat-fingered Alt+9).
+set -eu
+n="${1:?usage: herdr-goto-tab N}"
+HERDR="$HOME/.local/bin/herdr"
+
+ws=$("$HERDR" workspace list 2>/dev/null | python3 -c '
+import json,sys
+ws=json.load(sys.stdin)["result"]["workspaces"]
+f=[w for w in ws if w.get("focused")] or ws
+print(f[0]["workspace_id"] if f else "")
+') || exit 0
+[ -n "$ws" ] || exit 0
+
+target=$("$HERDR" tab list --workspace "$ws" 2>/dev/null | N="$n" python3 -c '
+import json,os,sys
+n=int(os.environ["N"])
+tabs=json.load(sys.stdin)["result"]["tabs"]
+hit=[t for t in tabs if t.get("number")==n]
+if hit:            print("focus", hit[0]["tab_id"])
+elif n==len(tabs)+1: print("create")
+') || exit 0
+
+case "$target" in
+  focus\ *) exec "$HERDR" tab focus "${target#focus }" >/dev/null 2>&1 ;;
+  create)   exec "$HERDR" tab create --workspace "$ws" --focus >/dev/null 2>&1 ;;
+esac

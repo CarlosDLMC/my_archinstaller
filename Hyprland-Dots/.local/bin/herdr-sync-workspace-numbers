@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+"""Stamp each workspace's number into a $num sidebar token.
+
+herdr has no built-in workspace-number token, so the sidebar reads it from
+workspace metadata. Re-run after creating/closing workspaces, or after a
+server restart (metadata is not persisted in session.json).
+"""
+import json
+import os
+import subprocess
+import sys
+
+HERDR = os.path.expanduser("~/.local/bin/herdr")
+
+out = subprocess.run([HERDR, "workspace", "list"], capture_output=True, text=True)
+if out.returncode != 0:
+    sys.exit(0)
+
+for w in json.loads(out.stdout)["result"]["workspaces"]:
+    subprocess.run(
+        [HERDR, "workspace", "report-metadata", w["workspace_id"],
+         "--source", "numbering", "--token", "num=%s" % w["number"]],
+        capture_output=True,
+    )

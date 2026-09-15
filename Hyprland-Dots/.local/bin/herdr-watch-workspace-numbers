@@ -1,0 +1,33 @@
+#!/usr/bin/env python3
+"""Keep $num sidebar tokens in sync with herdr's live workspace numbering.
+
+herdr exposes no event stream, so this polls. It only writes when the
+(workspace_id -> number) mapping actually changes, so it is idle most of
+the time. Exits quietly whenever the herdr server is not running.
+"""
+import json
+import os
+import subprocess
+import time
+
+HERDR = os.path.expanduser("~/.local/bin/herdr")
+last = None
+
+while True:
+    try:
+        out = subprocess.run([HERDR, "workspace", "list"],
+                             capture_output=True, text=True, timeout=10)
+        if out.returncode == 0:
+            ws = json.loads(out.stdout)["result"]["workspaces"]
+            cur = {w["workspace_id"]: w["number"] for w in ws}
+            stale = any(str(w.get("tokens", {}).get("num")) != str(w["number"]) for w in ws)
+            if cur != last or stale:
+                for w in ws:
+                    subprocess.run(
+                        [HERDR, "workspace", "report-metadata", w["workspace_id"],
+                         "--source", "numbering", "--token", "num=%s" % w["number"]],
+                        capture_output=True, timeout=10)
+                last = cur
+    except Exception:
+        last = None
+    time.sleep(3)

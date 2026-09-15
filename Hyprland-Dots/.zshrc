@@ -80,3 +80,9 @@ esac
 
 [ -r "$HOME/.local/bin/env" ] && . "$HOME/.local/bin/env"
 [ -r "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
+
+# One shared cargo build cache across every checkout, including the git
+# worktrees herdr creates under ~/.herdr/worktrees. Without this each worktree
+# grows its own target/ - ~20GB apiece on a large Rust repo, which fills a
+# 225GB disk after three branches.
+export CARGO_TARGET_DIR="$HOME/.cache/cargo-target"
