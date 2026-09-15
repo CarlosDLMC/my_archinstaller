@@ -1,19 +1,43 @@
 #!/bin/bash
 # Send the clock and/or the weather back home.
 #
-# Usage: vpn-reset.sh [time|weather|all]
+# Usage: vpn-reset.sh [time|weather|all] [--forget]
 #
 # `all` is the default, which is what the disconnect button, the dropped-tunnel
 # handler and the stale-cache check at startup all want. The bar's two toggle
 # buttons call the halves individually, so either can come home while the tunnel
 # stays up.
 #
+# --forget additionally drops the saved home location, so the next departure
+# captures it fresh. It is passed by the paths that end with **no tunnel**
+# - disconnect, a dropped tunnel, the stale-cache check - where the saved copy
+# has nothing left to do: with no tunnel, an IP lookup is a better answer than a
+# remembered one, and it is the only one that notices you have moved.
+#
+# It is deliberately NOT inferred from whether a tunnel is up right now. The
+# disconnect button starts `wg-quick down` and this script in the same moment,
+# so the tunnel is usually still up when we get here, and a rule that read the
+# live state would forget almost nothing. It is also exactly the wrong thing to
+# do on the toggle path, where coming home *while connected* is the entire
+# point and the saved home is the only thing that can answer it.
+#
 # "Home" is whatever was saved the first time that half left it - see vpn-sync.sh.
 # Nothing is saved until then, so a machine that has never followed a tunnel has
 # no home files at all, and this degrades to what it always did: leave the clock
 # alone and let the weather fall back to IP.
 
-MODE="${1:-all}"
+MODE="all"
+FORGET=0
+for arg in "$@"; do
+    case "$arg" in
+        --forget)         FORGET=1 ;;
+        time|weather|all) MODE="$arg" ;;
+        *)
+            echo "Usage: vpn-reset.sh [time|weather|all] [--forget]"
+            exit 1
+            ;;
+    esac
+done
 
 RESET_TIME=0
 RESET_WEATHER=0
@@ -21,10 +45,6 @@ case "$MODE" in
     time)    RESET_TIME=1 ;;
     weather) RESET_WEATHER=1 ;;
     all)     RESET_TIME=1; RESET_WEATHER=1 ;;
-    *)
-        echo "Usage: vpn-reset.sh [time|weather|all]"
-        exit 1
-        ;;
 esac
 
 echo "Returning to local ($MODE)..."
@@ -64,9 +84,9 @@ if [ "$RESET_WEATHER" -eq 1 ]; then
     # Dropping the city preference is the whole reset: weather-fetch.sh then picks
     # home coordinates while a tunnel is up, or asks by IP when there is none.
     #
-    # weather_home is deliberately NOT deleted. It is the only thing that can
-    # answer "my own weather" while still connected, which is exactly the state
-    # this button exists for.
+    # weather_home survives this unless --forget says otherwise: without it the
+    # toggle could not answer "my own weather" while still connected, which is
+    # the state that button exists for.
     rm -f ~/.cache/quickshell/weather_city
 
     SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
@@ -84,6 +104,13 @@ if [ "$RESET_WEATHER" -eq 1 ]; then
     else
         echo "Error: weather-fetch.sh not found at $FETCH"
         FAILED=1
+    fi
+
+    # After the fetch, never before: the tunnel may still be on its way down, in
+    # which case that fetch was the last thing that needed these coordinates.
+    if [ "$FORGET" -eq 1 ]; then
+        rm -f ~/.cache/quickshell/weather_home
+        echo "Forgot the saved home location - the next sync will capture it again"
     fi
 fi
 

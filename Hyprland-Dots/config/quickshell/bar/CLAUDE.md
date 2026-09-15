@@ -363,9 +363,13 @@ components/         # Modular widget components
   white-active/grey-idle, the only state signal a 28px button has room for, and
   the card said nothing at all about it before.
 
-  **Home is captured on departure, not maintained.** Nothing is stored until a
-  half first leaves home: `timezone_default` on the first clock sync,
-  `weather_home` (`lat<TAB>lon<TAB>name`) on the first weather sync. The subtle
+  **Home is captured on departure and forgotten on disconnect.** Nothing is
+  stored until a half first leaves home: `timezone_default` on the first clock
+  sync, `weather_home` (`lat<TAB>lon<TAB>name`) on the first weather sync. The
+  disconnect button, a dropped tunnel and the stale-cache check all pass
+  `--forget` to `vpn-reset.sh`, which drops `weather_home` again - with no
+  tunnel an IP lookup is the better answer and the only one that notices you
+  have moved, so the file only needs to exist while a tunnel is up. The subtle
   part is where the weather snapshot comes from. By the time either button is
   reachable a tunnel is already up, so asking the network where we are answers
   with the **exit node** - which would save the place you are leaving *as* home
@@ -378,6 +382,15 @@ components/         # Modular widget components
   Home travels as **coordinates**, not a city name: a bare name only resolves
   for the seven in `VPN_LOCATIONS`, and home can be anywhere. Hence
   `weather-location.py "lat,lon" [name]`.
+
+  `--forget` is passed explicitly rather than inferred from whether a tunnel is
+  up, and that matters twice. The disconnect button starts `wg-quick down` and
+  the reset in the same moment, so the tunnel is usually still up when the
+  script runs and a live-state rule would forget almost nothing; and on the
+  toggle path, where coming home *while connected* is the whole point, the
+  saved home is the only thing that can answer, so forgetting there would break
+  the feature. The delete also comes **after** the fetch, since a tunnel still
+  on its way down means that fetch was the last thing needing the coordinates.
 
   `weather-fetch.sh` owns the precedence: `weather_city` (following the tunnel)
   > `weather_home`, but **only while a tunnel is up** > IP. That last ordering

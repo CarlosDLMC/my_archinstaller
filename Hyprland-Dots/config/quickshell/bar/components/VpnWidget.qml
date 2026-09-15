@@ -225,10 +225,19 @@ DropdownWidget {
         }
     }
 
-    // VPN reset process (back to local)
+    // Back to local, both halves, and forget the saved home on the way out.
+    //
+    // Every path that reaches this one ends with no tunnel - the disconnect
+    // button, a tunnel that dropped on its own, the stale-cache check at
+    // startup - and with no tunnel the saved home has nothing left to do: an IP
+    // lookup is the better answer, and the only one that notices you have moved.
+    // The next departure captures it again.
+    //
+    // The per-half resets below deliberately do not forget, because they run
+    // while the tunnel is still up.
     Process {
         id: vpnResetProc
-        command: ["sh", "-c", "$HOME/.config/quickshell/bar/scripts/vpn-reset.sh"]
+        command: ["sh", "-c", "$HOME/.config/quickshell/bar/scripts/vpn-reset.sh all --forget"]
         onRunningChanged: {
             if (!running) {
                 vpnWidget.updateVpnStatus()
