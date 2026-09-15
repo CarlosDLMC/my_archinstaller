@@ -2,6 +2,24 @@
 
 ## September 2026
 
+Fixed (2026-09-15) - the night light toggle did nothing visible. hyprsunset was
+starting and stopping correctly the whole time and the state file was right; the
+bar's icon was simply stuck. Same `FileView` bug as the battery pills:
+`NightLight` read its state file with `blockLoading`, so the `reload()` in
+`onFileChanged` returned the contents from *before* the toggle, every time. Once
+the file had said "on", `applyState` never saw "off" again and the icon latched
+white.
+
+The `onLoadedChanged` handler sitting beside it was assumed to re-apply the fresh
+value and does not: that signal fires on the transition *into* `loaded`, and after
+the first read `loaded` is already true, so a `reload()` never re-emits it. The
+pattern looks belt-and-braces and is stale every time after the first.
+
+`blockAllReads: true` on `NightLight` and on `CenterInfo`'s three watched files
+(timezone, weather city, weather cache), which had the same quiet version - the
+weather cache was parsed one write behind. Verified with six consecutive toggles:
+six correct state changes, where before the icon never moved.
+
 Fixed (2026-09-15) - the audio card's output devices were marked with a hard
 drive. The glyph was `nf-md-speaker` (U+F04C3), which is semantically right and
 visually wrong: it draws a studio speaker *cabinet* - a rounded box with a small
@@ -96,8 +114,10 @@ it. It is now a `BatteryState` singleton plus two renderers:
 - **`SystemStats` had the same bug**, quietly: `/proc/stat`, `/proc/meminfo` and
   the hwmon sensor were all read with `blockLoading`, so every CPU, memory and
   temperature reading in the bar was one 5s tick old. Fixed the same way.
-  `CenterInfo` and `NightLight` use `reload(); text()` too but re-apply from
-  `onLoadedChanged` when the read lands, so they self-correct and are left alone.
+  `CenterInfo` and `NightLight` were left alone at first on the belief that their
+  `onLoadedChanged` handler re-applied the fresh value. It does not - that signal
+  fires on the transition *into* `loaded`, which has already happened - so both
+  were stale too. Fixed in the follow-up below.
   The bar's CLAUDE.md said `blockLoading: true` "makes `reload()` + `text()`
   synchronous, which is what you want for `/proc`" - that is the opposite of true,
   and is corrected

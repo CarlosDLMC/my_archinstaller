@@ -40,7 +40,18 @@ Singleton {
         printErrors: false
         path: root.statePath
         watchChanges: true
-        blockLoading: true
+        // blockAllReads, NOT blockLoading. blockLoading only makes the *initial*
+        // load synchronous; after that reload() starts an async read and text()
+        // keeps returning the previous contents, so the reload() below read the
+        // state from before the toggle - every time.
+        //
+        // onLoadedChanged does not save it, which is what it looked like. That
+        // fires on the transition into `loaded`, and after the first read
+        // `loaded` is already true, so a reload never re-emits it. The effect
+        // was that the icon latched: once the file had said "on", applyState
+        // never saw "off" again and the toggle appeared dead, while hyprsunset
+        // itself was starting and stopping perfectly.
+        blockAllReads: true
         onFileChanged: {
             reload()
             root.applyState()
