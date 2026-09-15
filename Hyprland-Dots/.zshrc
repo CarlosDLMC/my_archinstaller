@@ -65,5 +65,18 @@ export PATH="$HOME/.local/share/gem/ruby/3.4.0/bin:$PATH"
 [ -x /home/linuxbrew/.linuxbrew/bin/brew ] && eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 export PATH="/opt/homebrew/opt/libpq/bin:$PATH"
 
+# ~/.local/bin is where this repo installs the herdr binary and every helper
+# script copy.sh ships (herdr-*, flag-switch, pokefetch-merge), and nothing else
+# puts it on PATH: systemd's user environment does not carry it, and the
+# ~/.local/bin/env line below is uv's shim, which only exists if you installed
+# uv. On a fresh machine that left `herdr` on disk but not on PATH. The helper
+# scripts are always called by absolute path, so this only ever showed up as
+# "herdr: command not found". The guard keeps a re-sourced .zshrc from stacking
+# duplicate entries.
+case ":$PATH:" in
+    *":$HOME/.local/bin:"*) ;;
+    *) export PATH="$HOME/.local/bin:$PATH" ;;
+esac
+
 [ -r "$HOME/.local/bin/env" ] && . "$HOME/.local/bin/env"
 [ -r "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"

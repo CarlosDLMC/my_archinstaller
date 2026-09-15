@@ -2,6 +2,19 @@
 
 ## September 2026
 
+Fixed (2026-09-15) - `~/.local/bin` is now put on `PATH` by `.zshrc`, with a
+duplicate guard.
+
+Nothing in the repo had ever done this. It went unnoticed because every script
+the dotfiles install there is invoked by absolute path - `config.toml` uses
+`__HOME__/.local/bin/...`, the systemd unit uses `%h/...`, and `pokefetch-merge`
+is never called bare - and because on the machine this was written on the
+directory was on `PATH` by accident, via the `~/.local/bin/env` shim that uv
+drops and `.zshrc` sources if it happens to exist. uv is not installed by this
+repo. So on a genuinely fresh machine the herdr binary would have been installed
+correctly and `herdr` would still have been "command not found", which is exactly
+the kind of thing that only shows up on the next real install.
+
 Changed (2026-09-15) - the clipboard picker (`SUPER + ALT + V`) is set in
 **JetBrains Mono** and its text is neutral.
 
