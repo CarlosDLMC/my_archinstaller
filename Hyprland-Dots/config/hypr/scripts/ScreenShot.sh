@@ -12,9 +12,10 @@ iDIR="$HOME/.config/swaync/icons"
 iDoR="$HOME/.config/swaync/images"
 sDIR="$HOME/.config/hypr/scripts"
 
-active_window_class=$(hyprctl -j activewindow | jq -r '(.class)')
-active_window_file="Screenshot_${time}_${active_window_class}.png"
-active_window_path="${dir}/${active_window_file}"
+# active_window_* are deliberately NOT computed here. They used to be, which
+# cost an hyprctl call plus a jq fork (~15ms measured) on every screenshot of
+# every kind, to build a filename only --active ever uses. shotactive sets them
+# itself, and notify_view "active" is only ever reached from shotactive.
 
 notify_cmd_base="notify-send -t 10000 -A action1=Open -A action2=Delete -h string:x-canonical-private-synchronous:shot-notify"
 notify_cmd_shot="${notify_cmd_base} -i ${iDIR}/picture.png "
@@ -91,6 +92,34 @@ satty_open() {
 # grim straight into satty. Arguments are passed to grim verbatim. A cancelled
 # selection leaves grim with nothing to capture and satty on an empty stdin
 # only shows an error box, so go through a file and check it first.
+#
+# Piping grim into satty instead of using this temp file - with -t ppm, so grim
+# emits bytes immediately instead of after a whole deflate pass, letting the
+# capture overlap satty's startup - was tried and REVERTED. An isolated
+# benchmark suggested it saved ~450ms, but that was a lucky sample. Measured
+# properly on the real script, 14 interleaved runs each, timed to the moment
+# satty's window appears on Hyprland's event socket:
+#
+#   temp file (this)   median 1736ms   mean 1649ms   stdev 269ms
+#   piped ppm          median 1756ms   mean 1682ms   stdev 251ms
+#   mean delta -33ms against a standard error of 98ms - indistinguishable.
+#
+# The run-to-run spread here is ~260ms, far larger than anything the pipeline
+# can save. Nothing in this script is the bottleneck.
+#
+# What it actually was: the machine was on battery. EPP sits at balance_power
+# and the cores idle around 1.6GHz against a 4.0GHz ceiling, and satty's startup
+# is almost entirely single-threaded work - dynamic linking, GTK4/libadwaita
+# init - so it scales close to linearly with clock. ~1.3s at 1.6GHz is roughly
+# 0.5-0.6s on mains. The variance had the same cause: balance_power ramps
+# opportunistically, so every run caught a different clock. So if screenshots
+# feel slow, check `powerprofilesctl get` and whether the charger is in before
+# touching anything here.
+#
+# Also ruled out by measurement along the way, all of them dead ends: image
+# format and size (a 4KB image still takes satty 1245ms), the GSK renderer (the
+# default already beats ngl/gl/vulkan/cairo), and a libadwaita portal stall
+# (ADW_DISABLE_PORTAL is slower, not faster).
 edit_shot() {
 	local tmpfile
 	tmpfile=$(mktemp --suffix=.png)
