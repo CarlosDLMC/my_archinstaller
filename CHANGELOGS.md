@@ -2,6 +2,15 @@
 
 ## September 2026
 
+Fixed (2026-09-15) - the audio card's output devices were marked with a hard
+drive. The glyph was `nf-md-speaker` (U+F04C3), which is semantically right and
+visually wrong: it draws a studio speaker *cabinet* - a rounded box with a small
+circle above a large one - and at the card's size that reads as a drive bay. It
+also disagreed with the bar, which has always used `nf-md-volume_high` (U+F057E)
+for the very same device, so one plain speaker output was drawn two different
+ways depending on where you looked. Both now use U+F057E. The headphone,
+bluetooth and monitor marks in that set were already legible and are unchanged.
+
 Added (2026-09-15) - **battery card and charge limit**. The battery widget was
 one number (`Battery.sh` in a `Process`, per screen) and a dropdown that repeated
 it. It is now a `BatteryState` singleton plus two renderers:
