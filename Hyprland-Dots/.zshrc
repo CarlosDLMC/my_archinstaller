@@ -86,3 +86,9 @@ esac
 # grows its own target/ - ~20GB apiece on a large Rust repo, which fills a
 # 225GB disk after three branches.
 export CARGO_TARGET_DIR="$HOME/.cache/cargo-target"
+
+# Herdr dev layouts: hdl (editor + agent + terminal), hds (adds a live hunk diff),
+# hdlm (one hdl tab per subdirectory), hsl (a grid of identical panes). The file
+# is repo-owned and copy.sh puts it there; the guard keeps a machine that skipped
+# the dots from erroring on every shell start.
+[ -r "$HOME/.config/zsh/herdr-layouts.zsh" ] && . "$HOME/.config/zsh/herdr-layouts.zsh"

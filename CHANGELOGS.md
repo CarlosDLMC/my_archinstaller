@@ -2,6 +2,59 @@
 
 ## September 2026
 
+Added (2026-09-16) - the other three quarters of the agent workspace: **dev
+layout functions**, **Neovim with LazyVim**, and **Hunk**.
+
+Herdr gave us panes and a sidebar that reports agent state. It has no file
+browser - its `goto` action is a session navigator, not a file picker - and
+nothing in it shows the code an agent is writing. Those are the two gaps this
+closes, and neither turned out to be a herdr problem.
+
+**The file tree is Neovim's**, drawn by snacks.explorer, which LazyVim ships on
+`Space E`. It only looks like a herdr feature because it fills a herdr pane. The
+config is the upstream LazyVim starter, cloned once and then left alone - not
+vendored here, because the starter is meant to be forked and `copy.sh` replaces
+config directories wholesale, which would bury your own `lua/plugins/*.lua` on
+every re-run.
+
+`neovim.sh` installs `tree-sitter-cli`, `stylua` and `shfmt` from the repos
+instead of leaving them to mason.nvim, and that is not a style preference. mason
+installs asynchronously inside a running nvim; the headless `+Lazy! sync` exits
+as soon as lazy is done and kills those installs mid-flight. The test machine
+ended up with mason logging "Neovim is exiting while packages are still
+installing" and nvim-treesitter reporting a hard `❌ tree-sitter (CLI)` - no
+parsers, no highlighting. pacman installs them synchronously and there is nothing
+left to race. Parsers stay lazy: on treesitter's `main` branch they arrive per
+language on first open, which a headless run cannot trigger anyway.
+
+**Hunk is the review half.** `hunk diff --watch` renders the working tree as a
+file-by-file review stream and re-renders as the agent writes. Like herdr it is
+not in the repos or the AUR, and upstream's install is `curl | sh`, which this
+repo does nowhere else - so `hunk.sh` resolves the GitHub release, verifies the
+tarball against the published `SHA256SUMS`, and installs the binary the same
+checked way `herdr.sh` does. A mismatch installs nothing.
+
+**The layouts** are ported from Omarchy Quattro's `default/bash/fns/herdr`
+(omacom/omarchy, MIT, DHH): `hdl` (editor, agent, terminal), `hds` (that plus a
+permanent hunk pane, minus the terminal), `hdlm` (one tab per subdirectory), `hsl`
+(a grid all running one command). They drive herdr's socket API rather than its
+keybindings, so they are indifferent to our keymap differing from his.
+
+The port is zsh and his are bash, and that is load-bearing rather than cosmetic.
+**zsh arrays are 1-indexed.** His `hsl` walks columns with
+`for (( index = 0; index < cols; index++ ))` over `${columns[index]}`, which under
+zsh reads an empty slot on the first iteration and never reaches the last column -
+it would have silently built one column fewer than asked, with no error. The loop
+here runs `1..cols` and the extra-row test moved from `<` to `<=` to match.
+Verified against 13 pane counts from 1 to 25. Two smaller changes: the agent
+defaults to `claude` where his `hds` hardcodes `opencode`, and the editor is named
+`nvim` outright rather than `$EDITOR`, which is `vim` here - these layouts exist
+for a file tree vim does not have.
+
+All of it was installed and exercised on the live machine before any of it was
+written to the repo: `hds` built in a throwaway workspace came up as
+nvim / zsh / hunk / claude across four panes, and the workspace was closed again.
+
 Added (2026-09-15) - **Herdr**, the terminal workspace manager the agents run
 in, is installed and configured by the installer (`herdr="ON"` in the preset).
 

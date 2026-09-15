@@ -54,6 +54,9 @@ then continue with the [Installation Steps](#installation-steps) below.
 - **Soviet TUI Lock Screen** matching ly, auto-sized to any display (720p → 4K)
 - **Offline Speech-to-Text** with Handy (toggle via SUPER + CTRL + F8)
 - **Herdr** terminal workspace manager for AI coding agents, with the sidebar, keybindings, theme and done/blocked sounds preconfigured
+- **Dev layouts** (`hdl` / `hds` / `hdlm` / `hsl`) that build a whole editor + agent + terminal pane layout in one command
+- **Neovim with LazyVim**, which is where the file tree beside the agents comes from
+- **Hunk** review-first diff viewer, for reading what the agents actually wrote
 - **Whole-Workspace Move** with SUPER + ALT + number, rebuilding the tiling layout window for window
 - **Boot Splash** with the repo logo (Plymouth, optional - replaces the CachyOS one)
 - **All Essential Packages** pre-configured
@@ -226,6 +229,10 @@ first prompt.
 - Handy (offline speech-to-text — Parakeet V3, auto-detects 25 languages)
 - Herdr (terminal workspace manager for AI coding agents — a static binary from
   herdr.dev, not a repo or AUR package, see [Herdr](#herdr-terminal-workspace-manager))
+- Neovim + LazyVim, with ripgrep, fd, lazygit, tree-sitter-cli, stylua and shfmt
+  (see [Neovim and the file explorer](#neovim-and-the-file-explorer))
+- Hunk (terminal diff viewer for agent changesets — also an out-of-band binary,
+  see [Hunk](#hunk-reading-what-the-agents-wrote))
 
 ## Configuration
 
@@ -985,6 +992,101 @@ past the end.
 `herdr` in a terminal. Its keybindings only exist inside that session, so
 `ALT + Tab` does nothing at all until you are in one.
 
+#### Dev layouts
+
+Four shell functions build a whole pane layout and start everything in it. They
+live in `~/.config/zsh/herdr-layouts.zsh` and `.zshrc` sources them:
+
+| Command | Layout |
+| --- | --- |
+| `hdl [agent] [agent2]` | editor ~70% on the left, agent(s) in the right column, terminal along the bottom |
+| `hds [agent]` | a 2x2 square: editor, live `hunk diff --watch`, terminal, agent |
+| `hdlm [agent] [agent2]` | one `hdl` tab per subdirectory of the current directory |
+| `hsl <count> <command>` | `count` panes tiled in a grid, all running the same command |
+
+The agent defaults to `claude`; `hdl codex` or `hdl claude codex` works too. Run
+one from the pane you want to become the layout - `hds` splits the pane it is
+called in, and renames the tab after the directory.
+
+`hdl` is the everyday one. `hds` trades the terminal quadrant for a permanent
+diff pane, which is worth it once an agent is actually writing code.
+
+These drive Herdr over its socket API rather than through keybindings, so they do
+not care what your `config.toml` keymap looks like.
+
+They are ported from Omarchy Quattro's `default/bash/fns/herdr` (omacom/omarchy,
+MIT, DHH), with three deliberate differences. **They are zsh, not bash** - his
+arrays are 0-indexed and zsh's are 1-indexed, so a verbatim copy of his `hsl`
+would read an empty slot first and never reach the last column, silently building
+one column fewer than asked. **The agent defaults to `claude`**, where his `hds`
+hardcodes `opencode`. And **the editor is named `nvim` outright** rather than
+`$EDITOR`, which is `vim` here - these layouts exist for the LazyVim file tree,
+which vim does not have.
+
+### Neovim and the file explorer
+
+Herdr has no file browser. Its `goto` action is a session navigator, not a file
+picker, and nothing in its config can open a tree. The file explorer sitting next
+to the agents is **Neovim's**, drawn by `snacks.explorer`, which LazyVim ships
+and binds to `Space E`. So the file tree is a Neovim question that happens to be
+answered inside a Herdr pane.
+
+Worth keeping the names straight, because they blur:
+
+| Name | What it is |
+| --- | --- |
+| Neovim | the editor - the `nvim` binary |
+| lazy.nvim | the plugin manager |
+| LazyVim | a curated config built on lazy.nvim, cloned to `~/.config/nvim` |
+| snacks.nvim | one of its plugins - the one drawing the tree |
+
+There is no `lazyvim` command. You always run `nvim`.
+
+The ones worth learning first:
+
+- `Space E` - toggle the file tree (double-click opens; single click just moves the cursor)
+- `Ctrl + W W` - hop between tree and editor
+- `Space Space` - fuzzy-find a file
+- `Space S G` - grep everything, with preview
+- `Space G G` - lazygit in a floating pane
+- `a` / `A` in the tree - new file / new directory, `?` for the rest
+
+`neovim.sh` installs `tree-sitter-cli`, `stylua` and `shfmt` from the repos rather
+than letting mason.nvim fetch them. mason installs asynchronously inside a running
+nvim, and the headless `+Lazy! sync` the script runs exits the moment lazy is
+done - which kills those installs mid-flight. That left nvim-treesitter reporting
+a hard `❌ tree-sitter (CLI)` with no parsers and no highlighting. pacman installs
+them synchronously and mason has nothing left to race. Parsers themselves are
+*not* pre-fetched: on treesitter's `main` branch they install per language the
+first time you open a matching file.
+
+**The Neovim config is deliberately not tracked here.** The LazyVim starter is
+meant to be forked and grown - `lua/plugins/*.lua` is yours - and vendoring a copy
+would both freeze someone else's template and put `copy.sh`'s wholesale directory
+replacement on top of your own plugin files on every re-run. `neovim.sh` clones
+the starter once and never touches it again; an existing LazyVim config is left
+completely alone, and any other `~/.config/nvim` is backed up rather than merged
+over.
+
+### Hunk (reading what the agents wrote)
+
+The sidebar tells you an agent is working, done or blocked. It says nothing about
+the code. [Hunk](https://github.com/modem-dev/hunk) is a review-first terminal
+diff viewer for agent-authored changesets: a multi-file review stream with a file
+sidebar and agent annotations beside the lines, and `--watch` re-renders as the
+agent writes. `hds` parks it in a permanent quadrant.
+
+- `hunk diff` - the working tree, `--watch` to auto-reload, `--staged` for the index
+- `hunk show` - the last commit; `hunk log` - browse history
+- `hunk pager` / `hunk difftool` - wire it into git itself
+
+Like Herdr, it is not in the repos or the AUR. Upstream's one-liner pipes an
+unread script into a shell, which this repo does nowhere else, so `hunk.sh`
+resolves the release through the GitHub API, verifies the archive against the
+published `SHA256SUMS`, and installs the binary to `~/.local/bin` - the same
+checked path `herdr.sh` takes. A mismatch installs nothing. Update later with
+`hunk update`.
+
 ### Lock Screen (Soviet TUI)
 
 The lock screen is built to match the **ly** login screen, so logging in and unlocking
@@ -1119,6 +1221,8 @@ All configs are in `~/.config/`. Main files to edit:
 - `~/.config/foot/` - Terminal configuration
 - `~/.zshrc` - Shell configuration
 - `~/.config/herdr/config.toml` - Herdr keybindings, sidebar rows, theme and sounds
+- `~/.config/nvim/lua/plugins/` - your Neovim plugins (not tracked by this repo)
+- `~/.config/zsh/herdr-layouts.zsh` - the `hdl` / `hds` / `hdlm` / `hsl` layout functions
 - `~/.config/gtk-3.0/settings.ini` - GTK theme, font, cursor and dark-mode preference
 - `~/.config/environment.d/locale.conf` - `LC_TIME`, i.e. the clock and calendar format
 - `~/.config/fontconfig/conf.d/99-no-ligatures.conf` - turns coding ligatures off
