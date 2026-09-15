@@ -399,6 +399,15 @@ good palette rather than rendering blank).
 `colAlert` is the only real hue in the bar. Spend it only on states worth
 looking at — if everything is an alert, nothing is.
 
+**`colDim`, `colMuted` and `colFaint` carry the wallpaper's hue at full
+saturation** — `atLeast()` only floors their lightness, it does not desaturate.
+`colWhite` and `colGrey` are the desaturated pair (`desat()`). On a few short bar
+labels that whisper of hue is the point. On a **large surface** it is not: the
+clipboard picker used `colDim`/`colMuted` for its rows and chrome and read as
+solidly orange on a red wallpaper. Any full-screen or card-sized surface should
+use `colWhite` for what is active or selected and `colGrey` for everything else,
+which is the bar's own white-active/grey-idle rule.
+
 Ordinal data (temperature, load) is encoded as a brightness ramp, with
 `colAlert` reserved for genuine extremes. See `getTempColor()` in
 `CenterInfo.qml`.
@@ -482,6 +491,15 @@ singleton that the widgets render; only the rendering should be per-screen. See
       onCleared: myDropdownOpen = false
   }
   ```
+- **Two font roles.** `Theme.fontFamily` is Terminess, the bar's face: a
+  bitmap-derived terminal font that suits a row of short fixed labels.
+  `Theme.fontFamilyContent` is JetBrains Mono, for surfaces that render
+  **arbitrary text at paragraph length and small size** — the clipboard picker is
+  the case that asked for it, since Terminess has no hinting to speak of below
+  its design size and its lowercase runs together. Use the Nerd Font variant name
+  (`JetBrainsMono Nerd Font`), not the bare family, because these surfaces draw
+  nf-md glyphs alongside the text. Shipped by `ttf-jetbrains-mono-nerd`, already
+  in `install-scripts/fonts.sh`.
 - **Nerd Font Icons**: Uses Material Design Icons range (nf-md-*) which render correctly in Qt. Other ranges may not work.
 
 ### External Dependencies
