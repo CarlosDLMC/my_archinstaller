@@ -109,7 +109,7 @@ components/
   ├── NightLightWidget.qml   # hyprsunset toggle
   ├── KeyboardLayoutWidget.qml # Current keyboard layout
   ├── LayoutOsd.qml          # Centred layout-switcher OSD, one per screen
-  ├── VpnWidget.qml          # VPN selector; syncs clock and weather
+  ├── VpnWidget.qml          # VPN selector; a Time and a Weather sync button
   ├── PowerWidget.qml        # Power menu
   ├── Clock.qml              # Time display
   ├── SlackWidget.qml        # Slack indicator
@@ -121,7 +121,7 @@ scripts/
   ├── weather-fetch.sh       # Weather entry point (city preference -> weather-location.py)
   ├── weather-location.py    # Open-Meteo fetch, prints the JSON the bar parses
   ├── layouts.py             # Keyboard layout enumeration
-  ├── vpn-sync.sh            # Point clock/weather at the VPN exit
+  ├── vpn-sync.sh            # Point the clock and/or the weather at the VPN exit
   └── vpn-reset.sh           # Restore local timezone and weather
 ```
 

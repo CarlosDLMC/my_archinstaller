@@ -7,7 +7,12 @@ import ".."
 DropdownWidget {
     id: vpnWidget
     popupWidth: 240
-    popupHeight: Math.min(vpnConfigs.length * 40 + 50, 350)
+    // Rows are 36 with 2 of spacing; 72 is the header, divider, stem and padding
+    // above them, and the sync row costs its 28 plus one gap while a tunnel is
+    // up. Same arithmetic as WifiWidget, for the same reason: the old
+    // `* 40 + 50` was short of the chrome and drew a half row.
+    popupHeight: Math.min(vpnConfigs.length * 38 + 72
+                          + (activeVpn !== "" ? 32 : 0), 350)
     popupXOffset: 250
 
     required property var centerInfoRef
@@ -119,30 +124,66 @@ DropdownWidget {
         onTriggered: vpnWidget.updateVpnStatus()
     }
 
-    // VPN sync process (timezone + weather)
+    // ------------------------------------------------------------------
+    //  Sync: two buttons, because they are not the same size of change
+    // ------------------------------------------------------------------
+    //  The weather half rewrites one string in ~/.cache and the bar picks it up.
+    //  The clock half runs `timedatectl set-timezone`, which moves the system
+    //  clock for every process on the machine - journal timestamps, file mtimes,
+    //  every other app. They used to be one button, so wanting the weather to
+    //  follow the tunnel meant taking the clock with it.
+    //
+    //  In both: targetVpn goes in as a positional parameter, not glued onto the
+    //  command string. Concatenated, the config name was re-parsed by sh:
+    //  "us west" arrived as $1="us" with the rest dropped (a silent, wrong
+    //  sync), and anything with a ;, | or $() in it would have run as a
+    //  command. The names come from /etc/wireguard, which only root can
+    //  write, so this was never reachable by anyone who was not already
+    //  root - it is the quiet truncation that actually bites.
+    //
+    //  Still sh -c rather than a bare argv array, because $HOME has to be
+    //  expanded by something, and Process does not do it.
+
     Process {
-        id: vpnSyncProc
+        id: timeSyncProc
         property string targetVpn: ""
-        // targetVpn goes in as a positional parameter, not glued onto the
-        // command string. Concatenated, the config name was re-parsed by sh:
-        // "us west" arrived as $1="us" with the rest dropped (a silent, wrong
-        // sync), and anything with a ;, | or $() in it would have run as a
-        // command. The names come from /etc/wireguard, which only root can
-        // write, so this was never reachable by anyone who was not already
-        // root - it is the quiet truncation that actually bites.
-        //
-        // Still sh -c rather than a bare argv array, because $HOME has to be
-        // expanded by something, and Process does not do it.
-        command: ["sh", "-c", "$HOME/.config/quickshell/bar/scripts/vpn-sync.sh \"$1\"", "sh", targetVpn]
+        command: ["sh", "-c", "$HOME/.config/quickshell/bar/scripts/vpn-sync.sh \"$1\" time", "sh", targetVpn]
         onRunningChanged: {
-            if (!running) {
-                // Trigger immediate refresh in CenterInfo
-                if (centerInfoRef) {
-                    centerInfoRef.refreshTimezone()
-                    centerInfoRef.refreshWeather()
-                }
-            }
+            if (!running && centerInfoRef)
+                centerInfoRef.refreshTimezone()
         }
+    }
+
+    Process {
+        id: weatherSyncProc
+        property string targetVpn: ""
+        command: ["sh", "-c", "$HOME/.config/quickshell/bar/scripts/vpn-sync.sh \"$1\" weather", "sh", targetVpn]
+        onRunningChanged: {
+            if (!running && centerInfoRef)
+                centerInfoRef.refreshWeather()
+        }
+    }
+
+    //  A floor under how briefly the spinner can show. Setting a timezone is
+    //  effectively instant, so without this the clock button's spinner appears
+    //  and disappears inside one frame, which reads as a click that did nothing
+    //  rather than as work that happened.
+    Timer { id: timeSpinFloor; interval: 450; repeat: false }
+    Timer { id: weatherSpinFloor; interval: 450; repeat: false }
+
+    readonly property bool timeSyncing: timeSyncProc.running || timeSpinFloor.running
+    readonly property bool weatherSyncing: weatherSyncProc.running || weatherSpinFloor.running
+
+    function syncTime() {
+        timeSyncProc.targetVpn = vpnWidget.activeVpn
+        timeSpinFloor.restart()
+        timeSyncProc.running = true
+    }
+
+    function syncWeather() {
+        weatherSyncProc.targetVpn = vpnWidget.activeVpn
+        weatherSpinFloor.restart()
+        weatherSyncProc.running = true
     }
 
     // VPN reset process (back to local)
@@ -212,6 +253,7 @@ DropdownWidget {
 
             // Header
             RowLayout {
+                id: headerRow
                 width: parent.width
                 spacing: 8
 
@@ -222,34 +264,6 @@ DropdownWidget {
                     font.family: Theme.fontFamily
                     font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
                     Layout.fillWidth: true
-                }
-
-                // Sync button (timezone + weather) - only show when connected
-                Rectangle {
-                    visible: vpnWidget.activeVpn !== ""
-                    Layout.preferredWidth: 30
-                    Layout.preferredHeight: 24
-                    color: syncMouseArea.containsMouse ? Qt.rgba(100, 255, 100, 0.2) : "transparent"
-                    radius: 4
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "󰑓"
-                        color: Theme.colNetwork
-                        font.pixelSize: Theme.fontSize
-                        font.family: Theme.fontFamily
-                    }
-
-                    MouseArea {
-                        id: syncMouseArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            vpnSyncProc.targetVpn = vpnWidget.activeVpn
-                            vpnSyncProc.running = true
-                        }
-                    }
                 }
 
                 // Disconnect button (only show when connected)
@@ -287,16 +301,113 @@ DropdownWidget {
             }
 
             Rectangle {
+                id: headerDivider
                 width: parent.width
                 height: 1
                 color: Theme.colMuted
+            }
+
+            // One button per thing that can follow the tunnel. They are labelled
+            // rather than left as two bare glyphs: this is the one place in the
+            // card where a misread click moves the system clock, and "󰑓"
+            // twice over says nothing about which half is which.
+            Row {
+                id: syncRow
+                width: parent.width
+                height: 28
+                spacing: 6
+                visible: vpnWidget.activeVpn !== ""
+
+                Repeater {
+                    model: [
+                        { kind: "time",    icon: "󰥔", label: "Time" },
+                        { kind: "weather", icon: "󰖐", label: "Weather" }
+                    ]
+
+                    delegate: Rectangle {
+                        required property var modelData
+
+                        readonly property bool busy: modelData.kind === "time"
+                            ? vpnWidget.timeSyncing
+                            : vpnWidget.weatherSyncing
+
+                        width: (syncRow.width - syncRow.spacing) / 2
+                        height: syncRow.height
+                        radius: 6
+                        color: syncMouse.containsMouse && !busy
+                            ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.14)
+                            : Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.04)
+                        Behavior on color { ColorAnimation { duration: 110 } }
+
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            // Fixed box, so swapping the glyph for the spinner
+                            // does not shift the label sideways.
+                            Item {
+                                width: Theme.fontSize
+                                height: Theme.fontSize
+                                anchors.verticalCenter: parent.verticalCenter
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    visible: !busy
+                                    text: modelData.icon
+                                    color: syncMouse.containsMouse ? Theme.colFg : Theme.colMuted
+                                    font.pixelSize: Theme.fontSize
+                                    font.family: Theme.fontFamily
+                                }
+
+                                // Same ring the network card shows while it is
+                                // scanning: an indeterminate wait, no progress to
+                                // report.
+                                Spinner {
+                                    anchors.centerIn: parent
+                                    visible: busy
+                                    width: Theme.fontSize - 3
+                                    height: width
+                                }
+                            }
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: modelData.label
+                                color: busy ? Theme.colDim
+                                     : syncMouse.containsMouse ? Theme.colFg : Theme.colMuted
+                                font.pixelSize: Theme.fontSize - 2
+                                font.family: Theme.fontFamily
+                                style: Text.Outline; styleColor: Theme.colTextShadow
+                            }
+                        }
+
+                        MouseArea {
+                            id: syncMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            enabled: !busy
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (modelData.kind === "time")
+                                    vpnWidget.syncTime()
+                                else
+                                    vpnWidget.syncWeather()
+                            }
+                        }
+                    }
+                }
             }
 
             // VPN config list
             ListView {
                 id: vpnListView
                 width: parent.width
-                height: parent.height - 40
+                // Measured off the siblings above rather than a constant: the
+                // old `parent.height - 40` predates the sync row and would cut
+                // the list short by exactly its height whenever a tunnel is up.
+                height: parent.height - headerRow.height - headerDivider.height
+                        - (syncRow.visible ? syncRow.height + parent.spacing : 0)
+                        - parent.spacing * 2
                 clip: true
                 model: vpnWidget.vpnConfigs
                 spacing: 2
