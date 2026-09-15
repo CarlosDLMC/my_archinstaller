@@ -30,6 +30,10 @@ status_indicators = "symbols"   # distinct glyphs instead of color-only dots
 
 # Brighten the muted greys the theme uses for secondary text.
 [theme.custom]
+# Paint the pane area instead of letting foot's background=000000 show.
+# "reset" (the default) leaves it to the terminal - which is why changing the
+# herdr theme only repainted the chrome.
+panel_bg = "#161616"
 accent = "#ffc799"
 text = "#ffffff"
 subtext0 = "#d0d0d0"
