@@ -352,6 +352,45 @@ components/         # Modular widget components
   **default route separately**: with WireGuard up the route interface is the
   tunnel, so keying the radio details off it (as the original did) silently
   dropped SSID, signal and rate for as long as the VPN was connected
+- **VpnWidget.qml**: the WireGuard picker, and two toggles under its header -
+  Time and Weather - for what follows the tunnel. They are separate because they
+  are not the same size of change: the weather half rewrites one string in
+  `~/.cache`, the clock half runs `timedatectl set-timezone`, which moves the
+  system clock for **every process on the machine**. One button used to do both,
+  so wanting the tunnel's weather meant taking its timezone with it. Each is a
+  toggle: press to follow the exit node, press again to come home, either half
+  on its own, with the tunnel still up. Filled means that half is away -
+  white-active/grey-idle, the only state signal a 28px button has room for, and
+  the card said nothing at all about it before.
+
+  **Home is captured on departure, not maintained.** Nothing is stored until a
+  half first leaves home: `timezone_default` on the first clock sync,
+  `weather_home` (`lat<TAB>lon<TAB>name`) on the first weather sync. The subtle
+  part is where the weather snapshot comes from. By the time either button is
+  reachable a tunnel is already up, so asking the network where we are answers
+  with the **exit node** - which would save the place you are leaving *as* home
+  and make the way back a no-op. So the snapshot is taken from the cached
+  reading, and `weather-location.py` stamps every reading with `source`
+  (`ip`/`vpn`/`fixed`) and `tunneled`. Only `source == "ip"` **and**
+  `tunneled == false` is a real location for this machine. Both conditions
+  matter and the second is the one that is easy to forget.
+
+  Home travels as **coordinates**, not a city name: a bare name only resolves
+  for the seven in `VPN_LOCATIONS`, and home can be anywhere. Hence
+  `weather-location.py "lat,lon" [name]`.
+
+  `weather-fetch.sh` owns the precedence: `weather_city` (following the tunnel)
+  > `weather_home`, but **only while a tunnel is up** > IP. That last ordering
+  is deliberate - with no tunnel, asking by IP every time is what keeps the
+  reading honest if you actually move house, and it is also how a fresh
+  `weather_home` gets captured at the next departure.
+
+  A machine that has never fetched weather **without** a tunnel up has no home
+  to go to, and the weather toggle's return direction falls back to IP - i.e.
+  the exit node. This is not a bug that can be fixed in code: you cannot learn
+  where you are while all your traffic leaves somewhere else. One fetch off the
+  tunnel seeds it permanently.
+
 - **Spinner.qml**: eight dots on a ring with the tail graded by opacity, for
   waits with no known duration. **Drawn rather than set in type**: a Nerd Font
   spinner glyph turned with a RotationAnimator visibly wobbles, because the ink

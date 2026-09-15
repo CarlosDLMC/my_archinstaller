@@ -110,6 +110,42 @@ fi
 # ---- weather -------------------------------------------------------------
 # One string in a cache file, which weather-fetch.sh then passes to the lookup.
 if [ "$SYNC_WEATHER" -eq 1 ]; then
+    # Snapshot home before leaving it. Nothing is stored until this moment -
+    # there is no home file on a machine that has never followed a tunnel.
+    #
+    # The snapshot has to come out of the cached reading, because by the time
+    # this button is reachable a tunnel is already up and asking the network
+    # where we are would answer with the exit node. Only a reading whose source
+    # is "ip" is a real location for this machine, so a cache already holding a
+    # tunnel's city leaves any existing home alone rather than overwriting it.
+    # An "ip" reading does overwrite, which is what keeps home current if you
+    # move.
+    python3 - <<'SNAPSHOT' >> "$LOG_FILE" 2>&1
+import json, os, sys
+
+cache = os.path.expanduser("~/.cache/quickshell/weather.json")
+home = os.path.expanduser("~/.cache/quickshell/weather_home")
+try:
+    with open(cache) as f:
+        d = json.load(f)
+except Exception as e:
+    print(f"home snapshot: no usable cache ({e})")
+    sys.exit(0)
+
+if d.get("source") != "ip" or d.get("tunneled") or d.get("lat") is None or d.get("lon") is None:
+    print(
+        f"home snapshot: cached reading is source={d.get('source')!r} "
+        f"tunneled={d.get('tunneled')!r} - not a reading of this machine's own "
+        f"location, keeping any existing home"
+    )
+    sys.exit(0)
+
+name = (d.get("tooltip", "").split("</b>")[0].split("<b>")[-1] or "").strip()
+with open(home, "w") as f:
+    f.write(f"{d['lat']}\t{d['lon']}\t{name}\n")
+print(f"home snapshot: saved {name} ({d['lat']},{d['lon']})")
+SNAPSHOT
+
     echo "$CITY" > ~/.cache/quickshell/weather_city
 
     SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"

@@ -1,8 +1,18 @@
 #!/usr/bin/env python3
 # Weather script for the Quickshell bar.
-# Usage: weather-location.py [city]
+# Usage: weather-location.py [city | "lat,lon" [display name]]
 #   - If [city] matches VPN_LOCATIONS, those coordinates are used.
+#   - "lat,lon" uses those coordinates directly, with the display name that
+#     follows it. This is how the bar asks for *home* while a tunnel is up:
+#     IP geolocation would answer with the exit node, and a plain city name
+#     only resolves for the seven in VPN_LOCATIONS, so home - which can be
+#     anywhere - has to travel as coordinates.
 #   - Otherwise location comes from IP geolocation.
+#
+# The output carries `lat`, `lon` and `source` ("ip", "vpn" or "fixed")
+# alongside the display fields, so the caller can tell where a reading came
+# from. vpn-sync.sh uses that to snapshot home before the first departure:
+# only a reading whose source is "ip" is a real location for this machine.
 #
 # Data source: Open-Meteo (https://open-meteo.com) — keyless, worldwide,
 # returns structured JSON. This replaces the previous weather.com HTML scraper:
@@ -17,6 +27,8 @@
 import requests
 import json
 import os
+import re
+import subprocess
 import sys
 
 CACHE_PATH = os.path.expanduser("~/.cache/quickshell/weather.json")
@@ -178,6 +190,23 @@ def get_location():
     return None, None, ""
 
 
+def tunnel_up():
+    """True if a WireGuard tunnel is up.
+
+    An IP reading taken through a tunnel describes the exit node, not this
+    machine, so `source: "ip"` alone is not enough to call a reading home -
+    vpn-sync.sh needs both. Getting this wrong would save the exit node as home
+    and make the way back point at the place you were leaving.
+    """
+    try:
+        out = subprocess.run(
+            ["wg", "show", "interfaces"], capture_output=True, text=True, timeout=3
+        )
+        return bool(out.stdout.strip())
+    except Exception:
+        return False
+
+
 def fetch_air_quality(lat, lon):
     """Return European AQI as int, or None."""
     try:
@@ -206,15 +235,25 @@ def emit_cached_or_empty(reason):
 
 
 # ---- resolve coordinates -------------------------------------------------
-city_arg = sys.argv[1].lower() if len(sys.argv) > 1 else None
+COORD_RE = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$")
+
+arg = sys.argv[1] if len(sys.argv) > 1 else None
+city_arg = arg.lower() if arg else None
+coords = COORD_RE.match(arg) if arg else None
 
 ip_city = ""
-if city_arg and city_arg in VPN_LOCATIONS:
+if coords:
+    latitude, longitude = float(coords.group(1)), float(coords.group(2))
+    location = sys.argv[2] if len(sys.argv) > 2 else ""
+    source = "fixed"
+elif city_arg and city_arg in VPN_LOCATIONS:
     latitude, longitude = VPN_LOCATIONS[city_arg]
     location = VPN_LOCATION_NAMES_RU.get(city_arg, city_arg.capitalize())
+    source = "vpn"
 else:
     latitude, longitude, ip_city = get_location()
     location = ip_city
+    source = "ip"
     if latitude is None:
         emit_cached_or_empty("Could not determine location from IP")
 
@@ -309,6 +348,16 @@ out_data = {
     "alt_display": status_ru,
     "tooltip": tooltip,
     "class": icon_key,
+    # Where this reading came from, and the coordinates it came from. Not
+    # rendered - CenterInfo.qml reads the fields above and ignores these - but
+    # vpn-sync.sh needs them to snapshot home, and it cannot ask the network
+    # for them once a tunnel is up.
+    "lat": latitude,
+    "lon": longitude,
+    "source": source,
+    # Only meaningful for an "ip" reading, and the whole question for it: an IP
+    # lookup made through a tunnel found the exit node.
+    "tunneled": tunnel_up() if source == "ip" else None,
 }
 output_json = json.dumps(out_data)
 print(output_json)
