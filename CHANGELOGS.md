@@ -2,6 +2,32 @@
 
 ## September 2026
 
+Added (2026-09-16) - `02-Final-Check.sh` now verifies herdr, Neovim and Hunk,
+and the layouts say something when a command they start is missing.
+
+The final check is what decides whether a preset install reboots, and its promise
+is that every selected component produced what it exists to produce. herdr had no
+check at all since it was added, and neither did the two new ones - so a machine
+where the herdr download failed, or where `__HOME__` never got substituted, or
+where treesitter came up without its CLI, would have passed and rebooted looking
+fine.
+
+The `__HOME__` one is the reason this matters. An unsubstituted placeholder leaves
+every CTRL+ALT+N tab bind and the ALT+Q close-workspace popup pointing at a path
+that does not exist, and herdr reports nothing for it - the keys just quietly do
+nothing, which is indistinguishable from not having read the docs.
+
+These checks test `~/.local/bin/herdr` and `~/.local/bin/hunk` by path rather than
+with `command -v`, because nothing in the installer puts `~/.local/bin` on PATH
+during the run - the `.zshrc` guard only applies to shells started afterwards. A
+`command -v` there would have reported a failure on a perfectly good install.
+
+Separately, the layout functions now print a one-line note for any command they
+are about to start that is not on PATH, then build the layout anyway. This repo
+installs no coding agent, so on a fresh machine `hdl` starts `claude` and gets
+nothing; a pane that only says "command not found" is a puzzle, and a pane with a
+note above it is not. Same for `nvim` and `hunk` when their options were off.
+
 Added (2026-09-16) - the other three quarters of the agent workspace: **dev
 layout functions**, **Neovim with LazyVim**, and **Hunk**.
 

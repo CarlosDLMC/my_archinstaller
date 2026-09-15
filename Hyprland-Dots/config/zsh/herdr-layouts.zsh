@@ -57,6 +57,22 @@ _herdr_layout_ready() {
   return 0
 }
 
+# Warn about commands a layout is about to start that are not installed.
+#
+# The layout still builds - the pane exists and you can type in it - but a pane
+# that only says "command not found" is otherwise a puzzle. It matters most on a
+# fresh install: this repo installs no coding agent at all, so `claude` is not
+# there until you install it yourself, exactly like the SUPER+T / SUPER+R binds
+# in the README. nvim and hunk are only present if their install options were on.
+_herdr_note_missing() {
+  local c
+  for c in "$@"; do
+    [[ -n $c ]] || continue
+    command -v "${c%% *}" >/dev/null 2>&1 ||
+      print -u2 "herdr layout: '${c%% *}' is not installed - its pane will be empty."
+  done
+}
+
 # Dev Layout: editor left, agent(s) right, terminal along the bottom.
 # Usage: hdl [agent] [second_agent]
 hdl() {
@@ -70,6 +86,8 @@ hdl() {
   # HERDR_PANE_ID, not "the focused pane" - it stays correct if focus moves while
   # the layout is still being built.
   editor_pane="$HERDR_PANE_ID"
+
+  _herdr_note_missing nvim "$ai" "$ai2"
 
   herdr tab rename "$HERDR_TAB_ID" "${current_dir:t}" >/dev/null
 
@@ -98,6 +116,8 @@ hds() {
   local editor_pane diff_pane terminal_pane ai_pane
 
   editor_pane="$HERDR_PANE_ID"
+
+  _herdr_note_missing nvim hunk "$ai"
 
   herdr tab rename "$HERDR_TAB_ID" "${current_dir:t}" >/dev/null
 
@@ -153,6 +173,8 @@ hsl() {
   local current_dir="$PWD"
   local -a columns panes
   local cols=1 k index col rows j last pane
+
+  _herdr_note_missing "$cmd"
 
   herdr tab rename "$HERDR_TAB_ID" "${current_dir:t}" >/dev/null
 

@@ -1014,6 +1014,15 @@ diff pane, which is worth it once an agent is actually writing code.
 These drive Herdr over its socket API rather than through keybindings, so they do
 not care what your `config.toml` keymap looks like.
 
+**`hdl` starts an agent that a fresh install does not have.** This repo installs
+no coding agent - `claude`, `codex` and the rest are applications, which are
+deliberately out of scope, the same as the `SUPER + T` and `SUPER + R` binds. The
+layouts print a one-line note for any command they are about to start that is not
+on PATH (`herdr layout: 'claude' is not installed - its pane will be empty`) and
+then build the layout anyway, so the pane is there to type in. Install the agent
+you use and it fills itself. The same note appears for `nvim` or `hunk` if their
+install options were off.
+
 They are ported from Omarchy Quattro's `default/bash/fns/herdr` (omacom/omarchy,
 MIT, DHH), with three deliberate differences. **They are zsh, not bash** - his
 arrays are 0-indexed and zsh's are 1-indexed, so a verbatim copy of his `hsl`
