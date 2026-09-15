@@ -323,6 +323,22 @@ if [ -f "$SCRIPT_DIR/config/zsh/secrets.zsh" ]; then
     fi
 fi
 
+# Deploy the herdr layout functions.
+#
+# Separate from the config_dirs loop for the same reason secrets.zsh is: that loop
+# replaces whole directories, and ~/.config/zsh holds a filled-in secrets.zsh that
+# must survive. This file is the opposite case - it is entirely repo-owned, carries
+# no user data, and .zshrc sources it - so unlike secrets.zsh it is copied
+# unconditionally and a newer version always wins.
+if [ -f "$SCRIPT_DIR/config/zsh/herdr-layouts.zsh" ]; then
+    mkdir -p "$HOME/.config/zsh"
+    if cp "$SCRIPT_DIR/config/zsh/herdr-layouts.zsh" "$HOME/.config/zsh/herdr-layouts.zsh"; then
+        echo "  ${OK} Copied herdr-layouts.zsh (hdl / hds / hdlm / hsl)"
+    else
+        echo "  ${ERROR} Failed to copy herdr-layouts.zsh"
+    fi
+fi
+
 # Copy the wallpaper library
 #
 # The dots hardcode $HOME/Pictures/wallpapers in WallpaperSelect.sh,

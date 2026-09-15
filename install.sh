@@ -139,7 +139,7 @@ limine="auto"
 # its only job is to catch a preset key that no longer matches one - see below.
 known_options="ly nvidia nouveau input_group gtk_themes bluetooth thunar \
 quickshell xdph zsh pokemon rog dots handy nopasswd_sudo printing plymouth \
-limine docker herdr"
+limine docker herdr neovim hunk"
 
 # Function to load preset file
 load_preset() {
@@ -523,6 +523,8 @@ options_command+=(
     "plymouth" "Plymouth boot splash with the repo logo? (replaces the distro's)" "OFF"
     "limine" "Theme the Limine boot menu and disable its countdown? (edits limine.conf, backup kept)" "OFF"
     "herdr" "Install Herdr terminal workspace manager for AI coding agents?" "OFF"
+    "neovim" "Install Neovim with LazyVim? (the file explorer beside the agents)" "OFF"
+    "hunk" "Install Hunk diff viewer? (review what the agents wrote)" "OFF"
 )
 
 # With a preset, skip the menu entirely and derive the selection from the
@@ -534,7 +536,7 @@ if [ "$preset_mode" == "true" ]; then
     selected_options=""
     for _opt in ly nvidia nouveau input_group gtk_themes bluetooth thunar \
                 quickshell xdph zsh pokemon rog dots handy nopasswd_sudo \
-                printing plymouth limine docker herdr; do
+                printing plymouth limine docker herdr neovim hunk; do
         [ "${!_opt}" == "ON" ] || continue
 
         # Respect the same conditions the interactive menu applies before it
@@ -914,6 +916,23 @@ if [[ " $selected_options " == *" herdr "* ]]; then
     echo "${INFO} Installing ${SKY_BLUE}Herdr terminal workspace manager...${RESET}" | tee -a "$LOG"
     sleep 1
     execute_script "herdr.sh"
+fi
+
+# Neovim - the file explorer half of the herdr workspace. Independent of herdr
+# itself (it is just an editor), so it is not gated on the herdr option.
+if [[ " $selected_options " == *" neovim "* ]]; then
+    echo "${INFO} Installing ${SKY_BLUE}Neovim with LazyVim...${RESET}" | tee -a "$LOG"
+    sleep 1
+    execute_script "neovim.sh"
+fi
+
+# Hunk - AFTER the dotfiles, like herdr above: it reports on whether the layout
+# functions (config/zsh/herdr-layouts.zsh) arrived, and that check needs them to
+# already be in ~/.config.
+if [[ " $selected_options " == *" hunk "* ]]; then
+    echo "${INFO} Installing ${SKY_BLUE}Hunk diff viewer...${RESET}" | tee -a "$LOG"
+    sleep 1
+    execute_script "hunk.sh"
 fi
 
 # Enable essential system services
