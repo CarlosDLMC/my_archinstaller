@@ -8,8 +8,8 @@
 # buttons call the halves individually, so either can come home while the tunnel
 # stays up.
 #
-# --forget additionally drops the saved home location, so the next departure
-# captures it fresh. It is passed by the paths that end with **no tunnel**
+# --forget additionally drops the saved home location and timezone, so the next
+# departure captures them fresh. It is passed by the paths that end with **no tunnel**
 # - disconnect, a dropped tunnel, the stale-cache check - where the saved copy
 # has nothing left to do: with no tunnel, an IP lookup is a better answer than a
 # remembered one, and it is the only one that notices you have moved.
@@ -76,6 +76,16 @@ if [ "$RESET_TIME" -eq 1 ]; then
     if [ "$FAILED" -eq 0 ]; then
         rm -f ~/.cache/quickshell/timezone_offset
         : > ~/.cache/quickshell/timezone
+
+        # After the restore, never before. Same rule as weather_home: with no
+        # tunnel the saved copy has nothing left to do, and re-capturing it on
+        # the next departure is what stops a stale one surviving a move. It also
+        # means a wrong one - captured while the clock was already following a
+        # tunnel - heals itself rather than persisting forever.
+        if [ "$FORGET" -eq 1 ]; then
+            rm -f ~/.cache/quickshell/timezone_default
+            echo "Forgot the saved home timezone - the next sync will capture it again"
+        fi
     fi
 fi
 
