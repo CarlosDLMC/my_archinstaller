@@ -164,6 +164,35 @@ DropdownWidget {
         }
     }
 
+    //  ...and the same two halves in reverse. These are what make the buttons
+    //  toggles rather than one-way switches: either half can come home while the
+    //  tunnel stays up, which is the case the old single reset could not express
+    //  - it only ever ran on disconnect.
+    Process {
+        id: timeResetProc
+        command: ["sh", "-c", "$HOME/.config/quickshell/bar/scripts/vpn-reset.sh time"]
+        onRunningChanged: {
+            if (!running && centerInfoRef)
+                centerInfoRef.refreshTimezone()
+        }
+    }
+
+    Process {
+        id: weatherResetProc
+        command: ["sh", "-c", "$HOME/.config/quickshell/bar/scripts/vpn-reset.sh weather"]
+        onRunningChanged: {
+            if (!running && centerInfoRef)
+                centerInfoRef.refreshWeather()
+        }
+    }
+
+    //  Which halves are currently following the tunnel. CenterInfo already owns
+    //  both answers - it watches those two cache files to render the clock and
+    //  the weather - so the card reads them from there rather than watching the
+    //  same files again, once per screen.
+    readonly property bool timeAway: centerInfoRef ? centerInfoRef.customTimezone !== "" : false
+    readonly property bool weatherAway: centerInfoRef ? centerInfoRef.weatherCity !== "" : false
+
     //  A floor under how briefly the spinner can show. Setting a timezone is
     //  effectively instant, so without this the clock button's spinner appears
     //  and disappears inside one frame, which reads as a click that did nothing
@@ -171,19 +200,29 @@ DropdownWidget {
     Timer { id: timeSpinFloor; interval: 450; repeat: false }
     Timer { id: weatherSpinFloor; interval: 450; repeat: false }
 
-    readonly property bool timeSyncing: timeSyncProc.running || timeSpinFloor.running
-    readonly property bool weatherSyncing: weatherSyncProc.running || weatherSpinFloor.running
+    readonly property bool timeBusy:
+        timeSyncProc.running || timeResetProc.running || timeSpinFloor.running
+    readonly property bool weatherBusy:
+        weatherSyncProc.running || weatherResetProc.running || weatherSpinFloor.running
 
-    function syncTime() {
-        timeSyncProc.targetVpn = vpnWidget.activeVpn
+    function toggleTime() {
         timeSpinFloor.restart()
-        timeSyncProc.running = true
+        if (vpnWidget.timeAway) {
+            timeResetProc.running = true
+        } else {
+            timeSyncProc.targetVpn = vpnWidget.activeVpn
+            timeSyncProc.running = true
+        }
     }
 
-    function syncWeather() {
-        weatherSyncProc.targetVpn = vpnWidget.activeVpn
+    function toggleWeather() {
         weatherSpinFloor.restart()
-        weatherSyncProc.running = true
+        if (vpnWidget.weatherAway) {
+            weatherResetProc.running = true
+        } else {
+            weatherSyncProc.targetVpn = vpnWidget.activeVpn
+            weatherSyncProc.running = true
+        }
     }
 
     // VPN reset process (back to local)
@@ -307,10 +346,11 @@ DropdownWidget {
                 color: Theme.colMuted
             }
 
-            // One button per thing that can follow the tunnel. They are labelled
-            // rather than left as two bare glyphs: this is the one place in the
-            // card where a misread click moves the system clock, and "󰑓"
-            // twice over says nothing about which half is which.
+            // One toggle per thing that can follow the tunnel: press to send that
+            // half to the exit node, press again to bring it home. They are
+            // labelled rather than left as two bare glyphs - this is the one
+            // place in the card where a misread click moves the system clock,
+            // and "󰑓" twice over says nothing about which half is which.
             Row {
                 id: syncRow
                 width: parent.width
@@ -327,16 +367,28 @@ DropdownWidget {
                     delegate: Rectangle {
                         required property var modelData
 
-                        readonly property bool busy: modelData.kind === "time"
-                            ? vpnWidget.timeSyncing
-                            : vpnWidget.weatherSyncing
+                        readonly property bool isTime: modelData.kind === "time"
+                        readonly property bool busy: isTime ? vpnWidget.timeBusy
+                                                            : vpnWidget.weatherBusy
+                        // Following the tunnel. The button is a toggle, so this
+                        // is both what it reports and what the next click undoes.
+                        readonly property bool away: isTime ? vpnWidget.timeAway
+                                                            : vpnWidget.weatherAway
 
                         width: (syncRow.width - syncRow.spacing) / 2
                         height: syncRow.height
                         radius: 6
-                        color: syncMouse.containsMouse && !busy
-                            ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.14)
-                            : Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.04)
+                        // Filled means this half is on the tunnel: the bar's own
+                        // white-active/grey-idle rule, which is the only state
+                        // signal a 28px button has room for. Without it the card
+                        // said nothing about whether the weather was following
+                        // the tunnel - the exact thing that is easy to lose track
+                        // of once the two halves can disagree.
+                        color: away
+                            ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b,
+                                      syncMouse.containsMouse ? 0.26 : 0.18)
+                            : Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b,
+                                      syncMouse.containsMouse ? 0.14 : 0.04)
                         Behavior on color { ColorAnimation { duration: 110 } }
 
                         Row {
@@ -354,7 +406,8 @@ DropdownWidget {
                                     anchors.centerIn: parent
                                     visible: !busy
                                     text: modelData.icon
-                                    color: syncMouse.containsMouse ? Theme.colFg : Theme.colMuted
+                                    color: away || syncMouse.containsMouse
+                                        ? Theme.colWhite : Theme.colGrey
                                     font.pixelSize: Theme.fontSize
                                     font.family: Theme.fontFamily
                                 }
@@ -373,8 +426,8 @@ DropdownWidget {
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: modelData.label
-                                color: busy ? Theme.colDim
-                                     : syncMouse.containsMouse ? Theme.colFg : Theme.colMuted
+                                color: away || syncMouse.containsMouse
+                                    ? Theme.colWhite : Theme.colGrey
                                 font.pixelSize: Theme.fontSize - 2
                                 font.family: Theme.fontFamily
                                 style: Text.Outline; styleColor: Theme.colTextShadow
@@ -388,10 +441,10 @@ DropdownWidget {
                             enabled: !busy
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                if (modelData.kind === "time")
-                                    vpnWidget.syncTime()
+                                if (isTime)
+                                    vpnWidget.toggleTime()
                                 else
-                                    vpnWidget.syncWeather()
+                                    vpnWidget.toggleWeather()
                             }
                         }
                     }
