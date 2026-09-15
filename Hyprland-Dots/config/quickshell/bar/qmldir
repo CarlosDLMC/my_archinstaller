@@ -5,6 +5,7 @@ singleton RecordState 1.0 RecordState.qml
 singleton Monitors 1.0 Monitors.qml
 singleton ShotState 1.0 ShotState.qml
 singleton SystemStats 1.0 SystemStats.qml
+singleton BatteryState 1.0 BatteryState.qml
 singleton NightLight 1.0 NightLight.qml
 singleton AgentUsage 1.0 AgentUsage.qml
 singleton ClipboardState 1.0 ClipboardState.qml

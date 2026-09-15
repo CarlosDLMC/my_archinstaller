@@ -28,6 +28,7 @@ Monitors.qml        # Singleton: connected monitors, shared by the capture dialo
 RecordState.qml     # Singleton: screen-recording dialog state + global shortcuts
 ShotState.qml       # Singleton: screenshot dialog state + global shortcut
 SystemStats.qml     # Singleton: CPU usage/temp + memory, read from /proc via FileView
+BatteryState.qml    # Singleton: every battery reading, read from /sys via FileView
 AgentUsage.qml      # Singleton: Claude Code allowance + token stats
 ClipboardState.qml  # Singleton: clipboard history state + the clipMenu shortcut
 NightLight.qml      # Singleton: night-light state, watched off Hyprsunset.sh's state file
@@ -47,7 +48,8 @@ components/         # Modular widget components
   ├── MemoryWidget.qml     # Memory in use (renders SystemStats)
   ├── DiskWidget.qml       # Disk usage percentage
   ├── VolumeWidget.qml     # Volume with mute/sink detection (speaker/headphone/bluetooth/hdmi)
-  ├── BatteryWidget.qml    # Battery level with charging status
+  ├── BatteryWidget.qml    # Battery level in the bar (renders BatteryState)
+  ├── BatteryPanel.qml     # Battery card body: health, cycles, packs, charge limit
   ├── WifiWidget.qml       # WiFi status with network speeds (extends DropdownWidget)
   ├── BluetoothWidget.qml  # Bluetooth status with dropdown (extends DropdownWidget)
   ├── PowerProfileWidget.qml # Power profile selector (extends DropdownWidget)
@@ -228,7 +230,77 @@ components/         # Modular widget components
   before the node is bound. The card's height comes from what the body measured,
   not from arithmetic over row counts - text height follows the font's line
   metrics, not the pixelSize, so counting rows clips the last one
-- **BatteryWidget.qml**: Battery level with charging status and tiered icons
+- **BatteryState.qml / BatteryWidget.qml / BatteryPanel.qml**: everything about
+  the battery. `BatteryState` is a **singleton** for the reason `SystemStats` is:
+  the bar is per-screen, and the old widget ran `Battery.sh` and its own `udevadm
+  monitor` once per bar to produce one number. On a two-screen desk there is now
+  one monitor process where the power-profile, bluetooth and network widgets each
+  run two.
+
+  It reads **one file per pack**: `/sys/class/power_supply/BAT*/uevent` carries
+  STATUS, CAPACITY, ENERGY_*, POWER_NOW and CYCLE_COUNT as KEY=VALUE, so a whole
+  battery costs one `FileView` instead of nine. The charge thresholds are the
+  exception - they are not in `uevent` and get their own views, reloaded only on
+  the slow tick and after a write, because nothing else on the machine touches
+  them.
+
+  **The trigger is `udevadm monitor`, not `watchChanges`.** sysfs attributes do
+  not raise inotify events, so a `FileView` with `watchChanges` binds and then
+  never fires; udev is the kernel's actual notification for this subsystem. The
+  60s timer behind it only has to catch the monitor having died.
+
+  Level is **energy-weighted** (`sum(energy_now) / sum(energy_full)`), not the
+  mean of the pack percentages. This T480's internal pack holds 10.7Wh against
+  the removable one's 19.7Wh, and averaging "100% and 20%" into "60%" describes
+  no amount of runtime that exists. Packs reporting `charge_*` in uAh rather than
+  `energy_*` in uWh are normalised on the way in, or the card reads 0 Wh on every
+  machine of that kind.
+
+  The card is ported from Omarchy Quattro's power panel (omacom/omarchy, MIT,
+  DHH) - capacity, cycles, draw, time, fill bar, "holding" - **minus its
+  power-profile picker**, which this bar already has as `PowerProfileWidget`. It
+  adds **health** (`energy_full / energy_full_design`), which upstream does not
+  show and which is the reading that actually predicts a dead pack: BAT0 here is
+  44% at 239 cycles, BAT1 is 82% at 566.
+
+  **The charge limit is not a port.** Omarchy reads
+  `charge_control_end_threshold` and displays it; nothing there writes it.
+  `BatteryState.setLimit()` calls `sudo /usr/local/bin/battery-charge-limit set
+  N`, a root-owned helper installed by `install-scripts/battery_charge_limit.sh`
+  along with a conf file and a oneshot unit that re-applies the value at boot and
+  after resume. The helper is at a root-owned path on purpose: sudo is
+  passwordless here, so a user-writable script behind it would be a way to run
+  anything as root. Without the helper the readout still works and only the
+  picker is withheld - `limitWritable` is `limitSupported && helperInstalled`.
+
+  **The threshold files are ACPI calls.** Measured here:
+  `charge_control_end_threshold` costs **1.07ms** a read against **47us** for the
+  whole of `uevent`, and `AC/uevent` costs 493us. Dropping them from the 60s tick
+  looked like free money and was tried; it is wrong. The limit is what decides
+  whether the bar shows "holding" or "full", so a limit set from a terminal, by
+  TLP, or by this shell's own helper left the wrong glyph in the bar until
+  someone happened to open the card. 4.3ms a minute is 0.007% of a core and
+  cannot drop a frame at 60Hz. The tick reads them; `readThresholds()` on
+  `onOpened` only makes the card open on a reading that is current rather than up
+  to a minute old.
+
+  What the cost *does* rule out is paying it on the click path. That is why the
+  pills bind to **`effectiveLimit`**, not
+  `limitEnd`. `setLimit()` records the click in `pendingLimit` straight away and
+  `effectiveLimit` prefers it, so the pill moves on the click. Waiting for the
+  hardware meant sudo (~20ms) plus the helper (~14ms) plus that 4.3ms re-read
+  before the 130ms fade could even start - about 170ms to confirmation, which is
+  past the point a button stops feeling connected to the finger.
+  `pendingLimit` is cleared when the re-read lands, so a value the firmware
+  clamped or refused moves the pill back rather than leaving it lying.
+
+  Two labels are worth keeping honest. A threshold **only stops charging**; it
+  discharges nothing, so a pack already above the limit sits there until the
+  machine runs off it, and the card says "Above limit · 60%" rather than "Holding
+  at 60%" next to a 97% reading. And `colAlert` is spent on one state - actually
+  discharging, at or below 15% - because a pack parked at its limit is the
+  desired state, not a problem, and colouring it red is how you teach yourself to
+  ignore the colour.
 - **WifiWidget.qml**: The network list paints instantly from NetworkManager's
   cache (`--rescan no`), and the real results land at 1.4s and 3.2s. That first
   paint is usually just the AP already connected, so the card carries a
@@ -317,7 +389,7 @@ good palette rather than rendering blank).
 |---|---|
 | `colValue` / `colFg` | numbers, primary text |
 | `colLabel` / `colDim` | `CPU`, `MEM` — the noun, and secondary info |
-| `colBright` | emphasis (active workspace, hot temp) |
+| `colWhite` / `colGrey` | the brightness ramp: emphasis, then the step below it |
 | `colMuted` | separators, inactive, "off" states |
 | `colAccent` | active / connected / on |
 | `colAlert` | **needs attention**: muted, low battery, DND on, VPN down, storm |
@@ -330,6 +402,11 @@ looking at — if everything is an alert, nothing is.
 Ordinal data (temperature, load) is encoded as a brightness ramp, with
 `colAlert` reserved for genuine extremes. See `getTempColor()` in
 `CenterInfo.qml`.
+
+There is no `colBright`. It was listed in this table for a while and never
+existed in `Theme.qml` - the palette has a `palBright`, but nothing exports it,
+so `Theme.colBright` is `undefined` and Qt logs `Unable to assign [undefined] to
+QColor` and falls back to black. Use `colWhite` and `colGrey` for the ramp.
 
 ### Key Patterns
 
@@ -351,9 +428,30 @@ singleton that the widgets render; only the rendering should be per-screen. See
 2. **`FileView`**, for anything that lives in a file - `/proc`, `/sys`, and the
    caches under `~/.cache/quickshell`. With `watchChanges: true` it updates on
    inotify, which is both cheaper and faster than polling an mtime by hand. Set
-   `printErrors: false` where a missing file is a normal state. `blockLoading:
-   true` makes `reload()` + `text()` synchronous, which is what you want for
-   `/proc`.
+   `printErrors: false` where a missing file is a normal state.
+
+   **For anything you poll - `/proc`, `/sys` - set `blockAllReads: true`, not
+   `blockLoading: true`.** This is the single easiest bug to write in this
+   codebase, and this file used to recommend the wrong one. `blockLoading` makes
+   only the *initial* load synchronous. After that, `reload()` starts an
+   **asynchronous** read and `text()` keeps returning the previous contents until
+   it lands, so `reload(); text()` gives you the value from the refresh before
+   this one - forever. Measured: three `reload()` + `text()` pairs in the same
+   event-loop turn all returned the stale value, and it only caught up on the
+   next tick. `blockAllReads` makes every read synchronous, which is what a
+   polled file needs.
+
+   It bites hardest on a write-then-read: the limit pills in the battery card
+   needed two clicks for exactly this reason - the write landed, the read after
+   it returned the pre-write value, and the optimistic value was dropped in
+   favour of it. `SystemStats` had the quiet version of the same bug: every CPU,
+   memory and temperature reading was one 5s tick old. `CenterInfo` and
+   `NightLight` use `reload(); text()` too and get away with it only because they
+   re-apply from `onLoadedChanged` when the async read lands.
+
+   Neither `watchChanges` nor inotify helps on sysfs: those attributes raise no
+   inotify events at all. Use `udevadm monitor` for hardware state (see
+   `BatteryState`).
 3. **A D-Bus / netlink monitor process** (`nmcli monitor`, `dbus-monitor`,
    `udevadm monitor`), for hardware state with no file to watch. Gate these on the
    hardware actually existing - see below.
@@ -385,6 +483,9 @@ singleton that the widgets render; only the rendering should be per-screen. See
 - `nmcli` for WiFi scanning/connecting
 - `bluetoothctl` for Bluetooth management
 - `powerprofilesctl` for power profile management
+- `/usr/local/bin/battery-charge-limit` (installed by `install-scripts/battery_charge_limit.sh`)
+  for setting the battery charge threshold. Optional: without it the battery card
+  still shows every reading and only hides the limit picker
 - `dunstctl` for DND (Do Not Disturb) toggle
 - `wpctl` / `pactl` for volume control and audio sink detection
 - `hyprctl` for workspace/window data
