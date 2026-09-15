@@ -108,6 +108,10 @@ mkdir -p "$HOME/.config"
 # List of config directories to copy
 config_dirs=(
     "hypr"
+    # Herdr: config.toml plus the done/request notification sounds it
+    # references by relative path. install-scripts/herdr.sh resolves the
+    # __HOME__ placeholders in config.toml after this copy.
+    "herdr"
     "quickshell"
     "wlogout"
     "wallust"

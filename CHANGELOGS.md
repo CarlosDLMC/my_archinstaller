@@ -2,6 +2,40 @@
 
 ## September 2026
 
+Added (2026-09-15) - **Herdr**, the terminal workspace manager the agents run
+in, is installed and configured by the installer (`herdr="ON"` in the preset).
+
+Herdr is not in the repos or the AUR, so `install-scripts/herdr.sh` reads
+`herdr.dev/latest.json` for the current release's URL and sha256 and installs the
+static binary to `~/.local/bin/herdr`. Reading the manifest rather than pinning a
+version means a fresh install is never born stale. The sha256 is verified before
+install and a mismatch installs nothing - this is the one thing in the repo that
+comes from outside a package manager, so that hash is the whole integrity story.
+An unreachable herdr.dev skips the component and records it for
+`02-Final-Check.sh` instead of failing the run.
+
+The split of ownership is the part worth remembering: `herdr.sh` owns only the
+binary, the systemd user unit (it needs an absolute `ExecStart`) and the
+`__HOME__` substitution. The config, the two sounds and the four `herdr-*`
+helpers are dotfiles. That is why `install.sh` runs `herdr.sh` *after*
+`dotfiles-main.sh` - the other order substitutes paths into a file that is not
+there yet, and then `copy.sh` drops the untouched template on top.
+
+`config.toml` is templated with `__HOME__` because Herdr's `[[keys.command]]`
+entries take a command string, and a tracked dotfile cannot carry one machine's
+`$HOME`. `herdr-workspace-numbers.service` exists because Herdr has no built-in
+workspace-number token and the custom `$num` the sidebar reads lives in workspace
+metadata, which does not survive a server restart.
+
+`ALT + Tab` is unbound in `UserKeybinds.lua`. Hyprland binds it to
+`window.cycle_next` by default, and a compositor bind is swallowed before any
+application sees it, so Herdr could never have received the key otherwise. Window
+cycling stays on `SUPER + J` / `SUPER + K`.
+
+`CARGO_TARGET_DIR` is now set in `.zshrc`: Herdr's worktrees under
+`~/.herdr/worktrees` each get their own cargo `target/`, ~20GB apiece on a large
+Rust repo, which fills a 225GB disk in about three branches.
+
 Fixed (2026-09-15) - `~/.local/bin` is now put on `PATH` by `.zshrc`, with a
 duplicate guard.
 

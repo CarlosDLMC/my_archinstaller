@@ -53,6 +53,7 @@ then continue with the [Installation Steps](#installation-steps) below.
 - **ly Display Manager** (lightweight TUI login screen with large font)
 - **Soviet TUI Lock Screen** matching ly, auto-sized to any display (720p → 4K)
 - **Offline Speech-to-Text** with Handy (toggle via SUPER + CTRL + F8)
+- **Herdr** terminal workspace manager for AI coding agents, with the sidebar, keybindings, theme and done/blocked sounds preconfigured
 - **Whole-Workspace Move** with SUPER + ALT + number, rebuilding the tiling layout window for window
 - **Boot Splash** with the repo logo (Plymouth, optional - replaces the CachyOS one)
 - **All Essential Packages** pre-configured
@@ -223,6 +224,8 @@ first prompt.
 - mpv, pavucontrol
 - satty (screenshot annotation editor)
 - Handy (offline speech-to-text — Parakeet V3, auto-detects 25 languages)
+- Herdr (terminal workspace manager for AI coding agents — a static binary from
+  herdr.dev, not a repo or AUR package, see [Herdr](#herdr-terminal-workspace-manager))
 
 ## Configuration
 
@@ -829,6 +832,11 @@ those three commands — the VPN widget is the only thing here that depends on i
 - `SUPER + ALT + <1-0>` - Move *every* window of the current workspace to that workspace, keeping the tiling layout intact (`SUPER + CTRL + <1-0>` still moves one window silently)
 - `CTRL + ALT + L` - Lock screen (Soviet TUI)
 - `CTRL + ALT + P` - Power menu (wlogout)
+- `ALT + Tab` - **nothing, on purpose.** Hyprland's default cycle-window bind is
+  removed in `UserKeybinds.lua` so the key reaches Herdr, which cycles terminal
+  tabs with it. A compositor bind is consumed before any application sees it, so
+  this is the only way Herdr can have the key. Window cycling stays on
+  `SUPER + J` / `SUPER + K`.
 
 See `Hyprland-Dots/config/hypr/configs/Keybinds.lua` for all keybindings, or press
 `SUPER H` for the cheat sheet: a window listing every live bind (from `hyprctl binds`) with a
@@ -871,6 +879,111 @@ Handy is offline speech-to-text — no audio leaves your machine. `wtype` inject
 ```
 
 `handy-start.sh` opens Handy visibly while `selected_model` is empty — so you get the model picker on a fresh machine — and switches to `--start-hidden` once a model is set.
+
+### Herdr (terminal workspace manager)
+
+Herdr runs AI coding agents inside one persistent terminal session: workspaces
+(typically one per git worktree), tabs inside them, panes inside those, and a
+sidebar listing every agent's state — idle, working, done, blocked — across all
+of them at once. The sidebar is the point: you can leave an agent running in
+workspace 3 and see from workspace 1 the moment it finishes or gets stuck.
+
+Controlled by the `herdr` preset option. It needs `dots` on, which owns
+everything below except the binary itself.
+
+**It is not a repo or an AUR package.** `install-scripts/herdr.sh` reads
+`https://herdr.dev/latest.json` — the manifest carries the per-platform download
+URL and its sha256 — and installs the static binary to `~/.local/bin/herdr`. The
+manifest is read rather than a version pinned, so a fresh install gets whatever
+is current; `herdr update` keeps it current afterwards. The sha256 is verified
+before the binary is installed and a mismatch means it is **not** installed:
+this is a binary from outside the distro's package manager, so that hash is the
+only integrity check there is. If herdr.dev is unreachable the component is
+*skipped* rather than failing the install — it lands in the failed-package
+manifest and `02-Final-Check.sh` reports it at the end.
+
+The binary is the only thing `herdr.sh` downloads. The config, the sounds and
+the four helper scripts are dotfiles, which is why `install.sh` runs `herdr.sh`
+*after* `dotfiles-main.sh` — the other order would substitute paths into a file
+that does not exist yet and then have `copy.sh` lay the untouched template back
+on top of it.
+
+#### Key bindings
+
+The prefix is `CTRL + B`, and `CTRL + B ?` lists everything.
+
+| Keys | Action |
+| --- | --- |
+| `ALT + 1…9` | Switch to workspace N |
+| `CTRL + ALT + 1…9` | Focus tab N, creating it when N is the next tab up |
+| `ALT + Tab` / `CTRL + Tab` | Next tab (`CTRL + SHIFT + Tab` for previous) |
+| `ALT + T` / `ALT + C` | New / close tab |
+| `ALT + H J K L` | Focus pane left / down / up / right (arrows work too) |
+| `ALT + V` / `ALT + S` | Split vertical / horizontal |
+| `ALT + X` / `ALT + Z` | Close pane / zoom pane |
+| `ALT + N` | New workspace |
+| `ALT + Q` | Close workspace — a popup that also removes the git worktree if it is one |
+| `ALT + W` / `ALT + B` | Next / previous workspace |
+| `CTRL + B W` | Workspace picker |
+
+`ALT + Tab` only reaches Herdr because `UserKeybinds.lua` removes Hyprland's
+default cycle-window bind on that key; see [Key Bindings](#key-bindings-some-important-ones).
+
+`CTRL + ALT + 1…9` are not a Herdr feature — Herdr's own `switch_tab` cannot
+create a tab that is not there. They are `[[keys.command]]` entries calling
+`~/.local/bin/herdr-goto-tab`, which focuses tab N or creates it when N is one
+past the end.
+
+#### What the config changes
+
+`~/.config/herdr/config.toml`, from `Hyprland-Dots/config/herdr/`:
+
+- **Sidebar legibility.** `status_indicators = "symbols"` gives each state a
+  distinct glyph instead of relying on colour alone, and `[theme.custom]`
+  brightens the greys the stock theme uses for secondary text, which were too
+  dim to read at a glance. Per-token rules colour the state word itself —
+  blocked red, working amber, done mint, idle grey — and `dim = false` on each
+  token is the part that actually makes it stick, since per-token styling wins
+  over the theme.
+- **A wider sidebar** (`sidebar_width = 30`) and no row gap, so more agents fit
+  on screen.
+- **A `claude`-specific row layout** that adds the stripped terminal title, so
+  Claude Code sessions are identifiable by what they are working on rather than
+  by tab number.
+- **Notifications are off by default.** `ui.toast.delivery = "off"` and
+  `ui.sound.enabled = false`. The done/blocked sounds are wired up and shipped
+  (`config/herdr/sounds/*.mp3`, freedesktop tones converted to mp3, which is the
+  format Herdr requires) — set `enabled = true` to turn them on, or
+  `delivery = "system"` to route toasts through dunst. `droid` is pinned off in
+  `[ui.sound.agents]` either way.
+
+#### The moving parts around it
+
+- **`__HOME__` in `config.toml`.** Herdr's `[[keys.command]]` entries take a
+  command string, and a tracked dotfile cannot contain one machine's `$HOME`.
+  The dotfile ships `__HOME__` and `herdr.sh` substitutes it in the *installed*
+  copy. Re-running is a no-op once no placeholders are left.
+- **`herdr-workspace-numbers.service`.** Herdr has no built-in workspace-number
+  token, so the sidebar reads a custom `$num` written into workspace metadata —
+  and that metadata does not survive a server restart. This user unit runs
+  `herdr-watch-workspace-numbers` to re-stamp it. Nothing else depends on it;
+  drop it if Herdr ever grows a real number token.
+- **`CARGO_TARGET_DIR` in `.zshrc`.** Herdr creates git worktrees under
+  `~/.herdr/worktrees`, and cargo gives every worktree its own `target/` — about
+  20 GB apiece on a large Rust repo, which fills a 225 GB disk after three
+  branches. One shared cache at `~/.cache/cargo-target` avoids that.
+- **`~/.local/bin` on `PATH`.** Added by `.zshrc` with a duplicate guard.
+  Nothing else puts it there — systemd's user environment does not carry it —
+  and without it the binary sits on disk while `herdr` is not a command.
+- **Claude Code integration.** If `claude` is on `PATH` at install time,
+  `herdr integration install claude` adds a `SessionStart` hook to
+  `~/.claude/settings.json` that reports the session id, so conversations resume
+  into their native sessions after a server restart. Skipped if Claude Code is
+  not installed; re-running will not install it twice.
+
+**On a fresh install** Herdr does not autostart and nothing launches it — run
+`herdr` in a terminal. Its keybindings only exist inside that session, so
+`ALT + Tab` does nothing at all until you are in one.
 
 ### Lock Screen (Soviet TUI)
 
@@ -1005,6 +1118,7 @@ All configs are in `~/.config/`. Main files to edit:
 - `~/.config/quickshell/bar/` - Custom bar configuration
 - `~/.config/foot/` - Terminal configuration
 - `~/.zshrc` - Shell configuration
+- `~/.config/herdr/config.toml` - Herdr keybindings, sidebar rows, theme and sounds
 - `~/.config/gtk-3.0/settings.ini` - GTK theme, font, cursor and dark-mode preference
 - `~/.config/environment.d/locale.conf` - `LC_TIME`, i.e. the clock and calendar format
 - `~/.config/fontconfig/conf.d/99-no-ligatures.conf` - turns coding ligatures off
