@@ -240,8 +240,17 @@ DropdownWidget {
         ].join(" ")).toLowerCase()
     }
 
+    // Device-type marks for the audio card's rows: headphones, bluetooth,
+    // monitor, speaker.
+    //
+    // The generic speaker is nf-md-volume_high and NOT nf-md-speaker (U+F04C3),
+    // which is what it used to be. F04C3 draws a studio speaker *cabinet* - a
+    // rounded box with a small circle above a large one - and at this size that
+    // reads as a hard drive, not as sound. It also disagreed with the bar, which
+    // has always used this glyph for the very same device, so one plain speaker
+    // output was drawn two different ways depending on where you looked at it.
     function sinkGlyph(node) {
-        if (!node) return "󰓃"
+        if (!node) return "󰕾"
         var b = nodeBlob(node)
         if (b.indexOf("headphone") !== -1 || b.indexOf("headset") !== -1
             || b.indexOf("earbud") !== -1 || b.indexOf("earphone") !== -1
@@ -249,7 +258,7 @@ DropdownWidget {
         if (b.indexOf("bluetooth") !== -1 || b.indexOf("bluez") !== -1) return "󰂯"
         if (b.indexOf("hdmi") !== -1 || b.indexOf("displayport") !== -1
             || b.indexOf("display") !== -1) return "󰍹"
-        return "󰓃"
+        return "󰕾"
     }
 
     function sourceGlyph(node) {
