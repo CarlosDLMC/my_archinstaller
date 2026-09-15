@@ -445,9 +445,15 @@ singleton that the widgets render; only the rendering should be per-screen. See
    needed two clicks for exactly this reason - the write landed, the read after
    it returned the pre-write value, and the optimistic value was dropped in
    favour of it. `SystemStats` had the quiet version of the same bug: every CPU,
-   memory and temperature reading was one 5s tick old. `CenterInfo` and
-   `NightLight` use `reload(); text()` too and get away with it only because they
-   re-apply from `onLoadedChanged` when the async read lands.
+   memory and temperature reading was one 5s tick old. `NightLight` had the
+   user-visible version: its icon latched on and the toggle looked dead, while
+   hyprsunset itself started and stopped perfectly.
+
+   **`onLoadedChanged` does not rescue this**, which is the trap. It fires on the
+   transition *into* `loaded`, and after the first read `loaded` is already true,
+   so a `reload()` never re-emits it. A handler written as
+   `onFileChanged: { reload(); apply(text()) }` with an `onLoadedChanged` beside
+   it looks belt-and-braces and is in fact stale every time after the first.
 
    Neither `watchChanges` nor inotify helps on sysfs: those attributes raise no
    inotify events at all. Use `udevadm monitor` for hardware state (see

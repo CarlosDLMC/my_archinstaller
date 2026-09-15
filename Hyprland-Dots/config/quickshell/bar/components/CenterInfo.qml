@@ -418,7 +418,12 @@ Item {
         printErrors: false
         path: centerInfo.cacheDir + "/timezone"
         watchChanges: true
-        blockLoading: true
+        // blockAllReads, NOT blockLoading - see the FileView note in CLAUDE.md.
+        // blockLoading only makes the *initial* load synchronous, so the
+        // reload() below read the file's previous contents and the cache was
+        // parsed one write behind. onLoadedChanged does not rescue it: that
+        // fires on the transition into `loaded`, which has already happened.
+        blockAllReads: true
         onFileChanged: {
             reload()
             centerInfo.applyTimezoneText(text())
@@ -435,7 +440,12 @@ Item {
         printErrors: false
         path: centerInfo.cacheDir + "/weather_city"
         watchChanges: true
-        blockLoading: true
+        // blockAllReads, NOT blockLoading - see the FileView note in CLAUDE.md.
+        // blockLoading only makes the *initial* load synchronous, so the
+        // reload() below read the file's previous contents and the cache was
+        // parsed one write behind. onLoadedChanged does not rescue it: that
+        // fires on the transition into `loaded`, which has already happened.
+        blockAllReads: true
         onFileChanged: {
             reload()
             centerInfo.applyWeatherCityText(text())
@@ -454,7 +464,12 @@ Item {
         printErrors: false
         path: centerInfo.cacheDir + "/weather.json"
         watchChanges: true
-        blockLoading: true
+        // blockAllReads, NOT blockLoading - see the FileView note in CLAUDE.md.
+        // blockLoading only makes the *initial* load synchronous, so the
+        // reload() below read the file's previous contents and the cache was
+        // parsed one write behind. onLoadedChanged does not rescue it: that
+        // fires on the transition into `loaded`, which has already happened.
+        blockAllReads: true
         onFileChanged: {
             reload()
             if (text().trim() !== "") centerInfo.parseWeatherJson(text())
