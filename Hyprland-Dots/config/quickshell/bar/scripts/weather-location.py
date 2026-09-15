@@ -162,16 +162,27 @@ def log(msg):
 
 
 def get_location():
-    """Get (lat, lon, city) from IP address."""
+    """Get (lat, lon, city, tz) from IP address.
+
+    The timezone comes back with the coordinates because both providers hand it
+    over for free, and it is the only trustworthy source for *this machine's*
+    own timezone: the system clock cannot be asked, since a previous VPN sync
+    may already have moved it. See the timezone_default snapshot in vpn-sync.sh.
+    """
     # Try ip-api.com first (45 req/min for non-commercial)
     try:
         r = requests.get(
-            "http://ip-api.com/json/?fields=lat,lon,city,status,message&lang=ru",
+            "http://ip-api.com/json/?fields=lat,lon,city,timezone,status,message&lang=ru",
             timeout=5,
         )
         data = r.json()
         if data.get("status") == "success":
-            return float(data["lat"]), float(data["lon"]), data.get("city", "")
+            return (
+                float(data["lat"]),
+                float(data["lon"]),
+                data.get("city", ""),
+                data.get("timezone", ""),
+            )
         log(f"ip-api.com error: {data.get('message', 'Unknown error')}")
     except Exception as e:
         log(f"ip-api.com error: {e}")
@@ -182,12 +193,12 @@ def get_location():
         data = r.json()
         if "loc" in data:
             lat, lon = data["loc"].split(",")
-            return float(lat), float(lon), data.get("city", "")
+            return float(lat), float(lon), data.get("city", ""), data.get("timezone", "")
         log(f"ipinfo.io error: {data.get('error', data)}")
     except Exception as e:
         log(f"ipinfo.io error: {e}")
 
-    return None, None, ""
+    return None, None, "", ""
 
 
 def tunnel_up():
@@ -242,6 +253,7 @@ city_arg = arg.lower() if arg else None
 coords = COORD_RE.match(arg) if arg else None
 
 ip_city = ""
+ip_tz = ""
 if coords:
     latitude, longitude = float(coords.group(1)), float(coords.group(2))
     location = sys.argv[2] if len(sys.argv) > 2 else ""
@@ -251,7 +263,7 @@ elif city_arg and city_arg in VPN_LOCATIONS:
     location = VPN_LOCATION_NAMES_RU.get(city_arg, city_arg.capitalize())
     source = "vpn"
 else:
-    latitude, longitude, ip_city = get_location()
+    latitude, longitude, ip_city, ip_tz = get_location()
     location = ip_city
     source = "ip"
     if latitude is None:
@@ -358,6 +370,11 @@ out_data = {
     # Only meaningful for an "ip" reading, and the whole question for it: an IP
     # lookup made through a tunnel found the exit node.
     "tunneled": tunnel_up() if source == "ip" else None,
+    # The timezone at those coordinates, as the geolocation provider reports it.
+    # This is what vpn-sync.sh saves as timezone_default, because the system
+    # clock is not a safe answer to "where does this machine live" - a previous
+    # sync may already have moved it.
+    "tz": ip_tz,
 }
 output_json = json.dumps(out_data)
 print(output_json)

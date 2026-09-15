@@ -84,8 +84,60 @@ FAILED=0
 if [ "$SYNC_TIME" -eq 1 ]; then
     # Remember the machine's own timezone the first time we move away from it, so
     # vpn-reset.sh can restore THAT rather than a hardcoded city.
+    #
+    # NOT from `timedatectl`, which is the obvious source and the wrong one: a
+    # previous sync may already have moved the system clock to a VPN's zone, and
+    # then this records that zone as home and every trip back lands in the wrong
+    # country. That is not hypothetical - it is how this machine ended up with
+    # timezone_default=Europe/Madrid while living in Minsk.
+    #
+    # The trustworthy source is the same one the weather half uses: a geolocation
+    # reading taken with no tunnel up, which carries the timezone beside the
+    # coordinates. `timedatectl` is kept only as a last resort, and only when the
+    # clock is demonstrably not following a tunnel.
     if [ ! -s ~/.cache/quickshell/timezone_default ]; then
-        timedatectl show -p Timezone --value 2>/dev/null > ~/.cache/quickshell/timezone_default || true
+        python3 - <<'TZSNAP' >> "$LOG_FILE" 2>&1
+import json, os, subprocess, sys
+
+cache = os.path.expanduser("~/.cache/quickshell/weather.json")
+default = os.path.expanduser("~/.cache/quickshell/timezone_default")
+marker = os.path.expanduser("~/.cache/quickshell/timezone")
+
+try:
+    with open(cache) as f:
+        d = json.load(f)
+except Exception:
+    d = {}
+
+tz = ""
+if d.get("source") == "ip" and not d.get("tunneled") and d.get("tz"):
+    tz = d["tz"]
+    why = "untunneled geolocation reading"
+else:
+    # No usable reading. Fall back to the system clock, but only if it is not
+    # already following a tunnel - an empty/absent marker is the bar's own
+    # record of "the clock is home".
+    try:
+        following = bool(open(marker).read().strip())
+    except Exception:
+        following = False
+    if following:
+        print("tz snapshot: clock already follows a tunnel and no untunneled "
+              "reading available - not guessing a home timezone")
+        sys.exit(0)
+    try:
+        tz = subprocess.run(["timedatectl", "show", "-p", "Timezone", "--value"],
+                            capture_output=True, text=True, timeout=5).stdout.strip()
+        why = "system clock (no untunneled reading to use)"
+    except Exception as e:
+        print(f"tz snapshot: could not read the system timezone ({e})")
+        sys.exit(0)
+
+if tz:
+    with open(default, "w") as f:
+        f.write(tz + "\n")
+    print(f"tz snapshot: saved {tz} from the {why}")
+TZSNAP
     fi
 
     # Set timezone using timedatectl. This runs from a QML Process with no tty, so

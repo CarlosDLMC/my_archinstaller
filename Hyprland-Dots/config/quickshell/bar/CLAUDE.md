@@ -367,7 +367,8 @@ components/         # Modular widget components
   stored until a half first leaves home: `timezone_default` on the first clock
   sync, `weather_home` (`lat<TAB>lon<TAB>name`) on the first weather sync. The
   disconnect button, a dropped tunnel and the stale-cache check all pass
-  `--forget` to `vpn-reset.sh`, which drops `weather_home` again - with no
+  `--forget` to `vpn-reset.sh`, which drops `weather_home` and
+  `timezone_default` again - with no
   tunnel an IP lookup is the better answer and the only one that notices you
   have moved, so the file only needs to exist while a tunnel is up. The subtle
   part is where the weather snapshot comes from. By the time either button is
@@ -378,6 +379,18 @@ components/         # Modular widget components
   (`ip`/`vpn`/`fixed`) and `tunneled`. Only `source == "ip"` **and**
   `tunneled == false` is a real location for this machine. Both conditions
   matter and the second is the one that is easy to forget.
+
+  **The clock's home comes from the same reading, not from `timedatectl`.** The
+  obvious source for "this machine's own timezone" is the system clock, and it
+  is the wrong one: a previous sync may already have moved it to a VPN's zone,
+  and then `timezone_default` records *that* and every trip home lands in the
+  wrong country - permanently, since it is only written when missing. This is
+  not hypothetical; it is how this machine ended up restoring to Europe/Madrid
+  while living in Minsk. So `get_location()` returns the provider's `timezone`
+  beside the coordinates (both ip-api and ipinfo hand it over for free), it is
+  stamped on the reading as `tz`, and the snapshot prefers it. `timedatectl` is
+  the last resort and only when `timezone` - the bar's own record of "the clock
+  is following a tunnel" - is empty.
 
   Home travels as **coordinates**, not a city name: a bare name only resolves
   for the seven in `VPN_LOCATIONS`, and home can be anywhere. Hence
