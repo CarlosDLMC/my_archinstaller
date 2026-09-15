@@ -177,6 +177,20 @@ QtObject {
     readonly property color colWhatsapp: palAlert
 
     // Font
+    //
+    // The bar is Terminess: a bitmap-derived terminal face that suits a row of
+    // short, fixed labels and readings, and suits the desktop it sits on.
     readonly property string fontFamily: "Terminess Nerd Font"
     readonly property int fontSize: 24
+
+    // Content surfaces use JetBrains Mono instead. The clipboard picker is the
+    // case that asked for it: it renders arbitrary text the user copied, at
+    // paragraph length and small size, which is the one thing Terminess is not
+    // built for - it has no hinting to speak of below its design size and the
+    // lowercase runs together. JetBrains Mono was drawn for exactly this.
+    //
+    // Nerd Font variant, not plain "JetBrains Mono": these surfaces draw
+    // nf-md glyphs alongside the text, and the bare family has none of them.
+    // Shipped by ttf-jetbrains-mono-nerd, already in install-scripts/fonts.sh.
+    readonly property string fontFamilyContent: "JetBrainsMono Nerd Font"
 }

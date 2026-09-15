@@ -11,6 +11,19 @@ import ".."
 // Shape follows Omarchy's clipboard plugin (omacom/omarchy, MIT, DHH) - split
 // view, type to filter, keyboard-first - and the overlay plumbing follows
 // ShotOsd, which is how every other full-screen dialog in this bar is built.
+//
+// Type and colour here deliberately depart from the bar:
+//
+// - The font is Theme.fontFamilyContent (JetBrains Mono), not Terminess. This
+//   renders arbitrary copied text at paragraph length and small size, which is
+//   the one thing a bitmap-derived terminal face is not built for.
+// - It uses the desaturated pair (colWhite / colGrey) and never colDim or
+//   colMuted. Those come straight from wallust with only a lightness floor -
+//   atLeast() does not touch saturation - so they carry the wallpaper's hue at
+//   full strength. On a few short bar labels that whisper is the point; across a
+//   large centred surface it is not, and on a red wallpaper the whole picker
+//   read as orange. White where selected, grey where not, which is the bar's own
+//   rule for active vs idle.
 PanelWindow {
     id: osd
 
@@ -155,7 +168,7 @@ PanelWindow {
                         text: "󰅇"
                         color: Theme.colWhite
                         font.pixelSize: osd.titleSize + 3
-                        font.family: Theme.fontFamily
+                        font.family: Theme.fontFamilyContent
                     }
 
                     TextInput {
@@ -167,7 +180,7 @@ PanelWindow {
                         anchors.verticalCenter: parent.verticalCenter
                         color: Theme.colWhite
                         font.pixelSize: osd.titleSize
-                        font.family: Theme.fontFamily
+                        font.family: Theme.fontFamilyContent
                         clip: true
                         focus: true
                         onTextChanged: ClipboardState.filter = text
@@ -191,9 +204,9 @@ PanelWindow {
                             anchors.fill: parent
                             visible: search.text === ""
                             text: "Search clipboard…"
-                            color: Theme.colMuted
+                            color: Theme.colGrey
                             font.pixelSize: osd.titleSize
-                            font.family: Theme.fontFamily
+                            font.family: Theme.fontFamilyContent
                             verticalAlignment: Text.AlignVCenter
                         }
                     }
@@ -205,16 +218,16 @@ PanelWindow {
                         text: ClipboardState.loading
                             ? "…"
                             : ClipboardState.filtered.length + " / " + ClipboardState.entries.length
-                        color: Theme.colMuted
+                        color: Theme.colGrey
                         font.pixelSize: osd.hintSize
-                        font.family: Theme.fontFamily
+                        font.family: Theme.fontFamilyContent
                     }
                 }
 
                 Rectangle {
                     width: parent.width
                     height: 1
-                    color: Theme.colMuted
+                    color: Theme.colSeparator
                     opacity: 0.45
                 }
 
@@ -291,9 +304,9 @@ PanelWindow {
                                         anchors.centerIn: parent
                                         visible: !thumb.visible
                                         text: row.isImage ? "󰋩" : "󰦨"
-                                        color: Theme.colMuted
+                                        color: Theme.colGrey
                                         font.pixelSize: osd.rowSize + 2
-                                        font.family: Theme.fontFamily
+                                        font.family: Theme.fontFamilyContent
                                     }
                                 }
 
@@ -304,9 +317,9 @@ PanelWindow {
                                         ? "Image  " + row.modelData.w + "×" + row.modelData.h
                                           + "  ·  " + row.modelData.size
                                         : row.modelData.preview
-                                    color: row.selected ? Theme.colWhite : Theme.colDim
+                                    color: row.selected ? Theme.colWhite : Theme.colGrey
                                     font.pixelSize: osd.rowSize
-                                    font.family: Theme.fontFamily
+                                    font.family: Theme.fontFamilyContent
                                     elide: Text.ElideRight
                                     maximumLineCount: 1
                                 }
@@ -360,9 +373,9 @@ PanelWindow {
                             anchors.margins: 12
                             visible: parent.entry !== null && !parent.isImage
                             text: parent.entry ? parent.entry.preview : ""
-                            color: Theme.colDim
+                            color: Theme.colGrey
                             font.pixelSize: osd.rowSize
-                            font.family: Theme.fontFamily
+                            font.family: Theme.fontFamilyContent
                             wrapMode: Text.Wrap
                             elide: Text.ElideRight
                         }
@@ -371,18 +384,18 @@ PanelWindow {
                             anchors.centerIn: parent
                             visible: parent.isImage && !bigImage.visible
                             text: "󰋩"
-                            color: Theme.colMuted
+                            color: Theme.colGrey
                             font.pixelSize: Math.round(48 * osd.uiScale)
-                            font.family: Theme.fontFamily
+                            font.family: Theme.fontFamilyContent
                         }
 
                         Text {
                             anchors.centerIn: parent
                             visible: parent.entry === null
                             text: ClipboardState.loading ? "Reading history…" : "Nothing matches"
-                            color: Theme.colMuted
+                            color: Theme.colGrey
                             font.pixelSize: osd.rowSize
-                            font.family: Theme.fontFamily
+                            font.family: Theme.fontFamilyContent
                         }
                     }
                 }
@@ -392,9 +405,9 @@ PanelWindow {
                     width: parent.width
                     horizontalAlignment: Text.AlignHCenter
                     text: "↑↓ move   ·   Enter paste   ·   Ctrl+Del remove   ·   Alt+Del wipe   ·   Esc close"
-                    color: Theme.colMuted
+                    color: Theme.colGrey
                     font.pixelSize: osd.hintSize
-                    font.family: Theme.fontFamily
+                    font.family: Theme.fontFamilyContent
                 }
             }
         }

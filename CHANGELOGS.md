@@ -2,6 +2,25 @@
 
 ## September 2026
 
+Changed (2026-09-15) - the clipboard picker (`SUPER + ALT + V`) is set in
+**JetBrains Mono** and its text is neutral.
+
+Terminess is right for the bar - short fixed labels on one row - and wrong here.
+The picker renders arbitrary copied text at paragraph length and small size,
+which is the one thing a bitmap-derived terminal face is not built for.
+`Theme.fontFamilyContent` is the new role for surfaces like this; the bar keeps
+`Theme.fontFamily`. The Nerd Font variant is named deliberately, because the
+picker draws nf-md glyphs beside the text and the bare family has none.
+
+The picker also used `colDim` and `colMuted`, and those carry the wallpaper's hue
+at **full saturation** - `atLeast()` only floors lightness, it does not
+desaturate. That is a whisper on a few short bar labels and the whole point of
+it, but across a large centred surface it meant the entire picker read as orange
+on a red wallpaper. It now uses the desaturated pair: `colWhite` for the selected
+row, `colGrey` for everything else, matching the bar's own white-active/grey-idle
+rule. Separators use `colSeparator`, which was already that grey. The rule is
+written into the bar's CLAUDE.md so the next large surface does not repeat it.
+
 Fixed (2026-09-15) - the night light toggle did nothing visible. hyprsunset was
 starting and stopping correctly the whole time and the state file was right; the
 bar's icon was simply stuck. Same `FileView` bug as the battery pills:
