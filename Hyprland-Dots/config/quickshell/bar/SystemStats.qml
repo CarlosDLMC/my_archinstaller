@@ -37,9 +37,17 @@ Singleton {
     // is why the FileView is guarded - reloading an empty path just errors.
     property string tempPath: ""
 
-    FileView { id: statFile; path: "/proc/stat"; blockLoading: true }
-    FileView { id: memFile; path: "/proc/meminfo"; blockLoading: true }
-    FileView { id: tempFile; path: root.tempPath; blockLoading: true }
+    // blockAllReads, NOT blockLoading. blockLoading only makes the *initial*
+    // load synchronous; after that, reload() starts an async read and text()
+    // keeps returning the previous contents until it lands, so every reading
+    // below was one 5s tick stale. Measured on /sys while chasing it in
+    // BatteryState: three reload()+text() pairs in the same turn all returned
+    // the old value. CenterInfo and NightLight get away with the same pattern
+    // only because they re-apply from onLoadedChanged when the read lands;
+    // there is nothing here to catch it.
+    FileView { id: statFile; path: "/proc/stat"; blockAllReads: true }
+    FileView { id: memFile; path: "/proc/meminfo"; blockAllReads: true }
+    FileView { id: tempFile; path: root.tempPath; blockAllReads: true }
 
     function readCpu() {
         statFile.reload()

@@ -743,6 +743,10 @@ echo "${INFO} Setting up ${SKY_BLUE}power profiles...${RESET}" | tee -a "$LOG"
 sleep 1
 execute_script "power_profiles.sh"
 
+echo "${INFO} Setting up the ${SKY_BLUE}battery charge limit...${RESET}" | tee -a "$LOG"
+sleep 1
+execute_script "battery_charge_limit.sh"
+
 echo "${INFO} Installing ${SKY_BLUE}pipewire and pipewire-audio...${RESET}" | tee -a "$LOG"
 sleep 1
 execute_script "pipewire.sh"

@@ -1,39 +1,40 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
-import Quickshell.Io
 import ".."
 
+// Battery level in the bar, with the full readout and the charge-limit picker
+// on click. Every reading comes from the BatteryState singleton, so this file
+// is a pure renderer: no Process, no FileView, nothing that costs twice on a
+// two-monitor desktop. That was the old widget's shape - it ran Battery.sh and
+// a udevadm monitor once per screen.
 DropdownWidget {
     id: batteryWidget
-    popupWidth: 280
-    popupHeight: Math.max(160, 70 + (batteryInfo.split('\n').filter(l => l.trim()).length * 60))
 
-    property string batteryInfo: ""
-    property int averageLevel: 0
-    property bool isCharging: false
+    popupWidth: 380
+    // Sized to what the card measured rather than to arithmetic over row
+    // counts: text height follows the font's line metrics, not pixelSize, so
+    // counting rows clips the last one.
+    property real cardHeight: 0
+    popupHeight: Math.max(200, Math.min(Math.ceil(cardHeight) + 30, 620))
+    popupXOffset: 200
 
-    // A desktop has no /sys/class/power_supply/BAT*, so the widget used to sit
-    // in the bar reading "0%" forever with an empty dropdown. Hidden rather
-    // than blanked: an invisible item is dropped from the RowLayout entirely,
-    // so it leaves no gap. shell.qml ties the neighbouring separator to this.
-    property bool hasBattery: false
+    // A desktop has no battery, and an invisible item is dropped from the
+    // RowLayout entirely, so it leaves no gap. shell.qml ties the neighbouring
+    // separator to this. The singleton gates its own monitor and timer on the
+    // same fact, so hiding here really does stop the work - see the "hiding is
+    // not stopping" note in CLAUDE.md.
+    visible: BatteryState.present
 
-    visible: hasBattery
-
-    Process {
-        id: batteryPresenceProc
-        command: ["sh", "-c", "ls -d /sys/class/power_supply/BAT* >/dev/null 2>&1 && echo yes || echo no"]
-        stdout: SplitParser {
-            onRead: data => {
-                if (data) batteryWidget.hasBattery = (data.trim() === "yes")
-            }
-        }
-        Component.onCompleted: running = true
-    }
-
-    function getBatteryIcon(level, charging) {
-        if (charging) return "󰂄"
+    function barIcon() {
+        var level = BatteryState.level
+        // Holding at a limit is not charging and not draining. The plug glyph
+        // says "on mains" without the charging bolt claiming the pack is
+        // filling, which is the thing a limit makes untrue for most of the day.
+        if (BatteryState.holding)
+            return "󰚥"
+        if (BatteryState.chargeState === "charging")
+            return "󰂄"
         if (level <= 10) return "󰂎"
         if (level <= 20) return "󰁺"
         if (level <= 30) return "󰁻"
@@ -47,159 +48,31 @@ DropdownWidget {
         return "󰁹"
     }
 
-    function parseBatteryInfo(output) {
-        if (!output) return
-
-        console.log("Battery raw output:", output)
-        var lines = output.trim().split('\n').filter(l => l.trim())
-        console.log("Battery lines found:", lines.length, "lines:", JSON.stringify(lines))
-        var total = 0
-        var count = 0
-        var charging = false
-
-        for (var i = 0; i < lines.length; i++) {
-            // Match "Battery: XX% (Status)" format from lock screen script
-            var match = lines[i].match(/Battery:\s*(\d+)%\s+\((.+)\)/)
-            if (match) {
-                var level = parseInt(match[1])
-                var status = match[2]
-                total += level
-                count++
-                if (status === "Charging") charging = true
-                console.log("Battery", count, "found: level=", level, "status=", status)
-            }
-        }
-
-        batteryWidget.averageLevel = count > 0 ? Math.round(total / count) : 0
-        batteryWidget.isCharging = charging
-        batteryWidget.batteryInfo = output.trim()
-        console.log("Final battery info stored:", batteryWidget.batteryInfo)
-    }
-
-    // Icon shown in bar (average battery)
     Text {
         anchors.verticalCenter: parent.verticalCenter
-        text: batteryWidget.getBatteryIcon(batteryWidget.averageLevel, batteryWidget.isCharging) + " " + batteryWidget.averageLevel + "%"
-        color: batteryWidget.averageLevel <= 15 ? Theme.colAlert : Theme.colWhite
+        text: batteryWidget.barIcon() + " " + BatteryState.level + "%"
+        // Low is only worth an alert while it is actually draining. Sitting at
+        // 60% on mains because that is the limit is the desired state, not a
+        // warning, and colouring it red is how you teach yourself to ignore the
+        // colour.
+        color: (BatteryState.chargeState === "discharging" && BatteryState.level <= 15)
+            ? Theme.colAlert
+            : Theme.colWhite
         font.pixelSize: Theme.fontSize
         font.family: Theme.fontFamily
         font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
     }
 
-    // Popup content
+    // The 60s tick already re-reads the thresholds, so this is not the only path
+    // to a limit changed from outside - it just makes the card open on a current
+    // reading instead of one up to a minute old.
+    onOpened: BatteryState.readThresholds()
+
     popupContent: Component {
-        Column {
-            width: parent.width
-            spacing: 12
-
-            Text {
-                text: "Battery Status"
-                color: Theme.colFg
-                font.pixelSize: Theme.fontSize + 2
-                font.family: Theme.fontFamily
-                font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
-                anchors.horizontalCenter: parent.horizontalCenter
-            }
-
-            Repeater {
-                model: batteryWidget.batteryInfo.split('\n').filter(l => l.trim())
-
-                Row {
-                    width: parent.width
-                    spacing: 12
-
-                    property var batteryData: {
-                        // Match "Battery: XX% (Status)" format from lock screen script
-                        var match = modelData.match(/Battery:\s*(\d+)%\s+\((.+)\)/)
-                        if (match) {
-                            return {
-                                level: parseInt(match[1]),
-                                status: match[2],
-                                charging: match[2] === "Charging"
-                            }
-                        }
-                        return {level: 0, status: "Unknown", charging: false}
-                    }
-
-                    Text {
-                        text: batteryWidget.getBatteryIcon(parent.batteryData.level, parent.batteryData.charging)
-                        color: parent.batteryData.level <= 15 ? Theme.colAlert : Theme.colWhite
-                        font.pixelSize: Theme.fontSize + 4
-                        font.family: Theme.fontFamily
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-
-                    Column {
-                        spacing: 4
-                        anchors.verticalCenter: parent.verticalCenter
-
-                        Text {
-                            text: "Battery " + (index + 1) + ": " + parent.parent.batteryData.level + "%"
-                            color: Theme.colFg
-                            font.pixelSize: Theme.fontSize
-                            font.family: Theme.fontFamily
-                            font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
-                        }
-
-                        Text {
-                            text: parent.parent.batteryData.charging ? "Charging" : "Not charging"
-                            color: Theme.colMuted
-                            font.pixelSize: Theme.fontSize - 2
-                            font.family: Theme.fontFamily
-                        }
-                    }
-                }
-            }
+        BatteryPanel {
+            anchors.fill: parent
+            onContentHeightChanged: batteryWidget.cardHeight = contentHeight
+            Component.onCompleted: batteryWidget.cardHeight = contentHeight
         }
-    }
-
-    // Get battery information using the EXACT same script as the lock screen
-    Process {
-        id: batteryProc
-        property string output: ""
-        command: ["sh", "-c", "$HOME/.config/hypr/scripts/Battery.sh"]
-        stdout: SplitParser {
-            onRead: data => {
-                if (!data) return
-                batteryProc.output += data + "\n"
-            }
-        }
-        onRunningChanged: {
-            if (running) {
-                output = ""
-            } else if (output) {
-                batteryWidget.parseBatteryInfo(output)
-            }
-        }
-        Component.onCompleted: running = true
-    }
-
-    function updateBatteries() {
-        batteryProc.running = true
-    }
-
-    // Event-based battery monitoring using udevadm
-    // Both gated on the battery existing. `visible: hasBattery` only hides the
-    // widget - it left `udevadm monitor` and the backup poll running on every
-    // desktop, watching a power supply that is not there.
-    Process {
-        id: batteryMonitor
-        command: ["udevadm", "monitor", "--udev", "--subsystem-match=power_supply"]
-        running: batteryWidget.hasBattery
-        stdout: SplitParser {
-            onRead: data => {
-                if (data && (data.includes("BAT") || data.includes("AC"))) {
-                    batteryWidget.updateBatteries()
-                }
-            }
-        }
-    }
-
-    // Backup timer (in case udevadm fails)
-    Timer {
-        interval: 60000
-        running: batteryWidget.hasBattery
-        repeat: true
-        onTriggered: batteryWidget.updateBatteries()
     }
 }

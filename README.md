@@ -212,6 +212,7 @@ first prompt.
 - Custom pokefetch terminal greeting
 - Event-based system monitoring
 - Battery, WiFi, Bluetooth, Volume widgets
+- Battery charge limit (60% / 80% / Full) — see [Battery charge limit](#battery-charge-limit)
 - Whole-workspace move that preserves the dwindle layout
 
 ### Applications
@@ -441,6 +442,64 @@ daemon running.
 or `tuned-ppd.service` with `tuned.service` under it. The unit name is not
 fixed either, and hardcoding one meant enabling a unit that did not exist.
 
+### Battery charge limit
+
+Click the battery in the bar. The card shows level, capacity, cycles, draw,
+time and — per pack, where there is more than one — **health**, meaning
+`energy_full / energy_full_design`: how much of its original capacity the cell
+still holds. Under that, three pills: **60%**, **80%** and **Full**.
+
+Why you want one. A lithium cell wears out two ways. Cycling it is the one
+everybody counts, and a laptop that lives on mains barely does it — the charger
+bypasses a full pack and runs the machine off the adapter, so the cycle counter
+hardly moves. The other is **calendar ageing**: held at 100%, a cell sits at
+~4.2V and its electrolyte oxidises at that potential whether or not any current
+flows, faster the warmer it is. Inside a laptop that is plugged in permanently
+that is the dominant wear by a wide margin.
+
+The T480 this was written on shows it plainly. The internal pack has **239
+cycles and 44%** of its design capacity left; the removable one has **566
+cycles and 82%**. Cycling is not what killed the first one.
+
+A threshold stops charging short of full so the cell spends its life at a
+voltage where that reaction is far slower. 60% is the one to want on a machine
+that stays on a desk; 80% is the usual compromise for one that travels.
+
+Two things about it that are not obvious:
+
+- It is only a **charge** limit. It stops charging; it discharges nothing. A
+  pack that was already above the limit when you set it stays there until the
+  machine actually runs off the battery — on a desk, that can be months. The
+  card says `Above limit · 60%` rather than `Holding at 60%` so this is visible
+  rather than mysterious.
+- It will not bring a dead pack back. Below about 60% health the cell is past
+  what a threshold can save; the limit protects the packs you still have.
+
+**Nothing is set for you.** `install-scripts/battery_charge_limit.sh` seeds
+`/etc/battery-charge-limit.conf` with whatever the hardware is already doing and
+leaves it there — a machine that travels wants the full pack, and an installer
+that decides 60% on its own is a laptop that dies in a meeting.
+
+What it installs, and why each piece exists:
+
+| Piece | Why |
+|---|---|
+| `/usr/local/bin/battery-charge-limit` | Those sysfs files are root-writable only, and a QML `Process` has no tty to prompt on. Root-owned on purpose: sudo is passwordless here, so a user-writable script behind it would be a way to run anything as root |
+| `/etc/battery-charge-limit.conf` | A sysfs write does not survive a reboot |
+| `battery-charge-limit.service` | Re-applies it at boot **and after resume** — some firmware clears the threshold on wake |
+
+From a terminal, if you prefer:
+
+```bash
+sudo battery-charge-limit get        # what each pack is set to
+sudo battery-charge-limit set 60     # set every pack, and remember it
+```
+
+Machines with no `charge_control_end_threshold` — desktops, and laptops whose
+vendor never wired one up — get nothing installed, and the card hides the
+control instead of offering one that does nothing. Support is best on ThinkPads
+(via `thinkpad_acpi`, no extra module needed) and most ASUS laptops.
+
 ### Laptops and desktops
 
 The same install is meant to work on both, so anything tied to laptop hardware
@@ -448,7 +507,12 @@ is decided by whether the hardware is there — never by a question or a flag yo
 have to remember to flip when you move the preset to another machine.
 
 - **Battery widget** — hidden when there is no `/sys/class/power_supply/BAT*`.
-  It used to sit in the bar reading `0%` with an empty dropdown.
+  It used to sit in the bar reading `0%` with an empty dropdown. The reading is
+  a singleton, so hiding it really does stop the work: one `udevadm monitor` for
+  the whole shell, and none at all on a desktop.
+- **Charge limit picker** — shown only where the kernel exposes
+  `charge_control_end_threshold` *and* the root helper is installed. See
+  [Battery charge limit](#battery-charge-limit).
 - **Bluetooth widget** — hidden when no controller is bound
   (`/sys/class/bluetooth/hci*`). It used to show a permanently "off" icon whose
   toggle silently failed, because `bluetoothctl` had no adapter to talk to.

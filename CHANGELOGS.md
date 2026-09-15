@@ -2,6 +2,97 @@
 
 ## September 2026
 
+Added (2026-09-15) - **battery card and charge limit**. The battery widget was
+one number (`Battery.sh` in a `Process`, per screen) and a dropdown that repeated
+it. It is now a `BatteryState` singleton plus two renderers:
+
+- **`BatteryState.qml`** holds every battery reading for the whole shell. One
+  `FileView` per pack on `uevent` - which carries STATUS, CAPACITY, ENERGY_*,
+  POWER_NOW and CYCLE_COUNT in a single KEY=VALUE blob, so a whole battery costs
+  one file rather than nine - and no subprocess at all after startup. The trigger
+  stays `udevadm monitor`, because sysfs attributes raise no inotify events and a
+  `FileView` with `watchChanges` would bind and then never fire. On this
+  two-screen desk that is **one** monitor process where the power-profile,
+  bluetooth and network widgets each run two
+- Level is **energy-weighted**, not the mean of the pack percentages. The old
+  average hid the fact that this T480's internal pack holds 10.7Wh against the
+  removable one's 19.7Wh; two packs at 100% and 20% are not "60%" of anything you
+  can run on. `charge_*` in uAh is normalised to `energy_*` in uWh, so the card is
+  not blank on the many machines that report the other way round
+- **The card** (`BatteryPanel.qml`) ports Omarchy Quattro's power panel
+  (omacom/omarchy, MIT, DHH): capacity, cycles, draw, time, a fill bar and the
+  "holding" state, in this bar's roles and its `GridLayout(columns: 4)`. Their
+  power-profile picker is left out - this bar already has one. It adds **health**
+  (`energy_full / energy_full_design`), which upstream does not show and which is
+  the number that actually predicts a dead pack: BAT0 here is at 239 cycles and
+  **44%** health while BAT1 is at 566 cycles and **82%**. Where there is more than
+  one pack, each gets its own row
+- **The charge limit is new work, not a port.** Omarchy *reads*
+  `charge_control_end_threshold` and displays it; nothing in that repo writes it.
+  Pills for 60% / 80% / Full, and three pieces behind them installed by
+  `install-scripts/battery_charge_limit.sh`: a root-owned helper at
+  `/usr/local/bin/battery-charge-limit` (those sysfs files are root-writable only
+  and a QML `Process` has no tty to prompt on), `/etc/battery-charge-limit.conf`
+  to remember the choice, and a oneshot unit that re-applies it at boot **and
+  after resume**, because a sysfs write does not survive a reboot and some
+  firmware clears the threshold on wake. Start threshold is written at `end - 5`
+  so the pack does not re-top on every fraction of a percent it self-discharges;
+  the write order clears start first, because `thinkpad_acpi` rejects a start
+  threshold that is not below the end one, so raising and lowering the limit need
+  opposite orders
+- **No limit is set for you.** The conf is seeded with whatever the hardware is
+  already doing and the unit is a no-op until you pick something. A machine that
+  travels wants the full pack, and an installer that decides 60% on its own is a
+  laptop that dies in a meeting
+- Why it is worth having: cycling is not the only thing that wears a cell. Held
+  at 100% it sits at ~4.2V and its electrolyte oxidises at that potential whether
+  or not current is flowing, faster the warmer it is - which is why a pack that
+  lives on mains can lose half its capacity with the cycle counter barely moving,
+  exactly as BAT0 here did. A threshold is the fix; it is also only a *charge*
+  limit, so a pack already above it stays there until the machine actually runs
+  off it, and the card says so rather than reporting "Holding at 60%" next to 97%
+- Machines with no `charge_control_end_threshold` (desktops, and laptops whose
+  vendor never wired it up) get nothing installed and the card hides the control.
+  `colAlert` is spent on one state only - actually discharging and at or below
+  15% - so a pack parked at its limit is not coloured like a problem
+- `Theme.colBright` turned out to be documented in the bar's CLAUDE.md but never
+  defined in `Theme.qml`, and nothing used it. The health ramp uses `colGrey` for
+  the middle tier instead; the doc is corrected
+- The limit pills felt laggy, and the measurement said why: the threshold sysfs
+  files are **ACPI calls**, not cached kernel values - **1.07ms** a read against
+  **47us** for the whole of `uevent`. The pill was waiting for sudo (~20ms), the
+  helper (~14ms) and a 4.3ms four-file re-read before its 130ms fade could start,
+  about 170ms to confirmation. Now `setLimit()` records the click in
+  `pendingLimit` and the pills bind to `effectiveLimit`, which prefers it, so they
+  move on the click; the pending value is dropped when the re-read lands, so a
+  limit the firmware clamped moves the pill back rather than lying
+- Dropping the threshold reads from the 60s tick was tried as part of that and
+  **reverted**: the limit is what decides whether the bar shows "holding" or
+  "full", so a limit set from a terminal or by TLP left the wrong glyph in the bar
+  until someone opened the card. 4.3ms a minute is 0.007% of a core and cannot
+  drop a frame. What the ACPI cost really rules out is paying it on the click path
+- That was only half of it. The pills still needed **two clicks**: the first did
+  nothing and the second applied. The cause was `FileView`, and it was a repo-wide
+  misunderstanding this file's own guidance had encouraged - **`blockLoading: true`
+  makes only the *initial* load synchronous**. After that, `reload()` starts an
+  asynchronous read and `text()` keeps returning the previous contents until it
+  lands, so `reload(); text()` reads the value from the refresh *before* this one.
+  Measured: three `reload()` + `text()` pairs in the same event-loop turn all
+  returned the stale value. So the write landed, the read after it returned the
+  pre-write value, `pendingLimit` was dropped in favour of it, and the pill
+  snapped back - indistinguishable from the click having been ignored. The fix is
+  one word, **`blockAllReads: true`**, which makes every read synchronous. Verified
+  by driving `setLimit()` in a loop: 60 -> 60 -> 80 -> 100, each read back
+  correctly on the first call, where `80` after `60` used to fail
+- **`SystemStats` had the same bug**, quietly: `/proc/stat`, `/proc/meminfo` and
+  the hwmon sensor were all read with `blockLoading`, so every CPU, memory and
+  temperature reading in the bar was one 5s tick old. Fixed the same way.
+  `CenterInfo` and `NightLight` use `reload(); text()` too but re-apply from
+  `onLoadedChanged` when the read lands, so they self-correct and are left alone.
+  The bar's CLAUDE.md said `blockLoading: true` "makes `reload()` + `text()`
+  synchronous, which is what you want for `/proc`" - that is the opposite of true,
+  and is corrected
+
 Added (2026-09-14) - four bar widgets, functionality taken from Omarchy Quattro
 (omacom/omarchy, MIT, DHH) and rebuilt in this bar's style. None of his code,
 styling or plugin scaffolding was copied; the ports keep the monochrome palette,
