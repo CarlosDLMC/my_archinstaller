@@ -253,6 +253,16 @@ if selected neovim; then
         command -v nvim
     check_outcome "LazyVim config missing: ~/.config/nvim/lua/config/lazy.lua - Space E has no file tree (install-scripts/neovim.sh)" \
         test -f "$HOME/.config/nvim/lua/config/lazy.lua"
+    # The colorscheme is two files and they fail differently. A missing
+    # colors/pycharm-dark.lua while lua/plugins/colorscheme.lua names it is the
+    # bad case: LazyVim asks for a scheme that does not exist and nvim opens on
+    # an error, so check the palette itself rather than only the opts file.
+    check_outcome "colors/pycharm-dark.lua is missing or differs from assets/nvim/pycharm-dark.lua (install-scripts/neovim.sh)" \
+        cmp -s "$HOME/.config/nvim/colors/pycharm-dark.lua" "assets/nvim/pycharm-dark.lua"
+    # Only warns if nothing selects a colorscheme at all - a file of your own
+    # choosing a different scheme is a deliberate choice, not a failure.
+    check_outcome "no colorscheme set: ~/.config/nvim/lua/plugins/colorscheme.lua is missing, so nvim falls back to LazyVim's tokyonight (install-scripts/neovim.sh)" \
+        test -f "$HOME/.config/nvim/lua/plugins/colorscheme.lua"
     # nvim-treesitter's `main` branch builds parsers with the tree-sitter CLI and
     # fails hard without it. mason cannot supply it from a headless run, which is
     # why neovim.sh takes it from the repos - verify that actually happened.

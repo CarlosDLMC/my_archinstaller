@@ -20,6 +20,12 @@
 # other machine-specific things in the README's "What is deliberately NOT in this
 # repo".
 #
+# The colorscheme is the one exception, and it is installed from assets/nvim/
+# rather than shipped as a dotfile, precisely so copy.sh's wholesale replacement
+# never touches ~/.config/nvim. See "the theme" below for how the two files
+# differ: the palette is ours, the file that selects it is yours after the first
+# install.
+#
 # NOTE: $EDITOR is left alone. It is "vim" from UserConfigs/01-UserDefaults.lua and
 # nothing here needs it to change - the herdr layouts name `nvim` outright. Change
 # that one line yourself if you want nvim to be the system editor too.
@@ -104,6 +110,39 @@ if [ ! -d "$NVIM_CFG" ]; then
   fi
 fi
 
+# ------------------------------------------------------------------- the theme
+# The PyCharm-matched colorscheme, so a fresh machine looks like this one rather
+# than like LazyVim's default tokyonight. Colours are JetBrains' new-UI "Dark",
+# read out of app.jar!/themes/expUI/expUI_darkScheme.xml, and foot and herdr are
+# configured from the same values - see Hyprland-Dots/config/{foot,herdr}.
+#
+# Two files, treated differently on purpose:
+#
+#   colors/pycharm-dark.lua      ours, overwritten every run. It is a palette
+#                                asset like assets/ly/*.dur, not something you
+#                                are expected to hand-edit.
+#   lua/plugins/colorscheme.lua  written ONLY if absent. This directory is
+#                                yours (see the header), so the installer may
+#                                seed it on a fresh machine but must never
+#                                overwrite a choice you made later - switch
+#                                colorscheme in that file and a re-run keeps it.
+if [ -d "$NVIM_CFG" ]; then
+  mkdir -p "$NVIM_CFG/colors" "$NVIM_CFG/lua/plugins"
+  if cp "$PARENT_DIR/assets/nvim/pycharm-dark.lua" "$NVIM_CFG/colors/pycharm-dark.lua"; then
+    echo "${OK} Installed the pycharm-dark colorscheme." | tee -a "$LOG"
+  else
+    echo "${WARN} Could not install colors/pycharm-dark.lua - see $LOG" | tee -a "$LOG"
+  fi
+
+  if [ -e "$NVIM_CFG/lua/plugins/colorscheme.lua" ]; then
+    echo "${NOTE} lua/plugins/colorscheme.lua already exists - left as yours." | tee -a "$LOG"
+  elif cp "$PARENT_DIR/assets/nvim/colorscheme.lua" "$NVIM_CFG/lua/plugins/colorscheme.lua"; then
+    echo "${OK} Set pycharm-dark as the LazyVim colorscheme." | tee -a "$LOG"
+  else
+    echo "${WARN} Could not write lua/plugins/colorscheme.lua - see $LOG" | tee -a "$LOG"
+  fi
+fi
+
 # --------------------------------------------------------- pre-fetch the plugins
 # lazy.nvim installs on first launch either way; doing it here means the first
 # interactive nvim is instant instead of a progress bar. Non-fatal: a machine that
@@ -123,5 +162,5 @@ if [ -d "$NVIM_CFG" ]; then
   fi
 fi
 
-printf "\n${NOTE} ${SKY_BLUE}Neovim + LazyVim${RESET} installed. ${YELLOW}Space E${RESET} toggles the file tree, ${YELLOW}Ctrl+W W${RESET} hops between tree and editor, ${YELLOW}Space Space${RESET} finds a file, ${YELLOW}Space S G${RESET} greps with preview, ${YELLOW}Space G G${RESET} opens lazygit. Double-click works in the tree. Your own plugins go in ${SKY_BLUE}~/.config/nvim/lua/plugins/${RESET}, which this repo does not track.\n"
+printf "\n${NOTE} ${SKY_BLUE}Neovim + LazyVim${RESET} installed. ${YELLOW}Space E${RESET} toggles the file tree, ${YELLOW}Ctrl+W W${RESET} hops between tree and editor, ${YELLOW}Space Space${RESET} finds a file, ${YELLOW}Space S G${RESET} greps with preview, ${YELLOW}Space G G${RESET} opens lazygit. Double-click works in the tree. Colours match PyCharm and your terminal (${MAGENTA}pycharm-dark${RESET}). Your own plugins go in ${SKY_BLUE}~/.config/nvim/lua/plugins/${RESET}, which this repo seeds once and then leaves alone.\n"
 printf "\n%.0s" {1..2}
