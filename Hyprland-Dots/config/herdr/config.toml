@@ -35,8 +35,10 @@ status_indicators = "symbols"   # distinct glyphs instead of color-only dots
 # in that file (JetBrains derives it at runtime) - it is the new-UI convention.
 panel_bg = "#1e1f22"      # editor background
 sidebar_bg = "#2b2d30"    # tool-window background
-active_row_bg = "#26282e" # caret row
-selection_bg = "#2e436e"
+active_row_bg = "#121316" # focused row. PyCharm's caret row (#26282e) is only
+                          # 5 shades off sidebar_bg and unreadable in a narrow
+                          # sidebar, so this goes much darker instead.
+selection_bg = "#3d3222"  # cursor row - warm, picks up the amber accent
 surface0 = "#313438"      # indent guide
 surface1 = "#393b40"
 surface_dim = "#43454a"   # method separators
