@@ -2,6 +2,21 @@
 
 ## September 2026
 
+Changed (2026-09-16) - the sidebar's focused and cursor rows stopped borrowing
+PyCharm's values.
+
+`active_row_bg` was PyCharm's caret row, `#26282e`, which sits five shades off
+`sidebar_bg` - enough to read across a full-width editor and not enough to read
+in a column thirty cells wide. It goes much darker instead, `#121316`, so the
+focused row reads as focused rather than as a rendering artifact. `selection_bg`
+left PyCharm's blue `#2e436e` for a warm `#3d3222` that picks up the amber
+accent, so selection and accent belong to the same palette.
+
+This is the second thing the PyCharm import got wrong in the sidebar, after the
+accent, and for the same reason both times: a value tuned for a wide editor
+surface does not survive being moved to a narrow one. The rest of the palette is
+still PyCharm's.
+
 Changed (2026-09-16) - `ALT+C` closes a tab through a confirmation popup, and
 the sidebar's accent went back to vesper orange.
 
