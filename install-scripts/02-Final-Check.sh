@@ -246,6 +246,13 @@ if selected herdr; then
         bash -c '! grep -q "__HOME__" "$HOME/.config/herdr/config.toml"'
     check_outcome "herdr-workspace-numbers.service is not enabled - the sidebar's number column stops updating after a server restart (install-scripts/herdr.sh)" \
         systemctl --user is-enabled herdr-workspace-numbers.service
+    # Every [[keys.command]] entry names a helper script by absolute path, and a
+    # binding whose script did not ship does nothing and reports nothing - the
+    # same silent failure the __HOME__ check above exists to catch. Reading the
+    # bindings out of the installed config rather than listing the helpers here
+    # means a binding added later is covered without touching this file.
+    check_outcome "a herdr keybinding points at a helper script that is not installed or not executable (Hyprland-Dots/.local/bin, Hyprland-Dots/copy.sh)" \
+        python3 -c 'import tomllib, os, sys; cfg = os.path.expanduser("~/.config/herdr/config.toml"); d = tomllib.load(open(cfg, "rb")); cmds = d.get("keys", {}).get("command", []); missing = [c["command"] for c in cmds if not os.access(c["command"].split()[0], os.X_OK)]; print("\n".join(missing)); sys.exit(1 if missing else 0)'
 fi
 
 if selected neovim; then

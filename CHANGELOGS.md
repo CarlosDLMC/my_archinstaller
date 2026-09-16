@@ -2,6 +2,29 @@
 
 ## September 2026
 
+Changed (2026-09-16) - `ALT+C` closes a tab through a confirmation popup, and
+the sidebar's accent went back to vesper orange.
+
+`close_tab` kept `prefix+shift+x` and gave up `alt+c`, which is now a
+`[[keys.command]]` popup running the new `herdr-close-tab`. It names the tab and
+its pane count, says so when it is the last tab and the workspace will go with
+it, and defaults to yes on Enter - closing a tab destroys no files, unlike
+`herdr-close-workspace`, which can remove a worktree and therefore defaults the
+other way.
+
+The PyCharm blue `#56a8f5` was doing too much work as the accent: it drove the
+selected tab and every sidebar highlight at once. Accent is vesper's `#ffc799`
+again, the workspace and tab tokens dropped to neutral greys, and `$num` is the
+only thing left carrying the accent - so the eye goes to the workspace number
+rather than to five things at once. The PyCharm palette stays everywhere else.
+
+Also added to `02-Final-Check.sh`: every `[[keys.command]]` in the installed
+config is checked to point at an executable. A binding whose helper never shipped
+does nothing and reports nothing - the same silent failure the `__HOME__` check
+exists to catch, and now a real risk since there are five helper scripts rather
+than four. The check reads the bindings out of the config rather than listing the
+helpers, so a binding added later is covered without touching the check.
+
 Fixed (2026-09-16) - `herdr-off` existed only on this machine and would not have
 survived a fresh install.
 

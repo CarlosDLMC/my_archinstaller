@@ -1,0 +1,46 @@
+#!/bin/sh
+# Close the focused tab, after a one-key confirmation.
+# Bound to Alt+C as a popup. Enter confirms - closing a tab destroys no files,
+# so the default is yes, unlike herdr-close-workspace which can remove a worktree.
+HERDR="$HOME/.local/bin/herdr"
+
+info=$("$HERDR" workspace list 2>/dev/null | python3 -c '
+import json,subprocess,sys,os
+H=os.path.expanduser("~/.local/bin/herdr")
+ws=[w for w in json.load(sys.stdin)["result"]["workspaces"] if w.get("focused")]
+if not ws: sys.exit(1)
+w=ws[0]
+tabs=json.loads(subprocess.run([H,"tab","list","--workspace",w["workspace_id"]],
+                capture_output=True,text=True).stdout)["result"]["tabs"]
+cur=[t for t in tabs if t.get("focused")] or [t for t in tabs if t["tab_id"]==w.get("active_tab_id")]
+if not cur: sys.exit(1)
+t=cur[0]
+print(t["tab_id"]); print(t.get("label") or t["number"]); print(t.get("pane_count",1))
+print(len(tabs)); print(w.get("label") or w["workspace_id"])
+') || { echo "  Could not determine the focused tab."; sleep 2; exit 1; }
+
+id=$(echo "$info"    | sed -n 1p)
+label=$(echo "$info" | sed -n 2p)
+panes=$(echo "$info" | sed -n 3p)
+ntabs=$(echo "$info" | sed -n 4p)
+wslabel=$(echo "$info" | sed -n 5p)
+
+echo
+echo "  Close tab '$label' in $wslabel?"
+echo "  $panes pane(s) will be terminated."
+[ "$ntabs" = "1" ] && echo "  This is the last tab - the workspace closes with it."
+echo
+printf "  [Enter = yes, n = cancel] "
+read -r ans
+case "$ans" in
+  n|N|no|NO) echo "  Cancelled."; sleep 1 ;;
+  *)
+    out=$("$HERDR" tab close "$id" 2>&1)
+    case "$out" in
+      *'"error"'*)
+        echo "  FAILED:"
+        echo "$out" | python3 -c 'import json,sys; print("   ",json.load(sys.stdin)["error"]["message"])' 2>/dev/null || echo "   $out"
+        printf "  Press Enter..."; read -r _ ;;
+      *) echo "  Closed."; sleep 1 ;;
+    esac ;;
+esac
