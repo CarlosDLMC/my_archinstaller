@@ -11,6 +11,12 @@
 #   hdlm [agent] [agent2]   one hdl tab per subdirectory of the current directory
 #   hsl  <count> <command>  N panes in a grid, all running the same command
 #
+# Plus one thing that is not a layout at all:
+#
+#   herdr-off               stop the server so the session is actually saved,
+#                           then power off. Run it OUTSIDE herdr - see its own
+#                           comment for the shutdown race it works around.
+#
 # Three deliberate differences from Omarchy's originals:
 #
 #   1. zsh, not bash. Omarchy's are bash functions and arrays there are 0-indexed.
@@ -206,4 +212,50 @@ hsl() {
   for pane in "${panes[@]}"; do
     herdr pane run "$pane" "$cmd" >/dev/null
   done
+}
+
+# Save the herdr session, then power off.
+#
+# herdr deletes session.json on shutdown whenever its workspace list is already
+# empty - persist::clear() is a real remove_file(), and capture_session_save_job()
+# takes that branch on `workspaces.is_empty()`. At poweroff systemd tears down the
+# user session first, every pane shell exits, the emptied workspaces auto-close,
+# and the shutdown save deletes the snapshot instead of writing one.
+#
+# Upstream #3415 fixed that race, but only for panes killed by a signal: the guard
+# runs on ChildExitReason::Interrupted, and the shells here exit with code 1 and
+# signal None, so 0.9.0 still loses the session. Stopping the server by hand makes
+# the save run while the workspaces are still populated.
+#
+# Must run OUTSIDE herdr - a plain terminal, not a pane. Everything after the stop
+# runs in a shell herdr would kill along with its panes, so from inside a pane the
+# poweroff would never be reached.
+herdr-off() {
+  herdr server stop || return 1
+
+  # `server stop` returns once the sockets are gone, which is ~50ms before the
+  # snapshot is written. Wait for the process to exit, not for the socket.
+  # Anchored so a command line that merely mentions the server - another shell,
+  # an editor, this function in someone's scrollback - cannot match and stall us.
+  local waited=0
+  while pgrep -f '^\S+/herdr server$' >/dev/null; do
+    sleep 0.2
+    (( waited++ ))
+    if (( waited > 75 )); then
+      print -u2 "herdr-off: server still running after 15s - not powering off."
+      return 1
+    fi
+  done
+
+  # Refuse to power off if the shutdown deleted the session instead of saving it.
+  local last
+  last=$(grep -E 'persist\.(save|clear)' "$HOME/.config/herdr/herdr-server.log" | tail -1)
+  if [[ $last != *persist.save* ]]; then
+    print -u2 "herdr-off: session was cleared, not saved - not powering off."
+    print -u2 "  ${last:-no persist events in the log}"
+    return 1
+  fi
+
+  print "herdr-off: ${last#*event=}"
+  systemctl poweroff
 }

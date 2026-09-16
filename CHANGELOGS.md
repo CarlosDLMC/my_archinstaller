@@ -2,6 +2,27 @@
 
 ## September 2026
 
+Fixed (2026-09-16) - `herdr-off` existed only on this machine and would not have
+survived a fresh install.
+
+It was written straight into `~/.config/zsh/herdr-layouts.zsh` rather than into
+the tracked copy, so the repo's version was 46 lines shorter than the live one.
+Every other herdr and Neovim customisation checked out - config.toml, the sounds,
+the four helper scripts, the ALT+Tab unbind, foot.ini, the pycharm-dark palette
+and the colorscheme selector are all deployed by `copy.sh` or `neovim.sh` and all
+verify against the live machine - but this one function was a live-only edit, and
+a reinstall would have quietly dropped it.
+
+Captured verbatim, and documented in the file header and the README, neither of
+which mentioned it. It is worth knowing it is not a layout: it stops the server,
+waits for the process to exit, checks the log says `persist.save` rather than
+`persist.clear`, and only then powers off - and it has to run outside herdr,
+because everything after the stop runs in a shell herdr would otherwise kill.
+
+The general lesson is the one this repo keeps relearning: an edit made only in
+`~/.config` is invisible to the installer. The tracked copy is the one that gets
+installed.
+
 Added (2026-09-16) - `02-Final-Check.sh` now verifies herdr, Neovim and Hunk,
 and the layouts say something when a command they start is missing.
 

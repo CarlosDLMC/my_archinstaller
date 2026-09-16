@@ -1004,6 +1004,17 @@ live in `~/.config/zsh/herdr-layouts.zsh` and `.zshrc` sources them:
 | `hdlm [agent] [agent2]` | one `hdl` tab per subdirectory of the current directory |
 | `hsl <count> <command>` | `count` panes tiled in a grid, all running the same command |
 
+The same file also defines **`herdr-off`**, which is not a layout: it stops the
+Herdr server, waits for the process to actually exit, confirms the session was
+saved rather than cleared, and only then powers off. It exists because Herdr
+0.9.0 deletes `session.json` on shutdown when its workspace list is already
+empty - at poweroff systemd tears down the user session first, every pane shell
+exits, the emptied workspaces auto-close, and the shutdown save removes the
+snapshot instead of writing one. Upstream's fix for that race only covers panes
+killed by a signal, and these exit with a status instead. **Run it from a plain
+terminal, not from inside a pane** - anything after the stop runs in a shell
+Herdr would have killed.
+
 The agent defaults to `claude`; `hdl codex` or `hdl claude codex` works too. Run
 one from the pane you want to become the layout - `hds` splits the pane it is
 called in, and renames the tab after the directory.
