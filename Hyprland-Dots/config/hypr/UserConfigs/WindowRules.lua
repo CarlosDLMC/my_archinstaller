@@ -21,3 +21,11 @@ hl.layer_rule({ match = { namespace = "quickshell:bar" }, blur = true })
 -- renames - so float it instead. Only the browser window's title ends in
 -- "- Thunar", so the negative title match leaves that one tiled.
 rule({ match = { class = "^([Tt]hunar)$", title = "negative:(.* - Thunar$)" }, float = true, center = true })
+
+-- Terminal opacity. configs/WindowRules.lua sets "0.9 0.7" (active inactive);
+-- this file is required after it, so this wins.
+--
+-- Target: 0.85 focused, 0.70 unfocused. foot's own alpha=0.85 does the base
+-- translucency (it dims only the BACKGROUND, so glyphs stay crisp); this rule
+-- adds only the focus differential: 0.85 x 0.82 = 0.70.
+rule({ match = { tag = "terminal*" }, opacity = "1.0 0.82" })
