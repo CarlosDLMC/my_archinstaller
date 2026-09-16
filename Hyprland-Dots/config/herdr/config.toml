@@ -44,7 +44,7 @@ text = "#bcbec4"
 subtext0 = "#9da0a8"
 overlay0 = "#7a7e85"      # comments
 overlay1 = "#6f737a"
-accent = "#56a8f5"
+accent = "#ffc799"    # vesper primary - drives the selected tab + other highlights
 red = "#f75464"
 green = "#6aab73"
 yellow = "#cf8e6d"
@@ -57,13 +57,13 @@ mauve = "#c77dbb"
 [ui.sidebar.agents]
 row_gap = 0
 rows = [
-  ["state_icon", { token = "workspace", fg = "#56a8f5", bold = true, dim = false }, { token = "tab", fg = "#9da0a8", dim = false }],
+  ["state_icon", { token = "workspace", fg = "#bcbec4", bold = true, dim = false }, { token = "tab", fg = "#6f737a", dim = false }],
   [{ token = "agent", fg = "#bcbec4", bold = true, dim = false }, { token = "state_text", dim = false, rules = [{ equals = "blocked", fg = "#f75464", bold = true }, { equals = "working", fg = "#cf8e6d" }, { equals = "done", fg = "#6aab73", bold = true }, { equals = "idle", fg = "#7a7e85" }, { equals = "unknown", fg = "#4b5059" }] }],
 ]
 
 [ui.sidebar.agents.rows_by_agent]
 claude = [
-  ["state_icon", { token = "workspace", fg = "#56a8f5", bold = true, dim = false }, { token = "tab", fg = "#9da0a8", dim = false }],
+  ["state_icon", { token = "workspace", fg = "#bcbec4", bold = true, dim = false }, { token = "tab", fg = "#6f737a", dim = false }],
   [{ token = "terminal_title_stripped", fg = "#bcbec4", dim = false }],
   [{ token = "agent", fg = "#bcbec4", bold = true, dim = false }, { token = "state_text", dim = false, rules = [{ equals = "blocked", fg = "#f75464", bold = true }, { equals = "working", fg = "#cf8e6d" }, { equals = "done", fg = "#6aab73", bold = true }, { equals = "idle", fg = "#7a7e85" }, { equals = "unknown", fg = "#4b5059" }] }],
 ]
@@ -71,8 +71,8 @@ claude = [
 [ui.sidebar.spaces]
 row_gap = 0
 rows = [
-  [{ token = "$num", fg = "#56a8f5", bold = true, dim = false }, { token = "workspace", fg = "#bcbec4", bold = true, dim = false }],
-  [{ token = "branch", fg = "#cf8e6d", dim = false }, { token = "git_status", fg = "#6aab73", dim = false }],
+  [{ token = "$num", fg = "#ffc799", bold = true, dim = false }, { token = "workspace", fg = "#bcbec4", bold = true, dim = false }],
+  [{ token = "branch", fg = "#9da0a8", dim = false }, { token = "git_status", fg = "#7a7e85", dim = false }],
 ]
 
 [keys]
@@ -84,7 +84,7 @@ focus_pane_right = ["alt+l", "alt+right"]
 new_tab = "alt+t"
 next_tab = ["alt+tab", "ctrl+tab"]
 previous_tab = "ctrl+shift+tab"
-close_tab = ["alt+c", "prefix+shift+x"]
+close_tab = "prefix+shift+x"
 close_pane = "alt+x"
 split_vertical = "alt+v"
 split_horizontal = "alt+s"
@@ -152,3 +152,11 @@ type = "popup"
 command = "__HOME__/.local/bin/herdr-close-workspace"
 width = "70%"
 height = "40%"
+
+# Alt+C: close the focused tab, with a one-key confirmation.
+[[keys.command]]
+key = "alt+c"
+type = "popup"
+command = "__HOME__/.local/bin/herdr-close-tab"
+width = "60%"
+height = "30%"
