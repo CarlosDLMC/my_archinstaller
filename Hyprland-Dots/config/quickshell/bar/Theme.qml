@@ -160,7 +160,7 @@ QtObject {
     // Mostly white but carrying a clear touch of the wallust hue - more than
     // colWhite's 12% whisper, kept light enough to stay readable and to still
     // read as "white with a tint" rather than a coloured label.
-    readonly property color colWindow: desat(palFg, 0.45, 0.85)
+    readonly property color colWindow: desat(palFg, 0.60, 0.84)
 
     //  Per-area treatment, picked by eye from the comparison:
     //    workspaces      -> variant E (near-white active, light grey inactive)
