@@ -116,10 +116,11 @@ QtObject {
 
     readonly property color colBg: palBg
     readonly property color colBgTransparent: "transparent"
-    //  60% transparent, i.e. a 40% wash of the background colour sitting
-    //  under the compositor blur. Steadies the text over busy parts of the
-    //  wallpaper while still reading as see-through rather than a solid bar.
-    readonly property color colBgWash: Qt.rgba(palBg.r, palBg.g, palBg.b, 0.40)
+    //  Neutral black at 55% over the compositor blur - deliberately NOT tinted
+    //  with the wallust background, so the bar reads as a dark translucent strip
+    //  that stays the same across wallpapers. Steadies text over busy parts of
+    //  the wallpaper while still letting the blur show through.
+    readonly property color colBgWash: Qt.rgba(0, 0, 0, 0.55)
 
     //  Text roles are floored for legibility. colSeparator deliberately is
     //  NOT: WCAG applies to text, and the "│" dividers are decoration that
@@ -156,7 +157,10 @@ QtObject {
     readonly property color colDisk: colGrey
     readonly property color colNetwork: colWhite
     readonly property color colBluetooth: colWhite
-    readonly property color colWindow: colDim     // window title is secondary info
+    // Mostly white but carrying a clear touch of the wallust hue - more than
+    // colWhite's 12% whisper, kept light enough to stay readable and to still
+    // read as "white with a tint" rather than a coloured label.
+    readonly property color colWindow: desat(palFg, 0.45, 0.85)
 
     //  Per-area treatment, picked by eye from the comparison:
     //    workspaces      -> variant E (near-white active, light grey inactive)
