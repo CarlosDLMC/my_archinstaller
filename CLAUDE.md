@@ -14,6 +14,17 @@ actual desktop configuration lives under `Hyprland-Dots/config/`, which mirrors
 `~/.config/` on the running machine (e.g. `Hyprland-Dots/config/hypr` →
 `~/.config/hypr`, `Hyprland-Dots/config/rofi` → `~/.config/rofi`, and so on).
 
+## Working with Claude (important)
+
+**Do not change anything unless I ask you to.** When I ask a question — including
+diagnostic questions like "why is this slow?" or "is it because of X?" — answer
+the question only. Do not edit files, run fixes, revert, clear caches, or
+regenerate state as part of answering. Investigating read-only is fine;
+modifying my live system or the repo is not, until I explicitly ask for a
+change. A conditional "you can do X if I'm not happy" from earlier is not
+standing permission to act the next time I ask something — wait for a clear go.
+When a fix seems obvious, propose it and wait.
+
 ## Development workflow (important)
 
 There are **two copies** of every config file: the **live machine** copy under
