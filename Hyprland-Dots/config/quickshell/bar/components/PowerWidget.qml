@@ -40,10 +40,14 @@ DropdownWidget {
             id: powerIcon
             anchors.centerIn: parent
             text: ""
-            // color14, the vivid red in the palette. color12 (the literal
-            // border colour) measured 1.62:1 on the bar and read as a
-            // shadow of a logo; this is the same red family with presence.
-            color: Theme.colAlert
+            // Exactly the Hyprland active-window border colour: the bar
+            // template maps "border" to {{color12}}, which is the same wallust
+            // slot UserDecorations.lua uses for col.active_border. So the logo
+            // and the focused window's border always match, by request.
+            // NOTE: color12 is a dark slot (it once measured ~1.6:1 here), so
+            // on a busy wallpaper the logo can read dim - swap back to
+            // Theme.colAlert if presence matters more than the exact match.
+            color: Theme.palBorder
             // Sized off the BAR, not the text. barContent is laid out at
             // designHeight and then scaled by uiScale as one unit, so a
             // single multiplier fills the bar height at every resolution -
