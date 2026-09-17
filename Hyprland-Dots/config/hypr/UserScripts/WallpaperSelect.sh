@@ -57,11 +57,18 @@ kill_wallpaper_for_image() {
   pkill hyprpaper 2>/dev/null
 }
 
-# Retrieve wallpapers (both images & videos)
-mapfile -d '' PICS < <(find -L "${wallDIR}" -type f \( \
-  -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" -o \
-  -iname "*.bmp" -o -iname "*.tiff" -o -iname "*.webp" -o \
-  -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.mov" -o -iname "*.webm" \) -print0)
+# The find predicate that matches every wallpaper type (images & videos).
+# Kept in one variable so the recursive "random" scan and the per-directory
+# menu listing stay in sync.
+WALL_FIND_TYPES=(
+  -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" -o
+  -iname "*.bmp" -o -iname "*.tiff" -o -iname "*.webp" -o
+  -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.mov" -o -iname "*.webm"
+)
+
+# Retrieve every wallpaper in the tree - used ONLY to pick the ". random" entry.
+# The menu itself is now browsed one directory at a time (see menu() below).
+mapfile -d '' PICS < <(find -L "${wallDIR}" -type f \( "${WALL_FIND_TYPES[@]}" \) -print0)
 
 RANDOM_PIC="${PICS[$((RANDOM % ${#PICS[@]}))]}"
 RANDOM_PIC_NAME=". random"
@@ -69,13 +76,33 @@ RANDOM_PIC_NAME=". random"
 # Rofi command
 rofi_command="rofi -i -show -dmenu -config $rofi_theme -theme-str $rofi_override"
 
-# Sorting Wallpapers
+# Build the menu for a single directory: sub-folders first (navigable), then the
+# wallpapers that live directly in it. Folders are printed with a trailing "/"
+# so main() can tell a folder pick from a file pick. Nothing is listed
+# recursively here - descending into a folder re-runs this menu one level down.
 menu() {
-  IFS=$'\n' sorted_options=($(sort <<<"${PICS[*]}"))
+  local dir="$1"
 
-  printf "%s\x00icon\x1f%s\n" "$RANDOM_PIC_NAME" "$RANDOM_PIC"
+  # ".." to go back up, shown everywhere except the top-level wallpapers dir.
+  if [[ "$dir" != "$wallDIR" ]]; then
+    printf "%s\x00icon\x1f%s\n" ".." "go-up"
+  fi
 
-  for pic_path in "${sorted_options[@]}"; do
+  # ". random" (a random wallpaper from the whole tree) only at the top level.
+  if [[ "$dir" == "$wallDIR" ]]; then
+    printf "%s\x00icon\x1f%s\n" "$RANDOM_PIC_NAME" "$RANDOM_PIC"
+  fi
+
+  # Immediate sub-folders, sorted.
+  local subdir dir_name
+  while IFS= read -r -d '' subdir; do
+    dir_name=$(basename "$subdir")
+    printf "%s/\x00icon\x1f%s\n" "$dir_name" "folder"
+  done < <(find -L "$dir" -mindepth 1 -maxdepth 1 -type d -print0 | sort -z)
+
+  # Wallpapers directly in this folder (non-recursive), sorted.
+  local pic_path pic_name cache_gif_image cache_preview_image
+  while IFS= read -r -d '' pic_path; do
     pic_name=$(basename "$pic_path")
     if [[ "$pic_name" =~ \.gif$ ]]; then
       cache_gif_image="$HOME/.cache/gif_preview/${pic_name}.png"
@@ -94,7 +121,7 @@ menu() {
     else
       printf "%s\x00icon\x1f%s\n" "$pic_name" "$pic_path"
     fi
-  done
+  done < <(find -L "$dir" -mindepth 1 -maxdepth 1 -type f \( "${WALL_FIND_TYPES[@]}" \) -print0 | sort -z)
 }
 
 # Offer SDDM Simple Wallpaper Option (only for non-video wallpapers)
@@ -219,29 +246,55 @@ apply_video_wallpaper() {
 
 # Main function
 main() {
-  choice=$(menu | $rofi_command)
-  choice=$(echo "$choice" | xargs)
-  RANDOM_PIC_NAME=$(echo "$RANDOM_PIC_NAME" | xargs)
+  # Browse the wallpapers tree one directory at a time. A folder pick descends,
+  # ".." goes back up, and a file (or ". random") pick ends the loop with
+  # selected_file set to the chosen wallpaper.
+  local current_dir="$wallDIR"
+  local choice candidate choice_basename
+  selected_file=""
 
-  if [[ -z "$choice" ]]; then
-    echo "No choice selected. Exiting."
-    exit 0
-  fi
+  while true; do
+    choice=$(menu "$current_dir" | $rofi_command)
 
-  # Handle random selection correctly
-  if [[ "$choice" == "$RANDOM_PIC_NAME" ]]; then
-    choice=$(basename "$RANDOM_PIC")
-  fi
+    if [[ -z "$choice" ]]; then
+      echo "No choice selected. Exiting."
+      exit 0
+    fi
 
-  choice_basename=$(basename "$choice" | sed 's/\(.*\)\.[^.]*$/\1/')
+    # Go up one level (never above the wallpapers root - menu() only offers
+    # ".." below the root).
+    if [[ "$choice" == ".." ]]; then
+      current_dir=$(dirname "$current_dir")
+      continue
+    fi
 
-  # Search for the selected file in the wallpapers directory, including subdirectories
-  selected_file=$(find "$wallDIR" -iname "$choice_basename.*" -print -quit)
+    # Random wallpaper from the whole tree.
+    if [[ "$choice" == "$RANDOM_PIC_NAME" ]]; then
+      selected_file="$RANDOM_PIC"
+      break
+    fi
 
-  if [[ -z "$selected_file" ]]; then
-    echo "File not found. Selected choice: $choice"
-    exit 1
-  fi
+    # Folder pick (printed with a trailing "/" by menu()): descend into it.
+    if [[ "$choice" == */ ]]; then
+      candidate="$current_dir/${choice%/}"
+      if [[ -d "$candidate" ]]; then
+        current_dir="$candidate"
+        continue
+      fi
+    fi
+
+    # Otherwise it is a wallpaper in the current folder. Resolve the display
+    # name back to a real file within THIS directory only (non-recursive), so
+    # same-named files in different folders can't collide.
+    choice_basename=$(basename "$choice" | sed 's/\(.*\)\.[^.]*$/\1/')
+    selected_file=$(find "$current_dir" -mindepth 1 -maxdepth 1 -iname "$choice_basename.*" -print -quit)
+
+    if [[ -z "$selected_file" ]]; then
+      echo "File not found. Selected choice: $choice"
+      exit 1
+    fi
+    break
+  done
 
   # A video selection needs mpvpaper, and that is checked HERE rather than only
   # inside apply_video_wallpaper below.
