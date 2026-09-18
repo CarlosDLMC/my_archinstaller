@@ -44,6 +44,32 @@ color13: {{color13}};
 color14: {{color14}};
 color15: {{color15}};
 
+/* Readable text for each slot above.
+
+   A theme that uses @colorN as a fill prints @on-colorN on top of it instead
+   of guessing. The default is @background - the very value the themes have
+   always printed - so this file on its own behaves exactly as it used to, and
+   it keeps tracking the rgba() literal above, which DarkLight.sh rewrites
+   when it flips to light mode. RofiContrast.py (a wallust hook) then measures
+   each pair and swaps in @foreground for the slots where @background cannot
+   be read, leaving every other line untouched. */
+on-color0: @background;
+on-color1: @background;
+on-color2: @background;
+on-color3: @background;
+on-color4: @background;
+on-color5: @background;
+on-color6: @background;
+on-color7: @background;
+on-color8: @background;
+on-color9: @background;
+on-color10: @background;
+on-color11: @background;
+on-color12: @background;
+on-color13: @background;
+on-color14: @background;
+on-color15: @background;
+
 
 }
 

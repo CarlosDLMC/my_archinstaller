@@ -49,3 +49,8 @@ cp -f "$wallpaper_path" "$wallpaper_current" || true
 # Run wallust (silent) to regenerate templates defined in ~/.config/wallust/wallust.toml
 # -s is used in this repo to keep things quiet and avoid extra prompts
 wallust run -s "$wallpaper_path" || true
+
+# wallust rewrites its template targets after its own hooks run, so the rofi
+# palette can only be conditioned once `wallust run` has exited - see
+# RofiContrast.py, which picks a readable text colour for each colour slot.
+"$HOME/.config/hypr/scripts/RofiContrast.py" || true
