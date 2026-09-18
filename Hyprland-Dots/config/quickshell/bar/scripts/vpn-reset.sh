@@ -103,14 +103,24 @@ if [ "$RESET_WEATHER" -eq 1 ]; then
     FETCH="$SCRIPT_DIR/weather-fetch.sh"
 
     if [ -x "$FETCH" ]; then
-        WEATHER_OUTPUT=$("$FETCH" 2>/dev/null)
-        if [ $? -eq 0 ] && [ -n "$WEATHER_OUTPUT" ]; then
-            echo "$WEATHER_OUTPUT" > ~/.cache/quickshell/weather.json
-            echo "Weather reset to home"
-        else
-            echo "Warning: could not fetch home weather"
-            FAILED=1
-        fi
+        # Same rule as vpn-sync.sh: weather-location.py owns the cache file and
+        # writes it only on a fresh reading, so this just runs the fetch and
+        # reports. Exit 2 means every provider refused and the bar is still
+        # showing the last good reading - which is the right thing for it to
+        # show, but not something to call a successful reset.
+        "$FETCH" >/dev/null 2>/dev/null
+        FETCH_EXIT=$?
+        case "$FETCH_EXIT" in
+            0) echo "Weather reset to home" ;;
+            2)
+                echo "Warning: no weather provider answered - still showing the previous reading"
+                FAILED=1
+                ;;
+            *)
+                echo "Warning: could not fetch home weather"
+                FAILED=1
+                ;;
+        esac
     else
         echo "Error: weather-fetch.sh not found at $FETCH"
         FAILED=1

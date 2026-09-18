@@ -207,20 +207,39 @@ SNAPSHOT
     echo "Running: python3 $WEATHER_SCRIPT $CITY" >> "$LOG_FILE"
 
     if [ -f "$WEATHER_SCRIPT" ]; then
-        WEATHER_OUTPUT=$(python3 "$WEATHER_SCRIPT" "$CITY" 2>&1)
+        # stderr goes to the log, NOT into the captured output. It used to be
+        # `2>&1`, which folded the script's own log lines into the JSON and then
+        # wrote the result to the cache: on the first provider failure the cache
+        # became "Open-Meteo forecast error...\nUsing cached weather data\n{...}",
+        # which no longer parsed, and every consumer - the bar, the home
+        # snapshot, the timezone snapshot - broke at once.
+        #
+        # Nothing here writes the cache any more either. weather-location.py
+        # writes it itself, and only when it has a fresh reading, so there is
+        # exactly one writer and no way for this script to put something in that
+        # file that the script would not have put there.
+        python3 "$WEATHER_SCRIPT" "$CITY" >/dev/null 2>>"$LOG_FILE"
         WEATHER_EXIT=$?
         echo "Weather script exit code: $WEATHER_EXIT" >> "$LOG_FILE"
-        echo "Weather output: $WEATHER_OUTPUT" >> "$LOG_FILE"
 
-        if [ $WEATHER_EXIT -eq 0 ]; then
-            echo "$WEATHER_OUTPUT" > ~/.cache/quickshell/weather.json
-            echo "Weather cache written successfully" >> "$LOG_FILE"
-            echo "Weather updated for $CITY"
-        else
-            echo "Error: Weather script failed" >> "$LOG_FILE"
-            echo "Warning: Weather update failed for $CITY"
-            FAILED=1
-        fi
+        case "$WEATHER_EXIT" in
+            0)
+                echo "Weather updated for $CITY"
+                ;;
+            2)
+                # Every provider refused, so the bar keeps showing the reading it
+                # already had. The city preference stays set, so the next refresh
+                # that succeeds lands on $CITY without another click.
+                echo "Warning: no weather provider answered - still showing the previous reading" | tee -a "$LOG_FILE"
+                notify-send -u low "Weather" "No provider answered. Still showing the previous reading; $CITY will load on the next refresh." 2>/dev/null
+                FAILED=1
+                ;;
+            *)
+                echo "Error: Weather script failed" >> "$LOG_FILE"
+                echo "Warning: Weather update failed for $CITY"
+                FAILED=1
+                ;;
+        esac
     else
         echo "Error: Weather script not found at $WEATHER_SCRIPT" >> "$LOG_FILE"
         echo "Warning: Weather script not found at $WEATHER_SCRIPT"
