@@ -9,9 +9,17 @@ TitleFont=Cantarell Light 30
 MonospaceFont=Adwaita Mono 12
 ImageDir=/usr/share/plymouth/themes/soviet
 # Layout, as fractions of (screen - element) so it scales from 1080p to 4K:
-#   logo (watermark.png)   0.35  -> roughly the upper-middle of the screen
-#   password dialog/title  0.68  -> clear of the 400 px logo even at 1080p
+#   logo (watermark.png)   0.15  -> upper third of the screen
+#   password dialog/title  0.68  -> clear of the 560 px logo even at 1080p
 #   spinner (animation)    0.80
+#
+# The logo was 400 px at 0.35. A taller picture pushes its bottom edge down
+# twice over - the image itself grows, and 0.35 of a smaller (screen - image)
+# still leaves most of the growth below the anchor - so at 560 px and 0.35 it
+# overlapped the password prompt on a 1080p screen (bottom 742 vs prompt 680).
+# Moving the anchor to 0.15 buys back more than the extra height costs: the
+# bottom edge lands at 638 on 1080p and 692 on 1440p, both clear of the prompt.
+# 560 px is the largest that still clears 1080p; go taller and only 1440p+ fits.
 DialogHorizontalAlignment=.5
 DialogVerticalAlignment=.68
 TitleHorizontalAlignment=.5
@@ -19,7 +27,7 @@ TitleVerticalAlignment=.68
 HorizontalAlignment=.5
 VerticalAlignment=.80
 WatermarkHorizontalAlignment=.5
-WatermarkVerticalAlignment=.35
+WatermarkVerticalAlignment=.15
 Transition=none
 TransitionDuration=0.0
 BackgroundStartColor=0x000000
