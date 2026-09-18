@@ -92,15 +92,13 @@ split_vertical = "alt+v"
 split_horizontal = "alt+s"
 zoom = "alt+z"
 switch_workspace = "alt+1..9"
-next_workspace = "alt+w"
 previous_workspace = "alt+b"
-new_workspace = ["alt+n", "prefix+shift+n"]
+new_workspace = ["alt+w", "prefix+shift+n"]
 close_workspace = "prefix+shift+d"
 workspace_picker = "prefix+w"
 
 # Ctrl+Alt+N: focus tab N, or create it when N is the next tab up. Herdr's own
-# switch_tab cannot create a missing tab, hence the helper. (Plain alt+n is
-# new_workspace, above.)
+# switch_tab cannot create a missing tab, hence the helper.
 [[keys.command]]
 key = "ctrl+alt+1"
 type = "shell"
