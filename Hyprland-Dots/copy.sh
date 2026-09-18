@@ -150,6 +150,11 @@ config_dirs=(
     # Mono and Fira Code for their no-ligature cuts. Without it a fresh machine
     # gets ligatures everywhere - ->, =>, != rendered as single glyphs.
     "fontconfig"
+    # MangoHud.conf is not just an overlay layout: fps_limit and vsync in it
+    # actively cap and pace the game, so it is the panel tuning (48-75 Hz
+    # FreeSync window, cap 3 under the 75 Hz ceiling) in file form. Inert
+    # unless a game is launched with `mangohud %command%` - see GAMES_README.md.
+    "MangoHud"
 )
 
 # Where each directory's backup ended up, keyed by directory name. The wallust

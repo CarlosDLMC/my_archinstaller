@@ -115,6 +115,17 @@ hypr_package_2=(
   # no wallpaper. The script now refuses when this is missing; installing it
   # means it does not have to.
   mpvpaper
+  # Gaming overlay and micro-compositor. mangohud is the fps cap / frametime
+  # HUD the Steam launch option `mangohud %command%` pulls in, and it reads
+  # config/MangoHud/MangoHud.conf that copy.sh lays down - without the package
+  # that config is inert. lib32-mangohud is needed because 32-bit games load
+  # the 32-bit Vulkan layer; multilib is already enabled by pacman.sh.
+  # gamescope is not needed for a normal game, but it is what provides FSR 1.0
+  # upscaling and the resolution/cursor isolation a misbehaving title needs -
+  # and Keybinds.lua already frees SUPER + U/N/I/S/G for it. See GAMES_README.md.
+  mangohud
+  lib32-mangohud
+  gamescope
   nvtop
   nwg-look
   nwg-displays
