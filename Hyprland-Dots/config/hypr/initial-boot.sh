@@ -34,6 +34,9 @@ if [ ! -f "$HOME/.config/hypr/.initial_startup_done" ]; then
     # Initialize wallust and wallpaper
 	if [ -f "$wallpaper" ]; then
 		wallust run -s $wallpaper > /dev/null 
+		# see RofiContrast.py - readable rofi text for whatever slots this
+		# wallpaper produced; must follow wallust, never run as its hook.
+		"$HOME/.config/hypr/scripts/RofiContrast.py" || true
 		# awww-daemon does not fork: `query || daemon && img` would block here forever
 		# when the daemon is not up yet. Start it in the background, then set the image.
 		awww query >/dev/null 2>&1 || { awww-daemon --format argb >/dev/null 2>&1 & sleep 0.5; }

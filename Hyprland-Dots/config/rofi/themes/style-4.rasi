@@ -20,6 +20,14 @@ configuration {
 @theme "~/.config/rofi/wallust/colors-rofi.rasi"
 
 /*****----- Global Properties -----*****/
+/*  The fills below are wallust's, untouched. Only the text on top of them
+    changed: it used to be @background everywhere, and whether that could be
+    read depended on what the wallpaper happened to put in the slot
+    underneath. @on-colorN is the same @background on every wallpaper where
+    @background is legible, and @foreground on the ones where it is not -
+    RofiContrast.py measures the pair when wallust regenerates the palette.
+    Keep each @on-colorN matched to the slot its widget is filled with. */
+
 * {
     background-alt: @color1;
     selected:       @color12;
@@ -36,19 +44,24 @@ configuration {
     urgent-background:           @urgent;
     urgent-foreground:           @background;
     active-background:           @active;
-    active-foreground:           @background;
+    /*  This one sits on a transparent element, so the text lands on the
+        window itself - @background on @background was 1.00:1 on every
+        wallpaper, which is why running apps showed up as blank rows. */
+    active-foreground:           @foreground;
     selected-normal-background:  @selected;
-    selected-normal-foreground:  @background;
+    selected-normal-foreground:  @on-color12;   /* pairs with @selected */
     selected-urgent-background:  @active;
-    selected-urgent-foreground:  @background;
+    selected-urgent-foreground:  @on-color11;   /* pairs with @active   */
     selected-active-background:  @urgent;
-    selected-active-foreground:  @color12;
+    /*  @urgent is this theme's own #F7768E, not a wallust slot, so black on
+        it is a fixed 7.9:1 - no measuring needed. */
+    selected-active-foreground:  @background;
     alternate-normal-background: @background;
     alternate-normal-foreground: @foreground;
     alternate-urgent-background: @urgent;
     alternate-urgent-foreground: @background;
     alternate-active-background: @active;
-    alternate-active-foreground: @background;
+    alternate-active-foreground: @on-color11;
     
 
 }
@@ -284,8 +297,10 @@ button selected {
     border:                      2px 0px 2px 2px;
     border-radius:               6px;
     border-color:                @border-color;
-    background-color:            @selected-normal-foreground;
-    text-color:                  @selected-normal-background;
+    /*  Filled and written the same way round as the selected row above -
+        it used to be inverted, which put @color12 on top of @background. */
+    background-color:            @selected-normal-background;
+    text-color:                  @selected-normal-foreground;
 }
 
 /*****----- Message -----*****/

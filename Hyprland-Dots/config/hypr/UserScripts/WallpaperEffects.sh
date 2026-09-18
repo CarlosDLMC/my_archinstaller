@@ -47,6 +47,8 @@ no-effects() {
     wait $!
     wallust run "$wallpaper_current" -s &&
     wait $!
+    # readable rofi text for this palette - after wallust, see RofiContrast.py
+    "$HOME/.config/hypr/scripts/RofiContrast.py" || true
     # Refresh rofi, quickshell, wallust palettes
 	sleep 2
 	"$SCRIPTSDIR/Refresh.sh"
@@ -87,6 +89,8 @@ main() {
   
             wallust run "$wallpaper_output" -s &
             sleep 1
+            # readable rofi text for this palette - see RofiContrast.py
+            "$HOME/.config/hypr/scripts/RofiContrast.py" || true
             # Refresh rofi, quickshell, wallust palettes
             "${SCRIPTSDIR}/Refresh.sh"
             notify-send -u low -i "$iDIR/ja.png" "$choice" "effects applied"
