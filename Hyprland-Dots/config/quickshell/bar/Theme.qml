@@ -53,6 +53,41 @@ QtObject {
         return Qt.hsla(c.hslHue, c.hslSaturation, minLightness, c.a)
     }
 
+    //  A lightness floor is the right tool when the role is always dark
+    //  (the cases above). The logo is different: it is pinned to palBorder
+    //  so it matches the focused window's border, and how visible that is
+    //  depends entirely on which colour wallust put in that slot. Flooring
+    //  it unconditionally would brighten the logo on every wallpaper and
+    //  break the match even where the match reads fine. So instead: measure,
+    //  and lift only when the glyph would otherwise disappear.
+    function relativeLuminance(c) {
+        function channel(v) {
+            return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * channel(c.r) + 0.7152 * channel(c.g) + 0.0722 * channel(c.b)
+    }
+
+    function contrastRatio(a, b) {
+        var la = theme.relativeLuminance(a)
+        var lb = theme.relativeLuminance(b)
+        return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
+    }
+
+    //  Keeps wallust's hue and saturation, raises lightness in small steps
+    //  until the colour clears `target` against `against`. Returns `c`
+    //  untouched when it already clears, so this is a no-op on most
+    //  wallpapers.
+    function liftToContrast(c, against, target) {
+        if (theme.contrastRatio(c, against) >= target)
+            return c
+        for (var l = c.hslLightness; l <= 0.95; l += 0.02) {
+            var lifted = Qt.hsla(c.hslHue, c.hslSaturation, l, c.a)
+            if (theme.contrastRatio(lifted, against) >= target)
+                return lifted
+        }
+        return Qt.hsla(c.hslHue, c.hslSaturation, 0.95, c.a)
+    }
+
     function applyPalette(text) {
         if (!text || text.length === 0)
             return
@@ -161,6 +196,22 @@ QtObject {
     // colWhite's 12% whisper, kept light enough to stay readable and to still
     // read as "white with a tint" rather than a coloured label.
     readonly property color colWindow: desat(palFg, 0.60, 0.84)
+
+    //  Arch logo / power menu. Pinned to palBorder ({{color12}}, the same
+    //  wallust slot as Hyprland's col.active_border) so the mark and the
+    //  focused window's border are the same colour - that match is the point
+    //  of the role. But color12 is one of wallust's dark slots: on
+    //  Catppuccin-Mocha_hanged_man_tree it came out #09151E against a
+    //  #121416 bar, a contrast of 1.00:1 - the logo was there and simply
+    //  could not be seen.
+    //
+    //  3:1 is WCAG's floor for graphical objects (text wants 4.5, but this is
+    //  an icon, and pushing it further washes the border hue out). Measured
+    //  against palBg: the bar paints colBgWash, neutral black over blur, so
+    //  wallust's own background is the closest stand-in for the strip the
+    //  glyph actually sits on. Wallpapers whose border already clears 3:1 are
+    //  left exactly as they were.
+    readonly property color colLogo: liftToContrast(palBorder, palBg, 3.0)
 
     //  Per-area treatment, picked by eye from the comparison:
     //    workspaces      -> variant E (near-white active, light grey inactive)
