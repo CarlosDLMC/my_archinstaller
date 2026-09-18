@@ -357,26 +357,16 @@ Item {
                 console.log("Weather fetch started (city from cache: '" + weatherCity + "')")
             } else if (output) {
                 console.log("Weather fetch completed, output length: " + output.length)
-                if (parseWeatherJson(output)) {
-                    // Save to cache on successful fetch
-                    saveWeatherCache(output)
-                }
+                // Display only. weather-location.py writes the cache itself, and
+                // only when it has a fresh reading - one writer, so nothing can
+                // put a payload in that file that the fetch script would not
+                // have written. This used to re-save whatever came back, which
+                // meant a stale re-emission (or an empty one, when every
+                // provider was down) was written over the good reading.
+                parseWeatherJson(output)
             }
             // If no output (offline), cached data remains displayed
         }
-    }
-
-    // Function to save weather cache
-    function saveWeatherCache(data) {
-        // Escape single quotes in JSON for shell
-        var escaped = data.replace(/'/g, "'\\''")
-        cacheWriteProc.command = ["sh", "-c", "mkdir -p ~/.cache/quickshell && printf '%s' '" + escaped + "' > ~/.cache/quickshell/weather.json"]
-        cacheWriteProc.running = true
-    }
-
-    // Cache write process
-    Process {
-        id: cacheWriteProc
     }
 
     // ------------------------------------------------------------------
@@ -454,11 +444,12 @@ Item {
         onLoadFailed: centerInfo.applyWeatherCityText("")
     }
 
-    //  Watching our own cache file is deliberate: saveWeatherCache writes it,
-    //  the watch fires, and the reading is re-parsed. That costs one extra
-    //  parse of data we already have and cannot loop, because only weatherProc
-    //  ever writes the file and parsing never writes it back. In exchange, a
-    //  fetch on one screen's bar updates the other screen's for free.
+    //  Watching the cache file is deliberate: weather-location.py writes it at
+    //  the end of a successful fetch, the watch fires, and the reading is
+    //  re-parsed. That costs one extra parse of data this screen already has
+    //  and cannot loop, because nothing in the bar writes that file. In
+    //  exchange, a fetch started by one screen's bar - or by the VPN card, or
+    //  by a reset - updates every screen for free.
     FileView {
         id: weatherCacheFile
         printErrors: false
