@@ -28,7 +28,7 @@ set -eu
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HERE="$REPO_DIR/bios-logo"
-LOGO_DEFAULT="$REPO_DIR/LOGO.JPG"
+LOGO_DEFAULT="$REPO_DIR/icons/LOGO.JPG"
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/bios-logo"
 EDK2_LOGO_GUID="7BB28B99-61BB-11D5-9A5D-0090273FC14D"
 
