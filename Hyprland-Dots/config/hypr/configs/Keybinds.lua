@@ -28,7 +28,8 @@ bind(M .. " + E",      exec(D.files),                      { description = "file
 bind(M .. " + H",         exec(S .. "/KeyHints.sh"),     { description = "cheat sheet (searchable list of keybinds)" })
 bind(M .. " + ALT + R",   exec(S .. "/Refresh.sh"),      { description = "refresh bar and menus" })
 bind(M .. " + ALT + E",   exec(S .. "/RofiEmoji.sh"),    { description = "emoji menu" })
-bind(M .. " + S",         exec(S .. "/RofiSearch.sh"),   { description = "web search" })
+-- Freed for gamescope, which hard-binds SUPER + S to take a screenshot.
+-- bind(M .. " + S",         exec(S .. "/RofiSearch.sh"),   { description = "web search" })
 bind(M .. " + CTRL + S",  exec("rofi -show window"),     { description = "window switcher" })
 bind(M .. " + ALT + O",   exec(S .. "/ChangeBlur.sh"),   { description = "toggle blur" })
 bind(M .. " + SHIFT + G", exec(S .. "/GameMode.sh"),     { description = "toggle game mode" })
@@ -71,7 +72,8 @@ bind(M .. " + ALT + mouse_down", V.zoom_by(0.5), { description = "zoom out" })
 bind(M .. " + CTRL + ALT + B", exec(S .. "/ToggleQuickshellBar.sh"), { description = "toggle quickshell bar on/off" })
 
 -- Night light toggle (Hyprsunset)
-bind(M .. " + N", exec(S .. "/Hyprsunset.sh toggle"), { description = "toggle night light" })
+-- Freed for gamescope, which hard-binds SUPER + N to toggle nearest-neighbour filtering.
+-- bind(M .. " + N", exec(S .. "/Hyprsunset.sh toggle"), { description = "toggle night light" })
 
 -- FEATURES / EXTRAS (UserScripts)
 bind(M .. " + SHIFT + M", exec(U .. "/RofiBeats.sh"),         { description = "online music" })
@@ -111,7 +113,8 @@ bind(M .. " + SHIFT + E",   exec(S .. "/Quick_Settings.sh"),   { description = "
 
 -- Master layout
 bind(M .. " + CTRL + D",      hl.dsp.layout("removemaster"),   { description = "remove master" })
-bind(M .. " + I",             hl.dsp.layout("addmaster"),      { description = "add master" })
+-- Freed for gamescope, which hard-binds SUPER + I to raise FSR sharpness.
+-- bind(M .. " + I",             hl.dsp.layout("addmaster"),      { description = "add master" })
 bind(M .. " + CTRL + Return", hl.dsp.layout("swapwithmaster"), { description = "swap with master" })
 
 -- SUPER+J/K cycle windows the same way on every layout. They used to be set at
@@ -188,7 +191,8 @@ bind(M .. " + ALT + up",    hl.dsp.window.swap({ direction = "up" }),    { descr
 bind(M .. " + ALT + down",  hl.dsp.window.swap({ direction = "down" }),  { description = "swap window down" })
 
 -- Groups
-bind(M .. " + G",           hl.dsp.group.toggle(), { description = "toggle group" })
+-- Freed for gamescope, which hard-binds SUPER + G to toggle its keyboard grab.
+-- bind(M .. " + G",           hl.dsp.group.toggle(), { description = "toggle group" })
 bind(M .. " + Tab",         hl.dsp.group.next(),   { description = "next window in group" })
 bind(M .. " + CTRL + Tab",  hl.dsp.group.next(),   { description = "next window in group" })
 bind(M .. " + SHIFT + Tab", hl.dsp.group.prev(),   { description = "previous window in group" })
@@ -204,7 +208,8 @@ bind(M .. " + down",  hl.dsp.focus({ direction = "down" }),  { description = "fo
 
 -- Special workspace (scratchpad)
 bind(M .. " + SHIFT + U", hl.dsp.window.move({ workspace = "special" }), { description = "move to special workspace" })
-bind(M .. " + U",         hl.dsp.workspace.toggle_special(),            { description = "toggle special workspace" })
+-- Freed for gamescope, which hard-binds SUPER + U to toggle FSR upscaling in-game.
+-- bind(M .. " + U",         hl.dsp.workspace.toggle_special(),            { description = "toggle special workspace" })
 
 -- Workspaces 1-10 on the number row. Bound by keysym ("1".."0"), not by
 -- keycode ("code:10".."code:19") as before: binds resolve against the FIRST
