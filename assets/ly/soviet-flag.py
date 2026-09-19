@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 # Generate the 8-bit Soviet flag that ly draws behind its login screen.
-# Writes two durdraw .dur files (gzipped JSON) from the same traced art:
-# soviet-flag-animated.dur, where the cloth waves, and soviet-flag-static.dur,
-# a single still frame of it. config.ini sets animation = dur_file and points
-# dur_file_path at one of them; ly_config.sh installs both to /etc/ly, so
-# switching is a one-line config edit. Run with no arguments to write both, or
-# name a variant to write just that one.
+# Writes durdraw .dur files (gzipped JSON) from one traced art table: a waving
+# version and a single still frame of it, cut for each panel the repo supports
+# (soviet-flag-{animated,static}-{1080p,1440p,2160p}.dur). Run with no
+# arguments to write all of them, or name panels to write just those.
+#
+# There is a cut per panel because ly draws a .dur at its native cell size and
+# never scales it: a canvas smaller than the console grid leaves a black
+# margin, which is what a 120x33 flag did on a 1440p screen. ly_config.sh
+# measures the panel and installs the matching pair under the fixed names
+# config.ini points at, so config.ini never changes.
 #
 # RESOLUTION
 # A console cell is 16x32 px. latarcyrheb-sun32 - the font ly loads via
@@ -124,6 +128,17 @@ FLAG_ART = [
 # leftmost yellow is at x = 14, so this separates them cleanly.
 STATIC_MAX_X = 8
 
+# The flag sits left of centre so ly's login box - a fixed ~45 cells wide,
+# centred - lands on the bare half of the cloth instead of over the emblem
+# (art pixels 10..27). It used to be done with dur_x_offset = -16 in
+# config.ini, which was fine while the movie was smaller than the screen, but
+# a canvas that IS the screen cannot be shifted: ly would slide it off one
+# edge and leave 16 blank columns at the other. So the shift moves in here,
+# into where the art is placed on the canvas, and config.ini now offsets by 0.
+# 16 cells is right for every panel because the box does not scale with the
+# screen - it is the same 45 cells at 1080p and at 4K.
+X_SHIFT = 16
+
 # ly's dur palette is its own thing, and fg and bg are indexed differently.
 # Measured off /dev/fb0 with a probe frame (fg i as an upper half-block over
 # bg 12): the fg table is shifted one step, so fg 0 and 1 are both #AAAAAA and
@@ -170,6 +185,38 @@ def shrink(rows, nw, thr=0.38):
     return out
 
 
+def scale_art(art, scale):
+    """Area-resample the tag grid (R/Y/K/.) by `scale`.
+
+    shrink() above is for the '#'/'.' emblem masks and only goes down. This
+    one goes up, and carries four tags rather than two, so each target pixel
+    takes the tag that covers most of its footprint. On an integer scale that
+    is exact pixel doubling; on a fractional one it is nearest-neighbour with
+    the ties settled by area, which is the most a hard-edged 3-colour bitmap
+    can be stretched without inventing colours the palette cannot render.
+    """
+    if scale == 1:
+        return art                              # identity: byte-identical output
+    h, w = len(art), len(art[0])
+    nh, nw = round(h * scale), round(w * scale)
+    out = []
+    for y in range(nh):
+        line = ""
+        for x in range(nw):
+            x0, x1 = x * w / nw, (x + 1) * w / nw
+            y0, y1 = y * h / nh, (y + 1) * h / nh
+            area = {}
+            for sy in range(int(y0), min(h, int(y1) + 1)):
+                for sx in range(int(x0), min(w, int(x1) + 1)):
+                    ov = ((min(x1, sx + 1) - max(x0, sx))
+                          * (min(y1, sy + 1) - max(y0, sy)))
+                    if ov > 0:
+                        area[art[sy][sx]] = area.get(art[sy][sx], 0.0) + ov
+            line += max(area, key=area.get) if area else "."
+        out.append(line)
+    return out
+
+
 def emblem_mask():
     """Star, a gap, then the hammer and sickle. Separate blocks because drawn
     together the blade's top edge ran into the star."""
@@ -193,29 +240,46 @@ def emblem_mask():
 
 
 def build(px_w=120, px_h=66, frames=8, amp=2.0):
-    """Frames of a 120x66 grid of colour tags.
+    """Frames of a px_w x px_h grid of colour tags.
 
-    The art is the traced flag at 1:1 - no scaling, so nothing is softened.
-    It is 72 wide, centred in the 120-wide grid. Only the cloth columns are
-    displaced; the pole and finial stay put, which is what makes it read as a
-    flag on a pole rather than the whole picture sliding up and down.
+    The art is the traced flag, 72x66, scaled to stand the full height of the
+    grid and centred in its width. At the 120x66 default that is 1:1 - no
+    scaling, so nothing is softened, and the output is the file the 1080p
+    login screen has always had. A taller grid scales it up, so the flag keeps
+    the same share of the screen on a bigger panel instead of shrinking into
+    one corner of it.
+
+    Only the cloth columns are displaced; the pole and finial stay put, which
+    is what makes it read as a flag on a pole rather than the whole picture
+    sliding up and down.
     """
-    art_w, art_h = len(FLAG_ART[0]), len(FLAG_ART)
-    x_off = (px_w - art_w) // 2
+    scale = px_h / len(FLAG_ART)
+    # Snap a near-integer scale to the integer: exact pixel doubling beats a
+    # 2.03x resample that would widen every 33rd column for nothing.
+    if scale >= 1 and scale - int(scale) < 0.1:
+        scale = int(scale)
+    art = scale_art(FLAG_ART, scale)
+    art_w, art_h = len(art[0]), len(art)
+    x_off = (px_w - art_w) // 2 - X_SHIFT
+    y_off = (px_h - art_h) // 2
+    # The wave is measured in art pixels, so it has to grow with the art or a
+    # scaled-up flag would ripple less than the original.
+    amp = amp * scale
+    static_max_x = STATIC_MAX_X * scale
     out = []
     for f in range(frames):
         phase = 2 * math.pi * f / frames
         grid = [[None] * px_w for _ in range(px_h)]
         for ax in range(art_w):
-            t = 2 * math.pi * max(0, ax - STATIC_MAX_X) / (art_w - STATIC_MAX_X)
+            t = 2 * math.pi * max(0, ax - static_max_x) / (art_w - static_max_x)
             wave = int(round(amp * math.sin(1.5 * t - phase)))
             for ay in range(art_h):
-                tag = FLAG_ART[ay][ax]
+                tag = art[ay][ax]
                 if tag == "." or tag == "K":
                     continue                      # black: leave as background
                 # pole and finial stay put; the cloth waves
-                static = tag == "Y" and ax <= STATIC_MAX_X
-                ty = ay + (0 if static else wave)
+                static = tag == "Y" and ax <= static_max_x
+                ty = ay + y_off + (0 if static else wave)
                 if 0 <= ty < px_h:
                     grid[ty][x_off + ax] = tag
         out.append(grid)
@@ -262,18 +326,35 @@ def to_dur(grids, px_w, rows, framerate=None):
         "extra": None, "frames": frames}}
 
 
-# Two files, so config.ini can point at either one without regenerating
-# anything: the waving flag, and a single still frame of it. The still frame is
-# just build() with the wave switched off, which keeps both in lockstep with
-# FLAG_ART instead of letting a hand-placed copy drift out of sync.
+# Two files per panel, so config.ini can point at either one without
+# regenerating anything: the waving flag, and a single still frame of it. The
+# still frame is just build() with the wave switched off, which keeps both in
+# lockstep with FLAG_ART instead of letting a hand-placed copy drift out of
+# sync.
 VARIANTS = {
-    "soviet-flag-animated.dur": {"frames": 8, "amp": 2.0, "framerate": FRAMERATE},
-    "soviet-flag-static.dur": {"frames": 1, "amp": 0.0, "framerate": 1.0},
+    "animated": {"frames": 8, "amp": 2.0, "framerate": FRAMERATE},
+    "static": {"frames": 1, "amp": 0.0, "framerate": 1.0},
+}
+
+# One canvas per panel. ly draws a .dur at its native cell size and never
+# scales it, so a canvas smaller than the console grid leaves a black margin -
+# which is exactly what a 120x33 flag did on a 1440p screen. /etc/ly/start.sh
+# loads latarcyrheb-sun32, a 16x32 cell, so the grid is width/16 x height/32
+# whatever ly_config.sh put in vconsole.conf, and the art canvas is that grid
+# with the rows doubled: two art pixels per cell, upper and lower half block.
+#
+#   1920x1080 -> 120x33 cells -> 120x66 art   scale 1      (unchanged)
+#   2560x1440 -> 160x45 cells -> 160x90 art   scale 1.36
+#   3840x2160 -> 240x67 cells -> 240x134 art  scale 2 (snapped), 1 row spare
+PANELS = {
+    "1080p": (120, 66),
+    "1440p": (160, 90),
+    "2160p": (240, 134),
 }
 
 
-def write_dur(out, frames, amp, framerate):
-    grids, w, rows = build(frames=frames, amp=amp)
+def write_dur(out, px_w, px_h, frames, amp, framerate):
+    grids, w, rows = build(px_w=px_w, px_h=px_h, frames=frames, amp=amp)
     dur = to_dur(grids, w, rows, framerate=framerate)
     # Reproducible output: identical art must give a byte-identical file, or
     # every regeneration shows up as a phantom git diff. mtime=0 kills the
@@ -293,11 +374,14 @@ if __name__ == "__main__":
     # Written next to this script, not into the cwd, so the paths ly_config.sh
     # installs from are the same whatever directory this is run from.
     here = os.path.dirname(os.path.abspath(__file__))
-    wanted = sys.argv[1:] or list(VARIANTS)
-    for name in wanted:
-        if name not in VARIANTS:
-            sys.exit(f"unknown variant {name!r}; choose from {', '.join(VARIANTS)}")
-        write_dur(os.path.join(here, name), **VARIANTS[name])
+    wanted = sys.argv[1:] or list(PANELS)
+    for panel in wanted:
+        if panel not in PANELS:
+            sys.exit(f"unknown panel {panel!r}; choose from {', '.join(PANELS)}")
+        px_w, px_h = PANELS[panel]
+        for variant, opts in VARIANTS.items():
+            write_dur(os.path.join(here, f"soviet-flag-{variant}-{panel}.dur"),
+                      px_w, px_h, **opts)
 
 
 # --- preview ---------------------------------------------------------------

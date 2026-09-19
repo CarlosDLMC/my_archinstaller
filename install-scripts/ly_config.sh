@@ -34,13 +34,51 @@ ly_install 644 "$PARENT_DIR/assets/ly/config.ini" /etc/ly/config.ini
 printf "${NOTE} Installing ly start script...\n"
 ly_install 755 "$PARENT_DIR/assets/ly/start.sh" /etc/ly/start.sh
 
+# Which panel is this? Both the flag and the console font are cut for a
+# specific console grid, so both are chosen from the same number.
+#
+# The preferred (first) mode of every connected DRM connector is that
+# panel's native resolution, readable from sysfs with no compositor running.
+# The SMALLEST connected output decides, not the largest. The failure modes
+# are not symmetric: too small is merely cosmetic, while too large clips on
+# the panel that has the fewest rows. So the display that fits least is the
+# one that has to fit.
+_min_h=""
+for _modes in /sys/class/drm/*/modes; do
+  [ -r "$_modes" ] || continue
+  _conn="${_modes%/modes}"
+  [ "$(cat "$_conn/status" 2>/dev/null)" = "connected" ] || continue
+  # First line of modes is the preferred (native) mode, e.g. "2560x1440".
+  _h=$(head -1 "$_modes" 2>/dev/null | cut -d'x' -f2 | tr -cd '0-9')
+  [ -n "$_h" ] || continue
+  if [ -z "$_min_h" ] || [ "$_h" -lt "$_min_h" ]; then _min_h="$_h"; fi
+done
+# Fallback: the framebuffer the console is actually on. Covers a machine whose
+# connectors report no modes yet (and any future non-DRM console).
+if [ -z "$_min_h" ] && [ -r /sys/class/graphics/fb0/virtual_size ]; then
+  _min_h=$(cut -d, -f2 /sys/class/graphics/fb0/virtual_size 2>/dev/null | tr -cd '0-9')
+fi
+
 printf "${NOTE} Installing 8-bit soviet flag animation...\n"
 # config.ini sets animation = dur_file and points dur_file_path here, so the
 # flag has to land in /etc/ly or ly draws nothing at all. Both the waving and
 # the still version are installed, so switching is a one-line config edit
 # rather than a re-run of this script.
-ly_install 644 "$PARENT_DIR/assets/ly/soviet-flag-animated.dur" /etc/ly/soviet-flag-animated.dur
-ly_install 644 "$PARENT_DIR/assets/ly/soviet-flag-static.dur" /etc/ly/soviet-flag-static.dur
+#
+# ly draws a .dur at its native cell size and never scales it, so the art is
+# cut per console grid (assets/ly/soviet-flag.py) and the matching pair is
+# installed under the fixed names config.ini points at - config.ini never has
+# to change. The grid is width/16 x height/32 because /etc/ly/start.sh loads
+# latarcyrheb-sun32 on ly's own VT whatever vconsole.conf below ends up
+# saying, so these thresholds follow the panel, not the font.
+if   [ -n "$_min_h" ] && [ "$_min_h" -ge 2160 ]; then _flag="2160p"
+elif [ -n "$_min_h" ] && [ "$_min_h" -ge 1440 ]; then _flag="1440p"
+elif [ -n "$_min_h" ];                          then _flag="1080p"
+else _flag="1080p"   # nothing readable: the smallest cut is the safe one
+fi
+echo "${NOTE} Panel is ${_min_h:-unknown}px tall -> ${SKY_BLUE}soviet-flag-*-${_flag}.dur${RESET}" | tee -a "$LOG"
+ly_install 644 "$PARENT_DIR/assets/ly/soviet-flag-animated-$_flag.dur" /etc/ly/soviet-flag-animated.dur
+ly_install 644 "$PARENT_DIR/assets/ly/soviet-flag-static-$_flag.dur" /etc/ly/soviet-flag-static.dur
 
 printf "${NOTE} Installing custom soviet language...\n"
 ly_install 644 "$PARENT_DIR/assets/ly/lang/soviet.ini" /etc/ly/lang/soviet.ini
@@ -63,27 +101,12 @@ ly_install 644 "$PARENT_DIR/assets/ly/lang/soviet.ini" /etc/ly/lang/soviet.ini
 #   >= 1440p : latarcyrheb-sun32 (16x32) -> 160x45 grid
 #   otherwise: latarcyrheb-sun16 (8x16)  -> 240x67 grid at 1080p
 #
-# The SMALLEST connected output decides, not the largest. The failure modes are
-# not symmetric: too small a font is merely cosmetic, while too large a one
-# clips ly's box on the panel that has the fewest rows. So the display that
-# fits least is the one that has to fit.
+# _min_h was measured above, where the flag cut was chosen from it.
+#
+# This sets the font for the console at large. ly's own VT does not depend on
+# it: /etc/ly/start.sh runs setfont latarcyrheb-sun32 there unconditionally,
+# which is what the flag's 16x32 cell arithmetic assumes.
 printf "${NOTE} Selecting the console font for the login screen...\n"
-
-_min_h=""
-for _modes in /sys/class/drm/*/modes; do
-  [ -r "$_modes" ] || continue
-  _conn="${_modes%/modes}"
-  [ "$(cat "$_conn/status" 2>/dev/null)" = "connected" ] || continue
-  # First line of modes is the preferred (native) mode, e.g. "2560x1440".
-  _h=$(head -1 "$_modes" 2>/dev/null | cut -d'x' -f2 | tr -cd '0-9')
-  [ -n "$_h" ] || continue
-  if [ -z "$_min_h" ] || [ "$_h" -lt "$_min_h" ]; then _min_h="$_h"; fi
-done
-# Fallback: the framebuffer the console is actually on. Covers a machine whose
-# connectors report no modes yet (and any future non-DRM console).
-if [ -z "$_min_h" ] && [ -r /sys/class/graphics/fb0/virtual_size ]; then
-  _min_h=$(cut -d, -f2 /sys/class/graphics/fb0/virtual_size 2>/dev/null | tr -cd '0-9')
-fi
 
 if [ -z "$_min_h" ]; then
   echo "${WARN} Could not read any display height - leaving the console font alone." | tee -a "$LOG"
