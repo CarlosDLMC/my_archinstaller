@@ -13,23 +13,25 @@ ImageDir=/usr/share/plymouth/themes/soviet
 #   password dialog/title  0.68
 #   spinner (animation)    0.80
 #
-# The logo ships as icons/gopnik-watermark.png (649x860), rendered from
-# icons/aisaka.icon (1920x1920, trim 1449x1920) - a downscale of the real
-# source, never an upscale of the old 423x560 file. Plymouth draws the
-# watermark at its native pixel size - only the anchor is a fraction - so the
-# height is picked for this machine's 1440p panel and the anchor moved up to
-# spend the slack:
-#   top    0.05*(1440-860) = 29
-#   bottom 29+860          = 889
-#   prompt 0.68*(1440-80)  = 925   -> 36 px of clearance
-# 860 px is the tallest that still clears the prompt at this anchor; the old
-# 560 px at 0.35 then 0.15 was sized for a 1080p screen, where it left 233 px
-# of black between the logo and the prompt on this one.
+# The logo is a downscale of icons/aisaka.icon (1920x1920, trim 1449x1920) -
+# never an upscale. Plymouth draws the watermark at its native pixel size and
+# only the anchor is a fraction of the screen, so the height belongs to the
+# panel: icons/ carries one cut each and install-scripts/plymouth.sh installs
+# the one matching the smallest connected screen as watermark.png.
 #
-# WARNING: 860 px does NOT fit a 1080p screen - the bottom edge would land at
-# 0.05*(1080-860)+860 = 871, well over that screen's 680 px prompt. A fresh
-# install on a 1080p panel needs the logo re-rendered at ~620 px (or the
-# installer taught to render it from icons/aisaka.icon at the detected height).
+#   panel   cut        top   bottom   prompt 0.68*(H-80)   clearance
+#   1080p    468x620    23     643      680                  37
+#   1440p    649x860    29     889      925                  36   <- this desktop
+#   2160p   1011x1340   41    1381     1414                  33
+#
+# Each is the tallest that still clears the prompt at anchor 0.05, so all three
+# fill the same fraction of their screen. The anchor was 0.15 with a 560 px cut
+# sized for 1080p, which left 233 px of black above the prompt on 1440p.
+#
+# A 4K panel small enough to be HiDPI (plymouth's own guess, roughly >192 dpi)
+# makes plymouth double everything and halves the logical screen, which makes
+# the 1080p cut the right one; plymouth.force-scale=1 on the kernel command
+# line overrides that guess.
 DialogHorizontalAlignment=.5
 DialogVerticalAlignment=.68
 TitleHorizontalAlignment=.5
