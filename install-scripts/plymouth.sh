@@ -4,8 +4,8 @@
 # CachyOS ships plymouth with its "cachyos" theme, which keeps the motherboard's
 # firmware logo (ACPI BGRT) as the background and stamps a CachyOS watermark at
 # the bottom. This installs a theme that paints black and shows the repo's own
-# boot logo, icons/gopnik-watermark.png, instead, with the stock spinner and
-# the LUKS password prompt underneath. Disable "Boot Logo Display" in the BIOS and
+# boot logo from icons/ instead, with the stock spinner and the LUKS password
+# prompt underneath. Disable "Boot Logo Display" in the BIOS and
 # the vendor logo is gone for good, without touching the firmware.
 #
 # Only the theme is shipped. The spinner frames and the dialog artwork
@@ -24,10 +24,16 @@
 
 THEME="soviet"
 SRC_DIR="assets/plymouth/$THEME"
-# The picture itself lives with the other logos in icons/, next to LOGO.JPG,
-# so the firmware logo and the boot splash are picked from one place. It is
-# installed as the theme's watermark.png, the name the two-step module reads.
-WATERMARK="icons/gopnik-watermark.png"
+# The picture lives with the other logos in icons/, next to LOGO.JPG, so the
+# firmware logo and the boot splash come from one place. Plymouth draws the
+# watermark at its native pixel size - only the anchor in soviet.plymouth is a
+# fraction of the screen - so there is one cut per panel height and the right
+# one is installed as watermark.png, the name the two-step module reads. All
+# three are downscales of icons/aisaka.icon (1920x1920), cut so the bottom
+# edge clears the password prompt by ~35 px at that height.
+WATERMARK_1080="icons/gopnik-watermark-1080p.png"   # 468x620
+WATERMARK_1440="icons/gopnik-watermark-1440p.png"   # 649x860, the fallback
+WATERMARK_2160="icons/gopnik-watermark-2160p.png"   # 1011x1340
 DEST_DIR="/usr/share/plymouth/themes/$THEME"
 SPINNER_DIR="/usr/share/plymouth/themes/spinner"
 
@@ -55,6 +61,45 @@ if [ ! -d "$SPINNER_DIR" ]; then
   echo "${ERROR} $SPINNER_DIR is missing - this plymouth build has no spinner theme to borrow artwork from." | tee -a "$LOG"
   exit 1
 fi
+
+# Which cut fits this machine. The preferred (first) mode of every connected
+# DRM connector is the panel's native resolution, and it is readable from
+# sysfs with no compositor running - this script runs in a TTY as often as not,
+# so hyprctl/wlr-randr are no help. The *smallest* connected panel decides:
+# plymouth paints the same image on every display, so a cut sized for the big
+# screen of a mixed pair would land on the password prompt on the small one.
+# Sets WATERMARK and SCREEN_H. It assigns rather than echoes: $(...) would run
+# it in a subshell and SCREEN_H would never come back.
+pick_watermark() {
+  local modes conn h smallest=0
+  for modes in /sys/class/drm/card*-*/modes; do
+    [ -r "$modes" ] || continue
+    conn="${modes%/modes}"
+    [ "$(cat "$conn/status" 2>/dev/null)" = "connected" ] || continue
+    h=$(head -1 "$modes" | cut -d x -f2 | tr -cd '0-9')
+    [ -n "$h" ] || continue
+    if [ "$smallest" -eq 0 ] || [ "$h" -lt "$smallest" ]; then smallest=$h; fi
+  done
+  SCREEN_H="$smallest"
+  if   [ "$smallest" -ge 2160 ]; then WATERMARK="$WATERMARK_2160"
+  elif [ "$smallest" -ge 1440 ]; then WATERMARK="$WATERMARK_1440"
+  elif [ "$smallest" -gt 0 ];    then WATERMARK="$WATERMARK_1080"
+  else                                WATERMARK="$WATERMARK_1440"
+  fi
+}
+
+pick_watermark
+if [ "$SCREEN_H" -eq 0 ]; then
+  echo "${WARN} No connected DRM connector reported a mode - falling back to $(basename "$WATERMARK"). If the logo overlaps the password prompt, copy another icons/gopnik-watermark-*.png over $DEST_DIR/watermark.png by hand." | tee -a "$LOG"
+elif [ "$SCREEN_H" -lt 1000 ]; then
+  echo "${WARN} The smallest connected panel is only ${SCREEN_H} px tall - even the 620 px cut will crowd the password prompt. Re-render it shorter from icons/aisaka.icon if that bothers you." | tee -a "$LOG"
+else
+  echo "${NOTE} Smallest connected panel is ${SCREEN_H} px - using ${SKY_BLUE}$(basename "$WATERMARK")${RESET}." | tee -a "$LOG"
+fi
+# A 4K panel small enough to be HiDPI (plymouth's own guess: roughly >192 dpi)
+# makes plymouth double everything, which halves the logical screen and makes
+# the 1080p cut the right one. Override plymouth's guess on the kernel command
+# line with plymouth.force-scale=1 if the 4K cut comes out twice the size.
 
 # Theme files: ours on top of the spinner theme's frames and dialog artwork.
 # -n on the spinner copy so our watermark.png is never replaced by theirs.
