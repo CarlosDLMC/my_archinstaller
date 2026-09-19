@@ -9,17 +9,27 @@ TitleFont=Cantarell Light 30
 MonospaceFont=Adwaita Mono 12
 ImageDir=/usr/share/plymouth/themes/soviet
 # Layout, as fractions of (screen - element) so it scales from 1080p to 4K:
-#   logo (watermark.png)   0.15  -> upper third of the screen
-#   password dialog/title  0.68  -> clear of the 560 px logo even at 1080p
+#   logo (watermark.png)   0.05  -> just under the top edge
+#   password dialog/title  0.68
 #   spinner (animation)    0.80
 #
-# The logo was 400 px at 0.35. A taller picture pushes its bottom edge down
-# twice over - the image itself grows, and 0.35 of a smaller (screen - image)
-# still leaves most of the growth below the anchor - so at 560 px and 0.35 it
-# overlapped the password prompt on a 1080p screen (bottom 742 vs prompt 680).
-# Moving the anchor to 0.15 buys back more than the extra height costs: the
-# bottom edge lands at 638 on 1080p and 692 on 1440p, both clear of the prompt.
-# 560 px is the largest that still clears 1080p; go taller and only 1440p+ fits.
+# The logo ships as icons/gopnik-watermark.png (649x860), rendered from
+# icons/aisaka.icon (1920x1920, trim 1449x1920) - a downscale of the real
+# source, never an upscale of the old 423x560 file. Plymouth draws the
+# watermark at its native pixel size - only the anchor is a fraction - so the
+# height is picked for this machine's 1440p panel and the anchor moved up to
+# spend the slack:
+#   top    0.05*(1440-860) = 29
+#   bottom 29+860          = 889
+#   prompt 0.68*(1440-80)  = 925   -> 36 px of clearance
+# 860 px is the tallest that still clears the prompt at this anchor; the old
+# 560 px at 0.35 then 0.15 was sized for a 1080p screen, where it left 233 px
+# of black between the logo and the prompt on this one.
+#
+# WARNING: 860 px does NOT fit a 1080p screen - the bottom edge would land at
+# 0.05*(1080-860)+860 = 871, well over that screen's 680 px prompt. A fresh
+# install on a 1080p panel needs the logo re-rendered at ~620 px (or the
+# installer taught to render it from icons/aisaka.icon at the detected height).
 DialogHorizontalAlignment=.5
 DialogVerticalAlignment=.68
 TitleHorizontalAlignment=.5
@@ -27,7 +37,7 @@ TitleVerticalAlignment=.68
 HorizontalAlignment=.5
 VerticalAlignment=.80
 WatermarkHorizontalAlignment=.5
-WatermarkVerticalAlignment=.15
+WatermarkVerticalAlignment=.05
 Transition=none
 TransitionDuration=0.0
 BackgroundStartColor=0x000000

@@ -544,8 +544,9 @@ dead or removed battery is still treated as one.
 ### Boot splash (Plymouth)
 
 The `plymouth` preset option installs a Plymouth theme (`assets/plymouth/soviet/`)
-that paints the repo logo on black, with the stock spinner and the LUKS password
-prompt underneath. It is what you see between the firmware and ly.
+that paints the repo logo (`icons/gopnik-watermark.png`) on black, with the
+stock spinner and the LUKS password prompt underneath. It is what you see
+between the firmware and ly.
 
 On CachyOS the stock theme keeps the motherboard's own logo (the ACPI BGRT
 image) as background and adds a CachyOS watermark at the bottom. This theme
@@ -563,10 +564,18 @@ through every official path.
   line lives in the bootloader entry, and this repo never writes to a
   bootloader.
 
-Only `soviet.plymouth` and `watermark.png` are in the repo; the spinner frames
-and dialog artwork are copied at install time from plymouth's own `spinner`
-theme. To change the picture, replace `watermark.png` (about 400 px tall, on a
-black or transparent background) and re-run:
+Only `soviet.plymouth` and the picture are in the repo; the spinner frames and
+dialog artwork are copied at install time from plymouth's own `spinner` theme.
+The picture is `icons/gopnik-watermark.png` (649x860, transparent background),
+which sits with `LOGO.JPG` and is installed as the theme's `watermark.png`.
+
+Plymouth draws the watermark at its native pixel size - only the anchor
+(`WatermarkVerticalAlignment`) is a fraction of the screen - so the height is
+tied to the panel it was cut for. 860 px is the tallest that clears the
+password prompt on a 1440p screen; a 1080p screen needs about 620 px or the
+logo lands on top of the prompt. To change the picture, replace it (rendering
+from `icons/aisaka.icon`, which is the 1920x1920 original, keeps it sharp) and
+re-run:
 
 ```bash
 ./install-scripts/plymouth.sh

@@ -3,9 +3,9 @@
 #
 # CachyOS ships plymouth with its "cachyos" theme, which keeps the motherboard's
 # firmware logo (ACPI BGRT) as the background and stamps a CachyOS watermark at
-# the bottom. This installs a theme that paints black and shows LOGO.JPG (as
-# assets/plymouth/soviet/watermark.png) instead, with the stock spinner and the
-# LUKS password prompt underneath. Disable "Boot Logo Display" in the BIOS and
+# the bottom. This installs a theme that paints black and shows the repo's own
+# boot logo, icons/gopnik-watermark.png, instead, with the stock spinner and
+# the LUKS password prompt underneath. Disable "Boot Logo Display" in the BIOS and
 # the vendor logo is gone for good, without touching the firmware.
 #
 # Only the theme is shipped. The spinner frames and the dialog artwork
@@ -24,6 +24,10 @@
 
 THEME="soviet"
 SRC_DIR="assets/plymouth/$THEME"
+# The picture itself lives with the other logos in icons/, next to LOGO.JPG,
+# so the firmware logo and the boot splash are picked from one place. It is
+# installed as the theme's watermark.png, the name the two-step module reads.
+WATERMARK="icons/gopnik-watermark.png"
 DEST_DIR="/usr/share/plymouth/themes/$THEME"
 SPINNER_DIR="/usr/share/plymouth/themes/spinner"
 
@@ -55,7 +59,8 @@ fi
 # Theme files: ours on top of the spinner theme's frames and dialog artwork.
 # -n on the spinner copy so our watermark.png is never replaced by theirs.
 sudo mkdir -p "$DEST_DIR"
-sudo cp "$SRC_DIR/$THEME.plymouth" "$SRC_DIR/watermark.png" "$DEST_DIR/" 2>&1 | tee -a "$LOG"
+sudo cp "$SRC_DIR/$THEME.plymouth" "$DEST_DIR/" 2>&1 | tee -a "$LOG"
+sudo cp "$WATERMARK" "$DEST_DIR/watermark.png" 2>&1 | tee -a "$LOG"
 sudo find "$SPINNER_DIR" -maxdepth 1 -name '*.png' ! -name 'watermark.png' \
   -exec cp -n {} "$DEST_DIR/" \; 2>&1 | tee -a "$LOG"
 sudo chmod 644 "$DEST_DIR"/* 2>&1 | tee -a "$LOG"
