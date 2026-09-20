@@ -19,6 +19,42 @@ specific Steam Play compatibility tool. Check protondb.com first.
 Don't downgrade Proton on a game that already ran — the prefix in
 `steamapps/compatdata/<appid>/` can break. Back it up first.
 
+### On CachyOS: `proton-cachyos`
+
+CachyOS builds its own Proton, but **does not install it** — it is an opt-in
+package in the `cachyos` repo, so a fresh CachyOS machine has nothing but
+Valve's Proton, which Steam downloads into the library itself. Two flavours:
+
+```sh
+sudo pacman -S proton-cachyos-slr        # this one
+# proton-cachyos-native                  # avoid, see below
+```
+
+`-slr` runs inside the Steam Linux Runtime container, the way Valve's own
+Proton does, so it gets the library environment Steam games expect. `-native`
+links against the system libraries instead: faster to start, occasionally
+better on very new hardware, and the variant that breaks when a system library
+moves underneath it — which on a rolling distro it eventually does.
+
+It installs to `/usr/share/steam/compatibilitytools.d/`, which **Steam only
+scans at startup**. Quit Steam properly (Steam → Exit, or `Ctrl+Q`; closing the
+window just minimises it to the tray and the process keeps the old tool list),
+then relaunch. It appears near the bottom of the Proton dropdown as
+`proton-cachyos-11.0-<date> (steam linux runtime)` — not under a name starting
+with "CachyOS".
+
+**Keep a numbered Valve Proton installed.** proton-cachyos is built on Proton
+Experimental, so the warning above still applies to it: when a game regresses,
+the fix is pinning that game back to a stable numbered Proton
+(Properties → Compatibility). Valve's own *Proton - Experimental* is the
+redundant one once this is in place — same base, without the CachyOS patches.
+
+Switching the global default **upgrades the prefix of every game that already
+ran** under an older Proton, in `steamapps/compatdata/<appid>/`. Launch each
+installed game once after the switch, before uninstalling the Proton it used
+to run on. If a prefix misbehaves, move it aside and let Steam rebuild it (you
+lose in-prefix state such as mods, not your Steam or cloud saves).
+
 ## 2. Per-game commands
 
 Right-click game → Properties → General → **Launch Options**.
