@@ -671,3 +671,34 @@ try:
         f.write(output_json)
 except Exception as e:
     log(f"Warning: Failed to write cache: {e}")
+
+# Learn where home is, whenever it is knowable
+#
+# weather_home used to have exactly one writer: vpn-sync.sh, at the moment the
+# weather toggle was first pressed. That left the ordinary case with no home at
+# all - bring a tunnel up, never touch the toggle - and weather-fetch.sh then
+# fell through to its last step, an IP lookup, which through a tunnel answers
+# with the exit node. So the weather followed the tunnel without being asked,
+# while the clock stayed home because nothing moves it but an explicit
+# `timedatectl set-timezone`. The asymmetry was the whole bug: the clock only
+# ever moves on purpose, the weather re-resolved itself every fetch.
+#
+# A reading can only teach us where we live when it is our own: source "ip" (so
+# not a city argument and not a VPN city) and not tunneled. That is the same
+# test vpn-sync.sh applies to the cache before it snapshots home - applied here
+# to every honest reading instead of only to the one taken before a departure.
+#
+# Off the tunnel this rewrites home on every fetch, which is what keeps it
+# current if you move house. `--forget` still deletes it on disconnect, and the
+# next untunneled fetch puts it back - the file only needs to exist while a
+# tunnel is up, which is exactly when it cannot be learned.
+if source == "ip" and not out_data["tunneled"] and latitude is not None and longitude is not None:
+    HOME_PATH = os.path.expanduser("~/.cache/quickshell/weather_home")
+    try:
+        os.makedirs(os.path.dirname(HOME_PATH), exist_ok=True)
+        # Same tab-separated shape vpn-sync.sh writes and weather-fetch.sh reads.
+        with open(HOME_PATH, "w") as f:
+            f.write(f"{latitude}\t{longitude}\t{location}\n")
+        log(f"home learned: {location} ({latitude},{longitude})")
+    except Exception as e:
+        log(f"Warning: Failed to write home location: {e}")
