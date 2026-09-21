@@ -126,12 +126,23 @@ if [ "$RESET_WEATHER" -eq 1 ]; then
         FAILED=1
     fi
 
-    # After the fetch, never before: the tunnel may still be on its way down, in
-    # which case that fetch was the last thing that needed these coordinates.
-    if [ "$FORGET" -eq 1 ]; then
-        rm -f ~/.cache/quickshell/weather_home
-        echo "Forgot the saved home location - the next sync will capture it again"
-    fi
+    # weather_home is deliberately NOT dropped here any more, --forget or not.
+    #
+    # It used to be, on the reasoning that with no tunnel an IP lookup is the
+    # better answer and the only one that notices you have moved. That is still
+    # true of what gets *displayed*, and it is already guaranteed elsewhere:
+    # weather-fetch.sh consults weather_home only while a tunnel is up, so the
+    # file existing costs a disconnected machine nothing.
+    #
+    # It also raced. weather-location.py now writes weather_home from every
+    # untunneled "ip" reading, and the fetch just above is exactly such a
+    # reading when the tunnel has gone down - so the rm deleted the home it had
+    # learned one second earlier, and the very next connection fell back to IP
+    # and showed the exit node's city again. That was the bug this pairing was
+    # supposed to fix.
+    #
+    # timezone_default keeps its --forget below/above: the clock's home is still
+    # captured only on departure, so re-capturing it fresh is the right call.
 fi
 
 # Notify QuickShell to refresh

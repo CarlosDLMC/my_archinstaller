@@ -363,14 +363,23 @@ components/         # Modular widget components
   white-active/grey-idle, the only state signal a 28px button has room for, and
   the card said nothing at all about it before.
 
-  **Home is captured on departure and forgotten on disconnect.** Nothing is
-  stored until a half first leaves home: `timezone_default` on the first clock
-  sync, `weather_home` (`lat<TAB>lon<TAB>name`) on the first weather sync. The
+  **Home is learned whenever it is knowable, and forgotten on disconnect.**
+  `timezone_default` is stored when the clock half first leaves home.
+  `weather_home` (`lat<TAB>lon<TAB>name`) is different: it is written by
+  `weather-location.py` on *every* reading that is `source == "ip"` and not
+  tunneled, not only by `vpn-sync.sh` before a departure. It used to be the
+  latter, and that was a bug - see "Why the weather used to follow the tunnel"
+  below. The
   disconnect button, a dropped tunnel and the stale-cache check all pass
-  `--forget` to `vpn-reset.sh`, which drops `weather_home` and
-  `timezone_default` again - with no
-  tunnel an IP lookup is the better answer and the only one that notices you
-  have moved, so the file only needs to exist while a tunnel is up. The subtle
+  `--forget` to `vpn-reset.sh`, which drops `timezone_default` - with no tunnel
+  an IP lookup is the better answer and the only one that notices you have
+  moved. `--forget` no longer drops `weather_home`: that file is now refreshed
+  by every untunneled reading, and `weather-fetch.sh` consults it only while a
+  tunnel is up, so keeping it costs a disconnected machine nothing. Deleting it
+  actively broke things, because the fetch `vpn-reset.sh` runs first is itself
+  an untunneled reading on the dropped-tunnel path - the `rm` erased the home
+  it had just learned, and the next connection showed the exit node again. The
+  subtle
   part is where the weather snapshot comes from. By the time either button is
   reachable a tunnel is already up, so asking the network where we are answers
   with the **exit node** - which would save the place you are leaving *as* home
@@ -402,8 +411,9 @@ components/         # Modular widget components
   script runs and a live-state rule would forget almost nothing; and on the
   toggle path, where coming home *while connected* is the whole point, the
   saved home is the only thing that can answer, so forgetting there would break
-  the feature. The delete also comes **after** the fetch, since a tunnel still
-  on its way down means that fetch was the last thing needing the coordinates.
+  the feature. What remains of the delete comes **after** the fetch, since a
+  tunnel still on its way down means that fetch was the last thing needing the
+  coordinates.
 
   `weather-fetch.sh` owns the precedence: `weather_city` (following the tunnel)
   > `weather_home`, but **only while a tunnel is up** > IP. That last ordering
@@ -411,11 +421,23 @@ components/         # Modular widget components
   reading honest if you actually move house, and it is also how a fresh
   `weather_home` gets captured at the next departure.
 
-  A machine that has never fetched weather **without** a tunnel up has no home
-  to go to, and the weather toggle's return direction falls back to IP - i.e.
-  the exit node. This is not a bug that can be fixed in code: you cannot learn
-  where you are while all your traffic leaves somewhere else. One fetch off the
-  tunnel seeds it permanently.
+  **Why the weather used to follow the tunnel on its own.** `weather_home` had
+  exactly one writer - `vpn-sync.sh`, at the moment the weather toggle was
+  first pressed - and `--forget` deletes it on disconnect. So the ordinary case
+  never had one: bring a tunnel up, never touch the toggle, and step 2 above
+  has no file to read, leaving step 3, an IP lookup, which through a tunnel
+  answers with the exit node. The weather moved to Berlin without being asked
+  while the clock stayed in Minsk, because nothing moves the clock but an
+  explicit `timedatectl set-timezone`. That asymmetry was the bug: the clock
+  only ever moves on purpose, the weather re-resolved itself on every fetch.
+  `weather-location.py` now writes `weather_home` from any untunneled `ip`
+  reading, so the file exists before it is needed.
+
+  A machine that has never fetched weather **without** a tunnel up still has no
+  home to go to, and its weather falls back to IP - i.e. the exit node. That
+  part cannot be fixed in code: you cannot learn where you are while all your
+  traffic leaves somewhere else. One fetch off the tunnel seeds it, and from
+  then on every untunneled fetch keeps it current.
 
 - **Spinner.qml**: eight dots on a ring with the tail graded by opacity, for
   waits with no known duration. **Drawn rather than set in type**: a Nerd Font
