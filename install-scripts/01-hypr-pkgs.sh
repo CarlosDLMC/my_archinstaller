@@ -196,7 +196,9 @@ printf "\n%.0s" {1..1}
 # and some dhcpcd setups pull it in. Remove it up front when nothing needs it;
 # when something does, leave both alone and say so rather than break that.
 if pacman -Qi openresolv &>/dev/null && ! pacman -Qi systemd-resolvconf &>/dev/null; then
-  _req="$(pacman -Qi openresolv 2>/dev/null | sed -n 's/^Required By *: *//p')"
+  # LC_ALL=C: pacman localises its field names ("Requerido por", "Krävs av"), and
+  # on a non-English system this came back empty - read as "nothing needs it".
+  _req="$(LC_ALL=C pacman -Qi openresolv 2>/dev/null | sed -n 's/^Required By *: *//p')"
   if [ -z "$_req" ] || [ "$_req" = "None" ]; then
     echo "${NOTE} openresolv is installed and conflicts with systemd-resolvconf - removing it first." | tee -a "$LOG"
     uninstall_package openresolv 2>&1 | tee -a "$LOG"

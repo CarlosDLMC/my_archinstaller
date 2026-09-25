@@ -1,9 +1,12 @@
 #!/bin/bash
-# base-devel + archlinux-keyring #
+# base-devel, findutils, git #
+#
+# No archlinux-keyring here: pacman.sh refreshes it (and cachyos-keyring) right
+# before the full upgrade, and it now runs BEFORE this script, so these installs
+# resolve against a freshly synced database instead of the one from install day.
 
 base=(
   base-devel
-  archlinux-keyring
   findutils
   # git is not in base-devel and not in the `base` metapackage, so a freshly
   # installed Arch need not have it. zsh.sh clones oh-my-zsh and two plugins
@@ -31,7 +34,7 @@ fi
 LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_base.log"
 
 # Installation of main components with pacman
-echo -e "\nInstalling ${SKY_BLUE}base-devel${RESET} and ${SKY_BLUE}archlinux-keyring${RESET}..."
+echo -e "\nInstalling ${SKY_BLUE}base-devel${RESET}, ${SKY_BLUE}findutils${RESET} and ${SKY_BLUE}git${RESET}..."
 
 for PKG1 in "${base[@]}"; do
   echo "Installing $PKG1 with pacman..."

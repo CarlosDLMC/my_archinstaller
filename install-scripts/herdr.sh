@@ -62,27 +62,39 @@ case "$(uname -m)" in
 esac
 
 printf "\n%s - Fetching ${SKY_BLUE}Herdr${RESET} release manifest .... \n" "${NOTE}"
-MANIFEST=$(curl -fsSL --max-time 30 https://herdr.dev/latest.json 2>>"$LOG")
-if [ -z "$MANIFEST" ]; then
-  echo "${ERROR} Could not reach herdr.dev - skipping Herdr." | tee -a "$LOG"
-  record_package_failure "herdr"; exit 0
-fi
-
-read -r HERDR_VER HERDR_URL HERDR_SHA <<EOF
+# `|| MANIFEST=""`: Global_functions.sh runs `set -e`, and a bare assignment
+# from a failing curl is a failing command - the script used to die right here,
+# silently, before the skip branch below could record anything. That also
+# skipped the __HOME__ substitution further down on a re-run, which copy.sh had
+# just made necessary again.
+MANIFEST=$(curl -fsSL --max-time 30 https://herdr.dev/latest.json 2>>"$LOG") || MANIFEST=""
+HERDR_VER="" HERDR_URL="" HERDR_SHA=""
+if [ -n "$MANIFEST" ]; then
+  read -r HERDR_VER HERDR_URL HERDR_SHA <<EOF2 || true
 $(printf '%s' "$MANIFEST" | python3 -c "
 import json,sys
 d=json.load(sys.stdin); a='$HERDR_ASSET'
 print(d['version'], d['assets'][a], d['sha256'][a])
 " 2>>"$LOG")
-EOF
-
-if [ -z "$HERDR_URL" ]; then
-  echo "${ERROR} Herdr manifest had no $HERDR_ASSET asset - skipping." | tee -a "$LOG"
-  record_package_failure "herdr"; exit 0
+EOF2
 fi
 
-# Skip the download when the installed binary is already this version.
-if [ -x "$BIN" ] && [ "$("$BIN" --version 2>/dev/null | grep -oE "[0-9]+(\.[0-9]+)+" | head -n1)" = "$HERDR_VER" ]; then
+if [ -z "$MANIFEST" ] || [ -z "$HERDR_URL" ]; then
+  if [ -z "$MANIFEST" ]; then
+    echo "${ERROR} Could not reach herdr.dev." | tee -a "$LOG"
+  else
+    echo "${ERROR} Herdr manifest had no $HERDR_ASSET asset." | tee -a "$LOG"
+  fi
+  if [ -x "$BIN" ]; then
+    # Already installed: no download today, but the config below still needs
+    # doing, so carry on instead of exiting.
+    echo "${NOTE} Keeping the Herdr already at $BIN and configuring it." | tee -a "$LOG"
+  else
+    echo "${ERROR} Skipping Herdr." | tee -a "$LOG"
+    record_package_failure "herdr"; exit 0
+  fi
+elif [ -x "$BIN" ] && [ "$("$BIN" --version 2>/dev/null | grep -oE "[0-9]+(\.[0-9]+)+" | head -n1)" = "$HERDR_VER" ]; then
+  # Skip the download when the installed binary is already this version.
   echo "${OK} Herdr $HERDR_VER already installed." | tee -a "$LOG"
 else
   printf "\n%s - Downloading ${SKY_BLUE}Herdr $HERDR_VER${RESET} .... \n" "${NOTE}"
@@ -165,7 +177,9 @@ WantedBy=default.target
 EOF
 
 if [ -x "$HOME/.local/bin/herdr-watch-workspace-numbers" ]; then
-  systemctl --user daemon-reload 2>>"$LOG"
+  # Guarded: with no user bus (installer started through su/sudo -u) this
+  # fails, and under set -e that used to end the script with nothing printed.
+  systemctl --user daemon-reload 2>>"$LOG" || true
   systemctl --user enable --now herdr-workspace-numbers.service >>"$LOG" 2>&1 \
     && echo "${OK} herdr-workspace-numbers.service enabled." | tee -a "$LOG" \
     || echo "${WARN} Could not enable herdr-workspace-numbers.service - see $LOG" | tee -a "$LOG"

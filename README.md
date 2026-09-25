@@ -29,8 +29,10 @@ select exactly this and nothing else:
 If the machine has an NVIDIA GPU, the CachyOS installer already puts its
 prebuilt kernel module (`linux-cachyos-nvidia-open`) on it. `nvidia.sh` sees
 that and keeps it instead of installing `nvidia-open-dkms`, which would
-conflict with it; the rest of the NVIDIA setup (mkinitcpio modules, modeset
-options, nouveau blacklist) runs the same either way. The NVIDIA environment
+conflict with it. That package covers one kernel, so any other installed kernel
+without a module (a `linux-cachyos-lts` fallback, say) gets its own matching
+prebuilt package (`linux-cachyos-lts-nvidia-open`). The rest of the NVIDIA setup
+(mkinitcpio modules, modeset options, nouveau blacklist) runs the same either way. The NVIDIA environment
 variables in `configs/ENVariables.lua` turn themselves on when every GPU in the
 machine is NVIDIA, and stay off on hybrid laptops.
 
@@ -123,8 +125,8 @@ first prompt.
    Run `./install.sh` with no arguments to pick components from a menu instead;
    that interactive path is unchanged.
 
-   **You type your sudo password exactly once**, right after the selection is
-   printed, and never again. With `nopasswd_sudo="ON"` (the shipped preset)
+   **You type your sudo password exactly once**, at the very start of the run
+   (before anything is installed or detected), and never again. With `nopasswd_sudo="ON"` (the shipped preset)
    the passwordless rule is installed *first*, before the first package, so
    nothing later in the run can prompt. A background `sudo -v` keepalive also
    runs for the whole install, which covers the interactive path and any
@@ -345,7 +347,8 @@ failure cannot come back silently.
 
 `install-scripts/graphics.sh` reads `lspci` and installs the VA-API and Vulkan
 drivers for whatever GPU it finds — `intel-media-driver` + `vulkan-intel` on
-Intel, `vulkan-radeon` on AMD (VA-API for AMD now comes from `mesa` itself,
+Intel (plus `libva-intel-driver` for pre-Broadwell chips, which
+`intel-media-driver` does not support; libva picks whichever one fits), `vulkan-radeon` on AMD (VA-API for AMD now comes from `mesa` itself,
 which is why there is no `libva-mesa-driver` here — asking for that name fails
 the install), plus the `lib32-` variants (multilib is enabled by `pacman.sh`,
 which runs first). NVIDIA is not handled here; `nvidia.sh` owns that, and the
@@ -495,6 +498,7 @@ What it installs, and why each piece exists:
 | Piece | Why |
 |---|---|
 | `/usr/local/bin/battery-charge-limit` | Those sysfs files are root-writable only, and a QML `Process` has no tty to prompt on. Root-owned on purpose: sudo is passwordless here, so a user-writable script behind it would be a way to run anything as root |
+| `/etc/sudoers.d/battery-charge-limit` | Lets the bar run exactly that helper without a password, so the picker works even with `nopasswd_sudo="OFF"`. Validated with `visudo` before it is installed |
 | `/etc/battery-charge-limit.conf` | A sysfs write does not survive a reboot |
 | `battery-charge-limit.service` | Re-applies it at boot **and after resume** — some firmware clears the threshold on wake |
 
@@ -620,8 +624,12 @@ booting the default after a countdown. This is the one place the repo edits a
 bootloader config, added knowingly on 2026-09-13; the safeguards are a backup kept
 as `limine.conf.pre-theme`, an edit confined to the marked block plus the `timeout:`
 line, a before/after comparison of the OS entries that aborts the write if they
-differ, and a re-enroll when `ENABLE_ENROLL_LIMINE_CONFIG` is on in
-`/etc/default/limine`. Re-running replaces the block rather than duplicating it.
+differ, and a re-enroll when `ENABLE_ENROLL_LIMINE_CONFIG` is on. That setting
+is read from every file `limine-entry-tool` uses (`/etc/default/limine`,
+`/etc/limine-entry-tool.conf`, `/etc/limine-entry-tool.d/*.conf`), and if they
+disagree the script writes nothing: an unenrolled hash is a menu Limine refuses
+at boot. Re-running replaces the block rather than duplicating it, and keeps
+anything that sits above it (a `default_entry:` at the very top, for example).
 To do it by hand instead:
 
 ```bash
@@ -724,7 +732,9 @@ These are machine-specific, so a fresh install starts without them:
   over HDMI, which additionally needs a blob in `/usr/lib/firmware/edid/`, a
   `FILES=` entry in `/etc/mkinitcpio.conf` and a `drm.edid_firmware=` kernel
   parameter — none of which live under `~`. Use `nwg-displays` to lay out
-  whatever monitors the new machine has.
+  whatever monitors the new machine has. Once you have, a re-run of the
+  installer keeps it: `copy.sh` restores `monitors.lua` and `workspaces.lua`
+  from the `hypr` backup instead of resetting them to the template.
 - **`/etc/wireguard/*.conf`** — your VPN configs. They contain private keys, so
   they must never be committed. See below for how to move them across.
 - **`/etc/cups/printers.conf`** and its PPD — the printer queue. The device URI
@@ -931,7 +941,8 @@ before the binary is installed and a mismatch means it is **not** installed:
 this is a binary from outside the distro's package manager, so that hash is the
 only integrity check there is. If herdr.dev is unreachable the component is
 *skipped* rather than failing the install — it lands in the failed-package
-manifest and `02-Final-Check.sh` reports it at the end.
+manifest and `02-Final-Check.sh` reports it at the end. If a Herdr binary is
+already installed, it is kept and still configured; only the update is skipped.
 
 The binary is the only thing `herdr.sh` downloads. The config, the sounds and
 the four helper scripts are dotfiles, which is why `install.sh` runs `herdr.sh`
@@ -992,8 +1003,15 @@ past the end.
 
 - **`__HOME__` in `config.toml`.** Herdr's `[[keys.command]]` entries take a
   command string, and a tracked dotfile cannot contain one machine's `$HOME`.
-  The dotfile ships `__HOME__` and `herdr.sh` substitutes it in the *installed*
-  copy. Re-running is a no-op once no placeholders are left.
+  The dotfile ships `__HOME__`, and `copy.sh` substitutes it in the *installed*
+  copy as it deploys it (`herdr.sh` does it again, as a safety net), so running
+  `dotfiles-main.sh` on its own can no longer leave the tab binds pointing at
+  `__HOME__/.local/bin`. Re-running is a no-op once no placeholders are left.
+- **`~/.config/herdr` is updated, never replaced.** It is also herdr's runtime
+  directory — the running server's sockets, `session.json` and its logs sit
+  next to `config.toml` — so `copy.sh` copies the config and sounds into it
+  instead of moving the directory aside like the others. A `config.toml` that
+  differs from the repo is backed up next to itself first.
 - **`herdr-workspace-numbers.service`.** Herdr has no built-in workspace-number
   token, so the sidebar reads a custom `$num` written into workspace metadata —
   and that metadata does not survive a server restart. This user unit runs
@@ -1233,7 +1251,9 @@ prompt, and `02-Final-Check.sh` could not report it, because nothing had been
 attempted. The same applied to `rog="OFF"` on an ASUS laptop.
 
 With `auto`, the installer answers these from the machine instead: `lspci` for
-the GPU, `/sys/class/dmi/id/sys_vendor` for ASUS hardware. `ON` and `OFF` still
+the GPU, `/sys/class/dmi/id/sys_vendor` for ASUS hardware. On an ASUS laptop
+`asusctl` and `rog-control-center` are installed, and `supergfxctl` only when
+there are two GPUs to switch between. `ON` and `OFF` still
 force the decision, for when you mean it — `nvidia="OFF"` to stay on the
 open-source driver, for instance. A forced `ON` is still ignored with a note if
 the hardware is not there, so a stale preset cannot install an NVIDIA driver on
@@ -1243,13 +1263,28 @@ This is also why there is no CPU/GPU vendor prompt: `--preset` runs
 unattended by design, so a dialog could only appear in the interactive path —
 the one that already worked.
 
-The kernel module installed is `nvidia-open-dkms`. The closed-source
-`nvidia-dkms` this script used to name no longer exists in the repos — only
-the open modules do — and asking for the old name installed nothing while the
-rest of the script still added the modules to `mkinitcpio.conf` and blacklisted
-nouveau, so an NVIDIA machine rebooted with no GPU driver at all. The open
-modules support Turing (GTX 16xx / RTX 20xx) and newer; anything older needs
-`nvidia-390xx-dkms` or `nvidia-470xx-dkms` from the AUR, set by hand.
+Which driver gets installed depends on the GPU's generation, which
+`install-scripts/nvidia_detect.sh` reads from the PCI device ID:
+
+| GPU | Driver |
+| --- | --- |
+| Turing (GTX 16xx / RTX 20xx) and newer | `nvidia-open-dkms` + `nvidia-utils` + `lib32-nvidia-utils` |
+| Maxwell, Pascal, Volta (GTX 9xx / 10xx, Titan V) | `nvidia-580xx-dkms` + `nvidia-580xx-utils` + `lib32-nvidia-580xx-utils` (AUR — the 580 branch is the last to support them) |
+| Kepler and older | nothing: no maintained driver supports them, so `auto` leaves nouveau alone |
+
+The open modules only bind to Turing and newer. They used to be installed for
+every NVIDIA card, so a GTX 1060 rebooted with a module that never loaded *and*
+nouveau blacklisted — no GPU driver at all. With several NVIDIA GPUs the oldest
+one decides.
+
+`nvidia.sh` then checks that every installed kernel actually has an NVIDIA
+module (`modinfo -k <kver> nvidia`), because a DKMS build that fails inside
+pacman's hook still leaves the package "installed". If any kernel is missing
+one, the script fails, **nouveau is not blacklisted**, and the final check names
+the kernel. The modules go into the initramfs through
+`/etc/mkinitcpio.conf.d/99-nvidia.conf` (`MODULES+=(...)`), and the initramfs is
+rebuilt once, after the nouveau blacklist is written, so the image that boots
+carries both.
 
 Note that enabling `nvidia` does **not** touch your bootloader. The driver's
 `modeset=1 fbdev=1` settings are written to `/etc/modprobe.d/nvidia.conf`,
@@ -1280,7 +1315,7 @@ All configs are in `~/.config/`. Main files to edit:
 A preset run that ends with
 
 ```
-[WARN] NOT rebooting: the final check found missing packages.
+[WARN] NOT rebooting: the final check found missing packages or a component that did not land.
 ```
 
 did most of its work, but at least one package or component did not land. The
@@ -1325,7 +1360,11 @@ systemctl reboot
 
 Re-running `./install.sh --preset custom-preset.conf` is also safe — every
 package step skips what is already installed, and `copy.sh` will not overwrite
-a `secrets.zsh` you have filled in.
+a `secrets.zsh` you have filled in. It also keeps your wallust palette, your
+active wallpaper, the first-boot marker, your monitor layout (`monitors.lua`,
+`workspaces.lua`) and herdr's saved session. Everything else under a copied
+`~/.config` directory is reset to the repo version — edits you made there
+(`UserConfigs/*.lua`, say) are in the `<dir>.backup-<stamp>` copy next to it.
 
 #### "Validating source files with sha256sums... FAILED"
 
@@ -1346,6 +1385,13 @@ against `install-scripts/checksum-skip.conf`:
 
 `wallust` is listed, so the case that actually recurs no longer interrupts an
 unattended install.
+
+Two details make that reliable. The AUR helper runs under `LC_ALL=C.UTF-8`,
+because makepkg translates that message and on a non-English system the
+installer would never see it. And the failure is pinned to the package whose
+build printed it (the last `==> Making package:` before it), so when the
+mismatch is in an AUR *dependency* of what was asked for, it is that
+dependency's name that is checked against the allowlist and reported.
 
 It is an allowlist rather than a blanket retry on purpose. A checksum mismatch
 means the downloaded bytes are not the bytes the maintainer signed off on -

@@ -41,9 +41,13 @@ base_count=${#graphics[@]}
 
 if grep -qi 'intel' <<< "$gpu_info"; then
   printf "\n${NOTE} Detected ${SKY_BLUE}Intel${RESET} graphics\n" | tee -a "$LOG"
-  # intel-media-driver covers Broadwell/Gen9 and newer (this machine's UHD 620
-  # included). libva-intel-driver is the legacy path for pre-Broadwell parts.
-  graphics+=(intel-media-driver vulkan-intel lib32-vulkan-intel)
+  # intel-media-driver (iHD) covers Broadwell/Gen9 and newer (this machine's UHD
+  # 620 included); libva-intel-driver (i965) is the one for pre-Broadwell parts -
+  # Sandy Bridge, Ivy Bridge, Haswell - which intel-media-driver does not support.
+  # Both are installed: telling the generations apart from lspci is fragile, the
+  # packages are small, and libva tries iHD first and falls back to i965 on its
+  # own. Installing only iHD left older laptops on CPU decode with no error.
+  graphics+=(intel-media-driver libva-intel-driver vulkan-intel lib32-vulkan-intel)
 fi
 
 if grep -qiE 'amd|radeon|advanced micro devices' <<< "$gpu_info"; then

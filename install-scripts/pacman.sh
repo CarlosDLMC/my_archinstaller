@@ -79,8 +79,23 @@ echo -e "${CAT} ${MAGENTA}Pacman.conf${RESET} spicing up completed ${RESET}" 2>&
 # already present, where yay.sh/paru.sh and their -Syu never run) that is a
 # partial upgrade and Hyprland/quickshell fail at first login with missing
 # libraries. Upgrading here makes the run safe on every path.
+#
+# Keyring first. `-Syu` verifies every package against the installed keyring, so
+# on an older ISO (or an install that sat for weeks) packages signed by a newer
+# key fail as "unknown trust" and the whole upgrade aborts. Updating the keyring
+# on its own right after the sync is the Arch-documented fix; the -Su follows
+# immediately, so this is not left as a partial upgrade. 00-base.sh used to list
+# archlinux-keyring, but it skips anything already installed - which the keyring
+# always is - so it never refreshed anything.
 printf "\n%s - ${SKY_BLUE}Synchronizing repos and upgrading the system${RESET}\n" "${INFO}"
-sudo pacman -Syu --noconfirm 2>&1 | tee -a "$LOG"
+keyrings=(archlinux-keyring)
+pacman -Q cachyos-keyring &>/dev/null && keyrings+=(cachyos-keyring)
+sudo pacman -Sy --needed --noconfirm "${keyrings[@]}" 2>&1 | tee -a "$LOG"
+if [ "${PIPESTATUS[0]}" -ne 0 ]; then
+  printf "%s - Could not sync the repos or refresh the keyring. Check the network and mirrors, then re-run.\n" "${ERROR}" | tee -a "$LOG"
+  exit 1
+fi
+sudo pacman -Su --noconfirm 2>&1 | tee -a "$LOG"
 # PIPESTATUS, not the pipeline status: `cmd | tee` reports tee's exit code.
 if [ "${PIPESTATUS[0]}" -ne 0 ]; then
   printf "%s - The full system upgrade failed. Fix the repos/keyring and re-run; installing on a partial upgrade breaks Hyprland at first login.\n" "${ERROR}" | tee -a "$LOG"

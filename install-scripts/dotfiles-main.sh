@@ -36,12 +36,15 @@ if [ -d Hyprland-Dots ]; then
     printf "${NOTE} Running copy.sh script...\n"
     printf "======================================\n"
     ./copy.sh 2>&1 | tee -a "$PARENT_DIR/Install-Logs/dotfiles-copy-$(date +%Y%m%d-%H%M%S).log"
+    # Saved at once: the `[ ... ]` test below is itself a command and resets
+    # PIPESTATUS, so reading it again in the error message always said 1.
+    copy_rc=${PIPESTATUS[0]}
 
-    if [ ${PIPESTATUS[0]} -eq 0 ]; then
+    if [ "$copy_rc" -eq 0 ]; then
       printf "======================================\n"
       echo -e "${OK} Customized dotfiles installed successfully!"
     else
-      echo -e "${ERROR} copy.sh script failed with exit code ${PIPESTATUS[0]}"
+      echo -e "${ERROR} copy.sh script failed with exit code ${copy_rc}"
       exit 1
     fi
   else

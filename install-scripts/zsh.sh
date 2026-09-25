@@ -31,9 +31,15 @@ LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_zsh.log"
 
 # Installing core zsh packages
 printf "\n%s - Installing ${SKY_BLUE}zsh packages${RESET} .... \n" "${NOTE}"
-for ZSH in "${zsh_pkg[@]}"; do
-  install_package "$ZSH" "$LOG"
-done 
+# Not `for ZSH in ...`: ZSH is the variable the oh-my-zsh installer reads as
+# its install directory. When install.sh is started from a zsh that exports it
+# (the repo .zshrc does), the loop left ZSH=zsh-completions in the exported
+# environment and oh-my-zsh installed itself into <repo>/zsh-completions.
+for _zpkg in "${zsh_pkg[@]}"; do
+  install_package "$_zpkg" "$LOG"
+done
+# And pin it for the installer below, whatever the parent exported.
+export ZSH="$HOME/.oh-my-zsh"
 
 
 
@@ -49,24 +55,41 @@ if command -v zsh >/dev/null; then
   # create ~/.oh-my-zsh themselves, so after one failed download the directory
   # existed, this branch was skipped forever, and .zshrc sourced nothing.
   if [ ! -f "$HOME/.oh-my-zsh/oh-my-zsh.sh" ]; then
+    # The upstream installer refuses to run when $ZSH already exists ("You'll
+    # need to remove it"), so a ~/.oh-my-zsh left holding only custom/plugins
+    # from an earlier failed run made every re-run exit here. Move it aside;
+    # the plugin clones below recreate what it held.
+    if [ -e "$HOME/.oh-my-zsh" ]; then
+      _omz_bak="$HOME/.oh-my-zsh.incomplete-$(date +%Y%m%d-%H%M%S)"
+      mv -T "$HOME/.oh-my-zsh" "$_omz_bak"
+      echo "${NOTE} ~/.oh-my-zsh had no oh-my-zsh.sh - moved it to $(basename "$_omz_bak") and reinstalling." | tee -a "$LOG"
+    fi
     omz_installer="$(curl -fsSL https://install.ohmyz.sh)" || { echo "${ERROR} Could not download the Oh My Zsh installer (network?)" | tee -a "$LOG"; exit 1; }
     sh -c "$omz_installer" "" --unattended || { echo "${ERROR} Oh My Zsh installer failed" | tee -a "$LOG"; exit 1; }
   else
     echo "${INFO} Directory .oh-my-zsh already exists. Skipping re-installation." 2>&1 | tee -a "$LOG"
   fi
   
-  # Check if the directories exist before cloning the repositories
-  if [ ! -d "$HOME/.oh-my-zsh/custom/plugins/zsh-autosuggestions" ]; then
-      git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions 
-  else
-      echo "${INFO} Directory zsh-autosuggestions already exists. Cloning Skipped." 2>&1 | tee -a "$LOG"
-  fi
-
-  if [ ! -d "$HOME/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting" ]; then
-      git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting 
-  else
-      echo "${INFO} Directory zsh-syntax-highlighting already exists. Cloning Skipped." 2>&1 | tee -a "$LOG"
-  fi
+  # Guarded clones. Global_functions.sh runs `set -e`, so a bare failing
+  # `git clone` (a network blip, a GitHub hiccup) used to end zsh.sh right here -
+  # skipping .zshrc, chsh, fzf and the themes, with bash left as the login
+  # shell. A failed plugin is now reported and the rest carries on; the final
+  # check names it.
+  _omz_plugins="$HOME/.oh-my-zsh/custom/plugins"
+  for _plugin in \
+      "zsh-autosuggestions https://github.com/zsh-users/zsh-autosuggestions" \
+      "zsh-syntax-highlighting https://github.com/zsh-users/zsh-syntax-highlighting.git"; do
+    _pname="${_plugin%% *}"; _purl="${_plugin#* }"
+    if [ -d "$_omz_plugins/$_pname" ]; then
+      echo "${INFO} Directory $_pname already exists. Cloning Skipped." 2>&1 | tee -a "$LOG"
+    elif git clone "$_purl" "$_omz_plugins/$_pname" >> "$LOG" 2>&1; then
+      echo "${OK} Cloned $_pname" | tee -a "$LOG"
+    else
+      # A partial clone would make the -d test above skip it forever.
+      rm -rf "$_omz_plugins/$_pname"
+      echo "${ERROR} Could not clone $_pname - re-run install-scripts/zsh.sh once the network is back." | tee -a "$LOG"
+    fi
+  done
   
   # Check if ~/.zshrc and .zprofile exists, create a backup, and copy the new configuration
   if [ -f "$HOME/.zshrc" ]; then
@@ -161,8 +184,8 @@ fi
 
 # Installing core zsh packages
 printf "\n%s - Installing ${SKY_BLUE}fzf${RESET} .... \n" "${NOTE}"
-for ZSH2 in "${zsh_pkg2[@]}"; do
-  install_package "$ZSH2" "$LOG"
+for _zpkg in "${zsh_pkg2[@]}"; do
+  install_package "$_zpkg" "$LOG"
 done
 
 # copy additional oh-my-zsh themes from assets

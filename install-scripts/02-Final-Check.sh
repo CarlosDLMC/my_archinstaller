@@ -133,8 +133,11 @@ check_outcome() {
 # Always: these run on every install regardless of the preset.
 check_outcome "ru_RU.UTF-8 locale not generated - clock, calendar and lock screen fall back to English (install-scripts/locales.sh)" \
     bash -c 'locale -a | grep -qi "^ru_RU\.utf8$"'
-check_outcome "no AUR helper on PATH (install-scripts/yay.sh)" \
-    bash -c 'command -v yay || command -v paru'
+# Runs it rather than only finding it: a helper that is on PATH but cannot start
+# (paru-bin against a newer libalpm) passed `command -v` while every AUR install
+# failed.
+check_outcome "no working AUR helper - yay/paru missing or does not start (install-scripts/yay.sh)" \
+    bash -c 'yay --version || paru --version'
 check_outcome "NetworkManager.service is not enabled (install-scripts/services.sh)" \
     systemctl is-enabled NetworkManager.service
 if pacman -Qi systemd-resolvconf &>/dev/null; then
@@ -166,7 +169,27 @@ if selected zsh; then
     check_outcome "login shell is not zsh (install-scripts/zsh.sh)" \
         bash -c '[[ "$(getent passwd "$USER" | cut -d: -f7)" == */zsh ]]'
     check_outcome "~/.oh-my-zsh is missing (install-scripts/zsh.sh)" \
-        test -d "$HOME/.oh-my-zsh"
+        test -f "$HOME/.oh-my-zsh/oh-my-zsh.sh"
+    # .zshrc loads both from the plugins list; a failed clone is now reported by
+    # zsh.sh and the script carries on, so this is where it stops the reboot.
+    for _plugin in zsh-autosuggestions zsh-syntax-highlighting; do
+        check_outcome "oh-my-zsh plugin $_plugin was not cloned (install-scripts/zsh.sh)" \
+            test -d "$HOME/.oh-my-zsh/custom/plugins/$_plugin"
+    done
+fi
+
+if selected nvidia; then
+    # The module, not the package: a DKMS build that failed inside pacman's hook
+    # still leaves the dkms package "installed". One check per installed kernel,
+    # so a fallback kernel with no module is named too.
+    for _moddir in /usr/lib/modules/*/; do
+        [ -f "$_moddir/pkgbase" ] || continue
+        # Installed kernels only (vmlinuz owned by a package) - see nvidia.sh.
+        pacman -Qqo "${_moddir}vmlinuz" &>/dev/null || continue
+        _kver=$(basename "$_moddir")
+        check_outcome "no NVIDIA kernel module for $(cat "$_moddir/pkgbase") ($_kver) - that kernel boots without the NVIDIA driver (install-scripts/nvidia.sh)" \
+            modinfo -k "$_kver" -n nvidia
+    done
 fi
 
 if selected pokemon; then
@@ -288,8 +311,12 @@ if selected plymouth; then
 fi
 
 if selected limine; then
+    # The wallpaper goes to the partition ROOT (limine.sh steps out of a limine/
+    # subdirectory, because theme.conf names it boot():/limine-wallpaper.png), so
+    # the check has to look there too - next to the conf, a correct install on the
+    # /boot/limine/ or /efi/limine/ layout failed here and blocked the reboot.
     check_outcome "limine.conf has no theme block / wallpaper missing (install-scripts/limine.sh)" \
-        bash -c 'for c in /boot/limine.conf /efi/limine.conf /boot/efi/limine.conf /boot/limine/limine.conf /efi/limine/limine.conf; do sudo test -f "$c" || continue; sudo grep -q "my_archinstaller Limine theme" "$c" && sudo test -f "$(dirname "$c")/limine-wallpaper.png" && exit 0; done; exit 1'
+        bash -c 'for c in /boot/limine.conf /efi/limine.conf /boot/efi/limine.conf /boot/limine/limine.conf /efi/limine/limine.conf; do sudo test -f "$c" || continue; sudo grep -q "my_archinstaller Limine theme" "$c" || continue; d=$(dirname "$c"); [ "$(basename "$d")" = limine ] && d=$(dirname "$d"); sudo test -f "$d/limine-wallpaper.png" && exit 0; done; exit 1'
 fi
 
 # Packages that failed their SOURCE CHECKSUM rather than their build.
