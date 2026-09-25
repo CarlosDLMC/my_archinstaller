@@ -159,7 +159,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # Change the working directory to the parent directory of the script
 PARENT_DIR="$SCRIPT_DIR/.."
-cd "$PARENT_DIR" || { echo "${ERROR} Failed to change directory to $PARENT_DIR"; exit 1; }
+cd "$PARENT_DIR" || { echo "[ERROR] Failed to change directory to $PARENT_DIR"; exit 1; }
 
 # Source the global functions script
 if ! source "$(dirname "$(readlink -f "$0")")/Global_functions.sh"; then
@@ -187,6 +187,24 @@ if [ $overall_failed -ne 0 ]; then
 fi
 
 printf "\n%.0s" {1..1}
+
+# systemd-resolvconf conflicts with openresolv, and `--noconfirm` cannot answer
+# the "remove openresolv?" prompt - the transaction just fails, the package
+# lands in .failed-packages, and services.sh (which keys resolved off
+# systemd-resolvconf being installed) never enables resolved either. A stock
+# archinstall + NetworkManager box has no openresolv, but netctl, openfortivpn
+# and some dhcpcd setups pull it in. Remove it up front when nothing needs it;
+# when something does, leave both alone and say so rather than break that.
+if pacman -Qi openresolv &>/dev/null && ! pacman -Qi systemd-resolvconf &>/dev/null; then
+  _req="$(pacman -Qi openresolv 2>/dev/null | sed -n 's/^Required By *: *//p')"
+  if [ -z "$_req" ] || [ "$_req" = "None" ]; then
+    echo "${NOTE} openresolv is installed and conflicts with systemd-resolvconf - removing it first." | tee -a "$LOG"
+    uninstall_package openresolv 2>&1 | tee -a "$LOG"
+  else
+    echo "${WARN} openresolv is required by: ${_req}. systemd-resolvconf conflicts with it and will fail to install;" | tee -a "$LOG"
+    echo "${WARN} DNS stays on openresolv. Remove those packages and re-run if you want systemd-resolved." | tee -a "$LOG"
+  fi
+fi
 
 # Installation of main components
 printf "\n%s - Installing ${SKY_BLUE}the necessary Hyprland packages${RESET} .... \n" "${NOTE}"

@@ -54,7 +54,7 @@ neovim_pkg=(
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 PARENT_DIR="$SCRIPT_DIR/.."
-cd "$PARENT_DIR" || { echo "${ERROR} Failed to change directory to $PARENT_DIR"; exit 1; }
+cd "$PARENT_DIR" || { echo "[ERROR] Failed to change directory to $PARENT_DIR"; exit 1; }
 
 if ! source "$(dirname "$(readlink -f "$0")")/Global_functions.sh"; then
   echo "Failed to source Global_functions.sh"
@@ -155,7 +155,7 @@ fi
 # to be in place ahead of time; the parsers arrive on their own.
 if [ -d "$NVIM_CFG" ]; then
   printf "\n%s - Pre-fetching ${SKY_BLUE}LazyVim${RESET} plugins (first launch is slow otherwise) .... \n" "${NOTE}"
-  if timeout 600 nvim --headless "+Lazy! sync" +qa >>"$LOG" 2>&1; then
+  if timeout 600 nvim --headless "+Lazy! install" +qa >>"$LOG" 2>&1; then
     echo "${OK} LazyVim plugins installed." | tee -a "$LOG"
   else
     echo "${WARN} Plugin pre-fetch did not finish - nvim will do it on first launch." | tee -a "$LOG"

@@ -27,7 +27,7 @@
 ## WARNING: DO NOT EDIT BEYOND THIS LINE IF YOU DON'T KNOW WHAT YOU ARE DOING! ##
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PARENT_DIR="$SCRIPT_DIR/.."
-cd "$PARENT_DIR" || { echo "${ERROR} Failed to change directory to $PARENT_DIR"; exit 1; }
+cd "$PARENT_DIR" || { echo "[ERROR] Failed to change directory to $PARENT_DIR"; exit 1; }
 
 if ! source "$(dirname "$(readlink -f "$0")")/Global_functions.sh"; then
   echo "Failed to source Global_functions.sh"
@@ -52,7 +52,16 @@ if [ -z "$CONF" ]; then
   echo "${NOTE} No limine.conf found - Limine is not the bootloader here. Nothing to do." | tee -a "$LOG"
   exit 0
 fi
+# theme.conf names the wallpaper as boot():/limine-wallpaper.png - the ROOT of the
+# partition Limine booted from. For /boot/limine.conf that is the conf's own
+# directory, but for the /boot/limine/limine.conf and /efi/limine/limine.conf
+# layouts the conf sits one level down, and a wallpaper copied next to it is a
+# file Limine never looks at (it skips a missing wallpaper silently, so the menu
+# just came up bare). Step back to the partition root in that case.
 ESP_DIR="$(dirname "$CONF")"
+if [ "$(basename "$ESP_DIR")" = "limine" ]; then
+  ESP_DIR="$(dirname "$ESP_DIR")"
+fi
 [ -f "$THEME" ] && [ -f "$WALL" ] || { echo "${ERROR} $THEME or $WALL missing from the repo." | tee -a "$LOG"; exit 1; }
 echo "${INFO} Limine config: $CONF" | tee -a "$LOG"
 
@@ -60,7 +69,7 @@ echo "${INFO} Limine config: $CONF" | tee -a "$LOG"
 sudo cp -n "$CONF" "$CONF.pre-theme"
 echo "${OK} Backup kept at $CONF.pre-theme" | tee -a "$LOG"
 
-# 2. Wallpaper next to the config. theme.conf references it as boot():/limine-wallpaper.png,
+# 2. Wallpaper at the partition root. theme.conf references it as boot():/limine-wallpaper.png,
 #    i.e. relative to the partition Limine booted from, so the mount point does not matter.
 sudo cp "$WALL" "$ESP_DIR/limine-wallpaper.png"
 echo "${OK} Wallpaper copied to $ESP_DIR/limine-wallpaper.png ($(stat -c %s "$WALL") bytes)" | tee -a "$LOG"

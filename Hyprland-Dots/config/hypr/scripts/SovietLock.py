@@ -170,7 +170,7 @@ def batteries():
 
 
 def ac_online():
-    for name in ("AC", "AC0", "ACAD", "ADP1"):
+    for name in ("AC", "AC0", "ACAD", "ADP0", "ADP1"):
         val = read(f"/sys/class/power_supply/{name}/online")
         if val:
             return "ПОДКЛЮЧЕНО" if val == "1" else "ОТКЛЮЧЕНО"

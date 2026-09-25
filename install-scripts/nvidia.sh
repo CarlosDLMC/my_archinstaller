@@ -20,7 +20,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # Change the working directory to the parent directory of the script
 PARENT_DIR="$SCRIPT_DIR/.."
-cd "$PARENT_DIR" || { echo "${ERROR} Failed to change directory to $PARENT_DIR"; exit 1; }
+cd "$PARENT_DIR" || { echo "[ERROR] Failed to change directory to $PARENT_DIR"; exit 1; }
 
 # Source the global functions script
 if ! source "$(dirname "$(readlink -f "$0")")/Global_functions.sh"; then
@@ -79,8 +79,10 @@ fi
 printf "\n%.0s" {1..1}
 printf "${INFO} Rebuilding ${YELLOW}Initramfs${RESET}...\n" 2>&1 | tee -a "$LOG"
 # CachyOS + Limine keeps its initramfs under /boot/<machine-id>/<kernel>/ and
-# regenerates the hashed limine.conf entries through limine-mkinitcpio; a plain
-# `mkinitcpio -P` there writes an image nothing boots. Use the distro's path.
+# regenerates the hashed limine.conf entries through a mkinitcpio post hook
+# (limine-mkinitcpio-hook), so a plain `mkinitcpio -P` is fine there too -
+# plymouth.sh relies on exactly that. limine-mkinitcpio is simply the distro's
+# front door for the same rebuild, so prefer it where it exists.
 if command -v limine-mkinitcpio &>/dev/null; then
   sudo limine-mkinitcpio 2>&1 | tee -a "$LOG"
 else
@@ -94,8 +96,12 @@ printf "\n%.0s" {1..1}
 
 # Additional Nvidia steps
 NVEA="/etc/modprobe.d/nvidia.conf"
-if [ -f "$NVEA" ]; then
-  printf "${INFO} Seems like ${YELLOW}nvidia_drm modeset=1 fbdev=1${RESET} is already added in your system..moving on."
+# Look for the option itself, in any modprobe.d file, not for the file name.
+# CachyOS's chwd NVIDIA profile drops its own files under /etc/modprobe.d, and
+# one called nvidia.conf that does not carry modeset=1 used to be taken as
+# "already done" - Hyprland then started without DRM modeset.
+if grep -qsE '^\s*options\s+nvidia[_-]drm\s.*modeset=1' /etc/modprobe.d/*.conf; then
+  printf "${INFO} ${YELLOW}nvidia_drm modeset=1${RESET} is already set in /etc/modprobe.d..moving on."
   printf "\n"
 else
   printf "\n"

@@ -67,7 +67,7 @@ then continue with the [Installation Steps](#installation-steps) below.
 
 - Fresh Arch Linux installation with the `base` system and a kernel
 - Internet connection
-- git installed (or will be installed automatically)
+- git installed (`sudo pacman -S git`; only `auto-install.sh` installs it for you)
 - **A normal user account that can `sudo`** — see below
 
 The sudo requirement is the one that actually bites, because a minimal
@@ -952,9 +952,9 @@ The prefix is `CTRL + B`, and `CTRL + B ?` lists everything.
 | `ALT + H J K L` | Focus pane left / down / up / right (arrows work too) |
 | `ALT + V` / `ALT + S` | Split vertical / horizontal |
 | `ALT + X` / `ALT + Z` | Close pane / zoom pane |
-| `ALT + N` | New workspace |
+| `ALT + W` | New workspace |
 | `ALT + Q` | Close workspace — a popup that also removes the git worktree if it is one |
-| `ALT + W` / `ALT + B` | Next / previous workspace |
+| `ALT + B` | Previous workspace (there is no next-workspace key; use `ALT + 1…9` or the picker) |
 | `CTRL + B W` | Workspace picker |
 
 `ALT + Tab` only reaches Herdr because `UserKeybinds.lua` removes Hyprland's
@@ -1168,12 +1168,14 @@ handled too (a 4K at scale 2 is laid out as 1080p, which is what hyprlock actual
 
 **Going idle does not lock.** The lock screen is only ever raised deliberately, with
 `CTRL + ALT + L`. hypridle's screenlock listener is commented out in `hypridle.conf`;
-uncomment it to get a 10-minute auto-lock back. Idle still blanks the display after
-10.5 minutes — it just leaves the session unlocked. The session is also locked before
+uncomment it to get a 10-minute auto-lock back. **Going idle does not blank the display
+either**: the "Turn off screen" listener is commented out too, on purpose, so the only
+live listener is the 9-minute idle notification. The session is still locked before
 suspend (`before_sleep_cmd`), which is separate from idle.
 
-**Stays lit while plugged in.** When you *have* locked, `scripts/IdleDpms.sh` skips the
-idle blank while locked *and* on AC, so the panel stays readable at the desk but still
+**If you turn idle blanking back on**, point its `on-timeout` at `scripts/IdleDpms.sh`
+(the commented listener already does) rather than at `dpms off` directly: it skips the
+blank while locked *and* on AC, so the panel stays readable at the desk but still
 blanks on battery.
 
 **Files** (in `~/.config/hypr/`, from `Hyprland-Dots/config/hypr/`):
@@ -1182,9 +1184,9 @@ blanks on battery.
 - `scripts/SovietLock.py` — draws the panel, date, footer
 - `scripts/SovietClock.sh` — draws the block-glyph clock
 - `scripts/SovietLockGen.py` — sizes the widgets per monitor
-- `scripts/IdleDpms.sh` — idle blanking policy
+- `scripts/IdleDpms.sh` — idle blanking policy (only used if you re-enable the blank listener)
 - `scripts/LockRun.sh` — starts hyprlock, logs its output and exit code
-- `hypridle.conf` — calls `LockRun.sh` and `IdleDpms.sh`
+- `hypridle.conf` — calls `LockRun.sh` before sleep; the idle lock and blank listeners are commented out
 
 The clock is shell rather than another `SovietLock.py` mode because it is the one
 widget hyprlock re-runs every second per monitor, and Python's startup dominated
@@ -1447,7 +1449,7 @@ the shipped preset makes:
 
 ```bash
 cd ~/Documents/my_archinstaller
-INSTALL_SELECTED_OPTIONS="ly gtk_themes bluetooth thunar quickshell xdph zsh pokemon dots handy nopasswd_sudo printing" \
+INSTALL_SELECTED_OPTIONS="ly gtk_themes bluetooth thunar quickshell xdph zsh pokemon dots handy nopasswd_sudo printing docker plymouth limine herdr neovim hunk" \
   ./install-scripts/02-Final-Check.sh
 ```
 

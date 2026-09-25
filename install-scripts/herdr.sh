@@ -36,7 +36,7 @@ herdr_pkg=(
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 PARENT_DIR="$SCRIPT_DIR/.."
-cd "$PARENT_DIR" || { echo "${ERROR} Failed to change directory to $PARENT_DIR"; exit 1; }
+cd "$PARENT_DIR" || { echo "[ERROR] Failed to change directory to $PARENT_DIR"; exit 1; }
 
 if ! source "$(dirname "$(readlink -f "$0")")/Global_functions.sh"; then
   echo "Failed to source Global_functions.sh"
@@ -82,7 +82,7 @@ if [ -z "$HERDR_URL" ]; then
 fi
 
 # Skip the download when the installed binary is already this version.
-if [ -x "$BIN" ] && "$BIN" --version 2>/dev/null | grep -q "$HERDR_VER"; then
+if [ -x "$BIN" ] && [ "$("$BIN" --version 2>/dev/null | grep -oE "[0-9]+(\.[0-9]+)+" | head -n1)" = "$HERDR_VER" ]; then
   echo "${OK} Herdr $HERDR_VER already installed." | tee -a "$LOG"
 else
   printf "\n%s - Downloading ${SKY_BLUE}Herdr $HERDR_VER${RESET} .... \n" "${NOTE}"
@@ -116,8 +116,13 @@ if [ -f "$CFG" ]; then
     sed -i "s#__HOME__#$HOME#g" "$CFG"
     echo "${OK} Resolved __HOME__ paths in $CFG" | tee -a "$LOG"
   fi
-  if "$BIN" --default-config >/dev/null 2>&1; then
-    echo "${OK} Herdr config in place from the dotfiles." | tee -a "$LOG"
+  # `herdr --default-config` only prints the built-in defaults and always exits
+  # 0, so it validated nothing. Parse the installed file instead: a TOML error
+  # here is a config herdr will refuse at startup.
+  if python3 -c 'import sys, tomllib; tomllib.load(open(sys.argv[1], "rb"))' "$CFG" 2>>"$LOG"; then
+    echo "${OK} Herdr config in place from the dotfiles (parses as TOML)." | tee -a "$LOG"
+  else
+    echo "${ERROR} $CFG is not valid TOML - herdr will refuse to start. See $LOG" | tee -a "$LOG"
   fi
 else
   echo "${WARN} $CFG not found - the dotfiles' herdr config did not arrive." | tee -a "$LOG"
@@ -168,5 +173,5 @@ else
   echo "${WARN} herdr-watch-workspace-numbers missing (dotfiles); unit written but not enabled." | tee -a "$LOG"
 fi
 
-printf "\n${NOTE} ${SKY_BLUE}Herdr${RESET} installed. Run ${MAGENTA}herdr${RESET} to start. ${YELLOW}ALT+1..9${RESET} workspaces, ${YELLOW}ALT+TAB${RESET} tabs, ${YELLOW}ALT+HJKL${RESET} panes, ${YELLOW}ALT+N/ALT+Q${RESET} new/close workspace, ${YELLOW}CTRL+B ?${RESET} for everything else. Update later with ${MAGENTA}herdr update${RESET}.\n"
+printf "\n${NOTE} ${SKY_BLUE}Herdr${RESET} installed. Run ${MAGENTA}herdr${RESET} to start. ${YELLOW}ALT+1..9${RESET} workspaces, ${YELLOW}ALT+TAB${RESET} tabs, ${YELLOW}ALT+HJKL${RESET} panes, ${YELLOW}ALT+W/ALT+Q${RESET} new/close workspace, ${YELLOW}ALT+B${RESET} previous workspace, ${YELLOW}CTRL+B ?${RESET} for everything else. Update later with ${MAGENTA}herdr update${RESET}.\n"
 printf "\n%.0s" {1..2}
