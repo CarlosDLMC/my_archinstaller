@@ -69,6 +69,10 @@ record_checksum_failure() {
   echo "$1" >> "$CHECKSUM_FAILURES_MANIFEST"
 }
 
+# Scripts whose initramfs rebuild failed (see rebuild_initramfs). Truncated by
+# install.sh per run and read by 02-Final-Check.sh as an outcome failure.
+INITRAMFS_FAILED_MANIFEST="Install-Logs/.initramfs-failures"
+
 # Packages allowed to rebuild with integrity verification off. See the file
 # itself for what that means and what to check before adding a name.
 CHECKSUM_SKIP_LIST="install-scripts/checksum-skip.conf"
@@ -368,6 +372,21 @@ install_package_f() {
 }
 
 
+# Is <hook> in the HOOKS mkinitcpio will actually use?
+#
+# Sourced in a subshell, the way mkinitcpio itself reads its config (the main
+# file, then /etc/mkinitcpio.conf.d/*.conf in order), rather than grepped. A
+# regex on `^HOOKS=(...)` missed a multi-line array and `HOOKS+=(plymouth)` in a
+# drop-in, so ucode.sh told people to add a microcode initrd line to an entry
+# that already had the hook, and plymouth="auto" resolved to OFF on a system
+# that had plymouth set up. Same approach nvidia.sh uses for MODULES.
+mkinitcpio_has_hook() {
+  local hook="$1"
+  bash -c '[ -f /etc/mkinitcpio.conf ] && source /etc/mkinitcpio.conf
+           for f in /etc/mkinitcpio.conf.d/*.conf; do [ -f "$f" ] && source "$f"; done
+           printf "%s\n" "${HOOKS[@]}"' 2>/dev/null | grep -qx -- "$hook"
+}
+
 # Rebuild every initramfs. Returns non-zero on failure.
 #
 # CachyOS + Limine keeps its initramfs under /boot/<machine-id>/<kernel>/ and
@@ -385,6 +404,12 @@ rebuild_initramfs() {
   fi
   if [ "${PIPESTATUS[0]}" -ne 0 ]; then
     echo "${ERROR} initramfs rebuild failed - check $log" | tee -a "$log"
+    # Recorded, not just printed: callers run this as `|| true` so the rest of
+    # their setup still happens, and 02-Final-Check.sh's modinfo check passes
+    # whether or not the image was rebuilt. Without this marker a failed rebuild
+    # (a full ESP, say) auto-rebooted into an image missing the NVIDIA modules
+    # or the nouveau blacklist.
+    echo "$(basename "$0")" >> "$INITRAMFS_FAILED_MANIFEST"
     return 1
   fi
 }

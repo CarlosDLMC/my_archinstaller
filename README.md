@@ -34,7 +34,10 @@ without a module (a `linux-cachyos-lts` fallback, say) gets its own matching
 prebuilt package (`linux-cachyos-lts-nvidia-open`). The rest of the NVIDIA setup
 (mkinitcpio modules, modeset options, nouveau blacklist) runs the same either way. The NVIDIA environment
 variables in `configs/ENVariables.lua` turn themselves on when every GPU in the
-machine is NVIDIA, and stay off on hybrid laptops.
+machine is NVIDIA *and* the proprietary driver is actually loaded, and stay off on
+hybrid laptops. The driver check matters on the machines the installer leaves on
+nouveau (`nvidia="OFF"`, Kepler-or-older cards, a failed DKMS build): forcing
+NVIDIA's GLX library there broke every XWayland OpenGL app.
 
 git is not part of that selection, so after the first login:
 
@@ -156,8 +159,9 @@ first prompt.
 4. **Fill in your machine-local secrets.**
 
    The installer creates `~/.config/zsh/secrets.zsh` for you from
-   `Hyprland-Dots/config/zsh/secrets.zsh`, with **placeholder values** and mode
-   `600`. Open it and replace them with your real keys:
+   `Hyprland-Dots/config/zsh/secrets.zsh`, mode `600`, with **every line
+   commented out** and fake values. Open it, uncomment the keys you use and
+   replace their values with the real ones:
 
    ```bash
    ${EDITOR:-nano} ~/.config/zsh/secrets.zsh
@@ -513,6 +517,13 @@ Machines with no `charge_control_end_threshold` — desktops, and laptops whose
 vendor never wired one up — get nothing installed, and the card hides the
 control instead of offering one that does nothing. Support is best on ThinkPads
 (via `thinkpad_acpi`, no extra module needed) and most ASUS laptops.
+
+On ASUS laptops `asusd` (installed by the `rog` option) keeps a charge limit of
+its own and writes it back at boot and after resume. The helper therefore also
+sets asusd's limit (`asusctl battery limit N`) whenever it sets or re-applies
+yours, and the unit runs after `asusd.service`, so the two never disagree. The
+charge slider in rog-control-center drives the same setting; the bar's picker
+wins at the next boot or resume, so pick one of them and stick to it.
 
 ### Laptops and desktops
 
@@ -1115,7 +1126,7 @@ The ones worth learning first:
 
 `neovim.sh` installs `tree-sitter-cli`, `stylua` and `shfmt` from the repos rather
 than letting mason.nvim fetch them. mason installs asynchronously inside a running
-nvim, and the headless `+Lazy! sync` the script runs exits the moment lazy is
+nvim, and the headless `+Lazy! install` the script runs exits the moment lazy is
 done - which kills those installs mid-flight. That left nvim-treesitter reporting
 a hard `❌ tree-sitter (CLI)` with no parsers and no highlighting. pacman installs
 them synchronously and mason has nothing left to race. Parsers themselves are
@@ -1126,9 +1137,12 @@ first time you open a matching file.
 meant to be forked and grown - `lua/plugins/*.lua` is yours - and vendoring a copy
 would both freeze someone else's template and put `copy.sh`'s wholesale directory
 replacement on top of your own plugin files on every re-run. `neovim.sh` clones
-the starter once and never touches it again; an existing LazyVim config is left
-completely alone, and any other `~/.config/nvim` is backed up rather than merged
-over.
+the starter once and never re-clones it; an existing LazyVim config is kept, and
+any other `~/.config/nvim` is backed up rather than merged over. Two files are the
+exception: `colors/pycharm-dark.lua` (the PyCharm-matched palette, from
+`assets/nvim/`) is rewritten on every run, and `lua/plugins/colorscheme.lua`,
+which selects it, is written only when it does not exist - change the scheme
+there and re-runs keep your choice.
 
 ### Hunk (reading what the agents wrote)
 
@@ -1257,7 +1271,8 @@ there are two GPUs to switch between. `ON` and `OFF` still
 force the decision, for when you mean it — `nvidia="OFF"` to stay on the
 open-source driver, for instance. A forced `ON` is still ignored with a note if
 the hardware is not there, so a stale preset cannot install an NVIDIA driver on
-an AMD box.
+an AMD box - and a forced `nvidia="ON"` is ignored the same way on a Kepler-or-older
+card, which no maintained driver supports.
 
 This is also why there is no CPU/GPU vendor prompt: `--preset` runs
 unattended by design, so a dialog could only appear in the interactive path —
@@ -1322,7 +1337,7 @@ did most of its work, but at least one package or component did not land. The
 names are printed above that line and saved to
 `Install-Logs/00_CHECK-*_installed.log`.
 
-Three things feed that list. `02-Final-Check.sh` verifies a hardcoded set of
+Four things feed that list. `02-Final-Check.sh` verifies a hardcoded set of
 sixteen essential packages, which catches a package that was never even
 attempted because its script was skipped or died early. Everything else on the
 package side comes from `Install-Logs/.failed-packages`, which
@@ -1342,6 +1357,11 @@ to re-run. These exist because the failures that hurt most were never
 packages: a `copy.sh` that died left vanilla Hyprland with every package
 "installed", and a `locales.sh` that was killed before it ran left the clock in
 English — and both used to reboot as if nothing were wrong.
+
+The fourth is a failed **initramfs rebuild**. `rebuild_initramfs()` records the
+script that hit it, because a rebuild failing (a full ESP, say) leaves the old
+image in place: the NVIDIA driver's own checks still pass, and the machine would
+reboot into an initramfs without its modules or the nouveau blacklist.
 
 In practice these are almost always AUR builds (`awww`, `handy-bin`,
 `pokemon-colorscripts`), which break for reasons that have nothing to do with
@@ -1514,7 +1534,10 @@ anything was installed. Run it on the old machine before you clone on the new on
 - Event-based monitoring reduces CPU usage significantly
 - All scripts are logged to `Install-Logs/` (untracked - they are per-run output)
 - First boot runs `initial-boot.sh` to set the wallpaper, run wallust, and apply
-  the GTK, icon, cursor and Kvantum themes. It runs exactly once, guarded by
+  the GTK, icon, cursor and Kvantum themes. The marker is only written when
+  wallust and every `gsettings` write succeeded, so a first login where dconf was
+  not ready yet retries at the next login (with a notification) instead of
+  leaving the themes unapplied for good. Once it has worked it runs exactly once, guarded by
   `~/.config/hypr/.initial_startup_done`. That marker is gitignored on purpose:
   if it is ever committed, copy.sh deploys it to the new machine and the whole
   first-boot setup silently skips itself.

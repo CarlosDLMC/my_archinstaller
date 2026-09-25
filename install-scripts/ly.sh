@@ -38,8 +38,10 @@ done
 
 printf "${NOTE} Disabling other display managers if they exist...\n"
 
-# Check for other login managers and disable them
-for login_manager in lightdm gdm3 gdm lxdm sddm; do
+# Check for other login managers and disable them. Keep in step with the
+# services list in install.sh. "ly" is the legacy non-template ly.service: left
+# enabled, it and ly@tty2 fight over the console.
+for login_manager in lightdm gdm3 gdm lxdm sddm greetd lemurs plasmalogin cosmic-greeter ly; do
   if systemctl is-enabled "$login_manager" 2>/dev/null | grep -q enabled; then
     echo "Disabling $login_manager..."
     sudo systemctl disable "$login_manager" 2>&1 | tee -a "$LOG"

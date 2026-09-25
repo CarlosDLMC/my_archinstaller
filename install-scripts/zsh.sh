@@ -64,8 +64,14 @@ if command -v zsh >/dev/null; then
       mv -T "$HOME/.oh-my-zsh" "$_omz_bak"
       echo "${NOTE} ~/.oh-my-zsh had no oh-my-zsh.sh - moved it to $(basename "$_omz_bak") and reinstalling." | tee -a "$LOG"
     fi
-    omz_installer="$(curl -fsSL https://install.ohmyz.sh)" || { echo "${ERROR} Could not download the Oh My Zsh installer (network?)" | tee -a "$LOG"; exit 1; }
-    sh -c "$omz_installer" "" --unattended || { echo "${ERROR} Oh My Zsh installer failed" | tee -a "$LOG"; exit 1; }
+    # Not fatal. This used to `exit 1`, which also skipped chsh and everything
+    # else below that does not need Oh My Zsh - bash stayed the login shell over
+    # one network blip. The final check reports the missing ~/.oh-my-zsh.
+    if omz_installer="$(curl -fsSL https://install.ohmyz.sh)"; then
+      sh -c "$omz_installer" "" --unattended || echo "${ERROR} Oh My Zsh installer failed - continuing without it" | tee -a "$LOG"
+    else
+      echo "${ERROR} Could not download the Oh My Zsh installer (network?) - continuing without it" | tee -a "$LOG"
+    fi
   else
     echo "${INFO} Directory .oh-my-zsh already exists. Skipping re-installation." 2>&1 | tee -a "$LOG"
   fi

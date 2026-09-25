@@ -94,8 +94,12 @@ else
      curl -fsSL --max-time 60 -o "$TMPD/SHA256SUMS" "$HUNK_SUMS" 2>>"$LOG"; then
     # Verify before trusting it. SHA256SUMS names the archive exactly, so run the
     # check from inside the directory with only that line - a missing or renamed
-    # asset then fails the check instead of silently passing it.
-    if ( cd "$TMPD" && grep -F " $HUNK_ASSET" SHA256SUMS | sha256sum -c - >/dev/null 2>&1 ); then
+    # asset then fails the check instead of silently passing it. The whole line
+    # is matched (hash, text or binary marker, exact name): a substring match
+    # would also pick up e.g. "$HUNK_ASSET.sig", and sha256sum -c then fails a
+    # good download on the file that was never fetched.
+    _asset_re=$(printf '%s' "$HUNK_ASSET" | sed 's/[.[\*^$]/\\&/g')
+    if ( cd "$TMPD" && grep -E "^[0-9a-fA-F]{64} [ *]${_asset_re}\$" SHA256SUMS | sha256sum -c - >/dev/null 2>&1 ); then
       if tar xzf "$TMPD/$HUNK_ASSET" -C "$TMPD" 2>>"$LOG"; then
         EXTRACTED=$(find "$TMPD" -type f -name hunk -perm -u+x | head -1)
         if [ -n "$EXTRACTED" ]; then

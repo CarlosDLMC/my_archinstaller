@@ -103,9 +103,20 @@ fi
 
 # Theme files: ours on top of the spinner theme's frames and dialog artwork.
 # -n on the spinner copy so our watermark.png is never replaced by theirs.
+# Each copy's status is checked through PIPESTATUS: `cmd | tee` reports tee's,
+# so a missing watermark used to pass silently, the theme was still selected,
+# and the splash booted with no logo while the final check (which only reads the
+# theme name) passed.
 sudo mkdir -p "$DEST_DIR"
 sudo cp "$SRC_DIR/$THEME.plymouth" "$DEST_DIR/" 2>&1 | tee -a "$LOG"
+_cp_theme=${PIPESTATUS[0]}
 sudo cp "$WATERMARK" "$DEST_DIR/watermark.png" 2>&1 | tee -a "$LOG"
+_cp_mark=${PIPESTATUS[0]}
+if [ "$_cp_theme" -ne 0 ] || [ "$_cp_mark" -ne 0 ]; then
+  echo "${ERROR} Could not copy the theme files into $DEST_DIR - leaving the current splash theme selected. See $LOG" | tee -a "$LOG"
+  record_package_failure "plymouth-theme-$THEME"
+  exit 1
+fi
 sudo find "$SPINNER_DIR" -maxdepth 1 -name '*.png' ! -name 'watermark.png' \
   -exec cp -n {} "$DEST_DIR/" \; 2>&1 | tee -a "$LOG"
 sudo chmod 644 "$DEST_DIR"/* 2>&1 | tee -a "$LOG"
@@ -123,10 +134,7 @@ fi
 
 # Report-only: what the splash needs from files this repo does not write.
 hooks_have_plymouth=false
-while IFS= read -r conf; do
-  [ -n "$conf" ] || continue
-  if grep -qsE '^HOOKS=.*[ (]plymouth[ )]' "$conf"; then hooks_have_plymouth=true; break; fi
-done <<< "$(printf '/etc/mkinitcpio.conf\n'; find /etc/mkinitcpio.conf.d -maxdepth 1 -name '*.conf' 2>/dev/null)"
+mkinitcpio_has_hook plymouth && hooks_have_plymouth=true
 if [ "$hooks_have_plymouth" != "true" ]; then
   echo "${WARN} 'plymouth' is not in HOOKS (/etc/mkinitcpio.conf or /etc/mkinitcpio.conf.d/*.conf). Add it after 'systemd' (or after 'base udev'), then run: sudo mkinitcpio -P" | tee -a "$LOG"
 fi

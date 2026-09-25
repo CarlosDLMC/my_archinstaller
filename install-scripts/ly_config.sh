@@ -77,6 +77,14 @@ elif [ -n "$_min_h" ];                          then _flag="1080p"
 else _flag="1080p"   # nothing readable: the smallest cut is the safe one
 fi
 echo "${NOTE} Panel is ${_min_h:-unknown}px tall -> ${SKY_BLUE}soviet-flag-*-${_flag}.dur${RESET}" | tee -a "$LOG"
+# The 1080p cut is 120x33 cells, and start.sh's 16x32 font gives a panel under
+# 1080 px fewer rows than that (1366x768 is 85x24), so ly clips the flag there.
+# There is no smaller cut: downscaling the traced art below 66 rows breaks the
+# emblem apart, so a small panel needs art drawn for it. Say so rather than
+# leave a clipped flag unexplained.
+if [ -n "$_min_h" ] && [ "$_min_h" -lt 1056 ]; then
+  echo "${WARN} This panel is under 1080 px: the login-screen flag (120x33 cells) will be clipped. Set 'animation = none' in /etc/ly/config.ini if that bothers you." | tee -a "$LOG"
+fi
 ly_install 644 "$PARENT_DIR/assets/ly/soviet-flag-animated-$_flag.dur" /etc/ly/soviet-flag-animated.dur
 ly_install 644 "$PARENT_DIR/assets/ly/soviet-flag-static-$_flag.dur" /etc/ly/soviet-flag-static.dur
 

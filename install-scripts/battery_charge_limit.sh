@@ -127,6 +127,21 @@ write_one() {
   fi
 }
 
+# asusd (ASUS laptops, rog.sh) keeps a charge limit of its own in
+# /etc/asusd/asusd.ron, default 100, and writes it back to the same sysfs file
+# when it starts and after resume. Left out of step with ours, whichever ran
+# last won and a 60% limit quietly became 100% again. So tell asusd the same
+# number: then its re-apply and ours agree. `battery limit` is asusctl 6.x,
+# `-c` the older spelling.
+sync_asusd() {
+  local limit="$1"
+  command -v asusctl >/dev/null 2>&1 || return 0
+  systemctl is-active --quiet asusd.service 2>/dev/null || return 0
+  asusctl battery limit "$limit" >/dev/null 2>&1 \
+    || asusctl -c "$limit" >/dev/null 2>&1 \
+    || echo "battery-charge-limit: asusd did not take $limit% - it may restore its own limit" >&2
+}
+
 cmd_get() {
   local found=false
   for bat in $(batteries); do
@@ -170,6 +185,7 @@ cmd_set() {
   # rejected would have the unit re-apply the same failure at every boot.
   printf '# Written by battery-charge-limit. The quickshell bar edits this.\nLIMIT=%s\n' \
     "$limit" > "$CONF"
+  sync_asusd "$limit"
 }
 
 cmd_apply() {
@@ -191,6 +207,7 @@ cmd_apply() {
   for bat in $(batteries); do
     write_one "$bat" "$limit" || true
   done
+  sync_asusd "$limit"
 }
 
 case "${1:-}" in
@@ -255,7 +272,10 @@ cat > "$TMP_UNIT" <<'UNITEOF'
 # threshold on resume, so this runs at both.
 [Unit]
 Description=Apply the battery charge limit
-After=multi-user.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
+# asusd.service: on ASUS laptops asusd applies its own stored limit when it
+# starts, so run after it (the helper also syncs asusd to our value). A no-op
+# ordering where asusd is not installed.
+After=multi-user.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target asusd.service
 ConditionPathExists=/etc/battery-charge-limit.conf
 
 [Service]

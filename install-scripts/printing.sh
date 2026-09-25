@@ -74,5 +74,5 @@ fi
 
 printf "\n${NOTE} ${SKY_BLUE}CUPS${RESET} installed. Add your printer with ${MAGENTA}http://localhost:631${RESET} (Administration -> Add Printer)\n"
 printf "${NOTE} or ${MAGENTA}lpadmin${RESET}. A network IPP printer is normally discovered automatically -\n"
-printf "${NOTE} avahi and nss-mdns are already wired up by thunar.sh and services.sh.\n"
+printf "${NOTE} avahi and nss-mdns are already wired up by services.sh.\n"
 printf "\n%.0s" {1..2}
