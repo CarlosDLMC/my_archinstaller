@@ -10,18 +10,12 @@ pipewire=(
     sof-firmware
 )
 
-# added this as some reports script didnt install this.
-# basically force reinstall
-pipewire_2=(
-    pipewire-pulse
-)
-
 ############## WARNING: DO NOT EDIT BEYOND THIS LINE IF YOU DON'T KNOW WHAT YOU ARE DOING! ##############
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # Change the working directory to the parent directory of the script
 PARENT_DIR="$SCRIPT_DIR/.."
-cd "$PARENT_DIR" || { echo "${ERROR} Failed to change directory to $PARENT_DIR"; exit 1; }
+cd "$PARENT_DIR" || { echo "[ERROR] Failed to change directory to $PARENT_DIR"; exit 1; }
 
 # Source the global functions script
 source "$(dirname "$(readlink -f "$0")")/Global_functions.sh"
@@ -37,10 +31,6 @@ systemctl --user disable --now pulseaudio.socket pulseaudio.service >> "$LOG" 2>
 echo -e "${NOTE} Installing ${SKY_BLUE}Pipewire${RESET} Packages..."
 for PIPEWIRE in "${pipewire[@]}"; do
     install_package "$PIPEWIRE" "$LOG"
-done
-
-for PIPEWIRE2 in "${pipewire_2[@]}"; do
-    install_package_pacman "$PIPEWIRE2" "$LOG"
 done
 
 echo -e "${NOTE} Activating Pipewire Services..."

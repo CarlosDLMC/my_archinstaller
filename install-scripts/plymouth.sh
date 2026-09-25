@@ -40,7 +40,7 @@ SPINNER_DIR="/usr/share/plymouth/themes/spinner"
 ## WARNING: DO NOT EDIT BEYOND THIS LINE IF YOU DON'T KNOW WHAT YOU ARE DOING! ##
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PARENT_DIR="$SCRIPT_DIR/.."
-cd "$PARENT_DIR" || { echo "${ERROR} Failed to change directory to $PARENT_DIR"; exit 1; }
+cd "$PARENT_DIR" || { echo "[ERROR] Failed to change directory to $PARENT_DIR"; exit 1; }
 
 if ! source "$(dirname "$(readlink -f "$0")")/Global_functions.sh"; then
   echo "Failed to source Global_functions.sh"

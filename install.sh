@@ -859,6 +859,11 @@ for option in "${options[@]}"; do
             echo "${INFO} Theming the ${SKY_BLUE}Limine boot menu${RESET}..." | tee -a "$LOG"
             execute_script "limine.sh"
             ;;
+        docker|herdr|neovim|hunk)
+            # Handled after this loop, in order, because they depend on the
+            # dotfiles already being in place. Listed here so they do not fall
+            # into the "Unknown option" branch below and log a false alarm.
+            ;;
         *)
             echo "Unknown option: $option" | tee -a "$LOG"
             ;;

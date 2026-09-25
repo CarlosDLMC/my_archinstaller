@@ -14,7 +14,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # Change the working directory to the parent directory of the script
 PARENT_DIR="$SCRIPT_DIR/.."
-cd "$PARENT_DIR" || { echo "${ERROR} Failed to change directory to $PARENT_DIR"; exit 1; }
+cd "$PARENT_DIR" || { echo "[ERROR] Failed to change directory to $PARENT_DIR"; exit 1; }
 
 # Source the global functions script
 if ! source "$(dirname "$(readlink -f "$0")")/Global_functions.sh"; then
@@ -35,6 +35,9 @@ install_package  "$ASUS" "$LOG"
 done
 
 printf " Activating ROG services...\n"
-sudo systemctl enable supergfxd 2>&1 | tee -a "$LOG"
+# asusd is the daemon asusctl, rog-control-center and the keyboard/fan controls
+# talk to; the package does not enable it, so without this line the tools
+# install and then fail with "asusd not running" after reboot.
+sudo systemctl enable asusd supergfxd 2>&1 | tee -a "$LOG"
 
 printf "\n%.0s" {1..2}

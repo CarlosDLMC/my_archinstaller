@@ -20,7 +20,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # Change the working directory to the parent directory of the script
 PARENT_DIR="$SCRIPT_DIR/.."
-cd "$PARENT_DIR" || { echo "${ERROR} Failed to change directory to $PARENT_DIR"; exit 1; }
+cd "$PARENT_DIR" || { echo "[ERROR] Failed to change directory to $PARENT_DIR"; exit 1; }
 
 # Source the global functions script
 if ! source "$(dirname "$(readlink -f "$0")")/Global_functions.sh"; then
@@ -36,9 +36,17 @@ LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_thunar-sort.log"
 # setting silently never lands, so fall back to a private bus - its daemons still
 # write to the same files on disk. Prefer the live session bus when there is one:
 # a second gvfsd-metadata opening the same database is asking for lost writes.
+#
+# The live bus is found by its socket, not by DBUS_SESSION_BUS_ADDRESS: a TTY
+# login does not export that variable even though pam_systemd has already put
+# the user bus at $XDG_RUNTIME_DIR/bus. Keying off the variable meant every
+# console run spun up a private bus - and on a re-run after the desktop had
+# been used, a second gvfsd-metadata on the same database.
 run_with_bus() {
   if [ -n "$DBUS_SESSION_BUS_ADDRESS" ]; then
     "$@"
+  elif [ -n "$XDG_RUNTIME_DIR" ] && [ -S "$XDG_RUNTIME_DIR/bus" ]; then
+    DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus" "$@"
   elif command -v dbus-run-session >/dev/null 2>&1; then
     dbus-run-session -- "$@"
   else
@@ -72,7 +80,10 @@ fi
 if [ "$(run_with_bus xfconf-query -c thunar -p /misc-directory-specific-settings 2>/dev/null)" = "true" ]; then
   echo "${INFO} Directory-specific settings already enabled, skipping." | tee -a "$LOG"
 else
-  if run_with_bus xfconf-query -c thunar -p /misc-directory-specific-settings -n -t bool -s true 2>&1 | tee -a "$LOG"; then
+  # `if cmd | tee` tests tee, which always succeeds; a failed xfconf write used
+  # to print [OK] anyway. Test the write itself through PIPESTATUS.
+  run_with_bus xfconf-query -c thunar -p /misc-directory-specific-settings -n -t bool -s true 2>&1 | tee -a "$LOG"
+  if [ "${PIPESTATUS[0]}" -eq 0 ]; then
     echo "${OK} Enabled per-directory view settings in Thunar." | tee -a "$LOG"
   else
     echo "${ERROR} Failed to enable per-directory view settings - the per-folder sort below will not take effect." | tee -a "$LOG"
@@ -102,8 +113,14 @@ for ENTRY in "${sort_dirs_relative[@]}"; do
     mkdir -p "$TARGET" && echo "${NOTE} Created ${MAGENTA}$TARGET${RESET}" | tee -a "$LOG"
   fi
 
-  if run_with_bus gio set "$TARGET" metadata::thunar-sort-column THUNAR_COLUMN_DATE_MODIFIED 2>&1 | tee -a "$LOG" &&
-     run_with_bus gio set "$TARGET" metadata::thunar-sort-order GTK_SORT_DESCENDING 2>&1 | tee -a "$LOG"; then
+  # Same PIPESTATUS treatment as the xfconf write above: tee's status is not
+  # gio's, and a gio that could not reach gvfsd-metadata exits non-zero.
+  _gio_rc=0
+  run_with_bus gio set "$TARGET" metadata::thunar-sort-column THUNAR_COLUMN_DATE_MODIFIED 2>&1 | tee -a "$LOG"
+  [ "${PIPESTATUS[0]}" -eq 0 ] || _gio_rc=1
+  run_with_bus gio set "$TARGET" metadata::thunar-sort-order GTK_SORT_DESCENDING 2>&1 | tee -a "$LOG"
+  [ "${PIPESTATUS[0]}" -eq 0 ] || _gio_rc=1
+  if [ "$_gio_rc" -eq 0 ]; then
     echo "${OK} ${MAGENTA}$TARGET${RESET} set to newest-first." | tee -a "$LOG"
   else
     echo "${ERROR} Failed to set sort order on $TARGET." | tee -a "$LOG"
