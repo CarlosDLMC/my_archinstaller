@@ -35,4 +35,11 @@ else
   fi
 fi
 
+# Rebuild AFTER the blacklist is on disk. The default `kms` hook puts nouveau in
+# the initramfs and `modconf` copies /etc/modprobe.d into it, so a blacklist
+# written after the last rebuild is not in the image that actually boots.
+# nvidia.sh leaves the rebuild to this script when nouveau is selected, so this
+# one image carries the NVIDIA modules, their options and the blacklist.
+rebuild_initramfs "$LOG" || true
+
 printf "\n%.0s" {1..2}

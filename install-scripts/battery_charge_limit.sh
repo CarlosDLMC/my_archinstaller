@@ -218,6 +218,33 @@ fi
 printf "${OK} Installed ${SKY_BLUE}$HELPER${RESET}\n" | tee -a "$LOG"
 
 # ---------------------------------------------------------------------------
+# The sudoers rule
+# ---------------------------------------------------------------------------
+# The bar runs `sudo -n /usr/local/bin/battery-charge-limit set N` from a QML
+# Process, which has no terminal to prompt on. With nopasswd_sudo="ON" the wheel
+# rule covers it; with it OFF the picker failed silently. So, like the bluetooth
+# toggle's rule, this installs a rule for exactly this one root-owned helper.
+# Safe to grant because the helper is root:root 0755 (see above) and only takes
+# get / set <40-100> / apply. Built in a temp file and validated with visudo
+# first: a malformed file in sudoers.d makes EVERY sudo refuse to run.
+BAT_USER="${USER:-$(id -un)}"
+if [ -n "$BAT_USER" ]; then
+  BAT_RULE="$(mktemp)"
+  echo "$BAT_USER ALL=(root) NOPASSWD: $HELPER" > "$BAT_RULE"
+  if sudo visudo -c -f "$BAT_RULE" >/dev/null 2>&1; then
+    sudo install -m 0440 -o root -g root "$BAT_RULE" /etc/sudoers.d/battery-charge-limit 2>&1 | tee -a "$LOG"
+    if [ "${PIPESTATUS[0]}" -eq 0 ]; then
+      printf "${OK} sudoers rule for the bar's charge limit picker installed\n" | tee -a "$LOG"
+    else
+      printf "${ERROR} Could not install /etc/sudoers.d/battery-charge-limit - the bar's picker needs nopasswd_sudo\n" | tee -a "$LOG"
+    fi
+  else
+    printf "${ERROR} Generated sudoers rule failed validation - NOT installing it\n" | tee -a "$LOG"
+  fi
+  rm -f "$BAT_RULE"
+fi
+
+# ---------------------------------------------------------------------------
 # The unit
 # ---------------------------------------------------------------------------
 cat > "$TMP_UNIT" <<'UNITEOF'

@@ -58,6 +58,41 @@ LOG="Install-Logs/01-Hyprland-Install-Scripts-$(date +%Y%m%d-%H%M%S).log"
 # stale tarball from a previous run must not be reported against this one.
 : > "Install-Logs/.checksum-failures"
 
+# Authenticate sudo once, first thing, and keep the timestamp alive for the whole
+# run. This used to happen halfway down, after hardware detection - but the
+# base-devel, libnewt and pciutils installs below it already call sudo, so on a
+# fresh Arch box the first password prompt came from one of those, with no
+# message saying why, and the "once" happened somewhere else. Everything after
+# this point, including the ESP-only Limine detection, reuses this one prompt.
+echo "${INFO} Authenticating ${SKY_BLUE}sudo${RESET} once for the whole run..." | tee -a "$LOG"
+if ! sudo -v; then
+    echo "${ERROR} sudo did not accept your password, or $USER is not allowed to sudo. See README: Prerequisites." | tee -a "$LOG"
+    exit 1
+fi
+( while true; do sudo -n true 2>/dev/null; sleep 60; kill -0 "$$" 2>/dev/null || exit; done ) &
+sudo_keepalive_pid=$!
+trap 'kill "$sudo_keepalive_pid" 2>/dev/null' EXIT
+
+# Install a package before pacman.sh's full upgrade has run.
+#
+# base-devel, libnewt and pciutils/usbutils are needed before the menus and the
+# hardware detection, i.e. before the first `pacman -Syu`. A plain `pacman -S`
+# there resolves against the package database from the day the OS was
+# installed, so on a machine that sat for a week the mirrors no longer carry
+# those versions: 404s, and the installer exited with "base-devel not found nor
+# cannot be installed" - with an unsynced database as the real cause. Try the
+# cheap way first; on failure refresh the keyring(s) and upgrade the system
+# (the same full upgrade pacman.sh would do moments later), then retry.
+early_install() {
+    sudo pacman -S --needed --noconfirm "$@" && return 0
+    echo "${NOTE} Install failed - syncing the package databases and upgrading first, then retrying..." | tee -a "$LOG"
+    local _keyrings=(archlinux-keyring)
+    pacman -Q cachyos-keyring &>/dev/null && _keyrings+=(cachyos-keyring)
+    sudo pacman -Sy --needed --noconfirm "${_keyrings[@]}" \
+        && sudo pacman -Su --noconfirm \
+        && sudo pacman -S --needed --noconfirm "$@"
+}
+
 # Check if PulseAudio package is installed
 if pacman -Qq | grep -qw '^pulseaudio$'; then
     echo "$ERROR PulseAudio is detected as installed. Uninstall it first, or comment out the execute_script 'pipewire.sh' call in install.sh." | tee -a "$LOG"
@@ -71,7 +106,7 @@ if pacman -Q base-devel &> /dev/null; then
 else
     echo "$NOTE Install base-devel.........."
 
-    if sudo pacman -S --noconfirm base-devel; then
+    if early_install base-devel; then
         echo "👌 ${OK} base-devel has been installed successfully." | tee -a "$LOG"
     else
         echo "❌ $ERROR base-devel not found nor cannot be installed."  | tee -a "$LOG"
@@ -83,7 +118,7 @@ fi
 # install whiptails if detected not installed. Necessary for this version
 if ! command -v whiptail >/dev/null; then
     echo "${NOTE} - whiptail is not installed. Installing..." | tee -a "$LOG"
-    sudo pacman -S --noconfirm libnewt
+    early_install libnewt
     printf "\n%.0s" {1..1}
 fi
 
@@ -238,7 +273,7 @@ printf "\n%.0s" {1..1}
 for _tool in pciutils usbutils; do
     if ! pacman -Qq "$_tool" &> /dev/null; then
         echo "${NOTE} - $_tool is not installed. Installing..." | tee -a "$LOG"
-        sudo pacman -S --noconfirm "$_tool"
+        early_install "$_tool"
         printf "\n%.0s" {1..1}
     fi
 done
@@ -344,14 +379,31 @@ if check_services_running; then
     fi
 fi
 
-# Check if NVIDIA GPU is detected
+# Check if NVIDIA GPU is detected, and which driver branch can drive it.
+#
+# Not `lspci | grep -i nvidia`: that also matched the GPU's HDMI audio function
+# and nForce chipsets, and said nothing about the generation - so every NVIDIA
+# card got nvidia-open-dkms, which only binds to Turing and newer. A GTX 1060
+# rebooted with that module unloaded AND nouveau blacklisted: no driver at all.
+# nvidia_detect.sh prints none / open / 580xx / unsupported.
+nvidia_tier=$("$(dirname "$(readlink -f "$0")")/install-scripts/nvidia_detect.sh" 2>/dev/null || echo none)
 nvidia_detected=false
-if lspci | grep -i "nvidia" &> /dev/null; then
+nvidia_supported=false
+case "$nvidia_tier" in
+    open)  _nv_driver="nvidia-open-dkms" ;;
+    580xx) _nv_driver="nvidia-580xx-dkms (legacy branch, AUR)" ;;
+    *)     _nv_driver="" ;;
+esac
+if [ "$nvidia_tier" != "none" ]; then
     nvidia_detected=true
-    if [ "$preset_mode" == "true" ]; then
-        echo "${NOTE} NVIDIA GPU detected. It is configured unless the preset sets nvidia=\"OFF\"." | tee -a "$LOG"
+    [ -n "$_nv_driver" ] && nvidia_supported=true
+    if [ "$nvidia_supported" != "true" ]; then
+        # Kepler or older. "auto" leaves it alone below, so nouveau keeps working.
+        echo "${WARN} NVIDIA GPU detected, but it is Kepler or older: no maintained proprietary driver supports it. Keeping nouveau." | tee -a "$LOG"
+    elif [ "$preset_mode" == "true" ]; then
+        echo "${NOTE} NVIDIA GPU detected (driver: ${_nv_driver}). It is configured unless the preset sets nvidia=\"OFF\"." | tee -a "$LOG"
     else
-        whiptail --title "NVIDIA GPU Detected" --msgbox "NVIDIA GPU detected in your system.\n\nNOTE: The script will install nvidia-dkms, nvidia-utils, and nvidia-settings if you chose to configure." 12 60
+        whiptail --title "NVIDIA GPU Detected" --msgbox "NVIDIA GPU detected in your system.\n\nNOTE: The script will install ${_nv_driver}, the matching nvidia-utils and nvidia-settings if you chose to configure." 12 70
     fi
 fi
 
@@ -420,18 +472,6 @@ if pacman -Qi plymouth &>/dev/null && [ "$_hooks_have_plymouth" == "true" ]; the
     echo "${NOTE} Plymouth is installed and in the initramfs HOOKS." | tee -a "$LOG"
 fi
 
-# From here on the run needs root (the ESP is root-only, so even detecting Limine
-# does). Authenticate once, up front, with a message - not from inside a detection
-# test with stderr discarded - and keep the timestamp alive for the whole run.
-echo "${INFO} Authenticating ${SKY_BLUE}sudo${RESET} once for the whole run..." | tee -a "$LOG"
-if ! sudo -v; then
-    echo "${ERROR} sudo did not accept your password, or $USER is not allowed to sudo. See README: Prerequisites." | tee -a "$LOG"
-    exit 1
-fi
-( while true; do sudo -n true 2>/dev/null; sleep 60; kill -0 "$$" 2>/dev/null || exit; done ) &
-sudo_keepalive_pid=$!
-trap 'kill "$sudo_keepalive_pid" 2>/dev/null' EXIT
-
 # Limine: the theme edits its config, so only offer it where that config exists.
 limine_detected=false
 for _lc in /boot/limine.conf /efi/limine.conf /boot/efi/limine.conf /boot/limine/limine.conf /efi/limine/limine.conf; do
@@ -447,7 +487,8 @@ fi
 for _hw in nvidia nouveau rog bluetooth plymouth limine; do
     [ "${!_hw}" == "auto" ] || continue
     case "$_hw" in
-        nvidia)         _want="$nvidia_detected" ;;
+        # A GPU no maintained driver supports stays on nouveau under "auto".
+        nvidia)         _want="$nvidia_supported" ;;
         # nouveau follows the *decision* on nvidia, not the detection. It used to
         # follow nvidia_detected, so nvidia="OFF" plus nouveau="auto" on an NVIDIA
         # machine blacklisted nouveau without installing the proprietary driver -
@@ -696,10 +737,13 @@ run_required() {
     fi
 }
 
+# pacman.sh first: it enables multilib, refreshes the keyring and runs the full
+# upgrade, so 00-base.sh's installs (git, findutils) resolve against a freshly
+# synced database rather than the one from the day the OS was installed.
+run_required "pacman.sh"
+sleep 1
 # Ensuring base-devel is installed
 run_required "00-base.sh"
-sleep 1
-run_required "pacman.sh"
 sleep 1
 
 # Generate the locales the dots reference. Runs before the dotfiles are copied,
@@ -721,8 +765,15 @@ fi
 # `-S --noconfirm pkg` with an empty helper name, about 150 times, each one a
 # silent failure, and the run would end an hour later with a misleading
 # final screen. Stop here instead, while the real error is still on screen.
-if ! command -v yay &>/dev/null && ! command -v paru &>/dev/null; then
-    echo "${ERROR} No AUR helper is available after ${aur_helper:-yay}.sh ran. Nothing else can install without one." | tee -a "$LOG"
+# `--version`, not only `command -v`: an AUR helper that is on PATH but cannot
+# start (paru-bin linked against a libalpm soname that pacman no longer ships)
+# passed the old check, and then every one of ~150 installs failed.
+_aur_works=false
+for _h in yay paru; do
+    command -v "$_h" &>/dev/null && "$_h" --version &>/dev/null && { _aur_works=true; break; }
+done
+if [ "$_aur_works" != "true" ]; then
+    echo "${ERROR} No working AUR helper after ${aur_helper:-yay}.sh ran. Nothing else can install without one." | tee -a "$LOG"
     echo "${NOTE} Read the build error above (also in Install-Logs/), fix it, and re-run the installer." | tee -a "$LOG"
     exit 1
 fi
@@ -790,11 +841,24 @@ for option in "${options[@]}"; do
             ;;
         nvidia)
             echo "${INFO} Configuring ${SKY_BLUE}nvidia stuff${RESET}" | tee -a "$LOG"
-            execute_script "nvidia.sh"
+            # nvidia.sh exits non-zero unless every installed kernel ended up
+            # with an NVIDIA module. Its result used to be ignored and nouveau
+            # blacklisted regardless - a failed DKMS build then rebooted into
+            # no GPU driver at all.
+            if execute_script "nvidia.sh"; then
+                nvidia_ok=true
+            else
+                nvidia_ok=false
+                echo "${ERROR} The NVIDIA driver did not land - see the messages above." | tee -a "$LOG"
+            fi
             ;;
         nouveau)
-            echo "${INFO} blacklisting ${SKY_BLUE}nouveau${RESET}"
-            execute_script "nvidia_nouveau.sh" | tee -a "$LOG"
+            if [[ " $selected_options " == *" nvidia "* ]] && [ "${nvidia_ok:-false}" != "true" ]; then
+                echo "${WARN} Not blacklisting ${SKY_BLUE}nouveau${RESET}: the NVIDIA driver is not working, and nouveau is the only driver left." | tee -a "$LOG"
+            else
+                echo "${INFO} blacklisting ${SKY_BLUE}nouveau${RESET}"
+                execute_script "nvidia_nouveau.sh" | tee -a "$LOG"
+            fi
             ;;
         gtk_themes)
             echo "${INFO} Installing ${SKY_BLUE}GTK themes...${RESET}" | tee -a "$LOG"
@@ -948,6 +1012,9 @@ execute_script "services.sh"
 # copy fastfetch config if arch.png is not present. From the dotfiles: the
 # duplicate assets/fastfetch/ it used to read is gone.
 if [ ! -f "$HOME/.config/fastfetch/arch.png" ]; then
+    # mkdir first: with dots off, ~/.config need not exist yet, and
+    # `cp -r dir ~/.config/` into a missing directory fails.
+    mkdir -p "$HOME/.config"
     cp -r Hyprland-Dots/config/fastfetch "$HOME/.config/"
 fi
 

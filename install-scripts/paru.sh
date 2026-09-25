@@ -2,7 +2,13 @@
 # Paru AUR Helper #
 # NOTE: If yay is already installed, paru will not be installed #
 
-pkg="paru-bin"
+# `paru`, built from source - not paru-bin. The prebuilt release binary is linked
+# against a specific libalpm soname (paru-bin 2.1.0 wants libalpm.so.15) while
+# its PKGBUILD only asks for libalpm.so>=14, so after a pacman bump it installs
+# cleanly and then cannot start: every AUR install after it fails. Building from
+# source links against the libalpm on this machine. Slower (it pulls in rust as
+# a make dependency), but it works.
+pkg="paru"
 
 ## WARNING: DO NOT EDIT BEYOND THIS LINE IF YOU DON'T KNOW WHAT YOU ARE DOING! ##
 # Anchor to the repo root rather than trusting the caller's cwd.
@@ -61,6 +67,13 @@ else
   # tee's. Checking $? here would report success on every failed build.
   if [ "${PIPESTATUS[0]}" -ne 0 ]; then
     printf "%s - Failed to build and install ${YELLOW}$pkg${RESET}\n" "${ERROR}"
+    exit 1
+  fi
+
+  # Built is not the same as working - see the note on pkg above.
+  if ! paru --version >/dev/null 2>&1; then
+    printf "%s - ${YELLOW}$pkg${RESET} installed but does not run:\n" "${ERROR}"
+    paru --version 2>&1 | head -3
     exit 1
   fi
 

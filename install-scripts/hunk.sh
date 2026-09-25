@@ -55,13 +55,14 @@ case "$(uname -m)" in
 esac
 
 printf "\n%s - Resolving the latest ${SKY_BLUE}Hunk${RESET} release .... \n" "${NOTE}"
-RELEASE=$(curl -fsSL --max-time 30 https://api.github.com/repos/modem-dev/hunk/releases/latest 2>>"$LOG")
-if [ -z "$RELEASE" ]; then
-  echo "${ERROR} Could not reach the GitHub API - skipping Hunk." | tee -a "$LOG"
-  record_package_failure "hunk"; exit 0
-fi
-
-read -r HUNK_VER HUNK_URL HUNK_SUMS <<EOF
+# `|| RELEASE=""`: Global_functions.sh runs `set -e`, so a failing curl in a bare
+# assignment ended the script right here, silently - the skip branch below never
+# ran and nothing was recorded. GitHub's unauthenticated rate limit (a 403) is
+# enough to trigger it on a re-run.
+RELEASE=$(curl -fsSL --max-time 30 https://api.github.com/repos/modem-dev/hunk/releases/latest 2>>"$LOG") || RELEASE=""
+HUNK_VER="" HUNK_URL="" HUNK_SUMS=""
+if [ -n "$RELEASE" ]; then
+  read -r HUNK_VER HUNK_URL HUNK_SUMS <<EOF || true
 $(printf '%s' "$RELEASE" | python3 -c "
 import json,sys
 d=json.load(sys.stdin); want='$HUNK_ASSET'
@@ -69,14 +70,22 @@ a={x['name']: x['browser_download_url'] for x in d.get('assets',[])}
 print(d['tag_name'].lstrip('v'), a.get(want,''), a.get('SHA256SUMS',''))
 " 2>>"$LOG")
 EOF
-
-if [ -z "$HUNK_URL" ] || [ -z "$HUNK_SUMS" ]; then
-  echo "${ERROR} Release had no $HUNK_ASSET or no SHA256SUMS - skipping Hunk." | tee -a "$LOG"
-  record_package_failure "hunk"; exit 0
 fi
 
+if [ -z "$HUNK_URL" ] || [ -z "$HUNK_SUMS" ]; then
+  if [ -z "$RELEASE" ]; then
+    echo "${ERROR} Could not reach the GitHub API." | tee -a "$LOG"
+  else
+    echo "${ERROR} Release had no $HUNK_ASSET or no SHA256SUMS." | tee -a "$LOG"
+  fi
+  if [ -x "$BIN" ]; then
+    echo "${NOTE} Keeping the Hunk already at $BIN." | tee -a "$LOG"
+  else
+    echo "${ERROR} Skipping Hunk." | tee -a "$LOG"
+    record_package_failure "hunk"; exit 0
+  fi
 # Already current? `hunk --version` prints a bare version, e.g. "0.22.0".
-if [ -x "$BIN" ] && [ "$("$BIN" --version 2>/dev/null | tr -d '[:space:]')" = "$HUNK_VER" ]; then
+elif [ -x "$BIN" ] && [ "$("$BIN" --version 2>/dev/null | tr -d '[:space:]')" = "$HUNK_VER" ]; then
   echo "${OK} Hunk $HUNK_VER already installed." | tee -a "$LOG"
 else
   printf "\n%s - Downloading ${SKY_BLUE}Hunk $HUNK_VER${RESET} .... \n" "${NOTE}"
