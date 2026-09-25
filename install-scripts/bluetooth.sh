@@ -77,8 +77,15 @@ else
 fi
 
 # Disable blueman auto-start to save RAM (bar widget handles bluetooth)
+#
+# With a per-user override, not by deleting /etc/xdg/autostart/blueman.desktop:
+# that file belongs to the blueman package, so every blueman update put it back
+# (and pacman -Qkk reported it missing until then). A same-named file in
+# ~/.config/autostart with Hidden=true shadows it for good, per the XDG
+# autostart spec.
 printf " Disabling ${YELLOW}blueman auto-start${RESET} (saves ~130MB RAM)...\n"
-sudo rm -f /etc/xdg/autostart/blueman.desktop 2>&1 | tee -a "$LOG"
+mkdir -p "$HOME/.config/autostart"
+printf '[Desktop Entry]\nType=Application\nName=Blueman Applet\nHidden=true\n' > "$HOME/.config/autostart/blueman.desktop"
 systemctl --user mask blueman-applet.service 2>&1 | tee -a "$LOG"
 
 printf "\n%.0s" {1..2}

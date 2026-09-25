@@ -64,7 +64,21 @@ local function nvidia_only()
     p:close()
     return seen and only
 end
-if nvidia_only() then
+-- The hardware alone is not enough: the installer deliberately leaves an NVIDIA
+-- GPU on nouveau when nvidia="OFF", when the card is Kepler or older, and when
+-- the DKMS build failed. Forcing __GLX_VENDOR_LIBRARY_NAME=nvidia there points
+-- libglvnd at a GLX library that is not installed, so every XWayland OpenGL app
+-- fails to create a context (and VA-API at a driver that does not exist). So
+-- also require the proprietary module to be loaded and its GLX library present.
+local function exists(path)
+    local f = io.open(path, "r")
+    if f then f:close() return true end
+    return false
+end
+local function nvidia_driver()
+    return exists("/sys/module/nvidia/initstate") and exists("/usr/lib/libGLX_nvidia.so.0")
+end
+if nvidia_only() and nvidia_driver() then
     hl.env("LIBVA_DRIVER_NAME", "nvidia")
     hl.env("__GLX_VENDOR_LIBRARY_NAME", "nvidia")
     hl.env("NVD_BACKEND", "direct")

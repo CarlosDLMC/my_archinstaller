@@ -57,6 +57,8 @@ LOG="Install-Logs/01-Hyprland-Install-Scripts-$(date +%Y%m%d-%H%M%S).log"
 # Same treatment for the checksum-failure manifest, for the same reason: a
 # stale tarball from a previous run must not be reported against this one.
 : > "Install-Logs/.checksum-failures"
+# And for failed initramfs rebuilds (INITRAMFS_FAILED_MANIFEST).
+: > "Install-Logs/.initramfs-failures"
 
 # Authenticate sudo once, first thing, and keep the timestamp alive for the whole
 # run. This used to happen halfway down, after hardware detection - but the
@@ -346,7 +348,11 @@ else
 fi
 
 # List of services to check for active login managers
-services=("gdm.service" "gdm3.service" "lightdm.service" "lxdm.service" "sddm.service")
+# greetd, lemurs, plasmalogin and cosmic-greeter too: with only the classic five
+# listed, a machine already running greetd got ly enabled next to it and booted
+# into greetd anyway. Keep in step with the disable list in install-scripts/ly.sh.
+services=("gdm.service" "gdm3.service" "lightdm.service" "lxdm.service" "sddm.service"
+          "greetd.service" "lemurs.service" "plasmalogin.service" "cosmic-greeter.service")
 
 # Function to check if any login services are active
 check_services_running() {
@@ -462,11 +468,15 @@ fi
 # initramfs - CachyOS does; a plain archinstall has neither. The theme alone is
 # harmless, but "auto" should not pull plymouth onto a machine that never asked.
 plymouth_detected=false
+# Sourced the way mkinitcpio reads it, not grepped, so a multi-line HOOKS array
+# or HOOKS+=(plymouth) in a drop-in counts - same as mkinitcpio_has_hook in
+# Global_functions.sh (which is not sourced here: it sets -e).
 _hooks_have_plymouth=false
-while IFS= read -r _conf; do
-    [ -n "$_conf" ] || continue
-    if grep -qsE '^HOOKS=.*[ (]plymouth[ )]' "$_conf"; then _hooks_have_plymouth=true; break; fi
-done <<< "$(printf '/etc/mkinitcpio.conf\n'; find /etc/mkinitcpio.conf.d -maxdepth 1 -name '*.conf' 2>/dev/null)"
+if bash -c '[ -f /etc/mkinitcpio.conf ] && source /etc/mkinitcpio.conf
+            for f in /etc/mkinitcpio.conf.d/*.conf; do [ -f "$f" ] && source "$f"; done
+            printf "%s\n" "${HOOKS[@]}"' 2>/dev/null | grep -qx plymouth; then
+    _hooks_have_plymouth=true
+fi
 if pacman -Qi plymouth &>/dev/null && [ "$_hooks_have_plymouth" == "true" ]; then
     plymouth_detected=true
     echo "${NOTE} Plymouth is installed and in the initramfs HOOKS." | tee -a "$LOG"
@@ -493,8 +503,10 @@ for _hw in nvidia nouveau rog bluetooth plymouth limine; do
         # follow nvidia_detected, so nvidia="OFF" plus nouveau="auto" on an NVIDIA
         # machine blacklisted nouveau without installing the proprietary driver -
         # no GPU driver at all. nvidia is resolved earlier in this loop, so it is
-        # already ON/OFF here.
-        nouveau)        if [ "$nvidia" == "ON" ]; then _want=true; else _want=false; fi ;;
+        # already ON/OFF here. It also needs a card the driver supports: a
+        # forced nvidia="ON" on a Kepler card is skipped below, and blacklisting
+        # nouveau there would leave no driver at all.
+        nouveau)        if [ "$nvidia" == "ON" ] && [ "$nvidia_supported" == "true" ]; then _want=true; else _want=false; fi ;;
         rog)            _want="$rog_detected" ;;
         bluetooth)      _want="$bluetooth_detected" ;;
         plymouth)       _want="$plymouth_detected" ;;
@@ -586,6 +598,13 @@ if [ "$preset_mode" == "true" ]; then
             nvidia|nouveau)
                 if [ "$nvidia_detected" != "true" ]; then
                     echo "${NOTE} Preset forces '$_opt' but no NVIDIA GPU was detected. Skipping." | tee -a "$LOG"
+                    continue
+                fi
+                # A Kepler-or-older card is "detected" but no maintained driver
+                # binds to it. Forcing nvidia there used to run nvidia.sh anyway,
+                # fail, and have the final check blame a missing DKMS module.
+                if [ "$_opt" == "nvidia" ] && [ "$nvidia_supported" != "true" ]; then
+                    echo "${NOTE} Preset forces 'nvidia' but this GPU is Kepler or older - no maintained driver supports it. Skipping." | tee -a "$LOG"
                     continue
                 fi
                 ;;
@@ -1076,6 +1095,11 @@ if pacman -Q hyprland &> /dev/null || pacman -Q hyprland-git &> /dev/null; then
     if [ "$preset_mode" == "true" ]; then
         echo "${NOTE} Preset mode: rebooting in 15 seconds."
         echo "${CAT} Press any key to cancel and stay in this session."
+        # Throw away anything typed during the install first. Background jobs
+        # read nothing from the terminal, so every stray key from the last hour
+        # sat in the input buffer and `read -n 1` took it at once - cancelling
+        # the reboot before the countdown had started.
+        while read -r -t 0.05 -n 1000 _discard; do :; done
         if read -r -t 15 -n 1; then
             printf "\n"
             echo "👌 ${OK} Reboot cancelled. Reboot yourself with ${MAGENTA}systemctl reboot${RESET} when ready."

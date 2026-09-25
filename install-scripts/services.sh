@@ -128,10 +128,24 @@ else
   fi
 fi
 
+# avahi-daemon is enabled HERE, not only by thunar.sh. 01-hypr-pkgs.sh always
+# installs avahi, and the block below hands mDNS to it - so with thunar="OFF" the
+# daemon was installed but never started, resolved's responder was switched off,
+# and nothing answered .local names or printer discovery at all.
+if pacman -Qi avahi &>/dev/null && ! systemctl is-enabled avahi-daemon.service &>/dev/null; then
+  sudo systemctl enable --now avahi-daemon.service 2>&1 | tee -a "$LOG"
+  if systemctl is-enabled avahi-daemon.service &>/dev/null; then
+    echo "${OK} avahi-daemon enabled (mDNS responder for .local names and printer discovery)." | tee -a "$LOG"
+  else
+    echo "${WARN} Could not enable avahi-daemon - .local names and printer discovery will not work." | tee -a "$LOG"
+  fi
+fi
+
 # Two mDNS responders on one host make mDNS unreliable (avahi says so in the journal).
-# thunar.sh enables avahi for NAS discovery; when it is installed, let avahi own mDNS
-# and turn off systemd-resolved's responder. nss-mdns above answers .local via avahi.
-if pacman -Qi avahi &>/dev/null && systemctl is-enabled systemd-resolved.service &>/dev/null; then
+# When avahi owns mDNS (enabled just above), turn off systemd-resolved's responder.
+# nss-mdns above answers .local via avahi. Keyed off the daemon being enabled, not
+# the package being installed, so resolved never loses mDNS to a stopped avahi.
+if systemctl is-enabled avahi-daemon.service &>/dev/null && systemctl is-enabled systemd-resolved.service &>/dev/null; then
   if [ ! -f /etc/systemd/resolved.conf.d/10-avahi-owns-mdns.conf ]; then
     sudo mkdir -p /etc/systemd/resolved.conf.d
     printf '# Installed by my_archinstaller (install-scripts/services.sh): avahi-daemon is the\n# mDNS responder on this machine; two responders make mDNS unreliable.\n[Resolve]\nMulticastDNS=no\n' | sudo tee /etc/systemd/resolved.conf.d/10-avahi-owns-mdns.conf >/dev/null

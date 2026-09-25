@@ -38,7 +38,7 @@ neovim_pkg=(
 
   # The next three are LazyVim's own tooling, and they come from the repos here
   # rather than from mason.nvim on purpose. mason installs asynchronously inside
-  # a running nvim, and the headless "+Lazy! sync" below exits as soon as lazy is
+  # a running nvim, and the headless "+Lazy! install" below exits as soon as lazy is
   # done - which kills those installs mid-flight. On the machine this was tested
   # on that left nvim-treesitter reporting a hard
   #   Unmet requirements for nvim-treesitter `main`: ❌ tree-sitter (CLI)

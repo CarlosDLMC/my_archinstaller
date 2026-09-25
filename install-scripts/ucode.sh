@@ -72,13 +72,10 @@ printf "${OK} Microcode image: ${MAGENTA}${ucode_img}${RESET}\n" | tee -a "$LOG"
 # entry that is already correct is a good way to end up with a boot entry that
 # is not - which is the exact failure this script is written to avoid.
 #
-# find, not a glob: an empty conf.d would leave the pattern unexpanded and
-# grep -s would swallow it, turning "I could not check" into "not enabled".
+# Read the way mkinitcpio reads it (see mkinitcpio_has_hook), so a multi-line
+# HOOKS array or a HOOKS+= drop-in counts.
 microcode_hook=false
-while IFS= read -r conf; do
-  [ -n "$conf" ] || continue
-  if grep -qsE '^HOOKS=.*[ (]microcode[ )]' "$conf"; then microcode_hook=true; break; fi
-done <<< "$(printf '/etc/mkinitcpio.conf\n'; find /etc/mkinitcpio.conf.d -maxdepth 1 -name '*.conf' 2>/dev/null)"
+mkinitcpio_has_hook microcode && microcode_hook=true
 
 if [ "$microcode_hook" == "true" ]; then
   printf "${OK} mkinitcpio's ${MAGENTA}microcode${RESET} hook is enabled, so the image is built\n" | tee -a "$LOG"

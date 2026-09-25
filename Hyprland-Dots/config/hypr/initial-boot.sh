@@ -32,8 +32,15 @@ effect="--transition-bezier .43,1.19,1,.4 --transition-fps 30 --transition-type 
 if [ ! -f "$HOME/.config/hypr/.initial_startup_done" ]; then
     sleep 1
     # Initialize wallust and wallpaper
+	# Everything that has to land is checked, and the marker below is only
+	# written when it did. It used to be touched unconditionally, right after
+	# the gsettings calls had been sent to the background with their output
+	# thrown away - so a wallust failure, or dconf/D-Bus not being ready in the
+	# first second of the session, left the GTK theme, icons, cursor and fonts
+	# unapplied, and the marker made sure it was never tried again.
+	setup_ok=true
 	if [ -f "$wallpaper" ]; then
-		wallust run -s $wallpaper > /dev/null 
+		wallust run -s $wallpaper > /dev/null || setup_ok=false
 		# see RofiContrast.py - readable rofi text for whatever slots this
 		# wallpaper produced; must follow wallust, never run as its hook.
 		"$HOME/.config/hypr/scripts/RofiContrast.py" || true
@@ -45,13 +52,21 @@ if [ ! -f "$HOME/.config/hypr/.initial_startup_done" ]; then
 	fi
      
     # initiate GTK dark mode and apply icon and cursor theme
-    gsettings set org.gnome.desktop.interface color-scheme $color_scheme > /dev/null 2>&1 &
-    gsettings set org.gnome.desktop.interface gtk-theme $gtk_theme > /dev/null 2>&1 &
-    gsettings set org.gnome.desktop.interface icon-theme $icon_theme > /dev/null 2>&1 &
-    gsettings set org.gnome.desktop.interface cursor-theme $cursor_theme > /dev/null 2>&1 &
-    gsettings set org.gnome.desktop.interface cursor-size 24 > /dev/null 2>&1 &
-    gsettings set org.gnome.desktop.interface font-name "$gtk_font" > /dev/null 2>&1 &
-    gsettings set org.gnome.desktop.interface monospace-font-name "$gtk_mono_font" > /dev/null 2>&1 &
+    #
+    # In the foreground, and checked. The session bus that dconf rides on may
+    # not be answering yet this early, so give the first write a few seconds.
+    _gs() { gsettings set org.gnome.desktop.interface "$@" > /dev/null 2>&1; }
+    for _try in 1 2 3 4 5 6 7 8 9 10; do
+        _gs color-scheme "$color_scheme" && break
+        sleep 1
+    done
+    _gs color-scheme "$color_scheme" || setup_ok=false
+    _gs gtk-theme "$gtk_theme" || setup_ok=false
+    _gs icon-theme "$icon_theme" || setup_ok=false
+    _gs cursor-theme "$cursor_theme" || setup_ok=false
+    _gs cursor-size 24 || setup_ok=false
+    _gs font-name "$gtk_font" || setup_ok=false
+    _gs monospace-font-name "$gtk_mono_font" || setup_ok=false
 
      # NIXOS initiate GTK dark mode and apply icon and cursor theme
 	if [ -n "$(grep -i nixos < /etc/os-release)" ]; then
@@ -73,8 +88,14 @@ if [ ! -f "$HOME/.config/hypr/.initial_startup_done" ]; then
     # SUPER+SPACE (quickshell:layoutNext) owns switching.
 
 
-    # Create a marker file to indicate that the script has been executed.
-    touch "$HOME/.config/hypr/.initial_startup_done"
+    # Create a marker file to indicate that the script has been executed - only
+    # if it worked, so a failed first login is retried at the next one.
+    if [ "$setup_ok" = true ]; then
+        touch "$HOME/.config/hypr/.initial_startup_done"
+    else
+        notify-send -u critical "First-boot setup incomplete" \
+            "wallust or gsettings failed - it will be retried at the next login." > /dev/null 2>&1 || true
+    fi
 
     exit
 fi

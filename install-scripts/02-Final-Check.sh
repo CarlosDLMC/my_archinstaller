@@ -145,6 +145,12 @@ if pacman -Qi systemd-resolvconf &>/dev/null; then
         systemctl is-enabled systemd-resolved.service
 fi
 
+# A failed initramfs rebuild boots the previous image: no NVIDIA modules, no
+# nouveau blacklist, no new plymouth theme. Nothing else here can see that.
+if [ -s "$INITRAMFS_FAILED_MANIFEST" ]; then
+    outcome_failures+=("initramfs rebuild failed in: $(sort -u "$INITRAMFS_FAILED_MANIFEST" | tr '\n' ' ')- fix the error in Install-Logs/ and rebuild it (sudo limine-mkinitcpio on CachyOS+Limine, else sudo mkinitcpio -P)")
+fi
+
 if selected dots; then
     check_outcome "dotfiles not deployed: ~/.config/hypr/hyprland.lua is missing (install-scripts/dotfiles-main.sh)" \
         test -f "$HOME/.config/hypr/hyprland.lua"
