@@ -165,25 +165,56 @@ echo "${OK} NVIDIA kernel module present for every installed kernel." | tee -a "
 # printed "added" in both cases. `+=` appends to whatever the main file and the
 # earlier drop-ins set, and the effective list is verified afterwards.
 nv_modules=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)
+
+# mkinitcpio skips /etc/mkinitcpio.conf.d entirely when it is given `-c <file>`,
+# which is what a preset with an uncommented ALL_config= / default_config= /
+# fallback_config= does. A drop-in would then "pass" the check below while the
+# image got nothing. So: if any preset names its own config file, edit those
+# files instead (and verify each one on its own).
+custom_confs=$(sed -nE 's/^\s*[A-Za-z_]*config=["\x27]?([^"\x27 ]+)["\x27]?.*/\1/p' /etc/mkinitcpio.d/*.preset 2>/dev/null | sort -u)
+
 effective_modules() {
-  bash -c 'source /etc/mkinitcpio.conf 2>/dev/null
-           for f in /etc/mkinitcpio.conf.d/*.conf; do [ -f "$f" ] && source "$f"; done
-           printf "%s\n" "${MODULES[@]}"' 2>/dev/null
+  # $1: a config file used on its own (-c), or empty for the default layout.
+  if [ -n "$1" ]; then
+    bash -c 'source "$1" 2>/dev/null; printf "%s\n" "${MODULES[@]}"' _ "$1" 2>/dev/null
+  else
+    bash -c 'source /etc/mkinitcpio.conf 2>/dev/null
+             for f in /etc/mkinitcpio.conf.d/*.conf; do [ -f "$f" ] && source "$f"; done
+             printf "%s\n" "${MODULES[@]}"' 2>/dev/null
+  fi
 }
 modules_present() {
-  local have; have=$(effective_modules)
+  local have; have=$(effective_modules "${1:-}")
   for m in "${nv_modules[@]}"; do grep -qx "$m" <<< "$have" || return 1; done
 }
-if modules_present; then
-  echo "Nvidia modules already in the initramfs MODULES" 2>&1 | tee -a "$LOG"
-else
-  sudo mkdir -p /etc/mkinitcpio.conf.d
-  echo "MODULES+=(${nv_modules[*]})" | sudo tee /etc/mkinitcpio.conf.d/99-nvidia.conf >/dev/null
+
+if [ -z "$custom_confs" ]; then
   if modules_present; then
-    echo "${OK} Nvidia modules added via /etc/mkinitcpio.conf.d/99-nvidia.conf" | tee -a "$LOG"
+    echo "Nvidia modules already in the initramfs MODULES" 2>&1 | tee -a "$LOG"
   else
-    echo "${WARN} Could not get the Nvidia modules into MODULES - they will load later instead of in the initramfs." | tee -a "$LOG"
+    sudo mkdir -p /etc/mkinitcpio.conf.d
+    echo "MODULES+=(${nv_modules[*]})" | sudo tee /etc/mkinitcpio.conf.d/99-nvidia.conf >/dev/null
+    if modules_present; then
+      echo "${OK} Nvidia modules added via /etc/mkinitcpio.conf.d/99-nvidia.conf" | tee -a "$LOG"
+    else
+      echo "${WARN} Could not get the Nvidia modules into MODULES - they will load later instead of in the initramfs." | tee -a "$LOG"
+    fi
   fi
+else
+  for _conf in $custom_confs; do
+    if modules_present "$_conf"; then
+      echo "Nvidia modules already in MODULES of $_conf" 2>&1 | tee -a "$LOG"
+      continue
+    fi
+    # Presets pass this file with -c, so drop-ins do not apply; append to its
+    # own single-line MODULES=(...) and check that it took.
+    sudo sed -Ei "s/^(MODULES=\([^)]*)\)/\1 ${nv_modules[*]})/" "$_conf" 2>&1 | tee -a "$LOG"
+    if modules_present "$_conf"; then
+      echo "${OK} Nvidia modules added to $_conf (a preset uses it with -c, so drop-ins are ignored)" | tee -a "$LOG"
+    else
+      echo "${WARN} Could not add the Nvidia modules to $_conf - add them to its MODULES by hand for early KMS." | tee -a "$LOG"
+    fi
+  done
 fi
 
 # Additional Nvidia steps
