@@ -32,7 +32,16 @@ LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_rog.log"
 # treats any ASUS laptop as ROG hardware, and Zenbooks and Vivobooks are mostly
 # Intel-only - they got an enabled supergfxd for a switch they do not have.
 # Two or more display controllers (PCI class 03xx) is the hybrid case.
+#
+# dgpu_disable is the other signal: a hybrid laptop left in Eco mode keeps its
+# dGPU powered off across a reinstall, so it is not on the PCI bus and the count
+# says 1 - skipping the one tool that can switch it back on. The attribute only
+# exists on ASUS hybrid machines.
 gpu_count=$(lspci -n 2>/dev/null | awk '$2 ~ /^03/' | wc -l)
+if [ -e /sys/devices/platform/asus-nb-wmi/dgpu_disable ] && [ "$gpu_count" -lt 2 ]; then
+  echo "${NOTE} dGPU is switched off (Eco mode) - counting it as a hybrid laptop anyway." | tee -a "$LOG"
+  gpu_count=2
+fi
 if [ "$gpu_count" -ge 2 ]; then
   rog+=(supergfxctl)
 else
