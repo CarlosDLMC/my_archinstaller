@@ -109,6 +109,11 @@ log_shows_checksum_failure() {
 # you to turn checksums off for a package whose checksums were fine. makepkg
 # announces each build with "==> Making package: <name> <version>", so the
 # failure belongs to the last one announced before it.
+#
+# That <name> is the PKGBASE, not necessarily something you can install: a split
+# PKGBUILD builds several packages under one base (pkgbase=foo -> foo-cli,
+# python-foo), and `yay -S foo` then fails with "target not found". See
+# pkgnames_for_base below for turning it back into installable names.
 checksum_failed_packages() {
   local from="${1:-0}"
   [ -f "$LOG" ] || return 0
@@ -119,6 +124,59 @@ checksum_failed_packages() {
     | awk '!seen[$0]++'
 }
 
+# Every dependency (runtime, make, check) of the given packages, recursively,
+# one name per line, version constraints stripped. Used to work out which of a
+# split base's packages the asked-for package actually needs. Bounded depth: a
+# checksum failure is a few levels down at most, and each level is one -Si call.
+aur_dep_closure() {
+  local frontier="$*" seen=" $* " next dep depth=0
+  printf '%s\n' "$@"
+  while [ -n "$frontier" ] && [ "$depth" -lt 6 ]; do
+    next=""
+    # shellcheck disable=SC2086
+    for dep in $(env $AUR_ENV $ISAUR -Si $frontier 2>/dev/null \
+                   | sed -nE 's/^(Depends On|Make Deps|Check Deps) *: *//p' \
+                   | tr -s ' ' '\n' | sed -E 's/[<>=].*//' | grep -vx 'None' || true); do
+      [ -n "$dep" ] || continue
+      [[ "$seen" == *" $dep "* ]] && continue
+      seen+="$dep "; next+="$dep "
+      echo "$dep"
+    done
+    frontier="$next"; depth=$((depth + 1))
+  done
+}
+
+# The installable package name(s) behind a pkgbase whose checksum failed.
+#
+# The helper's clone of the AUR repo carries a .SRCINFO, whose top-level
+# `pkgname =` lines are every package the base builds. Of those, the ones that
+# matter are the asked-for package itself or whatever it depends on; failing
+# that (nothing in the dependency tree matched), the ones not yet installed.
+# Without a clone to read, the pkgbase is the best guess - it is the right answer
+# for every non-split package, which is nearly all of them.
+pkgnames_for_base() {
+  local base="$1" asked="$2" srcinfo="" d names needed n
+  for d in "${XDG_CACHE_HOME:-$HOME/.cache}/yay/$base" \
+           "${XDG_CACHE_HOME:-$HOME/.cache}/paru/clone/$base"; do
+    [ -f "$d/.SRCINFO" ] && { srcinfo="$d/.SRCINFO"; break; }
+  done
+  if [ -z "$srcinfo" ]; then
+    echo "$base"; return 0
+  fi
+  names=$(sed -nE 's/^pkgname = ([^[:space:]]+).*/\1/p' "$srcinfo")
+  [ -n "$names" ] || { echo "$base"; return 0; }
+  if grep -qx -- "$asked" <<< "$names"; then
+    echo "$asked"; return 0
+  fi
+  needed=$(grep -Fx -f <(aur_dep_closure "$asked") <<< "$names" || true)
+  if [ -n "$needed" ]; then
+    echo "$needed"; return 0
+  fi
+  for n in $names; do
+    pacman -Q "$n" &>/dev/null || echo "$n"
+  done
+}
+
 # Current size of $LOG, for the offset above.
 log_mark() {
   stat -c %s "$LOG" 2>/dev/null || echo 0
@@ -127,49 +185,61 @@ log_mark() {
 # Retry one package with --skipchecksums, but only if it is allowlisted.
 # Returns 0 if the package is installed afterwards.
 retry_without_checksums() {
-  local asked="$1" mark="$2" pkg
+  local asked="$1" mark="$2" base targets t allowed=false all_in
 
   log_shows_checksum_failure "$mark" || return 1
 
-  # The package whose checksum failed - the one asked for, or a dependency the
+  # The pkgbase whose checksum failed - the one asked for, or a dependency the
   # helper was building for it. Fall back to the asked-for name if the log does
   # not say (it always should under AUR_ENV).
-  pkg=$(checksum_failed_packages "$mark" | tail -1)
-  [ -n "$pkg" ] || pkg="$asked"
-  if [ "$pkg" != "$asked" ]; then
-    echo -e "\n${NOTE} The checksum failure is in ${YELLOW}${pkg}${RESET}, a dependency of ${YELLOW}${asked}${RESET}."
+  base=$(checksum_failed_packages "$mark" | tail -1)
+  [ -n "$base" ] || base="$asked"
+  # ...and the installable names behind it, for -S/-Q and for the final
+  # screen's advice. A split base's own name is often not installable.
+  mapfile -t targets < <(pkgnames_for_base "$base" "$asked" | awk 'NF && !seen[$0]++')
+  [ ${#targets[@]} -gt 0 ] || targets=("$base")
+
+  if [ "${targets[*]}" != "$asked" ]; then
+    echo -e "\n${NOTE} The checksum failure is in ${YELLOW}${base}${RESET} (installs as: ${YELLOW}${targets[*]}${RESET}), needed by ${YELLOW}${asked}${RESET}."
   fi
 
-  if ! checksum_skip_allowed "$pkg"; then
-    echo -e "\n${WARN} ${YELLOW}${pkg}${RESET} failed its ${YELLOW}source checksum${RESET}, not its build."
+  # Either name may be the one on the allowlist: the source belongs to the base,
+  # and the conf has always been written in package names.
+  checksum_skip_allowed "$base" && allowed=true
+  for t in "${targets[@]}"; do checksum_skip_allowed "$t" && allowed=true; done
+
+  if [ "$allowed" != true ]; then
+    echo -e "\n${WARN} ${YELLOW}${base}${RESET} failed its ${YELLOW}source checksum${RESET}, not its build."
     echo -e "${NOTE} The downloaded source does not match what the AUR PKGBUILD pins. Usually an"
     echo -e "${NOTE} upstream tarball that was regenerated - but verify before assuming that."
     echo -e "${NOTE} Check it, then either build it by hand:"
-    echo -e "${NOTE}   ${MAGENTA}$(basename "${ISAUR:-yay}") -S ${pkg} --mflags --skipchecksums${RESET}"
-    echo -e "${NOTE} or add ${MAGENTA}${pkg}${RESET} to ${MAGENTA}${CHECKSUM_SKIP_LIST}${RESET} to let re-runs do it."
-    record_checksum_failure "$pkg"
+    echo -e "${NOTE}   ${MAGENTA}$(basename "${ISAUR:-yay}") -S ${targets[*]} --mflags --skipchecksums${RESET}"
+    echo -e "${NOTE} or add ${MAGENTA}${base}${RESET} to ${MAGENTA}${CHECKSUM_SKIP_LIST}${RESET} to let re-runs do it."
+    for t in "${targets[@]}"; do record_checksum_failure "$t"; done
     return 1
   fi
 
-  echo -e "\n${WARN} ${YELLOW}${pkg}${RESET} failed its source checksum."
+  echo -e "\n${WARN} ${YELLOW}${base}${RESET} failed its source checksum."
   echo -e "${NOTE} It is listed in ${MAGENTA}${CHECKSUM_SKIP_LIST}${RESET}, so rebuilding it with"
   echo -e "${NOTE} ${YELLOW}integrity verification disabled for this package${RESET}."
   {
-    echo "=== checksum override: rebuilding $pkg with --skipchecksums ==="
+    echo "=== checksum override: rebuilding $base (${targets[*]}) with --skipchecksums ==="
     echo "=== allowlisted in $CHECKSUM_SKIP_LIST ==="
   } >> "$LOG"
 
   (
-    stdbuf -oL env $AUR_ENV $ISAUR -S --noconfirm --mflags --skipchecksums "$pkg" 2>&1
+    stdbuf -oL env $AUR_ENV $ISAUR -S --noconfirm --mflags --skipchecksums "${targets[@]}" 2>&1
   ) >> "$LOG" 2>&1 &
   local pid=$!
-  show_progress "$pid" "$pkg (--skipchecksums)"
+  show_progress "$pid" "${targets[*]} (--skipchecksums)"
 
-  if $ISAUR -Q "$pkg" &>/dev/null; then
-    echo -e "${OK} ${YELLOW}${pkg}${RESET} installed with checksums skipped."
+  all_in=true
+  for t in "${targets[@]}"; do $ISAUR -Q "$t" &>/dev/null || all_in=false; done
+  if [ "$all_in" = true ]; then
+    echo -e "${OK} ${YELLOW}${targets[*]}${RESET} installed with checksums skipped."
     # A dependency was the problem: now build what was actually asked for,
     # with verification ON - only the allowlisted package gets the override.
-    if [ "$pkg" != "$asked" ]; then
+    if ! printf '%s\n' "${targets[@]}" | grep -qx -- "$asked"; then
       (
         stdbuf -oL env $AUR_ENV $ISAUR -S --noconfirm "$asked" 2>&1
       ) >> "$LOG" 2>&1 &
@@ -180,8 +250,8 @@ retry_without_checksums() {
     fi
     return 0
   fi
-  echo -e "${ERROR} ${YELLOW}${pkg}${RESET} still failed with checksums skipped - this is not just a stale checksum."
-  record_checksum_failure "$pkg"
+  echo -e "${ERROR} ${YELLOW}${base}${RESET} still failed with checksums skipped - this is not just a stale checksum."
+  for t in "${targets[@]}"; do record_checksum_failure "$t"; done
   return 1
 }
 

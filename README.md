@@ -1391,7 +1391,11 @@ because makepkg translates that message and on a non-English system the
 installer would never see it. And the failure is pinned to the package whose
 build printed it (the last `==> Making package:` before it), so when the
 mismatch is in an AUR *dependency* of what was asked for, it is that
-dependency's name that is checked against the allowlist and reported.
+dependency's name that is checked against the allowlist and reported. For a
+split package (one PKGBUILD, several packages) makepkg names the pkgbase, which
+is often not installable, so the installer reads the helper's cached
+`.SRCINFO` to find the package names behind it and retries, reports and
+records those. The allowlist accepts either the pkgbase or a package name.
 
 It is an allowlist rather than a blanket retry on purpose. A checksum mismatch
 means the downloaded bytes are not the bytes the maintainer signed off on -
