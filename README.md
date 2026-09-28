@@ -200,7 +200,13 @@ first prompt.
 
 ### Core System
 - Hyprland, hypridle, hyprlock
-- ly display manager with large font
+- ly display manager with large font. Its session list is Hyprland only: ly
+  ignores `TryExec` and uwsm is not installed, so `pacman.sh` adds
+  `NoExtract = usr/share/wayland-sessions/hyprland-uwsm.desktop` to
+  `/etc/pacman.conf`, and `ly_config.sh` removes any copy already on disk.
+  Delete that line if you ever install uwsm. The login-screen flag is cut per
+  console grid (768p, 900p, 1080p, 1440p, 2160p), and the largest cut that fits
+  the panel is installed.
 - PipeWire audio
 - NetworkManager (plus `nss-mdns`, wired into `nsswitch.conf` for `.local` names,
   and `systemd-resolved` — see [DNS](#dns))
