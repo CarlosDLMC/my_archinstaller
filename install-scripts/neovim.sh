@@ -74,6 +74,30 @@ if ! command -v nvim >/dev/null 2>&1; then
   exit 0
 fi
 
+# ------------------------------------------------------------- rust-analyzer
+# The LazyVim Rust extra (seeded in lazyvim.json below) runs rust-analyzer through
+# rustaceanvim, which looks it up on PATH. It is what tells a trait from a struct,
+# underlines `let mut` bindings and marks unsafe calls - the RustRover colours in
+# pycharm-dark.lua need it; treesitter alone cannot tell those apart.
+#
+# With rustup, ~/.cargo/bin/rust-analyzer exists before the component does - it is
+# a proxy that only prints
+#   error: Unknown binary 'rust-analyzer' in official toolchain
+# and ~/.cargo/bin sits ahead of /usr/bin on PATH, so a pacman copy would be
+# shadowed by it. Hence: the rustup component when rustup is here, the Arch
+# package otherwise.
+RUSTUP="$(command -v rustup || true)"
+[ -z "$RUSTUP" ] && [ -x "$HOME/.cargo/bin/rustup" ] && RUSTUP="$HOME/.cargo/bin/rustup"
+if [ -n "$RUSTUP" ]; then
+  if "$RUSTUP" component add rust-analyzer >>"$LOG" 2>&1; then
+    echo "${OK} Installed rust-analyzer as a rustup component." | tee -a "$LOG"
+  else
+    echo "${WARN} rustup could not add rust-analyzer - see $LOG" | tee -a "$LOG"
+  fi
+else
+  install_package rust-analyzer "$LOG"
+fi
+
 # ------------------------------------------------------------ the LazyVim config
 NVIM_CFG="$HOME/.config/nvim"
 
@@ -143,6 +167,26 @@ if [ -d "$NVIM_CFG" ]; then
   fi
 fi
 
+# ------------------------------------------------------------- LazyVim extras
+# lazyvim.json is where :LazyExtras records what you turned on. The starter ships
+# without one and LazyVim writes it on first launch, so on a fresh machine it is
+# absent here and gets seeded with lang.rust (rustaceanvim, crates.nvim and the
+# rust/ron treesitter parsers). Same rule as colorscheme.lua: written only if
+# absent, so extras you toggled later survive a re-run. It carries
+# install_version 8 because LazyVim treats a lazyvim.json without one as a
+# pre-v8 install and switches on legacy defaults.
+#
+# This runs before the pre-fetch below so rustaceanvim is downloaded with the rest.
+if [ -d "$NVIM_CFG" ]; then
+  if [ -e "$NVIM_CFG/lazyvim.json" ]; then
+    echo "${NOTE} lazyvim.json already exists - extras left as yours." | tee -a "$LOG"
+  elif cp "$PARENT_DIR/assets/nvim/lazyvim.json" "$NVIM_CFG/lazyvim.json"; then
+    echo "${OK} Enabled the LazyVim Rust extra." | tee -a "$LOG"
+  else
+    echo "${WARN} Could not write lazyvim.json - see $LOG" | tee -a "$LOG"
+  fi
+fi
+
 # --------------------------------------------------------- pre-fetch the plugins
 # lazy.nvim installs on first launch either way; doing it here means the first
 # interactive nvim is instant instead of a progress bar. Non-fatal: a machine that
@@ -162,5 +206,5 @@ if [ -d "$NVIM_CFG" ]; then
   fi
 fi
 
-printf "\n${NOTE} ${SKY_BLUE}Neovim + LazyVim${RESET} installed. ${YELLOW}Space E${RESET} toggles the file tree, ${YELLOW}Ctrl+W W${RESET} hops between tree and editor, ${YELLOW}Space Space${RESET} finds a file, ${YELLOW}Space S G${RESET} greps with preview, ${YELLOW}Space G G${RESET} opens lazygit. Double-click works in the tree. Colours match PyCharm and your terminal (${MAGENTA}pycharm-dark${RESET}). Your own plugins go in ${SKY_BLUE}~/.config/nvim/lua/plugins/${RESET}, which this repo seeds once and then leaves alone.\n"
+printf "\n${NOTE} ${SKY_BLUE}Neovim + LazyVim${RESET} installed. ${YELLOW}Space E${RESET} toggles the file tree, ${YELLOW}Ctrl+W W${RESET} hops between tree and editor, ${YELLOW}Space Space${RESET} finds a file, ${YELLOW}Space S G${RESET} greps with preview, ${YELLOW}Space G G${RESET} opens lazygit. Double-click works in the tree. Colours match PyCharm and your terminal (${MAGENTA}pycharm-dark${RESET}), and Rust files match RustRover. Your own plugins go in ${SKY_BLUE}~/.config/nvim/lua/plugins/${RESET}, which this repo seeds once and then leaves alone.\n"
 printf "\n%.0s" {1..2}

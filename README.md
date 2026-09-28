@@ -235,7 +235,8 @@ first prompt.
 - Handy (offline speech-to-text — Parakeet V3, auto-detects 25 languages)
 - Herdr (terminal workspace manager for AI coding agents — a static binary from
   herdr.dev, not a repo or AUR package, see [Herdr](#herdr-terminal-workspace-manager))
-- Neovim + LazyVim, with ripgrep, fd, lazygit, tree-sitter-cli, stylua and shfmt
+- Neovim + LazyVim, with ripgrep, fd, lazygit, tree-sitter-cli, stylua, shfmt
+  and rust-analyzer (the LazyVim Rust extra is enabled)
   (see [Neovim and the file explorer](#neovim-and-the-file-explorer))
 - Hunk (terminal diff viewer for agent changesets — also an out-of-band binary,
   see [Hunk](#hunk-reading-what-the-agents-wrote))
@@ -1143,6 +1144,17 @@ exception: `colors/pycharm-dark.lua` (the PyCharm-matched palette, from
 `assets/nvim/`) is rewritten on every run, and `lua/plugins/colorscheme.lua`,
 which selects it, is written only when it does not exist - change the scheme
 there and re-runs keep your choice.
+
+**Rust looks like RustRover.** `pycharm-dark.lua` carries a Rust-only section with
+RustRover's own colours, read out of
+`intellij.rustrover.common.jar!/org/rust/ide/colors/RustDark.xml`: blue functions,
+green structs, purple traits, gold macros, pink `self`, italic teal lifetimes,
+underlined `let mut`. Most of it only works with rust-analyzer running, since
+treesitter cannot tell a trait from a struct, so `neovim.sh` installs rust-analyzer
+(as a rustup component when rustup is present - its `~/.cargo/bin` proxy would
+otherwise shadow the Arch package) and seeds `lazyvim.json` with the
+`lang.rust` extra. Like `colorscheme.lua`, `lazyvim.json` is written only if absent:
+on an existing config, turn the extra on yourself with `:LazyExtras`.
 
 ### Hunk (reading what the agents wrote)
 

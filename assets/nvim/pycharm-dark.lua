@@ -110,3 +110,89 @@ hi("DiffDelete", { fg = c.red })
 hi("GitSignsAdd",    { fg = c.added })
 hi("GitSignsChange", { fg = c.modified })
 hi("GitSignsDelete", { fg = c.red })
+
+-- Rust, as RustRover draws it. Colours from RustRover 2026.2
+-- (plugins/intellij-rust/lib/intellij.rustrover.common.jar!/org/rust/ide/colors/RustDark.xml,
+-- falling back to RustDarcula.xml and the Dark scheme like the IDE does).
+-- Everything is scoped to .rust so the Python colours above are untouched.
+local r = {
+  func     = "#6aa2d7",  -- functions, methods, calls
+  macro    = "#d5a563",
+  struct   = "#a6bb77",  -- struct, enum, union, type alias
+  variant  = "#8cc8d4",  -- enum variants (italic)
+  trait    = "#8d91dc",  -- traits and crates
+  tparam   = "#3cacac",  -- generic type parameters
+  lifetime = "#20999d",  -- italic
+  self     = "#e59eae",
+  attr     = "#b3ae60",  -- #[derive(...)], #[cfg(...)]
+  question = "#d8a460",  -- the ? operator, bold
+  doc      = "#5f826b",  -- /// doc comments
+  unsafe   = "#4e2c28",  -- background of unsafe operations
+}
+
+-- legacy vim syntax (used while there is no treesitter rust parser)
+hi("rustFuncName",        { fg = r.func })
+hi("rustFuncCall",        { fg = r.func })
+hi("rustMacro",           { fg = r.macro })
+hi("rustAssert",          { fg = r.macro })
+hi("rustPanic",           { fg = r.macro })
+hi("rustLifetime",        { fg = r.lifetime, italic = true })
+hi("rustSelf",            { fg = r.self })
+hi("rustAttribute",       { fg = r.attr })
+hi("rustDerive",          { fg = r.attr })
+hi("rustDeriveTrait",     { fg = r.trait })
+hi("rustTrait",           { fg = r.trait })
+hi("rustEnumVariant",     { fg = r.variant, italic = true })
+hi("rustType",            { fg = c.keyword })  -- i32, str, bool... RustRover colours primitives as keywords
+hi("rustQuestionMark",    { fg = r.question, bold = true })
+hi("rustCommentLineDoc",  { fg = r.doc, italic = true })
+hi("rustCommentBlockDoc", { fg = r.doc, italic = true })
+hi("rustEscape",          { fg = c.keyword })
+hi("rustConstant",        { fg = c.const, italic = true })
+
+-- treesitter
+hi("@function.rust",              { fg = r.func })
+hi("@function.call.rust",         { fg = r.func })
+hi("@function.method.rust",       { fg = r.func })
+hi("@function.method.call.rust",  { fg = r.func })
+hi("@function.macro.rust",        { fg = r.macro })
+hi("@type.rust",                  { fg = r.struct })
+hi("@type.builtin.rust",          { fg = c.keyword })
+hi("@constructor.rust",           { fg = r.variant, italic = true })
+hi("@variable.builtin.rust",      { fg = r.self })
+hi("@attribute.rust",             { fg = r.attr })
+hi("@label.rust",                 { fg = r.lifetime, italic = true })  -- 'a lifetimes
+hi("@constant.rust",              { fg = c.const, italic = true })
+hi("@comment.documentation.rust", { fg = r.doc, italic = true })
+hi("@string.escape.rust",         { fg = c.keyword })
+
+-- rust-analyzer semantic tokens (these win over treesitter when the LSP is running)
+hi("@lsp.type.function.rust",        { fg = r.func })
+hi("@lsp.type.method.rust",          { fg = r.func })
+hi("@lsp.typemod.method.trait.rust", { fg = r.func, italic = true })
+hi("@lsp.type.macro.rust",           { fg = r.macro })
+hi("@lsp.type.struct.rust",          { fg = r.struct })
+hi("@lsp.type.union.rust",           { fg = r.struct })
+hi("@lsp.type.typeAlias.rust",       { fg = r.struct })
+hi("@lsp.type.enum.rust",            { fg = r.struct, italic = true })
+hi("@lsp.type.enumMember.rust",      { fg = r.variant, italic = true })
+hi("@lsp.type.interface.rust",       { fg = r.trait })  -- traits
+hi("@lsp.typemod.namespace.crateRoot.rust", { fg = r.trait })
+hi("@lsp.type.typeParameter.rust",   { fg = r.tparam })
+hi("@lsp.type.lifetime.rust",        { fg = r.lifetime, italic = true })
+hi("@lsp.type.selfKeyword.rust",     { fg = r.self })
+hi("@lsp.type.builtinType.rust",     { fg = c.keyword })
+hi("@lsp.type.property.rust",        { fg = c.const })
+hi("@lsp.type.static.rust",          { fg = c.const })
+hi("@lsp.type.const.rust",           { fg = c.const, italic = true })
+hi("@lsp.type.attribute.rust",       { fg = r.attr })
+hi("@lsp.type.attributeBracket.rust",{ fg = r.attr })
+hi("@lsp.type.builtinAttribute.rust",{ fg = r.attr })
+hi("@lsp.type.derive.rust",          { fg = r.trait })
+hi("@lsp.type.escapeSequence.rust",  { fg = c.keyword })
+hi("@lsp.type.formatSpecifier.rust", { fg = c.keyword })
+hi("@lsp.typemod.operator.controlFlow.rust", { fg = r.question, bold = true })  -- ?
+hi("@lsp.typemod.comment.documentation.rust", { fg = r.doc, italic = true })
+hi("@lsp.mod.mutable.rust",          { underline = true })  -- let mut x: underlined like RustRover
+hi("@lsp.typemod.selfKeyword.mutable.rust", { fg = r.self, underline = true })
+hi("@lsp.mod.unsafe.rust",           { bg = r.unsafe })
