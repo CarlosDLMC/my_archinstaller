@@ -387,6 +387,70 @@ mkinitcpio_has_hook() {
            printf "%s\n" "${HOOKS[@]}"' 2>/dev/null | grep -qx -- "$hook"
 }
 
+# Where is limine.conf? Prints the first one found and returns 0, or prints
+# nothing and returns 1. The one search every script uses: install.sh (the
+# limine="auto" detection, in a child shell because it does not source this
+# file), limine.sh, 02-Final-Check.sh, ucode.sh and plymouth.sh.
+#
+# Each of those used to carry its own copy of a five-path list, and every copy
+# missed <ESP>/EFI/<dir>/limine.conf. That is where archinstall (4.4) writes it
+# - EFI/arch-limine/, or EFI/BOOT/ for the removable path - and where the Arch
+# wiki recommends it: next to the EFI binary, the first place Limine looks. On
+# such a machine limine="auto" resolved to OFF without a word, a forced
+# limine="ON" had limine.sh report "Limine is not the bootloader here", and the
+# final check then failed it and blocked the reboot.
+#
+# The old five paths still come first, in the same order, so a machine that was
+# detected before resolves to the same file. Then exactly one directory level
+# under each ESP's EFI/, with EFI/BOOT/ (the removable fallback) last: where
+# both exist, the firmware's boot entry points at the named one. A glob, not a
+# find, and evaluated by root in one sudo call - the ESP is routinely mounted
+# root-only (CachyOS: fmask=0077), and an unprivileged test or glob sees nothing.
+find_limine_conf() {
+  sudo sh -c '
+    for c in /boot/limine.conf /efi/limine.conf /boot/efi/limine.conf \
+             /boot/limine/limine.conf /efi/limine/limine.conf; do
+      [ -f "$c" ] && { echo "$c"; exit 0; }
+    done
+    for esp in /boot /efi /boot/efi; do
+      for c in "$esp"/EFI/*/limine.conf; do
+        case "$c" in */[Bb][Oo][Oo][Tt]/limine.conf) continue ;; esac
+        [ -f "$c" ] && { echo "$c"; exit 0; }
+      done
+    done
+    for esp in /boot /efi /boot/efi; do
+      for c in "$esp"/EFI/[Bb][Oo][Oo][Tt]/limine.conf; do
+        [ -f "$c" ] && { echo "$c"; exit 0; }
+      done
+    done
+    exit 1' 2>/dev/null
+}
+
+# The mount point of the partition that holds limine.conf ($1). That partition's
+# root is what Limine calls boot():/, so it is where theme.conf's
+# `wallpaper: boot():/limine-wallpaper.png` has to land - not next to a conf in
+# EFI/<dir>/ or limine/, where Limine never looks (and a missing wallpaper is
+# skipped silently, so the menu just comes up bare).
+#
+# findmnt as root: the path is inside a root-only mount, and an unprivileged
+# `findmnt -T` cannot stat it and simply fails. If findmnt gives nothing, step
+# out of an EFI/<dir>/ or a limine/ directory instead. "EFI" is matched in
+# capitals only: find_limine_conf always spells that component that way, and a
+# case-blind match took the /efi mount point itself for it.
+limine_partition_root() {
+  local conf="$1" root d
+  root=$(sudo findmnt -no TARGET -T "$conf" 2>/dev/null | head -1)
+  if [ -z "$root" ]; then
+    d=$(dirname "$conf")
+    case "$d" in
+      */EFI/*)  d="${d%/EFI/*}" ;;
+      */limine) d=$(dirname "$d") ;;
+    esac
+    root="${d:-/}"
+  fi
+  echo "$root"
+}
+
 # Rebuild every initramfs. Returns non-zero on failure.
 #
 # CachyOS + Limine keeps its initramfs under /boot/<machine-id>/<kernel>/ and
