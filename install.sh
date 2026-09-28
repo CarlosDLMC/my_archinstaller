@@ -413,6 +413,28 @@ if [ "$nvidia_tier" != "none" ]; then
     fi
 fi
 
+# An ASUS hybrid laptop left in Eco mode by its previous OS keeps the dGPU
+# powered off - dgpu_disable=1 lives in firmware and survives a reinstall - so
+# the card is not on the PCI bus and nvidia_detect.sh above says "none".
+# nvidia="auto" then resolves to OFF and even a forced nvidia="ON" is skipped:
+# after switching to Hybrid later, the NVIDIA GPU came up with no proprietary
+# driver, and nothing in the run had said so. rog.sh knew the dGPU was hidden
+# (it installs supergfxctl for exactly this case); this detection did not.
+#
+# Said, not fixed: dgpu_disable is not written from here. Switching the GPU
+# mode is supergfxctl's job and takes a reboot to settle, so the driver is a
+# step for afterwards, and the warning is repeated at the end of the run.
+asus_dgpu_off=false
+if [ "$nvidia_detected" != "true" ] \
+   && [ "$(cat /sys/devices/platform/asus-nb-wmi/dgpu_disable 2>/dev/null)" = "1" ]; then
+    asus_dgpu_off=true
+    echo "${WARN} ASUS dGPU is switched OFF (Eco mode, dgpu_disable=1). If it is an NVIDIA GPU, it is invisible to this run: its driver cannot be detected or installed." | tee -a "$LOG"
+    echo "${NOTE} To get the NVIDIA driver: switch to Hybrid (${MAGENTA}supergfxctl -m Hybrid${RESET}, or rog-control-center/asusctl), reboot, then run ${MAGENTA}install-scripts/nvidia.sh${RESET}." | tee -a "$LOG"
+    if [ "$preset_mode" != "true" ]; then
+        whiptail --title "ASUS dGPU is switched off" --msgbox "This ASUS laptop's discrete GPU is switched off (Eco mode, dgpu_disable=1), so it is not visible and no NVIDIA driver can be detected or installed now.\n\nTo get it afterwards: switch to Hybrid (supergfxctl -m Hybrid, or rog-control-center/asusctl), reboot, then run install-scripts/nvidia.sh." 14 78
+    fi
+fi
+
 # Check if this is an ASUS LAPTOP (asusctl/supergfxctl target ROG laptops: fan
 # curves, keyboard backlight, hybrid-GPU switching). DMI is the same question
 # rog="ON" was asking the user to answer by hand.
@@ -1085,6 +1107,15 @@ if pacman -Q hyprland &> /dev/null || pacman -Q hyprland-git &> /dev/null; then
 
     printf "\n${NOTE} You can start Hyprland by typing ${SKY_BLUE}Hyprland${RESET} (IF SDDM is not installed) (note the capital H!).\n"
     printf "\n${NOTE} However, it is ${YELLOW}highly recommended to reboot${RESET} your system.\n\n"
+
+    # Repeated here because the warning from hardware detection is an hour of
+    # scrollback away by now, and this is what the screen shows before a reboot
+    # (or before the NOT-rebooting list below).
+    if [ "$asus_dgpu_off" == "true" ]; then
+        echo "${WARN} Reminder: the ASUS dGPU was switched off (Eco mode), so no NVIDIA driver was installed for it."
+        echo "${NOTE} Switch to Hybrid (${MAGENTA}supergfxctl -m Hybrid${RESET}), reboot, then run ${MAGENTA}install-scripts/nvidia.sh${RESET}."
+        printf "\n%.0s" {1..1}
+    fi
 
     # An unattended reboot is only safe when the install actually completed.
     # With packages missing, rebooting just hides the evidence: the warning

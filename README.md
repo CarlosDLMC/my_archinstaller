@@ -1297,6 +1297,13 @@ the hardware is not there, so a stale preset cannot install an NVIDIA driver on
 an AMD box - and a forced `nvidia="ON"` is ignored the same way on a Kepler-or-older
 card, which no maintained driver supports.
 
+One case `auto` cannot see: an ASUS hybrid laptop left in **Eco mode**
+(`/sys/devices/platform/asus-nb-wmi/dgpu_disable` = 1) keeps its dGPU powered off,
+so it is not on the PCI bus and no NVIDIA driver is detected or installed. Even a
+forced `nvidia="ON"` is skipped. The installer warns about this at detection time
+and again at the end. Switch to Hybrid (`supergfxctl -m Hybrid`), reboot, then run
+`install-scripts/nvidia.sh`.
+
 This is also why there is no CPU/GPU vendor prompt: `--preset` runs
 unattended by design, so a dialog could only appear in the interactive path —
 the one that already worked.
