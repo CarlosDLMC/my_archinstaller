@@ -198,6 +198,32 @@ if selected nvidia; then
     done
 fi
 
+# nvidia.sh's failure path masks nvidia-utils' own "blacklist nouveau"
+# (/etc/modprobe.d/nvidia-utils.conf -> /dev/null) when NO kernel has the NVIDIA
+# module, so nouveau drives the card meanwhile. Only a successful nvidia.sh run
+# removes it. Fix DKMS by hand instead (dkms autoinstall, a kernel update that
+# builds) and the modinfo check above passes while the mask stays: nouveau loads
+# as well and competes with nvidia for the card on every boot. Not under `selected
+# nvidia`: the mask outlives the run that made it, and a standalone run of this
+# script has no selection at all.
+_nv_masks=()
+for _bl in nvidia-utils.conf nvidia-580xx-utils.conf; do
+    if [ -L "/etc/modprobe.d/$_bl" ] && [ "$(readlink "/etc/modprobe.d/$_bl")" = /dev/null ]; then
+        _nv_masks+=("/etc/modprobe.d/$_bl")
+    fi
+done
+if [ ${#_nv_masks[@]} -ne 0 ]; then
+    for _moddir in /usr/lib/modules/*/; do
+        [ -f "$_moddir/pkgbase" ] || continue
+        pacman -Qqo "${_moddir}vmlinuz" &>/dev/null || continue
+        _kver=$(basename "$_moddir")
+        if modinfo -k "$_kver" -n nvidia &>/dev/null; then
+            outcome_failures+=("nouveau blacklist still masked (${_nv_masks[*]} -> /dev/null, left by a failed nvidia.sh) although $(cat "$_moddir/pkgbase") ($_kver) has the NVIDIA module now - nouveau competes with nvidia for the card; re-run install-scripts/nvidia.sh")
+            break
+        fi
+    done
+fi
+
 if selected pokemon; then
     check_outcome "pokemon-colorscripts is not on PATH - every terminal prints an error (install-scripts/zsh_pokemon.sh)" \
         command -v pokemon-colorscripts

@@ -878,7 +878,16 @@ for option in "${options[@]}"; do
             ;;
         nouveau)
             if [[ " $selected_options " == *" nvidia "* ]] && [ "${nvidia_ok:-false}" != "true" ]; then
-                echo "${WARN} Not blacklisting ${SKY_BLUE}nouveau${RESET}: the NVIDIA driver is not working, and nouveau is the only driver left." | tee -a "$LOG"
+                # It used to say "nouveau is the only driver left", as if skipping
+                # this kept it working. It did not: nvidia-utils ships its own
+                # "blacklist nouveau" (/usr/lib/modprobe.d/nvidia-utils.conf), so
+                # the fallback only exists because nvidia.sh's failure path masks
+                # that file - and only for as long as nothing else blacklists it.
+                # It masks it only when NO kernel got the module; when some did,
+                # it keeps it so those boot on nvidia, and the others get no
+                # driver for the card. Either way, blacklisting more here helps
+                # nothing.
+                echo "${WARN} Not blacklisting ${SKY_BLUE}nouveau${RESET}: the NVIDIA driver did not land on every kernel. nvidia.sh's messages above say which kernels fall back to nouveau and which boot with no driver for the card." | tee -a "$LOG"
             else
                 echo "${INFO} blacklisting ${SKY_BLUE}nouveau${RESET}"
                 execute_script "nvidia_nouveau.sh" | tee -a "$LOG"
