@@ -31,7 +31,7 @@ local c = {
 local function hi(g, o) vim.api.nvim_set_hl(0, g, o) end
 
 -- editor chrome
-hi("Normal",       { fg = c.fg, bg = c.bg })
+hi("Normal",       { fg = c.fg, bg = "NONE" })  -- let the terminal background (foot, alpha 0.85) show through
 hi("NormalFloat",  { fg = c.fg, bg = c.bg_alt })
 hi("FloatBorder",  { fg = c.sep, bg = c.bg_alt })
 hi("CursorLine",   { bg = c.caret_row })
@@ -41,7 +41,9 @@ hi("Visual",       { bg = c.sel })
 hi("Search",       { fg = c.bg, bg = c.keyword })
 hi("IncSearch",    { fg = c.bg, bg = c.func })
 hi("ColorColumn",  { bg = c.bg_alt })
-hi("SignColumn",   { bg = c.bg })
+hi("SignColumn",   { bg = "NONE" })
+hi("NormalNC",     { fg = c.fg, bg = "NONE" })
+hi("EndOfBuffer",  { fg = c.bg_alt, bg = "NONE" })
 hi("VertSplit",    { fg = c.sep })
 hi("WinSeparator", { fg = c.sep })
 hi("StatusLine",   { fg = c.fg, bg = c.bg_alt })
