@@ -41,6 +41,13 @@ gpu_count=$(lspci -n 2>/dev/null | awk '$2 ~ /^03/' | wc -l)
 if [ -e /sys/devices/platform/asus-nb-wmi/dgpu_disable ] && [ "$gpu_count" -lt 2 ]; then
   echo "${NOTE} dGPU is switched off (Eco mode) - counting it as a hybrid laptop anyway." | tee -a "$LOG"
   gpu_count=2
+  # The same invisibility hid the card from install.sh's NVIDIA detection, so
+  # no NVIDIA driver was installed for it. supergfxctl (installed below) is the
+  # way to switch it back on; the driver is a separate step after that.
+  if [ "$(cat /sys/devices/platform/asus-nb-wmi/dgpu_disable 2>/dev/null)" = "1" ]; then
+    echo "${WARN} If this dGPU is NVIDIA, its driver was NOT installed: it cannot be detected while switched off." | tee -a "$LOG"
+    echo "${NOTE} After this install: ${MAGENTA}supergfxctl -m Hybrid${RESET}, reboot, then run ${MAGENTA}install-scripts/nvidia.sh${RESET}." | tee -a "$LOG"
+  fi
 fi
 if [ "$gpu_count" -ge 2 ]; then
   rog+=(supergfxctl)
