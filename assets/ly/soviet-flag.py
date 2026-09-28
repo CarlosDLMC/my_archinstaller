@@ -2,8 +2,8 @@
 # Generate the 8-bit Soviet flag that ly draws behind its login screen.
 # Writes durdraw .dur files (gzipped JSON) from one traced art table: a waving
 # version and a single still frame of it, cut for each panel the repo supports
-# (soviet-flag-{animated,static}-{1080p,1440p,2160p}.dur). Run with no
-# arguments to write all of them, or name panels to write just those.
+# (soviet-flag-{animated,static}-{768p,900p,1080p,1440p,2160p}.dur). Run with
+# no arguments to write all of them, or name panels to write just those.
 #
 # There is a cut per panel because ly draws a .dur at its native cell size and
 # never scales it: a canvas smaller than the console grid leaves a black
@@ -188,12 +188,24 @@ def shrink(rows, nw, thr=0.38):
 def scale_art(art, scale):
     """Area-resample the tag grid (R/Y/K/.) by `scale`.
 
-    shrink() above is for the '#'/'.' emblem masks and only goes down. This
-    one goes up, and carries four tags rather than two, so each target pixel
-    takes the tag that covers most of its footprint. On an integer scale that
-    is exact pixel doubling; on a fractional one it is nearest-neighbour with
-    the ties settled by area, which is the most a hard-edged 3-colour bitmap
-    can be stretched without inventing colours the palette cannot render.
+    shrink() above is for the '#'/'.' emblem masks. This one carries four
+    tags rather than two, so each target pixel takes the tag that covers most
+    of its footprint. On an integer scale that is exact pixel doubling; on a
+    fractional one it is nearest-neighbour with the ties settled by area,
+    which is the most a hard-edged 3-colour bitmap can be stretched without
+    inventing colours the palette cannot render.
+
+    Going DOWN (the sub-1080p cuts) plain majority is not enough: the emblem
+    and the pole are one-pixel yellow lines, and a line that straddles two
+    target pixels covers under half of each, so majority hands both to the
+    red or black around it. That broke the star into fragments at 768p and
+    erased the pole outright at 900p. Yellow is therefore kept once it covers
+    scale/2 of the footprint: a straight 1px line splits between at most two
+    target pixels and the larger share is always at least scale/2, so no line
+    can vanish, and it only doubles where it straddles the two almost exactly.
+    Checked by eye on previews of both small cuts: the star stays a closed
+    star, the hammer and sickle stay separate, and the pole stays one pixel
+    with its black gap to the cloth.
     """
     if scale == 1:
         return art                              # identity: byte-identical output
@@ -212,7 +224,10 @@ def scale_art(art, scale):
                           * (min(y1, sy + 1) - max(y0, sy)))
                     if ov > 0:
                         area[art[sy][sx]] = area.get(art[sy][sx], 0.0) + ov
-            line += max(area, key=area.get) if area else "."
+            if scale < 1 and area.get("Y", 0.0) >= scale / 2 * sum(area.values()):
+                line += "Y"
+            else:
+                line += max(area, key=area.get) if area else "."
         out.append(line)
     return out
 
@@ -247,7 +262,8 @@ def build(px_w=120, px_h=66, frames=8, amp=2.0):
     scaling, so nothing is softened, and the output is the file the 1080p
     login screen has always had. A taller grid scales it up, so the flag keeps
     the same share of the screen on a bigger panel instead of shrinking into
-    one corner of it.
+    one corner of it; a shorter one (768p, 900p) scales it down, so the whole
+    flag fits instead of ly clipping the 1080p cut at every edge.
 
     Only the cloth columns are displaced; the pole and finial stay put, which
     is what makes it read as a flag on a pole rather than the whole picture
@@ -260,7 +276,11 @@ def build(px_w=120, px_h=66, frames=8, amp=2.0):
         scale = int(scale)
     art = scale_art(FLAG_ART, scale)
     art_w, art_h = len(art[0]), len(art)
-    x_off = (px_w - art_w) // 2 - X_SHIFT
+    # Never negative. The 768p canvas is exactly wide enough for the full
+    # X_SHIFT (this comes out at 0 there); one cell narrower and a negative
+    # offset would index the grid from its END, wrapping the pole round to
+    # the right edge of the screen. Clamped, the flag just sits at the edge.
+    x_off = max(0, (px_w - art_w) // 2 - X_SHIFT)
     y_off = (px_h - art_h) // 2
     # The wave is measured in art pixels, so it has to grow with the art or a
     # scaled-up flag would ripple less than the original.
@@ -343,10 +363,21 @@ VARIANTS = {
 # whatever ly_config.sh put in vconsole.conf, and the art canvas is that grid
 # with the rows doubled: two art pixels per cell, upper and lower half block.
 #
+#   1366x768  ->  85x24 cells ->  85x48 art   scale 0.73
+#   1600x900  -> 100x28 cells -> 100x56 art   scale 0.85
 #   1920x1080 -> 120x33 cells -> 120x66 art   scale 1      (unchanged)
 #   2560x1440 -> 160x45 cells -> 160x90 art   scale 1.36
 #   3840x2160 -> 240x67 cells -> 240x134 art  scale 2 (snapped), 1 row spare
+#
+# The two small cuts exist because the 1080p one used to be the floor, and on
+# a 1366x768 panel (the base T480) ly clipped 35 columns and 9 rows off it -
+# the finial, the pole and the hoist edge of the cloth. ly_config.sh picks
+# the largest cut that fits the grid in BOTH directions, reading sizeX/sizeY
+# straight out of these files, so a new entry here needs nothing more than a
+# regeneration.
 PANELS = {
+    "768p": (85, 48),
+    "900p": (100, 56),
     "1080p": (120, 66),
     "1440p": (160, 90),
     "2160p": (240, 134),

@@ -70,6 +70,46 @@ else
     echo -e "${WARN} No [multilib] stanza found in $pacman_conf" 2>&1 | tee -a "$LOG"
 fi
 
+# Keep hyprland's uwsm session entry off disk.
+#
+# The hyprland package ships hyprland-uwsm.desktop (Exec=uwsm start ...) next
+# to the hyprland.desktop this setup logs in with. Other display managers hide
+# it through its TryExec=uwsm; ly never reads TryExec, nothing here installs
+# uwsm, and ly may even preselect it on the first boot - which is what
+# happened on this laptop (see "Session list" in ly_config.sh).
+#
+# NoExtract, so pacman never writes it - not on the hyprland.sh install later
+# in this run, and not on any upgrade after that. It has to be in place BEFORE
+# hyprland.sh, which is why it lives here and not in ly_config.sh; that script
+# removes the copy an install from before this line already left behind.
+# pacman -Qk skips a missing NoExtract file, so it reads as intended, not as
+# damage. Delete the line from pacman.conf if you ever install uwsm.
+#
+# pacman accumulates repeated NoExtract lines, so this is a line of its own
+# rather than an edit of one that may already be there - placed under the
+# stock "#NoExtract" in [options] (Arch and CachyOS both have it), or straight
+# under [options] where that comment is gone.
+uwsm_entry="usr/share/wayland-sessions/hyprland-uwsm.desktop"
+if pacman -Q uwsm &>/dev/null; then
+    echo -e "${CAT} uwsm is installed - not adding NoExtract for ${MAGENTA}${uwsm_entry##*/}${RESET}. ${RESET}" 2>&1 | tee -a "$LOG"
+elif grep -qE "^[[:space:]]*NoExtract[[:space:]]*=.*${uwsm_entry//./\\.}" "$pacman_conf"; then
+    echo -e "${CAT} NoExtract for ${MAGENTA}${uwsm_entry##*/}${RESET} is already set. ${RESET}" 2>&1 | tee -a "$LOG"
+else
+    # `|| true`: Global_functions.sh runs under set -e, and a failed edit of
+    # one cosmetic line must not end the install. The check below reports it.
+    if sed -n '/^\[options\]/,/^\[/p' "$pacman_conf" | grep -q '^#NoExtract'; then
+        sudo sed -i "/^\[options\]/,/^\[/{/^#NoExtract/a NoExtract   = $uwsm_entry
+}" "$pacman_conf" || true
+    else
+        sudo sed -i "/^\[options\]/a NoExtract   = $uwsm_entry" "$pacman_conf" || true
+    fi
+    if grep -qE "^[[:space:]]*NoExtract[[:space:]]*=.*${uwsm_entry//./\\.}" "$pacman_conf"; then
+        echo -e "${CAT} Added ${MAGENTA}NoExtract${RESET} for ${MAGENTA}${uwsm_entry##*/}${RESET} ${RESET}" 2>&1 | tee -a "$LOG"
+    else
+        echo -e "${WARN} Could not add NoExtract for ${uwsm_entry##*/} - ly will list a uwsm session that cannot start" 2>&1 | tee -a "$LOG"
+    fi
+fi
+
 echo -e "${CAT} ${MAGENTA}Pacman.conf${RESET} spicing up completed ${RESET}" 2>&1 | tee -a "$LOG"
 
 

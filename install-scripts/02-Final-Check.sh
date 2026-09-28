@@ -169,6 +169,15 @@ if selected ly; then
         systemctl is-enabled ly@tty2.service
     check_outcome "/etc/ly/config.ini does not match assets/ly/config.ini (install-scripts/ly_config.sh)" \
         cmp -s /etc/ly/config.ini "assets/ly/config.ini"
+    # config.ini hides the shell, xinitrc and xsessions entries, so
+    # /usr/share/wayland-sessions is ly's only source of sessions - and ly 1.4.1
+    # does not guard an empty list (it indexes items[len - 1]), so a login
+    # screen with nothing in it is undefined behaviour, not just an empty menu.
+    # hyprland.sh runs before ly_config.sh, so empty here means hyprland's
+    # session file is missing. ly_config.sh warns, but install.sh ignores its
+    # exit status, so this is what keeps the preset from rebooting into it.
+    check_outcome "ly has no session to offer: /usr/share/wayland-sessions has no .desktop file - hyprland's session file is missing (install-scripts/hyprland.sh, install-scripts/ly_config.sh)" \
+        bash -c 'compgen -G "/usr/share/wayland-sessions/*.desktop"'
 fi
 
 if selected zsh; then
