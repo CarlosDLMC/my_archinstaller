@@ -455,24 +455,40 @@ limine_partition_root() {
 #
 # CachyOS + Limine keeps its initramfs under /boot/<machine-id>/<kernel>/ and
 # regenerates the hashed limine.conf entries through a mkinitcpio post hook
-# (limine-mkinitcpio-hook), so a plain `mkinitcpio -P` is fine there too -
-# plymouth.sh relies on exactly that. limine-mkinitcpio is simply the distro's
-# front door for the same rebuild, so prefer it where it exists.
+# (limine-mkinitcpio-hook), so a plain `mkinitcpio -P` is fine there too.
+# limine-mkinitcpio is simply the distro's front door for the same rebuild, so
+# prefer it where it exists.
+#
+# The generator is picked in the same order plymouth's own plymouth-update-initrd
+# uses (limine-mkinitcpio, mkinitcpio, booster, dracut-rebuild), because
+# plymouth.sh rebuilds through here now instead of `plymouth-set-default-theme
+# -R` - which threw the rebuild's exit status away. Picked first and run once, so
+# PIPESTATUS below is always the generator's own status.
 rebuild_initramfs() {
-  local log="${1:-$LOG}"
+  local log="${1:-$LOG}" gen=()
   printf "${INFO} Rebuilding ${YELLOW}Initramfs${RESET}...\n" 2>&1 | tee -a "$log"
   if command -v limine-mkinitcpio &>/dev/null; then
-    sudo limine-mkinitcpio 2>&1 | tee -a "$log"
-  else
-    sudo mkinitcpio -P 2>&1 | tee -a "$log"
+    gen=(limine-mkinitcpio)
+  elif command -v mkinitcpio &>/dev/null; then
+    gen=(mkinitcpio -P)
+  elif [ -x /usr/lib/booster/regenerate_images ]; then
+    gen=(/usr/lib/booster/regenerate_images)
+  elif command -v dracut-rebuild &>/dev/null; then
+    gen=(dracut-rebuild)
   fi
+  if [ ${#gen[@]} -eq 0 ]; then
+    echo "${ERROR} No initramfs generator found (limine-mkinitcpio, mkinitcpio, booster, dracut-rebuild) - rebuild it by hand." | tee -a "$log"
+    echo "$(basename "$0")" >> "$INITRAMFS_FAILED_MANIFEST"
+    return 1
+  fi
+  sudo "${gen[@]}" 2>&1 | tee -a "$log"
   if [ "${PIPESTATUS[0]}" -ne 0 ]; then
     echo "${ERROR} initramfs rebuild failed - check $log" | tee -a "$log"
     # Recorded, not just printed: callers run this as `|| true` so the rest of
-    # their setup still happens, and 02-Final-Check.sh's modinfo check passes
-    # whether or not the image was rebuilt. Without this marker a failed rebuild
-    # (a full ESP, say) auto-rebooted into an image missing the NVIDIA modules
-    # or the nouveau blacklist.
+    # their setup still happens, and 02-Final-Check.sh's modinfo and plymouth
+    # theme checks pass whether or not the image was rebuilt. Without this
+    # marker a failed rebuild (a full ESP, say) auto-rebooted into an image
+    # missing the NVIDIA modules, the nouveau blacklist or the new splash.
     echo "$(basename "$0")" >> "$INITRAMFS_FAILED_MANIFEST"
     return 1
   fi
