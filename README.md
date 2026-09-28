@@ -1235,9 +1235,12 @@ agent writes. `hds` parks it in a permanent quadrant.
 Like Herdr, it is not in the repos or the AUR. Upstream's one-liner pipes an
 unread script into a shell, which this repo does nowhere else, so `hunk.sh`
 resolves the release through the GitHub API, verifies the archive against the
-published `SHA256SUMS`, and installs the binary to `~/.local/bin` - the same
-checked path `herdr.sh` takes. A mismatch installs nothing. Update later with
-`hunk update`.
+published `SHA256SUMS`, and installs the whole release - the binary and its
+bundled agent skills - as `~/.local/bin/.hunk-release/`, with `~/.local/bin/hunk`
+a symlink into it, so `hunk skill path` finds the review skill. That is the same
+checked path `herdr.sh` takes. A mismatch installs nothing. Update later by
+re-running `install-scripts/hunk.sh`. `hunk update` does not recognise this
+install: hunk works out how it was installed from where its binary lives.
 
 ### Lock Screen (Soviet TUI)
 

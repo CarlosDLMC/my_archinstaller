@@ -11,16 +11,29 @@
 # install.sh | sh`, which this does not use: it installs to ~/.hunk, and piping an
 # unread script into a shell is the one thing this repo does nowhere else. Instead
 # we do what herdr.sh does - resolve the release from the GitHub API, verify the
-# archive against the published SHA256SUMS, and install the binary to
-# ~/.local/bin - so both out-of-band binaries arrive the same, checked way.
+# archive against the published SHA256SUMS, and install into ~/.local/bin - so
+# both out-of-band binaries arrive the same, checked way.
 #
 # The release is a tar.gz (unlike herdr's bare binary):
 #   hunkdiff-linux-x64/
 #     hunk            <- the binary; "hunk" is binaryName in metadata.json
 #     metadata.json
-#     skills/         <- bundled agent skills, reachable later via `hunk skill path`
+#     skills/         <- bundled agent skills; `hunk skill path` prints one
 #
-# `hunk update` keeps it current afterwards.
+# The whole tree is kept, as ~/.local/bin/.hunk-release/, and ~/.local/bin/hunk
+# is a symlink into it. hunk finds its skills by walking up from its own binary
+# (symlinks resolved) looking for skills/<name>/SKILL.md, so the bare binary this
+# used to install had none: `hunk skill path` failed with "Could not locate the
+# bundled Hunk hunk-review skill".
+#
+# Why inside ~/.local/bin and not ~/.local/share/hunk: hunk works out how it was
+# installed from the real path of its binary. Under ~/.local/bin it takes itself
+# for a local source build - it shows no update notices, and `hunk update` only
+# prints advice. Anywhere else in $HOME it takes itself for an npm install: it
+# shows "Update available ... run `hunk update`" at startup, and `hunk update`
+# then runs `npm install --global hunkdiff`, which leaves a second, separate hunk
+# under npm's prefix while this one stays old. So neither place makes
+# `hunk update` work - update by re-running this script.
 
 hunk_pkg=(
   jq   # the herdr layout functions parse herdr's socket-API JSON with it
@@ -45,7 +58,17 @@ for PKG in "${hunk_pkg[@]}"; do
 done
 
 BIN="$HOME/.local/bin/hunk"
+# The release tree $BIN points into - see the header for why it lives here.
+REL="$HOME/.local/bin/.hunk-release"
 mkdir -p "$HOME/.local/bin"
+
+# A run interrupted inside the swap below leaves the previous tree parked at
+# .old - put it back so the symlink resolves again. A half-extracted .new is
+# simply dropped (the binary alone is ~160 MB).
+if [ ! -e "$REL" ] && [ -d "$REL.old" ]; then
+  mv -T "$REL.old" "$REL" || true
+fi
+rm -rf "$REL.new" "$REL.old"
 
 case "$(uname -m)" in
   x86_64)  HUNK_ASSET="hunkdiff-linux-x64.tar.gz" ;;
@@ -84,8 +107,12 @@ if [ -z "$HUNK_URL" ] || [ -z "$HUNK_SUMS" ]; then
     echo "${ERROR} Skipping Hunk." | tee -a "$LOG"
     record_package_failure "hunk"; exit 0
   fi
-# Already current? `hunk --version` prints a bare version, e.g. "0.22.0".
-elif [ -x "$BIN" ] && [ "$("$BIN" --version 2>/dev/null | tr -d '[:space:]')" = "$HUNK_VER" ]; then
+# Already current? `hunk --version` prints a bare version, e.g. "0.22.0". Only
+# in the release-tree layout: earlier versions of this script left a bare binary
+# with no skills beside it, and a matching version number must not keep that.
+elif [ -x "$BIN" ] && [ -d "$REL/skills" ] &&
+     [ "$(readlink -f "$BIN")" = "$(readlink -f "$REL/hunk")" ] &&
+     [ "$("$BIN" --version 2>/dev/null | tr -d '[:space:]')" = "$HUNK_VER" ]; then
   echo "${OK} Hunk $HUNK_VER already installed." | tee -a "$LOG"
 else
   printf "\n%s - Downloading ${SKY_BLUE}Hunk $HUNK_VER${RESET} .... \n" "${NOTE}"
@@ -100,11 +127,27 @@ else
     # good download on the file that was never fetched.
     _asset_re=$(printf '%s' "$HUNK_ASSET" | sed 's/[.[\*^$]/\\&/g')
     if ( cd "$TMPD" && grep -E "^[0-9a-fA-F]{64} [ *]${_asset_re}\$" SHA256SUMS | sha256sum -c - >/dev/null 2>&1 ); then
-      if tar xzf "$TMPD/$HUNK_ASSET" -C "$TMPD" 2>>"$LOG"; then
-        EXTRACTED=$(find "$TMPD" -type f -name hunk -perm -u+x | head -1)
+      # Extracted next to the live tree rather than into $TMPD: /tmp is a tmpfs,
+      # and only a rename within one filesystem swaps a whole tree in one step.
+      if mkdir -p "$REL.new" && tar xzf "$TMPD/$HUNK_ASSET" -C "$REL.new" 2>>"$LOG"; then
+        EXTRACTED=$(find "$REL.new" -type f -name hunk -perm -u+x | head -1)
         if [ -n "$EXTRACTED" ]; then
-          install -m 755 "$EXTRACTED" "$BIN"
-          echo "${OK} Hunk $HUNK_VER installed to $BIN (sha256 verified)." | tee -a "$LOG"
+          # Old tree aside, new tree in, then the link. A hunk running right now
+          # keeps the binary it has open, and the only moment with no tree at all
+          # is between two renames. `ln -sfn` also replaces the bare binary that
+          # earlier versions of this script installed at $BIN; the link is
+          # relative, so it survives the home directory moving.
+          if { [ ! -e "$REL" ] || mv -T "$REL" "$REL.old"; } &&
+             mv -T "$(dirname "$EXTRACTED")" "$REL" &&
+             ln -sfn .hunk-release/hunk "$BIN"; then
+            rm -rf "$REL.old"
+            echo "${OK} Hunk $HUNK_VER installed to $REL, linked from $BIN (sha256 verified)." | tee -a "$LOG"
+          else
+            # Put the previous tree back rather than leave $BIN dangling.
+            if [ ! -e "$REL" ] && [ -d "$REL.old" ]; then mv -T "$REL.old" "$REL" || true; fi
+            echo "${ERROR} Could not move Hunk $HUNK_VER into $REL. NOT installed." | tee -a "$LOG"
+            record_package_failure "hunk"
+          fi
         else
           echo "${ERROR} No 'hunk' binary inside $HUNK_ASSET. NOT installed." | tee -a "$LOG"
           record_package_failure "hunk"
@@ -121,7 +164,7 @@ else
     echo "${ERROR} Failed to download Hunk." | tee -a "$LOG"
     record_package_failure "hunk"
   fi
-  rm -rf "$TMPD"
+  rm -rf "$TMPD" "$REL.new"
 fi
 
 [ -x "$BIN" ] || { printf "\n%s Hunk binary missing - nothing else to do.\n" "${WARN}"; exit 0; }
@@ -135,5 +178,5 @@ else
   echo "${NOTE} Select the 'dots' option (or run install-scripts/dotfiles-main.sh)." | tee -a "$LOG"
 fi
 
-printf "\n${NOTE} ${SKY_BLUE}Hunk${RESET} installed. ${MAGENTA}hunk diff${RESET} reviews the working tree, ${MAGENTA}hunk diff --watch${RESET} re-renders as an agent writes, ${MAGENTA}hunk show${RESET} the last commit, ${MAGENTA}hunk log${RESET} the history. Inside herdr, ${YELLOW}hds${RESET} builds the square that keeps it on screen. Update later with ${MAGENTA}hunk update${RESET}.\n"
+printf "\n${NOTE} ${SKY_BLUE}Hunk${RESET} installed. ${MAGENTA}hunk diff${RESET} reviews the working tree, ${MAGENTA}hunk diff --watch${RESET} re-renders as an agent writes, ${MAGENTA}hunk show${RESET} the last commit, ${MAGENTA}hunk log${RESET} the history. Inside herdr, ${YELLOW}hds${RESET} builds the square that keeps it on screen. ${MAGENTA}hunk skill path${RESET} prints the bundled review skill for your agent. Update later by re-running ${MAGENTA}install-scripts/hunk.sh${RESET} - not ${MAGENTA}hunk update${RESET}, which does not recognise this install.\n"
 printf "\n%.0s" {1..2}
