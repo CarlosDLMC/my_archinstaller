@@ -36,7 +36,7 @@ prebuilt package (`linux-cachyos-lts-nvidia-open`). The rest of the NVIDIA setup
 variables in `configs/ENVariables.lua` turn themselves on when every GPU in the
 machine is NVIDIA *and* the proprietary driver is actually loaded, and stay off on
 hybrid laptops. The driver check matters on the machines the installer leaves on
-nouveau (`nvidia="OFF"`, Kepler-or-older cards, a failed DKMS build): forcing
+nouveau (`nvidia="OFF"`, Kepler-or-older cards, a DKMS build that failed on every kernel): forcing
 NVIDIA's GLX library there broke every XWayland OpenGL app.
 
 git is not part of that selection, so after the first login:
@@ -1318,8 +1318,20 @@ one decides.
 `nvidia.sh` then checks that every installed kernel actually has an NVIDIA
 module (`modinfo -k <kver> nvidia`), because a DKMS build that fails inside
 pacman's hook still leaves the package "installed". If any kernel is missing
-one, the script fails, **nouveau is not blacklisted**, and the final check names
-the kernel. The modules go into the initramfs through
+one, the script fails, and what happens to nouveau depends on how many kernels are
+affected. `nvidia-utils` (and `nvidia-580xx-utils`) ships its own
+`blacklist nouveau` in `/usr/lib/modprobe.d/`. If **no** kernel got the module, the
+script masks that file (`/etc/modprobe.d/nvidia-utils.conf -> /dev/null`) and
+rebuilds the initramfs, so nouveau drives the card meanwhile. Anything else that
+still blacklists it, such as `/etc/modprobe.d/nouveau.conf` from an earlier run, is
+named but not removed. If only **some** kernels got it, the package's blacklist
+stays so those kernels keep the NVIDIA driver, and a kernel without the module
+boots with no driver for the card. Either way the final check names that kernel
+and blocks the reboot. A later run of `install-scripts/nvidia.sh` in which every
+kernel has the module removes the mask again. If you fix DKMS by hand instead
+(`dkms autoinstall`, a kernel update that builds), the final check flags the
+leftover mask, because with it nouveau and nvidia compete for the card on every
+boot. The modules go into the initramfs through
 `/etc/mkinitcpio.conf.d/99-nvidia.conf` (`MODULES+=(...)`), and the initramfs is
 rebuilt once, after the nouveau blacklist is written, so the image that boots
 carries both.

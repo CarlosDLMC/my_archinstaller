@@ -4,7 +4,10 @@
 # Exits non-zero when it cannot leave a working NVIDIA kernel module behind for
 # every installed kernel. install.sh keys the nouveau blacklist off that, so a
 # failed driver never ends with nouveau switched off as well - which was the
-# one outcome worse than doing nothing: a reboot into no GPU driver at all.
+# one outcome worse than doing nothing: a reboot into no GPU driver at all. When
+# NO kernel got a module, the failure path also masks nvidia-utils' own nouveau
+# blacklist, which would otherwise do exactly that (see nouveau_pkg_blacklists).
+# When only some did, that blacklist stays, so those kernels keep nvidia.
 
 ## WARNING: DO NOT EDIT BEYOND THIS LINE IF YOU DON'T KNOW WHAT YOU ARE DOING! ##
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -101,6 +104,35 @@ fi
 
 has_module() { modinfo -k "$1" -n nvidia &>/dev/null; }
 
+# nvidia-utils ships /usr/lib/modprobe.d/nvidia-utils.conf, and the 580xx branch
+# nvidia-580xx-utils.conf, and both start with "blacklist nouveau". Every path
+# below installs one of them (the dkms and prebuilt module packages depend on
+# it, and the nvidia_pkg loop installs it by name), and mkinitcpio's modconf hook
+# copies it into the initramfs. So "nouveau is not blacklisted" was never true
+# once this script had run: the package had already done it. A same-named file
+# in /etc/modprobe.d overrides the /usr/lib one, and a symlink to /dev/null is
+# kmod's way of masking it - the only form of that file this script creates or
+# removes.
+nouveau_pkg_blacklists=(nvidia-utils.conf nvidia-580xx-utils.conf)
+is_our_mask() { [ -L "/etc/modprobe.d/$1" ] && [ "$(readlink "/etc/modprobe.d/$1")" = /dev/null ]; }
+
+# Take the masks back out, so the package's "blacklist nouveau" applies again.
+# Only a symlink to /dev/null is removed. Returns 0 when it removed one, so the
+# caller knows the initramfs needs rebuilding.
+unmask_nouveau_pkg_blacklists() {
+  local _bl _removed=1
+  for _bl in "${nouveau_pkg_blacklists[@]}"; do
+    is_our_mask "$_bl" || continue
+    if sudo rm -f "/etc/modprobe.d/$_bl"; then
+      echo "${OK} Removed the /etc/modprobe.d/$_bl mask from an earlier failed run - ${_bl%.conf} blacklists nouveau again." | tee -a "$LOG"
+      _removed=0
+    else
+      echo "${WARN} Could not remove the /etc/modprobe.d/$_bl mask - nouveau is not blacklisted. Remove it by hand and rebuild the initramfs." | tee -a "$LOG"
+    fi
+  done
+  return $_removed
+}
+
 printf "${YELLOW} Installing ${SKY_BLUE}Nvidia Packages${RESET}...\n"
 if [ -n "$prebuilt" ]; then
   echo "${NOTE} NVIDIA kernel module already installed (${SKY_BLUE}${prebuilt}${RESET}); keeping it, not installing ${dkms_pkg}." | tee -a "$LOG"
@@ -146,17 +178,94 @@ done
 # pacman's hook (a brand-new kernel, a headers mismatch) the dkms package still
 # counts as installed, and the old script carried on to blacklist nouveau and
 # let the preset reboot into no GPU driver. Check the module itself, per kernel.
-module_missing=()
+module_missing=(); module_present=()
 for i in "${!kvers[@]}"; do
-  has_module "${kvers[$i]}" || module_missing+=("${kbases[$i]} (${kvers[$i]})")
+  if has_module "${kvers[$i]}"; then
+    module_present+=("${kbases[$i]} (${kvers[$i]})")
+  else
+    module_missing+=("${kbases[$i]} (${kvers[$i]})")
+  fi
 done
 if [ ${#module_missing[@]} -ne 0 ]; then
   echo "${ERROR} No NVIDIA kernel module for: ${module_missing[*]}" | tee -a "$LOG"
   echo "${NOTE} Check the DKMS build with: dkms status   (and $LOG)" | tee -a "$LOG"
-  echo "${NOTE} nouveau is NOT being blacklisted, so this machine still has a working GPU driver." | tee -a "$LOG"
+  if [ ${#module_present[@]} -eq 0 ]; then
+    # No kernel has the module: give nouveau back for real. This used to print
+    # "nouveau is NOT being blacklisted, so this machine still has a working GPU
+    # driver" and exit - but nvidia-utils had blacklisted it already (see
+    # nouveau_pkg_blacklists), so a reboot on the strength of that message came
+    # up on simpledrm with no GPU driver at all. Mask the package's blacklist,
+    # then rebuild so the image that boots has the mask too. Safe only because
+    # no kernel can load nvidia: the mask applies to every kernel (see below).
+    _masked=()
+    for _bl in "${nouveau_pkg_blacklists[@]}"; do
+      [ -f "/usr/lib/modprobe.d/$_bl" ] || continue
+      if is_our_mask "$_bl"; then
+        _masked+=("/etc/modprobe.d/$_bl")
+      elif [ -e "/etc/modprobe.d/$_bl" ]; then
+        # Somebody's own file of that name already overrides the package's; not ours to touch.
+        echo "${WARN} /etc/modprobe.d/$_bl exists and is not a mask - leaving it as it is." | tee -a "$LOG"
+      elif sudo mkdir -p /etc/modprobe.d && sudo ln -s /dev/null "/etc/modprobe.d/$_bl"; then
+        echo "${OK} Masked /usr/lib/modprobe.d/$_bl (its 'blacklist nouveau') with /etc/modprobe.d/$_bl -> /dev/null." | tee -a "$LOG"
+        _masked+=("/etc/modprobe.d/$_bl")
+      else
+        echo "${ERROR} Could not mask /usr/lib/modprobe.d/$_bl - nouveau stays blacklisted by it." | tee -a "$LOG"
+      fi
+    done
+    if [ ${#_masked[@]} -ne 0 ]; then
+      # Only a successful run of this script removes the mask. Fixing DKMS by
+      # hand (dkms autoinstall, a kernel update that builds) leaves it in
+      # place, and from then on nouveau loads as well and competes with nvidia
+      # for the card on every boot - with the final check's modinfo test passing.
+      echo "${NOTE} Once the NVIDIA module builds, re-run ${SCRIPT_DIR}/nvidia.sh: it removes this mask and adds the early-KMS modules. Left in place, the mask makes nouveau compete with nvidia for the card on every boot. (By hand: sudo rm ${_masked[*]}, then rebuild the initramfs.)" | tee -a "$LOG"
+      rebuild_initramfs "$LOG" || true
+    fi
+  else
+    # Some kernels have the module, some do not. The mask above cannot be
+    # limited to one kernel, so it would hand the card to nouveau on the kernels
+    # that work: nouveau is in their image through autodetect, and on a first
+    # run nvidia is not, because 99-nvidia.conf below is only written once every
+    # kernel has the module. A working kernel downgraded to keep a broken one on
+    # nouveau. So keep the package's blacklist, and take out a mask left by an
+    # earlier run in which no kernel had the module.
+    if unmask_nouveau_pkg_blacklists; then
+      rebuild_initramfs "$LOG" || true
+    fi
+  fi
+  # Anything still blacklisting nouveau: the package's own file (always, when
+  # some kernel has the module), an earlier run's nvidia_nouveau.sh
+  # (/etc/modprobe.d/nouveau.conf, and `install nouveau /bin/true` in
+  # blacklist.conf), or a file of your own. Named rather than removed - the
+  # final check blocks the reboot over the missing module either way.
+  _still=()
+  for _f in /etc/modprobe.d/*.conf /usr/lib/modprobe.d/*.conf; do
+    [ -f "$_f" ] || continue
+    # A package file overridden by a same-named /etc one (the mask) is not read.
+    if [ "${_f%/*}" = /usr/lib/modprobe.d ] && [ -e "/etc/modprobe.d/${_f##*/}" ]; then continue; fi
+    grep -qsE '^\s*(blacklist\s+nouveau\b|install\s+nouveau\s)' "$_f" && _still+=("$_f")
+  done
+  if [ ${#module_present[@]} -ne 0 ]; then
+    if [ ${#_still[@]} -ne 0 ]; then
+      echo "${WARN} No driver for the NVIDIA card on ${module_missing[*]}: nouveau is blacklisted by ${_still[*]}." | tee -a "$LOG"
+      echo "${NOTE} Left that way on purpose: unblacklisting nouveau would make it take the card on ${module_present[*]} as well, where the NVIDIA module works. Boot ${module_present[*]} until the module builds, then re-run ${SCRIPT_DIR}/nvidia.sh." | tee -a "$LOG"
+    else
+      echo "${WARN} Nothing blacklists nouveau: ${module_missing[*]} falls back to it, but on ${module_present[*]} nouveau and nvidia both load and race for the card." | tee -a "$LOG"
+    fi
+  elif [ ${#_still[@]} -eq 0 ]; then
+    echo "${NOTE} nouveau is not blacklisted, so this machine still has a GPU driver on every kernel." | tee -a "$LOG"
+  else
+    echo "${WARN} nouveau is still blacklisted by: ${_still[*]}" | tee -a "$LOG"
+    echo "${NOTE} Until the NVIDIA module builds, a kernel without it boots with no GPU driver. Remove those lines and rebuild the initramfs to use nouveau meanwhile." | tee -a "$LOG"
+  fi
   exit 1
 fi
 echo "${OK} NVIDIA kernel module present for every installed kernel." | tee -a "$LOG"
+
+# The driver works, so a mask left by an earlier failed run (above) has to go:
+# with it, nouveau and nvidia both load and race for the card. The initramfs
+# rebuild below (or nvidia_nouveau.sh's, when nouveau is selected) then puts the
+# package's blacklist back into the image.
+unmask_nouveau_pkg_blacklists || true
 
 # ------------------------------------------------------------ early KMS
 # A drop-in rather than a sed on /etc/mkinitcpio.conf. The sed silently did
