@@ -761,11 +761,15 @@ export INSTALL_SELECTED_OPTIONS="$selected_options"
 # (sudo was authenticated and the keepalive started before hardware detection.)
 if [[ " $selected_options " == *" nopasswd_sudo "* ]]; then
     echo "${INFO} Configuring ${SKY_BLUE}passwordless sudo for wheel${RESET} first, so nothing below can prompt..." | tee -a "$LOG"
-    execute_script "sudoers_nopasswd.sh"
-    if sudo -n true 2>/dev/null; then
+    # The script's status and the rule itself, not `sudo -n true`: the `sudo -v`
+    # and the keepalive loop at the top keep the timestamp valid, so that passed
+    # whether or not the rule landed and this said "no longer asks" even after a
+    # failed visudo check. Same test as 02-Final-Check.sh ("NOPASSWD: ALL", not
+    # bluetooth.sh's narrower rule).
+    if execute_script "sudoers_nopasswd.sh" && sudo -n -l 2>/dev/null | grep -q "NOPASSWD: ALL"; then
         echo "${OK} sudo no longer asks for a password." | tee -a "$LOG"
     else
-        echo "${WARN} sudo still wants a password; the keepalive loop will carry the run instead." | tee -a "$LOG"
+        echo "${WARN} The passwordless sudo rule did not land (see above); the keepalive loop will carry the run instead." | tee -a "$LOG"
     fi
 fi
 
@@ -1134,37 +1138,62 @@ if pacman -Q hyprland &> /dev/null || pacman -Q hyprland-git &> /dev/null; then
         exit 1
     fi
 
+    # sudo, not a bare `systemctl reboot`. polkit lets an unprivileged user
+    # reboot only from the local active session (allow_active=yes); from an SSH
+    # session it is auth_admin_keep, so the unattended reboot sat at a
+    # pkttyagent password prompt or failed with "Access denied". sudo is already
+    # authenticated for the whole run (the keepalive at the top) or NOPASSWD.
+    # -n so it can never stop to ask; if it cannot, plain systemctl still works
+    # from a local session.
+    reboot_now() { sudo -n systemctl reboot 2>/dev/null || systemctl reboot; }
+
     # A preset run is meant to be unattended, so it reboots on its own rather
     # than parking on a prompt nobody is there to answer. The countdown is the
     # escape hatch: Ctrl-C, or any keypress, cancels the reboot.
     if [ "$preset_mode" == "true" ]; then
-        echo "${NOTE} Preset mode: rebooting in 15 seconds."
-        echo "${CAT} Press any key to cancel and stay in this session."
-        # Throw away anything typed during the install first. Background jobs
-        # read nothing from the terminal, so every stray key from the last hour
-        # sat in the input buffer and `read -n 1` took it at once - cancelling
-        # the reboot before the countdown had started.
-        while read -r -t 0.05 -n 1000 _discard; do :; done
-        if read -r -t 15 -n 1; then
-            printf "\n"
-            echo "👌 ${OK} Reboot cancelled. Reboot yourself with ${MAGENTA}systemctl reboot${RESET} when ready."
-            printf "\n%.0s" {1..2}
-            exit 0
+        if [ -t 0 ]; then
+            echo "${NOTE} Preset mode: rebooting in 15 seconds."
+            echo "${CAT} Press any key to cancel and stay in this session."
+            # Throw away anything typed during the install first. Background jobs
+            # read nothing from the terminal, so every stray key from the last hour
+            # sat in the input buffer and `read -n 1` took it at once - cancelling
+            # the reboot before the countdown had started.
+            while read -r -t 0.05 -n 1000 _discard; do :; done
+            if read -r -t 15 -n 1; then
+                printf "\n"
+                echo "👌 ${OK} Reboot cancelled. Reboot yourself with ${MAGENTA}systemctl reboot${RESET} when ready."
+                printf "\n%.0s" {1..2}
+                exit 0
+            fi
+        else
+            # No terminal on stdin (nohup, </dev/null, `ssh host ./install.sh`
+            # without -t): `read` hits end of file at once, so the 15-second
+            # countdown rebooted immediately and no keypress could ever cancel
+            # it. Wait the 15 seconds anyway; Ctrl-C is the way out.
+            echo "${NOTE} Preset mode, no terminal on stdin: rebooting in 15 seconds (Ctrl-C to abort)."
+            sleep 15
         fi
         printf "\n"
         echo "${INFO} Rebooting now..."
-        systemctl reboot
+        reboot_now
         exit 0
     fi
 
     while true; do
         echo -n "${CAT} Would you like to reboot now? (y/n): "
-        read HYP
+        # End of input (stdin redirected, or the terminal went away) makes read
+        # return nothing, for ever, and this loop printed "Invalid response"
+        # without end. No answer is a no.
+        if ! read -r HYP && [ -z "$HYP" ]; then
+            printf "\n"
+            echo "${NOTE} No answer (end of input) - not rebooting."
+            HYP="n"
+        fi
         HYP=$(echo "$HYP" | tr '[:upper:]' '[:lower:]')
 
         if [[ "$HYP" == "y" || "$HYP" == "yes" ]]; then
             echo "${INFO} Rebooting now..."
-            systemctl reboot 
+            reboot_now
             break
         elif [[ "$HYP" == "n" || "$HYP" == "no" ]]; then
             echo "👌 ${OK} You chose NOT to reboot"
