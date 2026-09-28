@@ -121,15 +121,29 @@ sudo find "$SPINNER_DIR" -maxdepth 1 -name '*.png' ! -name 'watermark.png' \
   -exec cp -n {} "$DEST_DIR/" \; 2>&1 | tee -a "$LOG"
 sudo chmod 644 "$DEST_DIR"/* 2>&1 | tee -a "$LOG"
 
-# -R rewrites /etc/plymouth/plymouthd.conf and regenerates every initramfs
-# (mkinitcpio -P). On CachyOS the limine-mkinitcpio-hook then refreshes the
-# boot entries on its own. This is the slow step.
+# Set the theme (/etc/plymouth/plymouthd.conf), then regenerate every initramfs
+# so the image that boots carries it. This is the slow step.
+#
+# Two steps, not `plymouth-set-default-theme -R`. -R runs plymouth-update-initrd
+# and then ends in an unconditional `exit 0`, so a rebuild that failed (a full
+# ESP, a hook error) still printed OK here, nothing reached
+# INITRAMFS_FAILED_MANIFEST, the final check - which only reads the theme name -
+# passed, and the preset rebooted into the old image with the distro splash.
+# rebuild_initramfs (Global_functions.sh) picks the generator the same way
+# plymouth-update-initrd does (limine-mkinitcpio on CachyOS+Limine, whose hook
+# also refreshes the hashed boot entries; else mkinitcpio -P) and records a
+# failure for the final check.
 echo "${NOTE} Setting ${SKY_BLUE}$THEME${RESET} as the default theme and rebuilding the initramfs..." | tee -a "$LOG"
-if sudo plymouth-set-default-theme -R "$THEME" >> "$LOG" 2>&1; then
+if sudo plymouth-set-default-theme "$THEME" >> "$LOG" 2>&1; then
   echo "${OK} plymouth theme is now $(plymouth-set-default-theme)." | tee -a "$LOG"
 else
-  echo "${ERROR} plymouth-set-default-theme -R failed - see $LOG" | tee -a "$LOG"
+  echo "${ERROR} plymouth-set-default-theme failed - see $LOG" | tee -a "$LOG"
   exit 1
+fi
+_rebuild_failed=false
+if ! rebuild_initramfs "$LOG"; then
+  _rebuild_failed=true
+  echo "${ERROR} The theme is selected but the initramfs was not rebuilt, so the next boot still shows the old splash. Fix the error above, then rebuild (sudo limine-mkinitcpio on CachyOS+Limine, else sudo mkinitcpio -P)." | tee -a "$LOG"
 fi
 
 # Report-only: what the splash needs from files this repo does not write.
@@ -143,9 +157,17 @@ if ! grep -qw splash /proc/cmdline; then
   echo "${NOTE} Add 'splash' (and 'quiet') to the cmdline in your bootloader entry. This repo does not edit bootloaders." | tee -a "$LOG"
 fi
 echo "${NOTE} To hide the motherboard's own logo as well, disable 'Boot Logo Display' in the BIOS." | tee -a "$LOG"
-# /boot is root-only on CachyOS, so test through sudo or this is always false.
-if sudo test -f /boot/limine.conf && ! sudo grep -q 'my_archinstaller Limine theme' /boot/limine.conf 2>/dev/null; then
+# /boot is root-only on CachyOS, so everything here goes through sudo -
+# find_limine_conf included (the same search limine.sh uses, so this hint and
+# that script agree on whether and where Limine is).
+if _limine_conf=$(find_limine_conf) && ! sudo grep -q 'my_archinstaller Limine theme' "$_limine_conf" 2>/dev/null; then
   echo "${NOTE} Limine is installed and unthemed. The 'limine' preset option (install-scripts/limine.sh) applies the matching boot-menu theme; see README 'Limine boot menu theme'." | tee -a "$LOG"
 fi
 
 printf "\n%.0s" {1..1}
+
+# Non-zero last, so the hints above are still printed. install.sh does not act
+# on this status; the final check does, through INITRAMFS_FAILED_MANIFEST.
+if [ "$_rebuild_failed" = true ]; then
+  exit 1
+fi
