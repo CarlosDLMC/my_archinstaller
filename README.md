@@ -210,6 +210,9 @@ first prompt.
 - PipeWire audio
 - NetworkManager (plus `nss-mdns`, wired into `nsswitch.conf` for `.local` names,
   and `systemd-resolved` — see [DNS](#dns))
+- `wireless-regdb`, the Wi-Fi regulatory database (`00-base.sh`). Plain Arch's
+  pacstrap leaves it out, so Wi-Fi stays on the restrictive world domain;
+  CachyOS already has it through `cachyos-settings`.
 - GPU video-acceleration drivers, detected per machine (see [Graphics](#graphics))
 - CPU microcode, detected per machine (see [Microcode](#microcode))
 - A power profile daemon, whichever one the distro provides (see [Power profiles](#power-profiles))
