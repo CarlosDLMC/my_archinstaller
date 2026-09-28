@@ -335,8 +335,9 @@ if selected neovim; then
     check_outcome "no colorscheme set: ~/.config/nvim/lua/plugins/colorscheme.lua is missing, so nvim falls back to LazyVim's tokyonight (install-scripts/neovim.sh)" \
         test -f "$HOME/.config/nvim/lua/plugins/colorscheme.lua"
     # nvim-treesitter's `main` branch builds parsers with the tree-sitter CLI and
-    # fails hard without it. mason cannot supply it from a headless run, which is
-    # why neovim.sh takes it from the repos - verify that actually happened.
+    # fails hard without it. neovim.sh takes it from the repos so it is on PATH
+    # before nvim first starts - left to mason, it was fetched during the headless
+    # pre-fetch and cut off there - so verify the repo copy actually installed.
     check_outcome "tree-sitter CLI is not installed - nvim-treesitter cannot build parsers, so there is no syntax highlighting (install-scripts/neovim.sh)" \
         command -v tree-sitter
 fi

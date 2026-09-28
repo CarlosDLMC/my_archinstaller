@@ -1145,14 +1145,17 @@ The ones worth learning first:
 - `Space G G` - lazygit in a floating pane
 - `a` / `A` in the tree - new file / new directory, `?` for the rest
 
-`neovim.sh` installs `tree-sitter-cli`, `stylua` and `shfmt` from the repos rather
-than letting mason.nvim fetch them. mason installs asynchronously inside a running
-nvim, and the headless `+Lazy! install` the script runs exits the moment lazy is
-done - which kills those installs mid-flight. That left nvim-treesitter reporting
-a hard `❌ tree-sitter (CLI)` with no parsers and no highlighting. pacman installs
-them synchronously and mason has nothing left to race. Parsers themselves are
-*not* pre-fetched: on treesitter's `main` branch they install per language the
-first time you open a matching file.
+`neovim.sh` installs `tree-sitter-cli` from the repos so nvim-treesitter's `main`
+branch can build parsers before nvim ever starts. Left to mason.nvim, the CLI was
+fetched in the background during the headless pre-fetch, which quit first and
+left a hard `❌ tree-sitter (CLI)` with no parsers and no highlighting. `stylua`
+and `shfmt` come from the repos too, but they save mason no work: LazyVim asks
+mason's own registry, not PATH, so mason still fetches its own copies. What fixes
+the race is that the pre-fetch no longer quits when lazy.nvim is done. The same
+headless nvim waits until mason's tools (`stylua`, `shfmt`, and `codelldb` from
+the Rust extra) and LazyVim's treesitter parsers have finished installing. If
+something did not make it, the script prints a WARN naming what is missing
+instead of OK.
 
 **The Neovim config is deliberately not tracked here.** The LazyVim starter is
 meant to be forked and grown - `lua/plugins/*.lua` is yours - and vendoring a copy
