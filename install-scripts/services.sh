@@ -19,13 +19,225 @@ LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_services.log"
 
 printf "\n${INFO} Enabling essential ${SKY_BLUE}system services${RESET}...\n" | tee -a "$LOG"
 
-# Enable NetworkManager
+# Enable NetworkManager - and make it the ONLY thing managing the network.
+#
+# A plain Arch installed with archinstall's "Copy ISO network configuration" (a
+# common pick; all the README asks for is "an Internet connection") comes up
+# with iwd + systemd-networkd + systemd-resolved enabled, and a hand-rolled
+# install may use dhcpcd. This used to enable NM on top and leave the others
+# enabled too: after the reboot NM's default Wi-Fi backend, wpa_supplicant,
+# fought iwd for wlan0, NM and networkd both ran DHCP on the same link, and
+# Wi-Fi was flaky or gone - while the final check, which only asked whether NM
+# was enabled, passed. CachyOS runs NM alone, so there none of this triggers and
+# NM is enabled and started exactly as before.
+#
+# iwd is kept, under NM, in the same layout archinstall's own "NetworkManager
+# (iwd backend)" choice writes: wifi.backend=iwd, and iwd.service disabled
+# because NM starts iwd itself over D-Bus (the Arch wiki says not to enable it).
+# That is what keeps the saved Wi-Fi working: its passphrase is in
+# /var/lib/iwd/*.psk and NM has no profile for it, but with the iwd backend NM
+# mirrors iwd's known networks and iwd autoconnects to them as before.
+#
+# Everything is disabled WITHOUT --now, and NM is only enabled, not started,
+# while another manager is still running: started now, NM would take over the
+# links networkd/iwd are holding in the middle of the install. The handover
+# happens at the reboot. systemd-resolved is left alone - it is handled below.
+#
+# netctl, connman, the wiki's per-interface wpa_supplicant@wlan0, and dhcpcd
+# with the wiki's 10-wpa_supplicant hook linked in are NOT handed over: they
+# keep the Wi-Fi password in their own files, and NM has no importer for any of
+# them. The first version of this block disabled the DHCP client under a
+# wpa_supplicant@wlan0 + dhcpcd laptop and left the supplicant enabled - the
+# reboot joined the Wi-Fi with no address, and NM could not take the card
+# either (its own wpa_supplicant fails with "ctrl_iface exists"). With one of
+# those enabled nothing is changed at all, and NM is NOT enabled either: the
+# second version still enabled it, and a netctl-auto@wlan0 laptop was left to
+# reboot into NM and netctl both claiming wlan0. Left off, NM trips the final
+# check's "NetworkManager.service is not enabled", which stops the preset's
+# auto-reboot, and a reboot by hand comes back on the setup that works now. The
+# warning gives the commands to move over by hand.
 printf "\n${NOTE} Enabling ${SKY_BLUE}NetworkManager${RESET}...\n" | tee -a "$LOG"
-sudo systemctl enable --now NetworkManager.service 2>&1 | tee -a "$LOG"
-if systemctl is-active --quiet NetworkManager.service; then
-  echo "${OK} NetworkManager is running." | tee -a "$LOG"
+if ! systemctl cat NetworkManager.service &>/dev/null; then
+  # Disabling the others without NM would boot the new machine with no network
+  # at all, so nothing is touched.
+  echo "${WARN} NetworkManager.service does not exist (networkmanager not installed?). Leaving the current network setup alone." | tee -a "$LOG"
 else
-  echo "${WARN} NetworkManager failed to start. Network connectivity may not work." | tee -a "$LOG"
+  # Per-interface and per-profile instances (dhcpcd@enp3s0, wpa_supplicant@wlan0,
+  # netctl@home) never show in list-unit-files, only their template does. They
+  # are found as loaded units, and as the .wants symlinks that enable them:
+  # netctl-auto@wlan0 hangs off the Wi-Fi card's device unit, so it is not even
+  # loaded while that card is missing.
+  net_instances() {
+    local _pat _link
+    {
+      systemctl list-units --all --plain --no-legend "$@" 2>/dev/null | cut -d' ' -f1
+      for _pat in "$@"; do
+        for _link in /etc/systemd/system/*.wants/$_pat /etc/systemd/system/*.requires/$_pat; do
+          if [ -L "$_link" ]; then
+            printf '%s\n' "${_link##*/}"
+          fi
+        done
+      done
+    } | sort -u
+  }
+
+  net_units=(systemd-networkd.service systemd-networkd.socket)
+  dhcpcd_units=(dhcpcd.service)
+  while read -r _unit; do
+    if [ -n "$_unit" ]; then
+      dhcpcd_units+=("$_unit")
+    fi
+  done < <(net_instances 'dhcpcd@*.service')
+
+  # The ones that keep the Wi-Fi password where NM cannot import it (see above).
+  # netctl.service restores whichever netctl profiles were up at shutdown.
+  net_hold_units=(connman.service netctl.service)
+  while read -r _unit; do
+    if [ -n "$_unit" ]; then
+      net_hold_units+=("$_unit")
+    fi
+  done < <(net_instances 'wpa_supplicant@*.service' 'wpa_supplicant-nl80211@*.service' 'wpa_supplicant-wired@*.service' \
+             'netctl@*.service' 'netctl-auto@*.service' 'netctl-ifplugd@*.service')
+
+  # dhcpcd is normally only a DHCP client, safe to hand over. The wiki's dhcpcd
+  # Wi-Fi setup links /usr/share/dhcpcd/hooks/10-wpa_supplicant (shipped
+  # inactive) into /usr/lib/dhcpcd/dhcpcd-hooks/, and then dhcpcd starts
+  # wpa_supplicant on the card itself from
+  # /etc/wpa_supplicant/wpa_supplicant*.conf: dhcpcd.service is the only unit
+  # enabled, and disabling it (as the DHCP client it looks like) booted a
+  # Wi-Fi-only laptop with no network and no profile NM could use.
+  dhcpcd_wifi_hook="/usr/lib/dhcpcd/dhcpcd-hooks/10-wpa_supplicant"
+  if [ -e "$dhcpcd_wifi_hook" ]; then
+    net_hold_units+=("${dhcpcd_units[@]}")
+  else
+    net_units+=("${dhcpcd_units[@]}")
+  fi
+
+  other_net_enabled=()
+  other_net_active=()
+  for _unit in "${net_units[@]}" iwd.service; do
+    if [ "$(systemctl is-enabled "$_unit" 2>/dev/null)" = enabled ]; then
+      other_net_enabled+=("$_unit")
+    fi
+    if systemctl is-active --quiet "$_unit"; then
+      other_net_active+=("$_unit")
+    fi
+  done
+  net_hold_enabled=()
+  for _unit in "${net_hold_units[@]}"; do
+    if [ "$(systemctl is-enabled "$_unit" 2>/dev/null)" = enabled ]; then
+      net_hold_enabled+=("$_unit")
+    fi
+    # Active counts too, so NM is not started next to a running netctl/connman.
+    if systemctl is-active --quiet "$_unit"; then
+      other_net_active+=("$_unit")
+    fi
+  done
+
+  # Written before NM can start, so it never brings wpa_supplicant up against
+  # iwd even for a moment. Skipped when netctl/connman/wpa_supplicant@/hooked
+  # dhcpcd stays: connman drives iwd itself and needs iwd.service left enabled.
+  iwd_under_nm="no"
+  if [[ " ${other_net_enabled[*]} " == *" iwd.service "* ]] && [ ${#net_hold_enabled[@]} -eq 0 ]; then
+    backend_conf="/etc/NetworkManager/conf.d/wifi_backend.conf"
+    if ! NetworkManager --print-config 2>/dev/null | grep -qx 'wifi.backend=iwd'; then
+      if [ -f "$backend_conf" ]; then
+        sudo cp "$backend_conf" "$backend_conf".bak-"$(date +%Y%m%d-%H%M%S)"
+      fi
+      sudo mkdir -p /etc/NetworkManager/conf.d
+      printf '# Installed by my_archinstaller (install-scripts/services.sh): iwd already held\n# this machine'"'"'s Wi-Fi, so NetworkManager drives iwd instead of wpa_supplicant.\n[device]\nwifi.backend=iwd\n' | sudo tee "$backend_conf" >/dev/null
+    fi
+    # Checked through NM's merged config, not the file: a later conf.d file can
+    # still override it, and iwd must not be disabled under a wpa_supplicant NM.
+    if NetworkManager --print-config 2>/dev/null | grep -qx 'wifi.backend=iwd'; then
+      iwd_under_nm="yes"
+      echo "${OK} NetworkManager will use iwd as its Wi-Fi backend - the Wi-Fi networks iwd saved keep working." | tee -a "$LOG"
+    else
+      echo "${WARN} Wrote $backend_conf but NetworkManager still does not report wifi.backend=iwd - another file in /etc/NetworkManager/conf.d overrides it." | tee -a "$LOG"
+      echo "${WARN} iwd.service left enabled; fix the override and re-run, or wpa_supplicant and iwd will fight over the Wi-Fi card." | tee -a "$LOG"
+    fi
+  fi
+
+  # Not enabled while one of the units that keep a Wi-Fi password stays (see
+  # above). An NM that was already enabled - by hand, or by an older run of this
+  # script, which enabled it unconditionally - is not disabled either: which of
+  # the two holds the working network is not knowable from here.
+  if [ ${#net_hold_enabled[@]} -gt 0 ]; then
+    if [ "$(systemctl is-enabled NetworkManager.service 2>/dev/null)" = enabled ]; then
+      echo "${WARN} NetworkManager is already enabled next to ${net_hold_enabled[*]} - both will claim the network after the reboot (see the warning below)." | tee -a "$LOG"
+    else
+      echo "${WARN} NetworkManager NOT enabled: ${net_hold_enabled[*]} stays in charge of the network (see the warning below). The final check will stop the auto-reboot on this." | tee -a "$LOG"
+    fi
+  elif [ ${#other_net_active[@]} -gt 0 ] && ! systemctl is-active --quiet NetworkManager.service; then
+    sudo systemctl enable NetworkManager.service 2>&1 | tee -a "$LOG"
+    if [ "$(systemctl is-enabled NetworkManager.service 2>/dev/null)" = enabled ]; then
+      echo "${OK} NetworkManager enabled. It takes over from ${other_net_active[*]} at the next boot - not started now, so this session keeps its connection." | tee -a "$LOG"
+    else
+      echo "${WARN} NetworkManager could not be enabled. Network connectivity may not work after the reboot." | tee -a "$LOG"
+    fi
+  else
+    sudo systemctl enable --now NetworkManager.service 2>&1 | tee -a "$LOG"
+    if systemctl is-active --quiet NetworkManager.service; then
+      echo "${OK} NetworkManager is running." | tee -a "$LOG"
+    else
+      echo "${WARN} NetworkManager failed to start. Network connectivity may not work." | tee -a "$LOG"
+    fi
+  fi
+
+  # archinstall's "Manual configuration" can give a link a static address in
+  # networkd. NM would just run DHCP there, which on a network without a DHCP
+  # server is no network at all - so networkd stays until it is moved over.
+  networkd_static="$(grep -lsE '^[[:space:]]*Address[[:space:]]*=' /etc/systemd/network/*.network 2>/dev/null || true)"
+  networkd_static_hint="nmcli connection add type ethernet ifname <if> ipv4.method manual ipv4.addresses <addr/prefix> ipv4.gateway <gw>"
+
+  if [ ${#net_hold_enabled[@]} -gt 0 ]; then
+    net_cred_dirs=()
+    for _unit in "${net_hold_enabled[@]}"; do
+      case "$_unit" in
+        wpa_supplicant*|dhcpcd*) _dir="/etc/wpa_supplicant/" ;;
+        netctl*)                 _dir="/etc/netctl/" ;;
+        *)                       _dir="/var/lib/connman/" ;;
+      esac
+      if [[ " ${net_cred_dirs[*]} " != *" $_dir "* ]]; then
+        net_cred_dirs+=("$_dir")
+      fi
+    done
+    echo "${WARN} Network setup left as it is: ${net_hold_enabled[*]} keeps the Wi-Fi password in ${net_cred_dirs[*]}, which NetworkManager cannot import - disabling it would boot this machine with no Wi-Fi." | tee -a "$LOG"
+    if [[ " ${net_hold_enabled[*]} " == *" dhcpcd"* ]]; then
+      echo "${WARN} dhcpcd is more than a DHCP client here: $dhcpcd_wifi_hook is linked in, so dhcpcd starts wpa_supplicant on the Wi-Fi card itself." | tee -a "$LOG"
+    fi
+    # %q, so a netctl profile's escaped name (netctl@home\x2dwifi) survives a paste.
+    echo "${WARN} To move to NetworkManager (the network drops for a moment): sudo systemctl disable --now$(printf ' %q' "${net_hold_enabled[@]}" "${other_net_enabled[@]}") && sudo systemctl enable --now NetworkManager.service - then for Wi-Fi: nmcli device wifi connect <SSID> password <password>" | tee -a "$LOG"
+    if [ -n "$networkd_static" ] && [[ " ${other_net_enabled[*]} " == *" systemd-networkd."* ]]; then
+      echo "${WARN} systemd-networkd also sets a static address in ${networkd_static//$'\n'/ } - once NetworkManager runs, recreate it there: $networkd_static_hint" | tee -a "$LOG"
+    fi
+  # Only once NM is known to be enabled - otherwise this would leave nothing.
+  elif [ ${#other_net_enabled[@]} -gt 0 ] && [ "$(systemctl is-enabled NetworkManager.service 2>/dev/null)" = enabled ]; then
+    networkd_warned="no"
+    for _unit in "${other_net_enabled[@]}"; do
+      case "$_unit" in
+        iwd.service)
+          [ "$iwd_under_nm" = "yes" ] || continue
+          ;;
+        systemd-networkd.*)
+          if [ -n "$networkd_static" ]; then
+            if [ "$networkd_warned" = "no" ]; then
+              echo "${WARN} systemd-networkd left enabled: a static address is set in ${networkd_static//$'\n'/ }." | tee -a "$LOG"
+              echo "${WARN} Recreate it in NetworkManager ($networkd_static_hint), then: sudo systemctl disable systemd-networkd.service" | tee -a "$LOG"
+              networkd_warned="yes"
+            fi
+            continue
+          fi
+          ;;
+      esac
+      sudo systemctl disable "$_unit" 2>&1 | tee -a "$LOG"
+      if [ "$(systemctl is-enabled "$_unit" 2>/dev/null)" = enabled ]; then
+        echo "${WARN} Could not disable $_unit - it and NetworkManager will both manage the network after the reboot." | tee -a "$LOG"
+      else
+        echo "${OK} $_unit disabled; NetworkManager manages the network from the next boot." | tee -a "$LOG"
+      fi
+    done
+  fi
 fi
 
 # systemd-resolved, because 01-hypr-pkgs.sh installs systemd-resolvconf.

@@ -208,8 +208,9 @@ first prompt.
   console grid (768p, 900p, 1080p, 1440p, 2160p), and the largest cut that fits
   the panel is installed.
 - PipeWire audio
-- NetworkManager (plus `nss-mdns`, wired into `nsswitch.conf` for `.local` names,
-  and `systemd-resolved` — see [DNS](#dns))
+- NetworkManager, as the only network manager (see [Network](#network)), plus
+  `nss-mdns`, wired into `nsswitch.conf` for `.local` names, and
+  `systemd-resolved` — see [DNS](#dns)
 - `wireless-regdb`, the Wi-Fi regulatory database (`00-base.sh`). Plain Arch's
   pacstrap leaves it out, so Wi-Fi stays on the restrictive world domain;
   CachyOS already has it through `cachyos-settings`.
@@ -425,6 +426,43 @@ After rebooting, confirm it took:
 ```bash
 journalctl -k -b | grep microcode      # want: "microcode updated early"
 ```
+
+### Network
+
+`services.sh` makes NetworkManager the only network manager. A plain Arch installed
+with archinstall's *Copy ISO network configuration* comes up with iwd +
+systemd-networkd enabled (a hand-rolled one may use dhcpcd), and leaving those
+enabled next to NetworkManager made wpa_supplicant fight iwd for the Wi-Fi card and
+two DHCP clients fight over each link after the reboot. So when iwd is enabled,
+NetworkManager is switched to the iwd Wi-Fi backend
+(`/etc/NetworkManager/conf.d/wifi_backend.conf`, `wifi.backend=iwd`, the same
+layout archinstall's *NetworkManager (iwd backend)* choice writes) and
+`iwd.service` is disabled, since NetworkManager starts iwd itself. The Wi-Fi
+networks iwd already saved keep working. systemd-networkd and dhcpcd are disabled.
+None of it is stopped during the install: NetworkManager takes over at the reboot,
+so the running install keeps its connection. A networkd link with a static
+`Address=` is left alone with a warning, because NetworkManager would only run DHCP
+there; the final check then stops the preset's auto-reboot until you move it over.
+On CachyOS none of this applies (NetworkManager already runs alone).
+
+netctl, connman, `wpa_supplicant@<if>`, and dhcpcd with its `10-wpa_supplicant`
+hook linked into `/usr/lib/dhcpcd/dhcpcd-hooks/` are **not** handed over: they keep
+the Wi-Fi password in `/etc/netctl/`, `/var/lib/connman/` or `/etc/wpa_supplicant/`,
+which NetworkManager cannot import, so switching would boot a Wi-Fi-only laptop
+with no network. With one of those enabled, `services.sh` changes nothing and does
+not enable NetworkManager; the final check then stops the preset's auto-reboot, and
+a reboot by hand comes back on the old setup. The warning prints the commands to
+switch by hand (`sudo systemctl disable --now <units> && sudo systemctl enable --now
+NetworkManager.service`, then `nmcli device wifi connect <SSID> password
+<password>`). Check with:
+
+```bash
+systemctl is-enabled systemd-networkd iwd dhcpcd 2>/dev/null   # disabled / not-found
+NetworkManager --print-config | grep wifi.backend             # wifi.backend=iwd if iwd was in use
+```
+
+Known limit: the bar's Wi-Fi share-QR cannot read the password of a network that
+only iwd saved; reconnecting to it once through the bar or nmcli fixes that.
 
 ### DNS
 
