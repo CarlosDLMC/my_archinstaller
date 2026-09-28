@@ -1404,12 +1404,18 @@ rebuilt once, after the nouveau blacklist is written, so the image that boots
 carries both.
 
 Note that enabling `nvidia` does **not** touch your bootloader. The driver's
-`modeset=1 fbdev=1` settings are written to `/etc/modprobe.d/nvidia.conf`,
-which the module reads when it loads and which works identically under
-systemd-boot, limine, GRUB, rEFInd or a UKI. `nvidia.sh` used to also add those
-as kernel parameters by editing `/etc/default/grub` and rewriting every
-systemd-boot entry's `options` line; that was redundant with the modprobe
-drop-in and is gone.
+`modeset=1 fbdev=1` settings are written to
+`/etc/modprobe.d/my_archinstaller-nvidia.conf`, which the module reads when it
+loads and which works identically under systemd-boot, limine, GRUB, rEFInd or a
+UKI. `nvidia.sh` used to also add those as kernel parameters by editing
+`/etc/default/grub` and rewriting every systemd-boot entry's `options` line; that
+was redundant with the modprobe drop-in and is gone.
+
+The file used to be `/etc/modprobe.d/nvidia.conf`. A file in `/etc/modprobe.d`
+replaces the one with the same name in `/usr/lib/modprobe.d`, and on CachyOS
+`cachyos-settings` ships `/usr/lib/modprobe.d/nvidia.conf` with its own NVreg
+tuning, which that one-liner silently switched off. A re-run moves the line out
+of the old file and deletes it if nothing else is in it.
 
 ### After Installation
 

@@ -327,7 +327,41 @@ else
 fi
 
 # Additional Nvidia steps
-NVEA="/etc/modprobe.d/nvidia.conf"
+#
+# Not /etc/modprobe.d/nvidia.conf, which is what this used to write. A file in
+# /etc/modprobe.d REPLACES the one of the same name in /usr/lib/modprobe.d
+# (modprobe.d(5)), and on CachyOS cachyos-settings ships
+# /usr/lib/modprobe.d/nvidia.conf with its own NVreg tuning
+# (NVreg_InitializeSystemMemoryAllocations=0). Our one-line file hid all of
+# it, silently. A name no package uses is read alongside it instead.
+NVEA="/etc/modprobe.d/my_archinstaller-nvidia.conf"
+NVEA_OLD="/etc/modprobe.d/nvidia.conf"
+NVEA_LINE="options nvidia_drm modeset=1 fbdev=1"
+
+# An earlier run left the line in the old file: take it out, and delete the
+# file if that line was all it held, so the package's nvidia.conf applies
+# again. Only our exact line goes - anything else in there was put there by
+# someone on purpose, and stays.
+if [ -f "$NVEA_OLD" ] && [ ! -L "$NVEA_OLD" ] && grep -qxF "$NVEA_LINE" "$NVEA_OLD"; then
+  if sudo sed -i "\\|^${NVEA_LINE}\$|d" "$NVEA_OLD"; then
+    if ! grep -qvE '^[[:space:]]*(#|$)' "$NVEA_OLD"; then
+      sudo rm -f "$NVEA_OLD"
+      if [ -f /usr/lib/modprobe.d/nvidia.conf ]; then
+        echo "${OK} Removed $NVEA_OLD from an earlier run - it hid the packaged /usr/lib/modprobe.d/nvidia.conf." | tee -a "$LOG"
+      else
+        echo "${OK} Removed $NVEA_OLD from an earlier run (the line now lives in ${NVEA##*/})." | tee -a "$LOG"
+      fi
+    else
+      echo "${OK} Moved the nvidia_drm line out of $NVEA_OLD (its other lines are left as they are)." | tee -a "$LOG"
+      if [ -f /usr/lib/modprobe.d/nvidia.conf ]; then
+        echo "${NOTE} $NVEA_OLD still replaces /usr/lib/modprobe.d/nvidia.conf - rename it if that is not intended." | tee -a "$LOG"
+      fi
+    fi
+  else
+    echo "${WARN} Could not edit $NVEA_OLD - it keeps hiding /usr/lib/modprobe.d/nvidia.conf." | tee -a "$LOG"
+  fi
+fi
+
 # Look for the option itself, in any modprobe.d file, not for the file name.
 # CachyOS's chwd NVIDIA profile drops its own files under /etc/modprobe.d, and
 # one called nvidia.conf that does not carry modeset=1 used to be taken as
@@ -338,7 +372,7 @@ if grep -qsE '^\s*options\s+nvidia[_-]drm\s.*modeset=1' /etc/modprobe.d/*.conf; 
 else
   printf "\n"
   printf "${YELLOW} Adding options to $NVEA..."
-  echo "options nvidia_drm modeset=1 fbdev=1" | sudo tee -a "$NVEA" 2>&1 | tee -a "$LOG"
+  echo "$NVEA_LINE" | sudo tee -a "$NVEA" 2>&1 | tee -a "$LOG"
   printf "\n"
 fi
 
@@ -356,7 +390,7 @@ fi
 # rewrite the `options` line of every systemd-boot loader entry, to add
 # nvidia-drm.modeset=1 and nvidia_drm.fbdev=1 to the kernel command line.
 #
-# Both were redundant: /etc/modprobe.d/nvidia.conf above sets exactly those two
+# Both were redundant: the modprobe.d file above sets exactly those two
 # options, the module reads them when it loads, and that works the same under
 # every bootloader - grub, systemd-boot, limine, rEFInd or a UKI. The kernel
 # command line added nothing the module was not already being told.
