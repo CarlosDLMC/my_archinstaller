@@ -1637,6 +1637,9 @@ anything was installed. Run it on the old machine before you clone on the new on
   if it is ever committed, copy.sh deploys it to the new machine and the whole
   first-boot setup silently skips itself.
 - Several packages the scripts name have moved from the official repos to the
-  AUR since they were written (`wlogout`, `wallust`, `gtk-engine-murrine`). They still install, through `yay`, but they are now
+  AUR since they were written (`wlogout`, `wallust`). They still install, through `yay`, but they are now
   source builds and the most likely thing to fail on a given day — see
   [When the installer stops without rebooting](#when-the-installer-stops-without-rebooting).
+  `gtk-engine-murrine` used to be on this list; it is no longer installed at all,
+  because on plain Arch it dragged in a from-source GTK 2 build (gtk2 left [extra]
+  too) for an engine none of the bundled Flat-Remix themes use.
