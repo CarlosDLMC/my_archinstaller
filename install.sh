@@ -483,12 +483,17 @@ if pacman -Qi plymouth &>/dev/null && [ "$_hooks_have_plymouth" == "true" ]; the
 fi
 
 # Limine: the theme edits its config, so only offer it where that config exists.
+#
+# The search is find_limine_conf in Global_functions.sh, the one limine.sh and
+# the final check use too, so the three cannot disagree about where the file is
+# (this used to be a third copy of a path list that missed archinstall's
+# <ESP>/EFI/arch-limine/limine.conf). Sourced in a child shell, just for this
+# call, because Global_functions.sh sets -e - see the plymouth block above.
 limine_detected=false
-for _lc in /boot/limine.conf /efi/limine.conf /boot/efi/limine.conf /boot/limine/limine.conf /efi/limine/limine.conf; do
-    if sudo test -f "$_lc" 2>/dev/null; then limine_detected=true; break; fi
-done
-if [ "$limine_detected" == "true" ]; then
-    echo "${NOTE} Limine bootloader detected." | tee -a "$LOG"
+_limine_conf=$(bash -c 'source "$1" && find_limine_conf' _ "$script_directory/Global_functions.sh" 2>/dev/null)
+if [ -n "$_limine_conf" ]; then
+    limine_detected=true
+    echo "${NOTE} Limine bootloader detected (${_limine_conf})." | tee -a "$LOG"
 fi
 
 # Resolve "auto" into ON/OFF from what was just detected. Only the preset loop

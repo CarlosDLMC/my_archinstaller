@@ -106,11 +106,14 @@ elif command -v bootctl &>/dev/null && sudo test -d /boot/loader/entries; then
     printf "${NOTE} Order matters - the microcode initrd must come first.\n" | tee -a "$LOG"
   fi
 
-elif sudo test -f /boot/limine.conf || sudo test -f /boot/limine.cfg; then
+elif _limine_conf=$(find_limine_conf) || { sudo test -f /boot/limine.cfg && _limine_conf=/boot/limine.cfg; }; then
   # Limine, also report-only. Its entries take the microcode as a module listed
   # before the initramfs one; order matters the same way it does everywhere.
+  # find_limine_conf (Global_functions.sh) rather than /boot/limine.conf alone:
+  # archinstall and the Arch wiki put the file in <ESP>/EFI/<dir>/, and that
+  # machine was told "Bootloader not recognised". limine.cfg is the pre-v8 name.
   img_name="${ucode_img##*/}"
-  printf "\n${NOTE} ${SKY_BLUE}Limine${RESET} detected. Make sure each boot entry loads the microcode\n" | tee -a "$LOG"
+  printf "\n${NOTE} ${SKY_BLUE}Limine${RESET} detected (${_limine_conf}). Make sure each boot entry loads the microcode\n" | tee -a "$LOG"
   printf "${NOTE} ${YELLOW}above${RESET} the initramfs module:\n" | tee -a "$LOG"
   printf "${NOTE}   ${MAGENTA}module_path: boot():/${img_name}${RESET}\n" | tee -a "$LOG"
   printf "${NOTE} If limine-mkinitcpio-hook or limine-entry-tool generates your entries,\n" | tee -a "$LOG"

@@ -317,12 +317,23 @@ if selected plymouth; then
 fi
 
 if selected limine; then
-    # The wallpaper goes to the partition ROOT (limine.sh steps out of a limine/
-    # subdirectory, because theme.conf names it boot():/limine-wallpaper.png), so
-    # the check has to look there too - next to the conf, a correct install on the
-    # /boot/limine/ or /efi/limine/ layout failed here and blocked the reboot.
-    check_outcome "limine.conf has no theme block / wallpaper missing (install-scripts/limine.sh)" \
-        bash -c 'for c in /boot/limine.conf /efi/limine.conf /boot/efi/limine.conf /boot/limine/limine.conf /efi/limine/limine.conf; do sudo test -f "$c" || continue; sudo grep -q "my_archinstaller Limine theme" "$c" || continue; d=$(dirname "$c"); [ "$(basename "$d")" = limine ] && d=$(dirname "$d"); sudo test -f "$d/limine-wallpaper.png" && exit 0; done; exit 1'
+    # The same file limine.sh edits (find_limine_conf, Global_functions.sh), and
+    # the wallpaper where limine.sh puts it: the ROOT of that conf's partition,
+    # because theme.conf names it boot():/limine-wallpaper.png. Next to the conf, a
+    # correct install on the /boot/limine/ or /efi/limine/ layout failed here and
+    # blocked the reboot.
+    #
+    # No limine.conf at all is a pass, not a failure: limine.sh says "Limine is
+    # not the bootloader here. Nothing to do." and exits 0 there, and this used to
+    # report "no theme block" for a GRUB or systemd-boot machine where limine had
+    # been ticked by hand or forced ON in a preset - blocking the reboot over
+    # something that could never apply. `if`, not a bare assignment: this file
+    # runs under Global_functions.sh's set -e.
+    if _limine_conf=$(find_limine_conf); then
+        _limine_root=$(limine_partition_root "$_limine_conf")
+        check_outcome "$_limine_conf has no theme block, or $_limine_root/limine-wallpaper.png is missing (install-scripts/limine.sh)" \
+            bash -c 'sudo grep -q "my_archinstaller Limine theme" "$1" && sudo test -f "$2/limine-wallpaper.png"' _ "$_limine_conf" "$_limine_root"
+    fi
 fi
 
 # Packages that failed their SOURCE CHECKSUM rather than their build.

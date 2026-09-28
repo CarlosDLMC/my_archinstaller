@@ -630,11 +630,15 @@ Cyrillic title into a copy of the wallpaper and darkens the left side for the me
 text; point `wallpaper:` at its output and raise `term_margin` if you use it.
 
 The `limine` preset option (`install-scripts/limine.sh`, `limine="auto"` in the
-shipped preset) applies it wherever a `limine.conf` exists: wallpaper onto the ESP,
+shipped preset) applies it wherever a `limine.conf` exists - `/boot`, `/efi` or
+`/boot/efi` (also in a `limine/` subdirectory), or next to the EFI binary in
+`<ESP>/EFI/<dir>/`, where archinstall puts it (`EFI/arch-limine/`, or `EFI/BOOT/`):
+wallpaper onto the root of the partition holding the conf (Limine's `boot():/`),
 theme block prepended, and `timeout: no` so the menu waits for a choice instead of
 booting the default after a countdown. This is the one place the repo edits a
 bootloader config, added knowingly on 2026-09-13; the safeguards are a backup kept
-as `limine.conf.pre-theme`, an edit confined to the marked block plus the `timeout:`
+as `limine.conf.pre-theme` (a record, not a restore point - see the revert note
+below), an edit confined to the marked block plus the `timeout:`
 line, a before/after comparison of the OS entries that aborts the write if they
 differ, and a re-enroll when `ENABLE_ENROLL_LIMINE_CONFIG` is on. That setting
 is read from every file `limine-entry-tool` uses (`/etc/default/limine`,
@@ -656,8 +660,15 @@ the global block survives kernel updates (`timeout` and `default_entry` already 
 A missing wallpaper is skipped silently, an unknown key is ignored, so a typo
 degrades the look rather than the boot. The selected entry is drawn in reverse video,
 which is why the highlight bar takes the `term_foreground` colour. Limine still draws
-its box frame around the entries; that is part of the program, not the theme. Revert
-everything with `sudo cp /boot/limine.conf.pre-theme /boot/limine.conf`.
+its box frame around the entries; that is part of the program, not the theme.
+
+Revert it with `./install-scripts/limine.sh --revert`. That takes the marked block
+out of the *current* limine.conf, puts back the `timeout:` line from before the
+theme (recorded inside the block when it was written), and removes the wallpaper.
+Do not copy `limine.conf.pre-theme` back instead: it is the first-ever backup, and
+on CachyOS every entry carries a BLAKE2 hash (`ENABLE_VERIFICATION=yes` in
+`/etc/limine-entry-tool.conf`). After the next kernel or initramfs update those
+hashes are stale, and Limine panics on every entry of the restored file.
 
 ### Firmware boot logo (the picture before the bootloader)
 
