@@ -255,6 +255,21 @@ for dir in "${config_dirs[@]}"; do
     fi
 done
 
+# Create MangoHud's log folder
+#
+# Shift_L+F2 (toggle_logging) writes a CSV into MangoHud.conf's output_folder,
+# and MangoHud opens that file with a plain ofstream - it never creates the
+# folder, so with the folder missing the toggle writes nothing and says
+# nothing. The tracked conf used to say /home/mentefria/mangologs, which was
+# missing even on this machine and cannot be created on one with another user
+# name; it says ~/mangologs now (MangoHud expands a leading ~ itself). Read from
+# the deployed conf so the folder and the setting cannot drift apart.
+_mh_logs="$(sed -n 's/^output_folder=//p' "$HOME/.config/MangoHud/MangoHud.conf" 2>/dev/null | tail -1)"
+case "$_mh_logs" in "~/"*) _mh_logs="$HOME/${_mh_logs#\~/}" ;; esac
+if [ -n "$_mh_logs" ]; then
+    mkdir -p "$_mh_logs" && echo "  ${OK} MangoHud logs (Shift_L+F2) go to $_mh_logs"
+fi
+
 # Expand $HOME in the Thunar sidebar bookmarks
 #
 # GTK reads this file as a list of absolute file:// URIs and does no variable
