@@ -138,8 +138,39 @@ check_outcome "ru_RU.UTF-8 locale not generated - clock, calendar and lock scree
 # failed.
 check_outcome "no working AUR helper - yay/paru missing or does not start (install-scripts/yay.sh)" \
     bash -c 'yay --version || paru --version'
-check_outcome "NetworkManager.service is not enabled (install-scripts/services.sh)" \
+# The services.sh warning has scrolled off by the time this runs, so the message
+# says where the way out is.
+check_outcome "NetworkManager.service is not enabled - if services.sh left netctl, connman, wpa_supplicant@ or dhcpcd's wpa_supplicant hook in charge, its log has the commands to move over (install-scripts/services.sh)" \
     systemctl is-enabled NetworkManager.service
+# services.sh leaves NetworkManager as the only network manager enabled. One
+# still enabled next to it (archinstall's "Copy ISO network configuration"
+# enables iwd + systemd-networkd) means two DHCP clients - or wpa_supplicant and
+# iwd, or NM and netctl - fighting over the same link after the reboot.
+# services.sh leaves one enabled on purpose when it cannot hand over safely (a
+# static networkd address, a conf.d file overriding wifi.backend, or netctl /
+# connman / wpa_supplicant@ / hooked dhcpcd holding the Wi-Fi password). In the
+# last case it does not enable NM either, and the check above stops the reboot;
+# this one covers an NM enabled earlier, by hand or by an older run. Instances
+# come from the .wants symlinks too: netctl-auto@wlan0 hangs off the card's
+# device unit and is not even loaded while the card is missing. iwd only counts
+# when NM is not using it as its Wi-Fi backend.
+if [ "$(systemctl is-enabled NetworkManager.service 2>/dev/null)" = enabled ]; then
+    check_outcome "another network manager is still enabled next to NetworkManager - they will fight over the same link after the reboot; services.sh printed how to hand it over (install-scripts/services.sh)" \
+        bash -c '
+            pats=("dhcpcd@*.service" "wpa_supplicant@*.service" "wpa_supplicant-nl80211@*.service" "wpa_supplicant-wired@*.service" "netctl@*.service" "netctl-auto@*.service" "netctl-ifplugd@*.service")
+            units=(systemd-networkd.service systemd-networkd.socket dhcpcd.service connman.service netctl.service)
+            while read -r u _; do units+=("$u"); done < <(systemctl list-units --all --plain --no-legend "${pats[@]}" 2>/dev/null)
+            for p in "${pats[@]}"; do
+                for l in /etc/systemd/system/*.wants/$p /etc/systemd/system/*.requires/$p; do
+                    if [ -L "$l" ]; then units+=("${l##*/}"); fi
+                done
+            done
+            for u in "${units[@]}"; do
+                if [ "$(systemctl is-enabled "$u" 2>/dev/null)" = enabled ]; then exit 1; fi
+            done
+            if [ "$(systemctl is-enabled iwd.service 2>/dev/null)" = enabled ] && ! NetworkManager --print-config 2>/dev/null | grep -qx "wifi.backend=iwd"; then exit 1; fi
+            exit 0'
+fi
 if pacman -Qi systemd-resolvconf &>/dev/null; then
     check_outcome "systemd-resolvconf is installed but systemd-resolved is not enabled - DNS will fail (install-scripts/services.sh)" \
         systemctl is-enabled systemd-resolved.service
