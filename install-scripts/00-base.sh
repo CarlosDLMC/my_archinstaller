@@ -1,5 +1,5 @@
 #!/bin/bash
-# base-devel, findutils, git #
+# base-devel, findutils, git, wireless-regdb #
 #
 # No archlinux-keyring here: pacman.sh refreshes it (and cachyos-keyring) right
 # before the full upgrade, and it now runs BEFORE this script, so these installs
@@ -15,6 +15,10 @@ base=(
   # it - but a tarball download or auto-install.sh's clone-into-place does not
   # guarantee it is still there by the time those scripts run.
   git
+  # wireless-regdb: the kernel's regulatory.db. Only an optdepend of `linux`,
+  # so pacstrap never installs it (CachyOS gets it through cachyos-settings),
+  # and without it Wi-Fi stays on the restrictive world domain "00".
+  wireless-regdb
 )
 
 ## WARNING: DO NOT EDIT BEYOND THIS LINE IF YOU DON'T KNOW WHAT YOU ARE DOING! ##
@@ -34,7 +38,7 @@ fi
 LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_base.log"
 
 # Installation of main components with pacman
-echo -e "\nInstalling ${SKY_BLUE}base-devel${RESET}, ${SKY_BLUE}findutils${RESET} and ${SKY_BLUE}git${RESET}..."
+echo -e "\nInstalling ${SKY_BLUE}base-devel${RESET}, ${SKY_BLUE}findutils${RESET}, ${SKY_BLUE}git${RESET} and ${SKY_BLUE}wireless-regdb${RESET}..."
 
 for PKG1 in "${base[@]}"; do
   echo "Installing $PKG1 with pacman..."
