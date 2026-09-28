@@ -26,7 +26,17 @@ for file in .zshrc .zprofile .bashrc .bash_profile pokefetch_perfect; do
         if [ -f "$HOME/$file" ] && ! cmp -s "$SCRIPT_DIR/$file" "$HOME/$file"; then
             cp "$HOME/$file" "$HOME/$file.backup-$BACKUP_STAMP" && echo "  ${NOTE} Backed up existing $file to $file.backup-$BACKUP_STAMP"
         fi
-        cp "$SCRIPT_DIR/$file" "$HOME/" 2>/dev/null && echo "  ${OK} Copied $file"
+        if cp "$SCRIPT_DIR/$file" "$HOME/" 2>/dev/null; then
+            # .zshrc runs pokefetch_perfect only when it is executable
+            # (`[ -x "$HOME/pokefetch_perfect" ]`), and skips it silently when
+            # not - and cp does not make it so: a new copy takes the checkout's
+            # mode (644 in a checkout that lost its exec bits, which is why the
+            # README says `chmod +x install.sh`), and an existing
+            # ~/pokefetch_perfect keeps whatever mode it already had. zsh.sh
+            # used to chmod it, but leaves this file to us when dots is selected.
+            [ "$file" = pokefetch_perfect ] && chmod +x "$HOME/$file"
+            echo "  ${OK} Copied $file"
+        fi
     fi
 done
 
@@ -57,10 +67,44 @@ fi
 # copies below used to run before the mkdir further down and fail silently.
 mkdir -p "$HOME/.config"
 
+# Back up a top-level ~/.config file before the repo copy replaces it.
+#
+# Unlike the shell files above and the config directories below, mimeapps.list
+# and the user-dirs files used to be replaced with no backup at all - and
+# mimeapps.list is where every "open with" choice made since the install lives:
+# on this machine a re-run would have silently taken Slack sign-in links and
+# double-clicked .docx files away from the apps they had been set to, with
+# nothing left to restore them from.
+#
+# Backed up when the live file holds a line the repo copy lacks, rather than on
+# any `cmp` difference, because tools rewrite both files during every install
+# and a byte comparison would back up nothing but their output:
+#   - thunar_default.sh runs `xdg-mime default` BEFORE the dots, so on a fresh
+#     machine mimeapps.list already exists with its two Thunar lines (and a
+#     leading blank line) - both are in the repo copy too.
+#   - xdg-user-dirs-update, run just below, adds every default the repo's
+#     user-dirs.dirs does not name - current xdg-user-dirs adds
+#     XDG_PROJECTS_DIR="$HOME/Projects" - so every re-run found that line
+#     "changed". Lines built from /etc/xdg/user-dirs.defaults the way it writes
+#     them are ignored for that reason; a Projects entry pointed elsewhere
+#     still counts.
+# A changed default app or a moved Downloads is a line the repo does not have,
+# so that is still backed up.
+backup_config_file() {
+    local _src="$1" _dst="$2"
+    [ -f "$_dst" ] || return 0
+    if grep -vxF -f "$_src" \
+            -f <(sed -n 's/^\([A-Z_]\+\)=\(.*\)$/XDG_\1_DIR="$HOME\/\2"/p' /etc/xdg/user-dirs.defaults 2>/dev/null) \
+            "$_dst" | grep -q .; then
+        cp "$_dst" "$_dst.backup-$BACKUP_STAMP" && echo "  ${NOTE} Backed up existing $(basename "$_dst") to $(basename "$_dst").backup-$BACKUP_STAMP"
+    fi
+}
+
 # Copy XDG user directories configuration
 printf "\n${INFO} Copying XDG user directories configuration...\n"
 for file in user-dirs.dirs user-dirs.locale; do
     if [ -f "$SCRIPT_DIR/config/$file" ]; then
+        backup_config_file "$SCRIPT_DIR/config/$file" "$HOME/.config/$file"
         cp "$SCRIPT_DIR/config/$file" "$HOME/.config/" 2>/dev/null && echo "  ${OK} Copied $file"
     fi
 done
@@ -98,6 +142,7 @@ fi
 # Copy mimeapps.list
 printf "\n${INFO} Copying MIME type associations...\n"
 if [ -f "$SCRIPT_DIR/config/mimeapps.list" ]; then
+    backup_config_file "$SCRIPT_DIR/config/mimeapps.list" "$HOME/.config/mimeapps.list"
     cp "$SCRIPT_DIR/config/mimeapps.list" "$HOME/.config/" 2>/dev/null && echo "  ${OK} Copied mimeapps.list"
 fi
 
