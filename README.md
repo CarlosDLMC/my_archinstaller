@@ -736,14 +736,18 @@ it is a firmware flash the user does by hand. See `bios-logo/README.md`.
 Nothing else in the install pulls in a print stack, so without it every
 application's print dialog opens with an empty printer list and no way to add
 one — which is easy to miss for weeks, because nothing looks broken until the
-first time you try to print.
+first time you try to print. `cups-pdf` also gets a `PDF` queue (`lp -d PDF`, or
+pick it in any print dialog); its files land in `/var/spool/cups-pdf/$USER/`.
 
 Like Docker, CUPS is **socket-activated** rather than enabled at boot: `cupsd`
 is idle almost all the time on a laptop, so `cups.socket` and `cups.path` start
-it on demand — the first print dialog, `lp` call, or visit to
-<http://localhost:631> brings it up. Enable `cups.service` instead if you want
-`cupsd` resident, which is only needed if you rely on it continuously browsing
-the network for printers that appear later.
+it on demand — the first print dialog, `lp` or `lpadmin` call brings it up.
+Port 631 is not a trigger: `cups.socket` listens only on `/run/cups/cups.sock`,
+so where cupsd has never run, <http://localhost:631> is refused until
+`sudo systemctl start cups`. Once cupsd has run it stays up (with the stock
+`WebInterface Yes` it never idle-exits), and `cups.path` starts it at every later
+boot. The installer adds the `PDF` printer, which is that first run, so after the
+install reboot the web UI is simply there.
 
 No driver package is installed, and for a modern network printer none is
 needed: IPP Everywhere / AirPrint printers advertise their own capabilities and
