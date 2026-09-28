@@ -1,9 +1,15 @@
 #!/bin/bash
 # GTK Themes & ICONS and  Sourcing from a different Repo #
 
+# gtk-engine-murrine is deliberately NOT here any more. It left the repos for
+# the AUR and depends on gtk2, which left [extra] too - so on plain Arch yay
+# first built GTK 2 from source, cloning all of GNOME's gtk git history, and a
+# gitlab.gnome.org hiccup put it in .failed-packages and stopped the reboot. It
+# was for nothing: the bundled Flat-Remix-GTK themes' gtk-2.0/*.rc use only the
+# "adwaita" and "pixmap" engines, never murrine, and no GTK 2 app is installed
+# (on the reference machine gtk2 was required by murrine and nothing else).
 engine=(
     unzip
-    gtk-engine-murrine
 )
 
 ## WARNING: DO NOT EDIT BEYOND THIS LINE IF YOU DON'T KNOW WHAT YOU ARE DOING! ##
