@@ -146,7 +146,10 @@ first prompt.
    Russian locale was generated, `systemd-resolved` is enabled, passwordless
    sudo works, and so on. If all of that passes you get a 15-second countdown
    and then a reboot; press any key during the countdown to cancel and stay in
-   the session. An interactive run (no `--preset`) still asks.
+   the session. With no terminal on stdin (nohup, `ssh host ./install.sh`
+   without `-t`) it still waits the 15 seconds; Ctrl-C aborts. The reboot goes
+   through sudo, so it also works from an SSH session, where polkit would
+   otherwise ask for a password. An interactive run (no `--preset`) still asks.
 
    If anything is missing, the installer **stops instead of rebooting** and
    leaves the list on screen. This matters because a package or script failure
