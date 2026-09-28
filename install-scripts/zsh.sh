@@ -64,13 +64,27 @@ if command -v zsh >/dev/null; then
       mv -T "$HOME/.oh-my-zsh" "$_omz_bak"
       echo "${NOTE} ~/.oh-my-zsh had no oh-my-zsh.sh - moved it to $(basename "$_omz_bak") and reinstalling." | tee -a "$LOG"
     fi
+    # --keep-zshrc, and the installer's own .zshrc thrown away again. The .zshrc
+    # that ends up here is the repo's - deployed below, or by copy.sh when dots
+    # is selected - and both back up what they replace. Left to itself the
+    # installer moved an existing .zshrc to .zshrc.pre-oh-my-zsh and wrote its
+    # template in its place, so the backup made next was of that template
+    # rather than your file; on a fresh machine, where there is no .zshrc yet,
+    # it still writes the template, and every install then left a .zshrc
+    # backup holding nothing but oh-my-zsh boilerplate.
+    _had_zshrc=false
+    if [ -e "$HOME/.zshrc" ] || [ -L "$HOME/.zshrc" ]; then _had_zshrc=true; fi
     # Not fatal. This used to `exit 1`, which also skipped chsh and everything
     # else below that does not need Oh My Zsh - bash stayed the login shell over
     # one network blip. The final check reports the missing ~/.oh-my-zsh.
     if omz_installer="$(curl -fsSL https://install.ohmyz.sh)"; then
-      sh -c "$omz_installer" "" --unattended || echo "${ERROR} Oh My Zsh installer failed - continuing without it" | tee -a "$LOG"
+      sh -c "$omz_installer" "" --unattended --keep-zshrc || echo "${ERROR} Oh My Zsh installer failed - continuing without it" | tee -a "$LOG"
     else
       echo "${ERROR} Could not download the Oh My Zsh installer (network?) - continuing without it" | tee -a "$LOG"
+    fi
+    # A .zshrc that was not there before the installer ran is its template.
+    if [ "$_had_zshrc" = false ] && [ -f "$HOME/.zshrc" ]; then
+      rm -f "$HOME/.zshrc"
     fi
   else
     echo "${INFO} Directory .oh-my-zsh already exists. Skipping re-installation." 2>&1 | tee -a "$LOG"
@@ -97,31 +111,37 @@ if command -v zsh >/dev/null; then
     fi
   done
   
-  # Check if ~/.zshrc and .zprofile exists, create a backup, and copy the new configuration
-  if [ -f "$HOME/.zshrc" ]; then
-      cp -b "$HOME/.zshrc" "$HOME/.zshrc-backup" || true
-  fi
-
-  if [ -f "$HOME/.zprofile" ]; then
-      cp -b "$HOME/.zprofile" "$HOME/.zprofile-backup" || true
-  fi
-  
-  # Copying the preconfigured zsh themes and profile
+  # Copying the preconfigured .zshrc, .zprofile and pokefetch_perfect
   #
   # These come from Hyprland-Dots/, which is the single source for every shell
   # file: it is what copy.sh deploys, so it is the version that actually ends up
   # on the machine. assets/ used to carry a second copy of .zshrc that drifted -
   # it kept the unguarded `source $ZSH/oh-my-zsh.sh` and `source <(fzf --zsh)`
   # and never sourced ~/.config/zsh/secrets.zsh - and this script copied *that*
-  # one. Nothing broke only because the option loop happens to run dots after
-  # zsh, so copy.sh overwrote it a few seconds later.
-  cp -r 'Hyprland-Dots/.zshrc' ~/
-  cp -r 'Hyprland-Dots/.zprofile' ~/
-
-  # Copy custom pokefetch_perfect script and dependencies
-  if [ -f 'Hyprland-Dots/pokefetch_perfect' ]; then
-      cp 'Hyprland-Dots/pokefetch_perfect' ~/
-      chmod +x ~/pokefetch_perfect
+  # one.
+  #
+  # Skipped when 'dots' is selected, like pokefetch.jsonc below: copy.sh deploys
+  # all three a few seconds later (the option loop runs dots after zsh) and
+  # backs up whatever differs to <file>.backup-<stamp> first. Copying them here
+  # as well made copy.sh find ~/.zshrc already identical to the repo, so it
+  # never made that backup - and the `cp -b ~/.zshrc ~/.zshrc-backup` that stood
+  # in for it keeps one generation plus a `~`, so an alias you had added was
+  # gone for good after the third re-run. Without dots this is the only deploy,
+  # and it does what copy.sh does: back up only a file that differs, to a
+  # stamped name that no later run overwrites.
+  if [[ " ${INSTALL_SELECTED_OPTIONS:-} " == *" dots "* ]]; then
+      echo "${NOTE} .zshrc, .zprofile and pokefetch_perfect come with the dotfiles (dots selected), not copied here." 2>&1 | tee -a "$LOG"
+  else
+      _shell_stamp="$(date +%Y%m%d-%H%M%S)"
+      for _file in .zshrc .zprofile pokefetch_perfect; do
+          [ -f "Hyprland-Dots/$_file" ] || continue
+          if [ -f "$HOME/$_file" ] && ! cmp -s "Hyprland-Dots/$_file" "$HOME/$_file"; then
+              cp "$HOME/$_file" "$HOME/$_file.backup-$_shell_stamp" &&
+                  echo "${NOTE} Backed up existing $_file to $_file.backup-$_shell_stamp" | tee -a "$LOG"
+          fi
+          cp "Hyprland-Dots/$_file" "$HOME/" && echo "${OK} Copied $_file" | tee -a "$LOG"
+      done
+      if [ -f "$HOME/pokefetch_perfect" ]; then chmod +x "$HOME/pokefetch_perfect"; fi
   fi
 
   # Copy pokefetch-merge python helper to ~/.local/bin/
