@@ -74,6 +74,18 @@ done
 # locale that LANG names drops the whole session back to C. An extra generated
 # locale costs a few seconds of locale-gen and nothing else.
 
+# Also when an enabled locale was never actually generated. An earlier run that
+# enabled the lines and then had locale-gen fail (or was interrupted) left
+# nothing to change here, so the re-run skipped locale-gen and the locale
+# stayed missing for good - re-running this script could never fix it.
+_have=$(locale -a 2>/dev/null | tr 'A-Z' 'a-z' | tr -d '-')
+for _locale in "${wanted_locales[@]}"; do
+  _n=$(echo "${_locale%% *}" | tr 'A-Z' 'a-z' | tr -d '-')
+  if ! grep -qx "$_n" <<<"$_have"; then
+    changed=1
+  fi
+done
+
 # locale-gen rebuilds every enabled locale, so only run it if something moved.
 if [ "$changed" -eq 1 ]; then
   printf "${NOTE} Running locale-gen (this takes a few seconds)...\n"
