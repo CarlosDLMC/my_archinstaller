@@ -504,13 +504,12 @@ fi
 # initramfs - CachyOS does; a plain archinstall has neither. The theme alone is
 # harmless, but "auto" should not pull plymouth onto a machine that never asked.
 plymouth_detected=false
-# Sourced the way mkinitcpio reads it, not grepped, so a multi-line HOOKS array
-# or HOOKS+=(plymouth) in a drop-in counts - same as mkinitcpio_has_hook in
-# Global_functions.sh (which is not sourced here: it sets -e).
+# mkinitcpio_has_hook (Global_functions.sh), which reads the config exactly the
+# way mkinitcpio does - a multi-line HOOKS array, HOOKS+=(plymouth) in a
+# drop-in and the drop-ins' real order all count. In a child shell, because
+# Global_functions.sh sets -e (see the Limine detection below).
 _hooks_have_plymouth=false
-if bash -c '[ -f /etc/mkinitcpio.conf ] && source /etc/mkinitcpio.conf
-            for f in /etc/mkinitcpio.conf.d/*.conf; do [ -f "$f" ] && source "$f"; done
-            printf "%s\n" "${HOOKS[@]}"' 2>/dev/null | grep -qx plymouth; then
+if bash -c 'source "$1" && mkinitcpio_has_hook plymouth' _ "$script_directory/Global_functions.sh" 2>/dev/null; then
     _hooks_have_plymouth=true
 fi
 if pacman -Qi plymouth &>/dev/null && [ "$_hooks_have_plymouth" == "true" ]; then
@@ -1212,7 +1211,7 @@ if pacman -Q hyprland &> /dev/null || pacman -Q hyprland-git &> /dev/null; then
         echo "${CAT} Fix what is listed above, then reboot with ${MAGENTA}systemctl reboot${RESET}."
         echo "${NOTE} Most package failures are AUR builds. Retry one with:"
         echo "        ${MAGENTA}yay -S <package>${RESET}"
-        echo "${NOTE} herdr, hunk, lazyvim, plymouth-theme-* and plymouth-splash are not packages - the list above says what to re-run or fix."
+        echo "${NOTE} herdr, hunk, lazyvim, plymouth-theme-*, plymouth-hook and plymouth-splash are not packages - the list above says what to re-run or fix."
         echo "${NOTE} A failed component can be retried with its script, e.g. ${MAGENTA}install-scripts/dotfiles-main.sh${RESET}"
         echo "${NOTE} The full list is in ${MAGENTA}Install-Logs/00_CHECK-*_installed.log${RESET}"
         printf "\n%.0s" {1..2}

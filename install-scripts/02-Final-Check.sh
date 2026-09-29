@@ -413,8 +413,9 @@ if selected plymouth; then
         bash -c '[ "$(plymouth-set-default-theme 2>/dev/null)" = soviet ]'
     # plymouth.sh puts the hook in where the distro did not (a drop-in in
     # /etc/mkinitcpio.conf.d). Without it the image never starts plymouth and
-    # the theme is never drawn. A missing `splash` comes through the failed
-    # list instead, as "plymouth-splash".
+    # the theme is never drawn. This reads only the default layout; a preset's
+    # own -c config, and a missing `splash`, come through the failed list
+    # instead, as "plymouth-hook" and "plymouth-splash".
     if command -v mkinitcpio &>/dev/null; then
         check_outcome "plymouth is not in the mkinitcpio HOOKS - the splash never starts (install-scripts/plymouth.sh)" \
             mkinitcpio_has_hook plymouth
@@ -493,7 +494,8 @@ if [ ${#missing[@]} -ne 0 ]; then
             herdr | hunk)     _hint=" (not a package - re-run install-scripts/$pkg.sh)" ;;
             lazyvim)          _hint=" (not a package - re-run install-scripts/neovim.sh)" ;;
             plymouth-theme-*) _hint=" (not a package - re-run install-scripts/plymouth.sh)" ;;
-            plymouth-splash)  _hint=" (not a package - 'splash' is not on the kernel command line; the plymouth log in Install-Logs/ says where to add it)" ;;
+            plymouth-splash)  _hint=" (not a package - 'splash' could not be put on the kernel command line; the plymouth log in Install-Logs/ says where to add it, then re-run install-scripts/plymouth.sh)" ;;
+            plymouth-hook)    _hint=" (not a package - the plymouth hook could not go into every mkinitcpio config; the plymouth log in Install-Logs/ says which, then re-run install-scripts/plymouth.sh)" ;;
             *)                _hint="" ;;
         esac
         echo "${WARNING}$pkg${RESET}$_hint"

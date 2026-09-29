@@ -61,7 +61,7 @@ record_package_failure() {
 # Take a name back out of the list once the thing it stands for is in place.
 # 02-Final-Check.sh re-verifies every entry with pacman, so for a name that is
 # not a pacman package - herdr, hunk, lazyvim, plymouth-theme-soviet,
-# plymouth-splash - only
+# plymouth-hook, plymouth-splash - only
 # this clears it: a successful re-run of the script that recorded it used to
 # leave it reported as missing for good.
 clear_package_failure() {
@@ -400,19 +400,48 @@ install_package_f() {
 }
 
 
-# Is <hook> in the HOOKS mkinitcpio will actually use?
+# The HOOKS mkinitcpio will actually use, one per line. With a file argument,
+# that file on its own - what a preset's ALL_config=/default_config= makes it
+# read (mkinitcpio -c skips the drop-ins).
 #
-# Sourced in a subshell, the way mkinitcpio itself reads its config (the main
-# file, then /etc/mkinitcpio.conf.d/*.conf in order), rather than grepped. A
-# regex on `^HOOKS=(...)` missed a multi-line array and `HOOKS+=(plymouth)` in a
-# drop-in, so ucode.sh told people to add a microcode initrd line to an entry
-# that already had the hook, and plymouth="auto" resolved to OFF on a system
-# that had plymouth set up. Same approach nvidia.sh uses for MODULES.
+# Read exactly the way mkinitcpio 42 reads it, not grepped and not sourced file
+# by file. It joins /etc/mkinitcpio.conf and every /etc/mkinitcpio.conf.d/*.conf
+# with a plain `cat`, in `LC_ALL=C.UTF-8 sort -V` order, and sources the result
+# once. So a file with no final newline glues its last line onto the next
+# file's first one, and a drop-in whose name sorts after another one wins -
+# both of which sourcing the files one at a time in glob order got wrong. A
+# string HOOKS="a b" is split into words, as mkinitcpio's arrayize_config does.
+# Config that does not parse gives no hooks at all, as mkinitcpio gives no image.
+# A file the user cannot read is read through sudo -n.
+#
+# Grepping `^HOOKS=(...)` before this missed a multi-line array and
+# `HOOKS+=(plymouth)` in a drop-in, so ucode.sh told people to add a microcode
+# initrd line to an entry that already had the hook, and plymouth="auto"
+# resolved to OFF on a system that had plymouth set up.
+mkinitcpio_hooks() {
+  local conf="${1:-}" d=/etc/mkinitcpio.conf.d f
+  {
+    if [ -n "$conf" ]; then
+      cat -- "$conf" 2>/dev/null || sudo -n cat -- "$conf" 2>/dev/null
+    else
+      if [ -e /etc/mkinitcpio.conf ]; then
+        cat /etc/mkinitcpio.conf 2>/dev/null || sudo -n cat /etc/mkinitcpio.conf 2>/dev/null
+      fi
+      if [ -d "$d" ]; then
+        while IFS= read -r -d '' f; do
+          cat -- "$d/$f" 2>/dev/null || sudo -n cat -- "$d/$f" 2>/dev/null
+        done < <(find "$d" -maxdepth 1 -xtype f -name '*.conf' -print0 2>/dev/null \
+                   | sed -z 's/.*\///' | LC_ALL=C.UTF-8 sort -zVu)
+      fi
+    fi
+  } | bash -c 'source /dev/stdin >/dev/null 2>&1 || exit 1
+               read -ra _h <<< "${HOOKS[*]}"
+               printf "%s\n" "${_h[@]}"' 2>/dev/null
+}
+
+# Is <hook> in the HOOKS mkinitcpio will actually use? [config file] as above.
 mkinitcpio_has_hook() {
-  local hook="$1"
-  bash -c '[ -f /etc/mkinitcpio.conf ] && source /etc/mkinitcpio.conf
-           for f in /etc/mkinitcpio.conf.d/*.conf; do [ -f "$f" ] && source "$f"; done
-           printf "%s\n" "${HOOKS[@]}"' 2>/dev/null | grep -qx -- "$hook"
+  mkinitcpio_hooks "${2:-}" | grep -qx -- "$1"
 }
 
 # Where is limine.conf? Prints the first one found and returns 0, or prints
