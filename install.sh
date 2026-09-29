@@ -1186,8 +1186,11 @@ if pacman -Q hyprland &> /dev/null || pacman -Q hyprland-git &> /dev/null; then
     # scrollback away by now, and this is what the screen shows before a reboot
     # (or before the NOT-rebooting list below).
     if [ "$asus_dgpu_off" == "true" ]; then
-        echo "${WARN} Reminder: the ASUS dGPU was switched off (Eco mode), so no NVIDIA driver was installed for it."
-        echo "${NOTE} Switch to Hybrid (${MAGENTA}supergfxctl -m Hybrid${RESET}), reboot, then run ${MAGENTA}install-scripts/nvidia.sh${RESET}."
+        # "If it is NVIDIA", like the warning at detection time: the switched-off
+        # GPU may be AMD, and then nvidia.sh finds no NVIDIA card and the verify
+        # step below would fail every kernel's NVIDIA module check.
+        echo "${WARN} Reminder: the ASUS dGPU was switched off (Eco mode), so it was not visible to this run."
+        echo "${NOTE} If it is an NVIDIA GPU: switch to Hybrid (${MAGENTA}supergfxctl -m Hybrid${RESET}), reboot, then run ${MAGENTA}install-scripts/nvidia.sh${RESET}."
         # The saved selection has no nvidia in it, so a plain re-check would skip
         # exactly the checks that matter after that.
         echo "${NOTE} Then verify it with nvidia in the selection: ${MAGENTA}INSTALL_SELECTED_OPTIONS=\"\$(cat Install-Logs/.selected-options) nvidia\" ./install-scripts/02-Final-Check.sh${RESET}"
