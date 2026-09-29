@@ -259,8 +259,12 @@ record_active() {
     fi
 
     active_window_class=$(hyprctl -j activewindow | jq -r '(.class)')
-    w_pos=$(hyprctl activewindow | grep 'at:' | cut -d':' -f2 | tr -d ' ' | tail -n1)
-    w_size=$(hyprctl activewindow | grep 'size:' | cut -d':' -f2 | tr -d ' ' | tail -n1 | sed s/,/x/g)
+    # Geometry from hyprctl's JSON, not its text output: in the text form the
+    # title: and initialTitle: lines come after at: and size:, so `grep 'at:' |
+    # tail -n1` took a window TITLE containing "at:" ("Chat: ...", "What: ...") as
+    # the position, and the capture failed.
+    w_pos=$(hyprctl -j activewindow | jq -r '"\(.at[0]),\(.at[1])"')
+    w_size=$(hyprctl -j activewindow | jq -r '"\(.size[0])x\(.size[1])"')
     geometry="${w_pos} ${w_size}"
 
     # Resolve which monitor this window sits on so wf-recorder targets it.
