@@ -140,16 +140,17 @@ check_outcome "no working AUR helper - yay/paru missing or does not start (insta
     bash -c 'yay --version || paru --version'
 # The services.sh warning has scrolled off by the time this runs, so the message
 # says where the way out is.
-check_outcome "NetworkManager.service is not enabled - if services.sh left netctl, connman, wpa_supplicant@ or dhcpcd's wpa_supplicant hook in charge, its log has the commands to move over (install-scripts/services.sh)" \
+check_outcome "NetworkManager.service is not enabled - if services.sh left netctl, connman, wpa_supplicant@, dhcpcd's wpa_supplicant hook, or a static networkd address it could not carry over in charge, its log has the commands to move over (install-scripts/services.sh)" \
     systemctl is-enabled NetworkManager.service
 # services.sh leaves NetworkManager as the only network manager enabled. One
 # still enabled next to it (archinstall's "Copy ISO network configuration"
 # enables iwd + systemd-networkd) means two DHCP clients - or wpa_supplicant and
 # iwd, or NM and netctl - fighting over the same link after the reboot.
 # services.sh leaves one enabled on purpose when it cannot hand over safely (a
-# static networkd address, a conf.d file overriding wifi.backend, or netctl /
-# connman / wpa_supplicant@ / hooked dhcpcd holding the Wi-Fi password). In the
-# last case it does not enable NM either, and the check above stops the reboot;
+# static networkd address it cannot carry over exactly, a conf.d file overriding
+# wifi.backend, or netctl / connman / wpa_supplicant@ / hooked dhcpcd holding
+# the Wi-Fi password). In the first and last cases it does not enable NM
+# either, and the check above stops the reboot;
 # this one covers an NM enabled earlier, by hand or by an older run. Instances
 # come from the .wants symlinks too: netctl-auto@wlan0 hangs off the card's
 # device unit and is not even loaded while the card is missing. iwd only counts
