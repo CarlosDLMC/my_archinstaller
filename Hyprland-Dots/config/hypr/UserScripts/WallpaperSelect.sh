@@ -192,7 +192,15 @@ modify_startup_config() {
 
     # Update the livewallpaper variable with the selected video path (using $HOME)
     selected_file="${selected_file/#$HOME/\$HOME}" # Replace /home/user with $HOME
-    sed -i -E "s|^local livewallpaper = .*|local livewallpaper = \"${selected_file//\"/}\"|" "$startup_config"
+    # Escaped for the sed replacement: \ & and the | delimiter are special there,
+    # so a path like "a & b.mp4" pasted the whole matched line into the file
+    # and "back\tab" became a tab.
+    # The line is Lua, so backslashes are first doubled for the Lua string (a
+    # lone \s is an invalid escape there, which broke the whole config).
+    local _repl="${selected_file//\"/}"
+    _repl="${_repl//\\/\\\\}"
+    _repl=$(printf '%s' "$_repl" | sed -e 's/[\\&|]/\\&/g')
+    sed -i -E "s|^local livewallpaper = .*|local livewallpaper = \"${_repl}\"|" "$startup_config"
 
     echo "Configured for live wallpaper (video)."
   else
