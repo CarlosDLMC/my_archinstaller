@@ -27,17 +27,23 @@ BACKUP_STAMP="$(date +%Y%m%d-%H%M%S)"
 # can hold raw bytes that are not valid UTF-8, and in a UTF-8 locale grep then
 # printed "binary file matches" instead of the line - the path came back empty
 # and the next login had video mode with no video.
+#
+# The path is read BEFORE <to> is touched, and any spacing is accepted (a hand
+# edit like local livewallpaper="..." is valid Lua). It used to switch <to> to
+# video mode first and then find no path - a login with mpvpaper on and an empty
+# path, i.e. no wallpaper at all. Returns 0 copied, 1 no video in <from>, 2 a
+# video is on in <from> but its path line cannot be read (nothing changed).
 copy_video_wallpaper() { # from to
     local _from="$1" _to="$2" _lw _t
+    local _lw_re='^[[:space:]]*local[[:space:]]+livewallpaper[[:space:]]*='
     [ -f "$_from" ] && [ -f "$_to" ] || return 1
     LC_ALL=C grep -aqE '^\s*run\("mpvpaper ' "$_from" || return 1
+    _lw=$(LC_ALL=C grep -aE "$_lw_re" "$_from" | head -n 1)
+    [ -n "$_lw" ] || return 2
     LC_ALL=C sed -i -E 's|^(\s*)run\("awww-daemon --format argb"\)|\1-- run("awww-daemon --format argb")|; s|^(\s*)--\s*run\("mpvpaper |\1run("mpvpaper |' "$_to"
-    _lw=$(LC_ALL=C grep -aE '^local livewallpaper = ' "$_from" | head -n 1)
-    if [ -n "$_lw" ]; then
-        _t=$(mktemp)
-        LW="$_lw" LC_ALL=C awk '/^local livewallpaper = /{print ENVIRON["LW"]; next} {print}' "$_to" > "$_t" && cat "$_t" > "$_to"
-        rm -f "$_t"
-    fi
+    _t=$(mktemp)
+    LW="$_lw" RE="$_lw_re" LC_ALL=C awk '$0 ~ ENVIRON["RE"] {print ENVIRON["LW"]; next} {print}' "$_to" > "$_t" && cat "$_t" > "$_to"
+    rm -f "$_t"
     return 0
 }
 
@@ -601,8 +607,12 @@ if [ -n "$_hypr_bak" ]; then
 
     # The video wallpaper: only its three lines, not the whole Startup_Apps.lua
     # (see copy_video_wallpaper). Without this the next login showed a still image.
-    if copy_video_wallpaper "$_hypr_bak/configs/Startup_Apps.lua" "$HOME/.config/hypr/configs/Startup_Apps.lua"; then
+    copy_video_wallpaper "$_hypr_bak/configs/Startup_Apps.lua" "$HOME/.config/hypr/configs/Startup_Apps.lua"
+    _rc=$?
+    if [ "$_rc" -eq 0 ]; then
         echo "  ${OK} Kept your video wallpaper from the previous install"
+    elif [ "$_rc" -eq 2 ]; then
+        echo "  ${WARN} Your Startup_Apps.lua had mpvpaper on but no livewallpaper line this script can read, so the video was not carried over (it is in $(basename "$_hypr_bak")). Pick it again with SUPER+W."
     fi
 fi
 

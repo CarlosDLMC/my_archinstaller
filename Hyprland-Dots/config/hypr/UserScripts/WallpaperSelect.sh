@@ -272,7 +272,10 @@ modify_startup_config() {
     local _repl
     _repl=$(lua_escape "$selected_file")
     _repl=$(printf '%s' "$_repl" | LC_ALL=C sed -e 's/[\\&|]/\\&/g')
-    LC_ALL=C sed -i -E "s|^local livewallpaper = .*|local livewallpaper = \"${_repl}\"|" "$startup_config"
+    # Any spacing: a hand edit such as local livewallpaper="..." is valid Lua,
+    # and matching only the exact "local livewallpaper = " form printed
+    # "Configured for live wallpaper" while leaving the old path in place.
+    LC_ALL=C sed -i -E "s|^[[:space:]]*local[[:space:]]+livewallpaper[[:space:]]*=.*|local livewallpaper = \"${_repl}\"|" "$startup_config"
 
     echo "Configured for live wallpaper (video)."
   else
@@ -283,7 +286,7 @@ modify_startup_config() {
     # Startup_Apps.lua as changed and back hypr up on the next re-run.
     # The whole line, comment included, exactly as the repo ships it - the video
     # branch above drops the comment, and anything else still differs.
-    LC_ALL=C sed -i -E 's|^local livewallpaper = .*|local livewallpaper = ""  -- WallpaperSelect.sh rewrites this line for video wallpapers|' "$startup_config"
+    LC_ALL=C sed -i -E 's|^[[:space:]]*local[[:space:]]+livewallpaper[[:space:]]*=.*|local livewallpaper = ""  -- WallpaperSelect.sh rewrites this line for video wallpapers|' "$startup_config"
 
     echo "Configured for static wallpaper (image)."
   fi
