@@ -40,11 +40,19 @@ copy_video_wallpaper() { # from to
     LC_ALL=C grep -aqE '^\s*run\("mpvpaper ' "$_from" || return 1
     _lw=$(LC_ALL=C grep -aE "$_lw_re" "$_from" | head -n 1)
     [ -n "$_lw" ] || return 2
-    LC_ALL=C sed -i -E 's|^(\s*)run\("awww-daemon --format argb"\)|\1-- run("awww-daemon --format argb")|; s|^(\s*)--\s*run\("mpvpaper |\1run("mpvpaper |' "$_to"
-    _t=$(mktemp)
-    LW="$_lw" RE="$_lw_re" LC_ALL=C awk '$0 ~ ENVIRON["RE"] {print ENVIRON["LW"]; next} {print}' "$_to" > "$_t" && cat "$_t" > "$_to"
+    # Both edits in ONE pass into a temp file, which replaces <to> only once it
+    # was written in full. The mode switch used to be a sed -i on <to> first: a
+    # temp file that could not be written (a full TMPDIR) then left mpvpaper on
+    # with an empty path - and still returned 0.
+    _t=$(mktemp) || return 2
+    if LW="$_lw" RE="$_lw_re" LC_ALL=C awk '$0 ~ ENVIRON["RE"] {print ENVIRON["LW"]; next} {print}' "$_to" \
+         | LC_ALL=C sed -E 's|^(\s*)run\("awww-daemon --format argb"\)|\1-- run("awww-daemon --format argb")|; s|^(\s*)--\s*run\("mpvpaper |\1run("mpvpaper |' >"$_t" \
+       && [ -s "$_t" ] && cat "$_t" >"$_to"; then
+        rm -f "$_t"
+        return 0
+    fi
     rm -f "$_t"
-    return 0
+    return 2
 }
 
 # Is <file> one of the animation presets Animations.sh copies in? Only then is
