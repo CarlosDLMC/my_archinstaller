@@ -127,8 +127,10 @@ bind(M .. " + K", hl.dsp.window.cycle_next({ next = false }), { description = "c
 bind(M .. " + SHIFT + I", hl.dsp.layout("togglesplit"), { description = "toggle split (dwindle)" })
 bind(M .. " + P",         hl.dsp.window.pseudo(),        { description = "toggle pseudo (dwindle)" })
 
--- Works on either layout
-bind(M .. " + M", hl.dsp.layout("splitratio 0.3"), { description = "set split ratio to 0.3" })
+-- Works on either layout: SplitRatio.sh sends dwindle its splitratio message and
+-- sets master.mfact on master, which has no ratio message of its own (the bare
+-- hl.dsp.layout("splitratio 0.3") did nothing there).
+bind(M .. " + M", exec(S .. "/SplitRatio.sh"), { description = "set split ratio to 0.3" })
 
 -- Cycle windows; if floating bring to top
 bind("ALT + Tab", function()
