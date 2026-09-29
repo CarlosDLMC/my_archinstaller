@@ -570,8 +570,12 @@ options_command=(
     whiptail --title "Select Options" --checklist "Choose options to install or configure\nNOTE: 'SPACEBAR' to select & 'TAB' key to change selection" 28 85 20
 )
 
-# Add NVIDIA options if detected
-if [ "$nvidia_detected" == "true" ]; then
+# Add NVIDIA options if a card the driver supports is there. Detected is not
+# enough: a Kepler-or-older card is detected but no maintained driver binds to
+# it, and ticking "nvidia" there ran nvidia.sh into a failure the final check
+# then blamed on a missing driver no script can install. The preset path gates
+# the same way.
+if [ "$nvidia_supported" == "true" ]; then
     options_command+=(
         "nvidia" "Do you want script to configure NVIDIA GPU?" "OFF"
         "nouveau" "Do you want Nouveau to be blacklisted?" "OFF"
