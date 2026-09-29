@@ -48,6 +48,12 @@ if [ -d "$SCRIPT_DIR/.local/bin" ]; then
     # flip the mode of unrelated things already installed there (uv, aws, claude).
     for _src in "$SCRIPT_DIR/.local/bin/"*; do
         [ -e "$_src" ] || continue
+        # Same cmp-then-back-up as the shell files: an edited script used to be
+        # replaced with nothing left of the edit.
+        _dst="$HOME/.local/bin/$(basename "$_src")"
+        if [ -f "$_dst" ] && ! cmp -s "$_src" "$_dst"; then
+            cp "$_dst" "$_dst.backup-$BACKUP_STAMP" && echo "  ${NOTE} Backed up existing $(basename "$_src") to $(basename "$_src").backup-$BACKUP_STAMP"
+        fi
         if cp "$_src" "$HOME/.local/bin/"; then
             chmod +x "$HOME/.local/bin/$(basename "$_src")"
             echo "  ${OK} Copied $(basename "$_src")"
@@ -59,6 +65,15 @@ fi
 printf "\n${INFO} Copying .local/share data files...\n"
 if [ -d "$SCRIPT_DIR/.local/share" ]; then
     mkdir -p "$HOME/.local/share"
+    # Per file, backed up first when it differs (the dunst D-Bus service
+    # override, say) - a plain cp -r used to replace an edited one silently.
+    while IFS= read -r -d '' _src; do
+        _rel="${_src#"$SCRIPT_DIR/.local/share/"}"
+        _dst="$HOME/.local/share/$_rel"
+        if [ -f "$_dst" ] && ! cmp -s "$_src" "$_dst"; then
+            cp "$_dst" "$_dst.backup-$BACKUP_STAMP" && echo "  ${NOTE} Backed up existing $_rel to $(basename "$_rel").backup-$BACKUP_STAMP"
+        fi
+    done < <(find "$SCRIPT_DIR/.local/share" -type f -print0)
     cp -r "$SCRIPT_DIR/.local/share/." "$HOME/.local/share/" 2>/dev/null && echo "  ${OK} Copied .local/share data files"
 fi
 
@@ -233,8 +248,29 @@ for dir in "${config_dirs[@]}"; do
             sed -i "s|\$HOME|$HOME|g" "$_cmp_tmp/bookmarks"
             _cmp_src="$_cmp_tmp"
         fi
+        # Runtime files this script seeds itself (all gitignored), left out of the
+        # comparison: with them counted, hypr, quickshell, wallust, rofi and cava
+        # were backed up on every re-run with no edits at all, ~12 MB each time.
+        # The "identical" branch copies the repo over the existing directory, so
+        # they stay in place - the repo has none of them to overwrite with. Not
+        # monitors.lua/workspaces.lua: those ARE tracked, and the identical
+        # branch would reset them to the templates with no backup to recover from.
+        # hypr/wallust/, rofi/wallust/ and wallust/output/ hold only wallust
+        # output and have no tracked file at all, so they are left out whole.
+        _cmp_x=()
+        case "$dir" in
+            hypr)       _cmp_x=(.initial_startup_done .wallpaper_current .wallpaper_modified wallust) ;;
+            quickshell) _cmp_x=(qml_color.json wallust-colors.json) ;;
+            wallust)    _cmp_x=(output) ;;
+            rofi)       _cmp_x=(wallust .current_wallpaper) ;;
+            cava)       _cmp_x=(config) ;;
+        esac
+        _cmp_args=()
+        for _x in "${_cmp_x[@]}"; do
+            _cmp_args+=(-x "$_x")
+        done
         _same=no
-        if [ -d "$HOME/.config/$dir" ] && diff -rq "$_cmp_src" "$HOME/.config/$dir" >/dev/null 2>&1; then
+        if [ -d "$HOME/.config/$dir" ] && diff -rq "${_cmp_args[@]}" "$_cmp_src" "$HOME/.config/$dir" >/dev/null 2>&1; then
             _same=yes
         fi
         if [ -n "$_cmp_tmp" ]; then
@@ -466,11 +502,33 @@ if [ -n "$_hypr_bak" ]; then
     # nwg-displays overwrites on Apply. Unlike the files above these DO exist in
     # the fresh copy (as the templates), so the backup has to win outright -
     # otherwise a re-run reset every monitor to the catch-all highres/auto rule.
-    for _state in monitors.lua workspaces.lua; do
+    # UserAnimations.lua is state too: Animations.sh copies the chosen preset
+    # over it, and a re-run reset it to the repo's with the choice left only in
+    # the backup.
+    for _state in monitors.lua workspaces.lua UserConfigs/UserAnimations.lua; do
         if [ -f "$_hypr_bak/$_state" ] && ! cmp -s "$_hypr_bak/$_state" "$HOME/.config/hypr/$_state"; then
-            cp "$_hypr_bak/$_state" "$HOME/.config/hypr/$_state" && echo "  ${OK} Kept your monitor layout ($_state) from the previous install"
+            cp "$_hypr_bak/$_state" "$HOME/.config/hypr/$_state" && echo "  ${OK} Kept your $_state from the previous install"
         fi
     done
+
+    # A video wallpaper chosen in WallpaperSelect.sh lives in three lines of
+    # Startup_Apps.lua (livewallpaper, awww-daemon commented, mpvpaper live). The
+    # file itself is the repo's and should update on a re-run, so it is not
+    # restored whole - only those three edits are re-applied, the same seds
+    # WallpaperSelect.sh uses. Without this the next login showed a still image.
+    _sa="configs/Startup_Apps.lua"
+    if [ -f "$_hypr_bak/$_sa" ] && [ -f "$HOME/.config/hypr/$_sa" ] \
+       && grep -qE '^\s*run\("mpvpaper ' "$_hypr_bak/$_sa"; then
+        _lw=$(grep -E '^local livewallpaper = ' "$_hypr_bak/$_sa" | head -n 1)
+        sed -i -E 's|^(\s*)run\("awww-daemon --format argb"\)|\1-- run("awww-daemon --format argb")|; s|^(\s*)--\s*run\("mpvpaper |\1run("mpvpaper |' "$HOME/.config/hypr/$_sa"
+        if [ -n "$_lw" ]; then
+            _tmp_sa=$(mktemp)
+            awk -v lw="$_lw" '/^local livewallpaper = /{print lw; next} {print}' "$HOME/.config/hypr/$_sa" > "$_tmp_sa" \
+                && cat "$_tmp_sa" > "$HOME/.config/hypr/$_sa"
+            rm -f "$_tmp_sa"
+        fi
+        echo "  ${OK} Kept your video wallpaper (${_lw#local livewallpaper = }) from the previous install"
+    fi
 fi
 
 # Deploy herdr's config and sounds INTO ~/.config/herdr, never replacing it.
