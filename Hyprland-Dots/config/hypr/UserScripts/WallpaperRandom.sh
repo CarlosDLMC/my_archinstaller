@@ -17,6 +17,10 @@ mapfile -d '' PICS < <(find -L "${wallDIR}" -type f \( \
   -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" -o -name "*.pnm" -o \
   -name "*.tga" -o -name "*.tiff" -o -name "*.webp" -o -name "*.bmp" -o \
   -name "*.farbfeld" -o -name "*.gif" \) -print0)
+if (( ${#PICS[@]} == 0 )); then
+  notify-send -u low "Random wallpaper" "No wallpapers found in $wallDIR" 2>/dev/null
+  exit 1
+fi
 RANDOMPICS="${PICS[$((RANDOM % ${#PICS[@]}))]}"
 
 
@@ -35,10 +39,11 @@ SWWW_PARAMS="--transition-fps $FPS --transition-type $TYPE --transition-duration
 awww query >/dev/null 2>&1 || { awww-daemon --format argb >/dev/null 2>&1 & sleep 0.5; }
 awww img "${RANDOMPICS}" $SWWW_PARAMS
 
-wait $!
-"$SCRIPTSDIR/WallustSwww.sh" &&
-
-wait $!
+# No `wait $!`: awww img runs in the foreground, so it is done here. When the
+# daemon had to be started just above, $! was the DAEMON's pid and `wait`
+# blocked for the rest of the session - WallustSwww.sh and Refresh.sh never
+# ran, and the colours stayed on the old wallpaper.
+"$SCRIPTSDIR/WallustSwww.sh"
 sleep 2
 "$SCRIPTSDIR/Refresh.sh"
 

@@ -87,8 +87,10 @@ main() {
 
             sleep 2
   
-            wallust run "$wallpaper_output" -s &
-            sleep 1
+            # In the foreground, like no-effects above: RofiContrast.py has to run
+            # after wallust has exited (see WallustSwww.sh). Backgrounded with a
+            # 1 s sleep, a slower wallust run overwrote the rofi contrast fix.
+            wallust run "$wallpaper_output" -s
             # readable rofi text for this palette - see RofiContrast.py
             "$HOME/.config/hypr/scripts/RofiContrast.py" || true
             # Refresh rofi, quickshell, wallust palettes
