@@ -160,7 +160,11 @@ echo "${NOTE} To hide the motherboard's own logo as well, disable 'Boot Logo Dis
 # /boot is root-only on CachyOS, so everything here goes through sudo -
 # find_limine_conf included (the same search limine.sh uses, so this hint and
 # that script agree on whether and where Limine is).
-if _limine_conf=$(find_limine_conf) && ! sudo grep -q 'my_archinstaller Limine theme' "$_limine_conf" 2>/dev/null; then
+# Not when limine is in this run's selection: limine.sh runs right after this
+# script and applies the theme, so the hint only told you to do what was about
+# to happen anyway.
+if [[ " ${INSTALL_SELECTED_OPTIONS:-} " != *" limine "* ]] \
+   && _limine_conf=$(find_limine_conf) && ! sudo grep -q 'my_archinstaller Limine theme' "$_limine_conf" 2>/dev/null; then
   echo "${NOTE} Limine is installed and unthemed. The 'limine' preset option (install-scripts/limine.sh) applies the matching boot-menu theme; see README 'Limine boot menu theme'." | tee -a "$LOG"
 fi
 
