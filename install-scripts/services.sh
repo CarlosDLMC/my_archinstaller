@@ -56,6 +56,14 @@ printf "\n${INFO} Enabling essential ${SKY_BLUE}system services${RESET}...\n" | 
 # check's "NetworkManager.service is not enabled", which stops the preset's
 # auto-reboot, and a reboot by hand comes back on the setup that works now. The
 # warning gives the commands to move over by hand.
+#
+# A networkd link with a static address (archinstall's "Manual configuration")
+# is converted into a NetworkManager profile, and then networkd goes like any
+# other. It used to be left enabled with a warning while NM was enabled anyway:
+# after a reboot by hand NM's automatic wired DHCP profile and networkd's static
+# address both claimed the link. A .network file that uses anything the
+# conversion cannot carry over exactly is treated like netctl above instead -
+# nothing changes and NM is not enabled.
 printf "\n${NOTE} Enabling ${SKY_BLUE}NetworkManager${RESET}...\n" | tee -a "$LOG"
 if ! systemctl cat NetworkManager.service &>/dev/null; then
   # Disabling the others without NM would boot the new machine with no network
@@ -158,15 +166,304 @@ else
     fi
   fi
 
+  # archinstall's "Manual configuration" can give a link a static address in
+  # networkd. NM would just run DHCP there, which on a network without a DHCP
+  # server is no network at all - so the address is carried over into an NM
+  # keyfile first. `nmcli --offline` builds the keyfile without a running NM and
+  # rejects any value it would not accept. The python below decides whether the
+  # .network file can be carried over EXACTLY: one [Match] Name= that is a
+  # physical ethernet card present right now, Address= with a prefix, at most
+  # one gateway per family, DNS= / Domains= as plain addresses and names, and
+  # nothing else. Anything more (globs, MAC matches, extra routes, DHCP next to
+  # the static address, a .netdev defining a bridge or VLAN) keeps networkd, and
+  # then NM is not enabled at all - a half-converted network is the one outcome
+  # worse than the warning.
+  networkd_static=()
+  while IFS= read -r _f; do
+    if [ -n "$_f" ]; then
+      networkd_static+=("$_f")
+    fi
+  done < <(grep -lsE '^[[:space:]]*Address[[:space:]]*=' /etc/systemd/network/*.network 2>/dev/null || true)
+  networkd_static_left=()
+  networkd_static_hint="nmcli connection add type ethernet ifname <if> ipv4.method manual ipv4.addresses <addr/prefix> ipv4.gateway <gw>"
+
+  if [ ${#networkd_static[@]} -gt 0 ] && [ ${#net_hold_enabled[@]} -eq 0 ] \
+     && [[ " ${other_net_enabled[*]} " == *" systemd-networkd."* ]]; then
+    networkd_to_nm=$(cat <<'PY'
+import ipaddress, os, sys
+
+import fnmatch
+
+path = sys.argv[1]
+others = sys.argv[2:]
+stem = os.path.basename(path)[:-len(".network")]
+
+def fail(why):
+    print(why, file=sys.stderr)
+    sys.exit(2)
+
+sections = []
+try:
+    with open(path) as f:
+        lines = f.read().splitlines()
+except OSError as e:
+    fail(f"cannot read it ({e.strerror})")
+for raw in lines:
+    line = raw.strip()
+    if not line or line[0] in "#;":
+        continue
+    if line.endswith("\\"):
+        fail("it uses a line continuation")
+    if line.startswith("[") and line.endswith("]"):
+        sections.append((line[1:-1], []))
+        continue
+    if not sections or "=" not in line:
+        fail(f"unexpected line: {line}")
+    k, v = line.split("=", 1)
+    k, v = k.strip(), v.strip()
+    if not v:
+        fail(f"{k}= with an empty value (a list reset)")
+    sections[-1][1].append((k, v))
+
+name = None
+addrs, gws, dns, search = [], [], [], []
+matches = 0
+for sec, kvs in sections:
+    if sec == "Match":
+        matches += 1
+        for k, v in kvs:
+            if k != "Name":
+                fail(f"[Match] {k}= (only a single Name= is converted)")
+            if name is not None or any(c in v for c in "*?[]! \t"):
+                fail(f"[Match] Name={v} is not one literal interface name")
+            name = v
+    elif sec == "Network":
+        for k, v in kvs:
+            if k == "Address":
+                addrs.append(v)
+            elif k == "Gateway":
+                gws.append(v)
+            elif k == "DNS":
+                dns += v.split()
+            elif k == "Domains":
+                search += v.split()
+            elif k == "DHCP":
+                if v.lower() not in ("no", "false", "0", "off"):
+                    fail(f"DHCP={v} next to a static address")
+            else:
+                fail(f"[Network] {k}=")
+    elif sec == "Address":
+        for k, v in kvs:
+            if k != "Address":
+                fail(f"[Address] {k}=")
+            addrs.append(v)
+    elif sec == "Route":
+        rgw, dest = None, None
+        for k, v in kvs:
+            if k == "Gateway":
+                rgw = v
+            elif k == "Destination":
+                dest = v
+            else:
+                fail(f"[Route] {k}=")
+        if rgw is None or dest not in (None, "0.0.0.0/0", "::/0"):
+            fail("a [Route] other than a plain default route")
+        gws.append(rgw)
+    else:
+        fail(f"a [{sec}] section")
+if matches != 1 or name is None:
+    fail("it does not match exactly one interface by Name=")
+
+# networkd applies only the FIRST .network file (in name order) whose [Match]
+# fits a link. Another file that could match this interface - a glob, a MAC or
+# Type= match, an empty [Match], the same Name= - means the link may not be
+# running this file at all, so it is not converted.
+for other in others:
+    if os.path.basename(other) == os.path.basename(path):
+        continue
+    try:
+        with open(other) as f:
+            olines = f.read().splitlines()
+    except OSError:
+        fail(f"cannot read {other}")
+    sec, onames, okeys = None, [], 0
+    for raw in olines:
+        line = raw.strip()
+        if not line or line[0] in "#;":
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            sec = line[1:-1]
+            continue
+        if sec == "Match" and "=" in line:
+            k, v = (x.strip() for x in line.split("=", 1))
+            okeys += 1
+            if k != "Name":
+                fail(f"{other} matches by [Match] {k}=, which could also match {name}")
+            onames += v.split()
+    if okeys == 0:
+        fail(f"{other} has no [Match] Name=, so it matches every link")
+    for pat in onames:
+        if pat.startswith("!") or fnmatch.fnmatchcase(name, pat):
+            fail(f"{other} ([Match] Name={pat}) can also match {name}")
+
+sysnet = f"/sys/class/net/{name}"
+if not os.path.isdir(sysnet):
+    fail(f"{name} is not present on this machine")
+if not os.path.exists(f"{sysnet}/device"):
+    fail(f"{name} is a virtual interface")
+for d in ("wireless", "phy80211", "bridge", "bonding"):
+    if os.path.exists(f"{sysnet}/{d}"):
+        fail(f"{name} is not a plain ethernet link ({d})")
+try:
+    with open(f"{sysnet}/type") as t:
+        if t.read().strip() != "1":
+            fail(f"{name} is not an ethernet link")
+except OSError:
+    fail(f"cannot read {sysnet}/type")
+
+v4a, v6a, v4g, v6g, v4d, v6d = [], [], [], [], [], []
+for a in addrs:
+    if "/" not in a:
+        fail(f"Address={a} has no prefix length")
+    try:
+        i = ipaddress.ip_interface(a)
+    except ValueError:
+        fail(f"Address={a} is not an address")
+    if i.ip.is_unspecified:
+        fail(f"Address={a} asks networkd to pick from a pool")
+    (v4a if i.version == 4 else v6a).append(str(i))
+for g in gws:
+    try:
+        ip = ipaddress.ip_address(g)
+    except ValueError:
+        fail(f"Gateway={g} is not a plain address")
+    (v4g if ip.version == 4 else v6g).append(str(ip))
+for d in dns:
+    try:
+        ip = ipaddress.ip_address(d)
+    except ValueError:
+        fail(f"DNS={d} is not a plain address")
+    (v4d if ip.version == 4 else v6d).append(str(ip))
+for s in search:
+    if s.startswith("~"):
+        fail(f"Domains={s} is a routing-only domain")
+if not (v4a or v6a):
+    fail("it has no usable Address=")
+if len(v4g) > 1 or len(v6g) > 1:
+    fail("more than one gateway per address family")
+if (v4g and not v4a) or (v6g and not v6a):
+    fail("a gateway with no address of its family")
+
+# Priority 100: a DHCP ethernet profile NM already has (an older run of this
+# script enabled NM unconditionally) must not win the autoconnect tie-break.
+args = ["type", "ethernet", "con-name", f"networkd-{stem}", "ifname", name,
+        "connection.autoconnect-priority", "100"]
+if v4a:
+    args += ["ipv4.method", "manual", "ipv4.addresses", ",".join(v4a)]
+    if v4g:
+        args += ["ipv4.gateway", v4g[0]]
+else:
+    args += ["ipv4.method", "disabled"]
+if v4d:
+    args += ["ipv4.dns", ",".join(v4d)]
+# "auto" even next to static IPv6 addresses: networkd keeps accepting router
+# advertisements beside them (IPv6AcceptRA= defaults to on), and NM's "manual"
+# would drop the SLAAC addresses and the RA default route. eui64 and privacy
+# off are networkd's defaults too - NM's own (stable-privacy) would give the
+# link different IPv6 addresses than it has today.
+args += ["ipv6.method", "auto", "ipv6.addr-gen-mode", "eui64", "ipv6.ip6-privacy", "0"]
+if v6a:
+    args += ["ipv6.addresses", ",".join(v6a)]
+    if v6g:
+        args += ["ipv6.gateway", v6g[0]]
+if v6d:
+    args += ["ipv6.dns", ",".join(v6d)]
+if search:
+    args += ["ipv4.dns-search" if v4a else "ipv6.dns-search", ",".join(search)]
+sys.stdout.write("\0".join(args) + "\0")
+PY
+)
+    _nm_tmp=$(mktemp -d)
+    _nm_profiles=()
+    _nm_sources=()
+    # Every .network networkd reads besides these, for the first-match check in
+    # the python. /usr/lib's are left out: systemd's own there match container
+    # and VM links by Kind=/Virtualization=, never a physical card.
+    networkd_all=()
+    for _f in /etc/systemd/network/*.network; do
+      if [ -e "$_f" ]; then
+        networkd_all+=("$_f")
+      fi
+    done
+    if compgen -G '/etc/systemd/network/*.netdev' >/dev/null; then
+      networkd_static_left=("${networkd_static[@]}")
+      echo "${WARN} /etc/systemd/network also defines virtual devices (*.netdev), which a NetworkManager profile would not recreate - systemd-networkd stays." | tee -a "$LOG"
+    # A drop-in can add a route, an address or DHCP that the python never sees.
+    elif compgen -G '/etc/systemd/network/*.network.d/*.conf' >/dev/null \
+         || compgen -G '/run/systemd/network/*.network' >/dev/null \
+         || compgen -G '/run/systemd/network/*.network.d/*.conf' >/dev/null; then
+      networkd_static_left=("${networkd_static[@]}")
+      echo "${WARN} systemd-networkd also reads drop-ins (*.network.d/) or /run/systemd/network, which a conversion of the main files would miss - systemd-networkd stays." | tee -a "$LOG"
+    else
+      for _f in "${networkd_static[@]}"; do
+        _stem="${_f##*/}"
+        _stem="${_stem%.network}"
+        if ! _why=$(python3 -c "$networkd_to_nm" "$_f" "${networkd_all[@]}" 2>&1 >"$_nm_tmp/$_stem.args"); then
+          networkd_static_left+=("$_f")
+          echo "${WARN} $_f cannot be carried over to NetworkManager exactly: ${_why:-python3 failed}" | tee -a "$LOG"
+          continue
+        fi
+        mapfile -d '' -t _nm_args < "$_nm_tmp/$_stem.args"
+        if ! nmcli --offline connection add "${_nm_args[@]}" >"$_nm_tmp/networkd-$_stem.nmconnection" 2>"$_nm_tmp/$_stem.err"; then
+          networkd_static_left+=("$_f")
+          echo "${WARN} nmcli could not build a profile from $_f: $(head -n 1 "$_nm_tmp/$_stem.err")" | tee -a "$LOG"
+          continue
+        fi
+        _nm_profiles+=("networkd-$_stem")
+        _nm_sources+=("$_f")
+      done
+    fi
+    # All or nothing: with even one file left networkd stays enabled, and NM is
+    # not enabled next to it (below), so nothing is installed.
+    if [ ${#networkd_static_left[@]} -eq 0 ]; then
+      _nm_written=()
+      for _i in "${!_nm_profiles[@]}"; do
+        _dst="/etc/NetworkManager/system-connections/${_nm_profiles[$_i]}.nmconnection"
+        if sudo test -e "$_dst"; then
+          echo "${OK} $_dst already exists - kept as it is." | tee -a "$LOG"
+        # NM ignores a keyfile that is not root-owned and 600.
+        elif sudo install -D -m 600 -o root -g root "$_nm_tmp/${_nm_profiles[$_i]}.nmconnection" "$_dst"; then
+          _nm_written+=("$_dst")
+          echo "${OK} Static address from ${_nm_sources[$_i]} carried over to NetworkManager: $_dst" | tee -a "$LOG"
+        else
+          networkd_static_left+=("${_nm_sources[$_i]}")
+          echo "${WARN} Could not write $_dst - systemd-networkd stays." | tee -a "$LOG"
+        fi
+      done
+      # Still all or nothing: take back what this run wrote, so a later "enable
+      # NM and recreate the address" does not end up with two profiles.
+      if [ ${#networkd_static_left[@]} -gt 0 ] && [ ${#_nm_written[@]} -gt 0 ]; then
+        sudo rm -f "${_nm_written[@]}"
+        echo "${WARN} Removed the profiles this run had already written: ${_nm_written[*]}" | tee -a "$LOG"
+      fi
+    fi
+    rm -rf "$_nm_tmp"
+  fi
+
   # Not enabled while one of the units that keep a Wi-Fi password stays (see
-  # above). An NM that was already enabled - by hand, or by an older run of this
+  # above), or networkd keeps a static address that could not be carried over.
+  # An NM that was already enabled - by hand, or by an older run of this
   # script, which enabled it unconditionally - is not disabled either: which of
   # the two holds the working network is not knowable from here.
-  if [ ${#net_hold_enabled[@]} -gt 0 ]; then
+  net_keep=("${net_hold_enabled[@]}")
+  if [ ${#networkd_static_left[@]} -gt 0 ]; then
+    net_keep+=(systemd-networkd.service)
+  fi
+  if [ ${#net_keep[@]} -gt 0 ]; then
     if [ "$(systemctl is-enabled NetworkManager.service 2>/dev/null)" = enabled ]; then
-      echo "${WARN} NetworkManager is already enabled next to ${net_hold_enabled[*]} - both will claim the network after the reboot (see the warning below)." | tee -a "$LOG"
+      echo "${WARN} NetworkManager is already enabled next to ${net_keep[*]} - both will claim the network after the reboot (see the warning below)." | tee -a "$LOG"
     else
-      echo "${WARN} NetworkManager NOT enabled: ${net_hold_enabled[*]} stays in charge of the network (see the warning below). The final check will stop the auto-reboot on this." | tee -a "$LOG"
+      echo "${WARN} NetworkManager NOT enabled: ${net_keep[*]} stays in charge of the network (see the warning below). The final check will stop the auto-reboot on this." | tee -a "$LOG"
     fi
   elif [ ${#other_net_active[@]} -gt 0 ] && ! systemctl is-active --quiet NetworkManager.service; then
     sudo systemctl enable NetworkManager.service 2>&1 | tee -a "$LOG"
@@ -183,12 +480,6 @@ else
       echo "${WARN} NetworkManager failed to start. Network connectivity may not work." | tee -a "$LOG"
     fi
   fi
-
-  # archinstall's "Manual configuration" can give a link a static address in
-  # networkd. NM would just run DHCP there, which on a network without a DHCP
-  # server is no network at all - so networkd stays until it is moved over.
-  networkd_static="$(grep -lsE '^[[:space:]]*Address[[:space:]]*=' /etc/systemd/network/*.network 2>/dev/null || true)"
-  networkd_static_hint="nmcli connection add type ethernet ifname <if> ipv4.method manual ipv4.addresses <addr/prefix> ipv4.gateway <gw>"
 
   if [ ${#net_hold_enabled[@]} -gt 0 ]; then
     net_cred_dirs=()
@@ -208,8 +499,8 @@ else
     fi
     # %q, so a netctl profile's escaped name (netctl@home\x2dwifi) survives a paste.
     echo "${WARN} To move to NetworkManager (the network drops for a moment): sudo systemctl disable --now$(printf ' %q' "${net_hold_enabled[@]}" "${other_net_enabled[@]}") && sudo systemctl enable --now NetworkManager.service - then for Wi-Fi: nmcli device wifi connect <SSID> password <password>" | tee -a "$LOG"
-    if [ -n "$networkd_static" ] && [[ " ${other_net_enabled[*]} " == *" systemd-networkd."* ]]; then
-      echo "${WARN} systemd-networkd also sets a static address in ${networkd_static//$'\n'/ } - once NetworkManager runs, recreate it there: $networkd_static_hint" | tee -a "$LOG"
+    if [ ${#networkd_static[@]} -gt 0 ] && [[ " ${other_net_enabled[*]} " == *" systemd-networkd."* ]]; then
+      echo "${WARN} systemd-networkd also sets a static address in ${networkd_static[*]} - once NetworkManager runs, recreate it there: $networkd_static_hint" | tee -a "$LOG"
     fi
   # Only once NM is known to be enabled - otherwise this would leave nothing.
   elif [ ${#other_net_enabled[@]} -gt 0 ] && [ "$(systemctl is-enabled NetworkManager.service 2>/dev/null)" = enabled ]; then
@@ -220,9 +511,9 @@ else
           [ "$iwd_under_nm" = "yes" ] || continue
           ;;
         systemd-networkd.*)
-          if [ -n "$networkd_static" ]; then
+          if [ ${#networkd_static_left[@]} -gt 0 ]; then
             if [ "$networkd_warned" = "no" ]; then
-              echo "${WARN} systemd-networkd left enabled: a static address is set in ${networkd_static//$'\n'/ }." | tee -a "$LOG"
+              echo "${WARN} systemd-networkd left enabled: a static address is set in ${networkd_static_left[*]}, and it could not be carried over (see above)." | tee -a "$LOG"
               echo "${WARN} Recreate it in NetworkManager ($networkd_static_hint), then: sudo systemctl disable systemd-networkd.service" | tee -a "$LOG"
               networkd_warned="yes"
             fi
@@ -237,6 +528,10 @@ else
         echo "${OK} $_unit disabled; NetworkManager manages the network from the next boot." | tee -a "$LOG"
       fi
     done
+  # NM was not enabled above, because of a static address that stays in networkd.
+  elif [ ${#networkd_static_left[@]} -gt 0 ]; then
+    echo "${WARN} Network setup left as it is: systemd-networkd sets a static address in ${networkd_static_left[*]} that could not be carried over exactly (see above), and NetworkManager would only run DHCP there." | tee -a "$LOG"
+    echo "${WARN} To move to NetworkManager (the network drops for a moment): sudo systemctl disable --now$(printf ' %q' "${other_net_enabled[@]}") && sudo systemctl enable --now NetworkManager.service - then recreate the address: $networkd_static_hint" | tee -a "$LOG"
   fi
 fi
 

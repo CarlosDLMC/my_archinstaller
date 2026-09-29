@@ -440,10 +440,25 @@ layout archinstall's *NetworkManager (iwd backend)* choice writes) and
 `iwd.service` is disabled, since NetworkManager starts iwd itself. The Wi-Fi
 networks iwd already saved keep working. systemd-networkd and dhcpcd are disabled.
 None of it is stopped during the install: NetworkManager takes over at the reboot,
-so the running install keeps its connection. A networkd link with a static
-`Address=` is left alone with a warning, because NetworkManager would only run DHCP
-there; the final check then stops the preset's auto-reboot until you move it over.
-On CachyOS none of this applies (NetworkManager already runs alone).
+so the running install keeps its connection. On CachyOS none of this applies
+(NetworkManager already runs alone).
+
+A networkd link with a static `Address=` (archinstall's *Manual configuration*) is
+carried over rather than dropped, since NetworkManager would only run DHCP there:
+each such `.network` file becomes a NetworkManager profile,
+`/etc/NetworkManager/system-connections/networkd-<file>.nmconnection`, built with
+`nmcli --offline`, and networkd is then disabled like the rest. The original
+`.network` files stay where they are, unused. The conversion only runs when it can be
+exact: one `[Match] Name=` naming a physical ethernet card, `Address=` with a prefix
+length, at most one gateway per address family, plain `DNS=` / `Domains=` entries,
+and nothing else. IPv6 stays on router advertisements with EUI-64 addresses, as it
+was under networkd, and the profile gets `autoconnect-priority=100` so an older DHCP
+profile cannot win the link. A glob or MAC match, an extra route, `DHCP=` next to the
+static address, a `.netdev` (bridge, VLAN, bond), a drop-in (`*.network.d/`), another
+`.network` file that could match the same card (networkd only applies the first
+match) or any other key keeps networkd, and then
+`services.sh` does not enable NetworkManager at all, the same as for netctl below. The
+reason is printed, and the final check stops the preset's auto-reboot.
 
 netctl, connman, `wpa_supplicant@<if>`, and dhcpcd with its `10-wpa_supplicant`
 hook linked into `/usr/lib/dhcpcd/dhcpcd-hooks/` are **not** handed over: they keep
