@@ -196,3 +196,33 @@ hi("@lsp.typemod.comment.documentation.rust", { fg = r.doc, italic = true })
 hi("@lsp.mod.mutable.rust",          { underline = true })  -- let mut x: underlined like RustRover
 hi("@lsp.typemod.selfKeyword.mutable.rust", { fg = r.self, underline = true })
 hi("@lsp.mod.unsafe.rust",           { bg = r.unsafe })
+
+-- Python, as PyCharm draws it. The Dark scheme inherits these from Darcula's
+-- plugins/python-ce/lib/modules/intellij.python.community.impl.jar!/colorSchemes/PythonDarcula.xml;
+-- docstrings and decorators fall back to the Dark scheme's doc comment and metadata.
+-- Scoped to .python like the Rust section. Keyword arguments and dunders need the
+-- extra captures in after/queries/python/highlights.scm.
+local py = {
+  self    = "#94558d",  -- self, cls
+  builtin = "#8888c6",  -- print, len, int, str, ValueError
+  kwarg   = "#aa4926",  -- f(sep="")
+  dunder  = "#b200b2",  -- __init__, __name__
+  deco    = "#b3ae60",  -- @dataclass
+  doc     = "#5f826b",  -- """docstrings"""
+}
+
+-- legacy vim syntax (used while there is no treesitter python parser)
+hi("pythonBuiltin",       { fg = py.builtin })
+hi("pythonExceptions",    { fg = py.builtin })
+hi("pythonDecorator",     { fg = py.deco })
+hi("pythonDecoratorName", { fg = py.deco })
+
+-- treesitter
+hi("@variable.builtin.python",           { fg = py.self })
+hi("@function.builtin.python",           { fg = py.builtin })
+hi("@type.builtin.python",               { fg = py.builtin })
+hi("@attribute.python",                  { fg = py.deco })
+hi("@attribute.builtin.python",          { fg = py.deco })
+hi("@string.documentation.python",       { fg = py.doc, italic = true })
+hi("@variable.parameter.keyword.python", { fg = py.kwarg })   -- after/queries
+hi("@function.dunder.python",            { fg = py.dunder })  -- after/queries

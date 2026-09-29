@@ -158,12 +158,20 @@ fi
 #                                seed it on a fresh machine but must never
 #                                overwrite a choice you made later - switch
 #                                colorscheme in that file and a re-run keeps it.
+#
+# after/queries/python/highlights.scm goes with the palette and is overwritten the
+# same way: it adds the treesitter captures the Python section needs (keyword
+# arguments and __dunder__ names), which nvim-treesitter's own query lumps in with
+# other nodes.
 if [ -d "$NVIM_CFG" ]; then
-  mkdir -p "$NVIM_CFG/colors" "$NVIM_CFG/lua/plugins"
+  mkdir -p "$NVIM_CFG/colors" "$NVIM_CFG/lua/plugins" "$NVIM_CFG/after/queries/python"
   if cp "$PARENT_DIR/assets/nvim/pycharm-dark.lua" "$NVIM_CFG/colors/pycharm-dark.lua"; then
     echo "${OK} Installed the pycharm-dark colorscheme." | tee -a "$LOG"
   else
     echo "${WARN} Could not install colors/pycharm-dark.lua - see $LOG" | tee -a "$LOG"
+  fi
+  if ! cp "$PARENT_DIR/assets/nvim/python-highlights.scm" "$NVIM_CFG/after/queries/python/highlights.scm"; then
+    echo "${WARN} Could not install after/queries/python/highlights.scm - see $LOG" | tee -a "$LOG"
   fi
 
   if [ -e "$NVIM_CFG/lua/plugins/colorscheme.lua" ]; then
