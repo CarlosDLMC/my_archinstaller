@@ -52,7 +52,10 @@ if [ -d "$SCRIPT_DIR/.local/bin" ]; then
         # replaced with nothing left of the edit.
         _dst="$HOME/.local/bin/$(basename "$_src")"
         if [ -f "$_dst" ] && ! cmp -s "$_src" "$_dst"; then
-            cp "$_dst" "$_dst.backup-$BACKUP_STAMP" && echo "  ${NOTE} Backed up existing $(basename "$_src") to $(basename "$_src").backup-$BACKUP_STAMP"
+            # chmod -x: ~/.local/bin is on PATH, and an executable backup
+            # would show up there as a command.
+            cp "$_dst" "$_dst.backup-$BACKUP_STAMP" && chmod -x "$_dst.backup-$BACKUP_STAMP" \
+                && echo "  ${NOTE} Backed up existing $(basename "$_src") to $(basename "$_src").backup-$BACKUP_STAMP"
         fi
         if cp "$_src" "$HOME/.local/bin/"; then
             chmod +x "$HOME/.local/bin/$(basename "$_src")"
