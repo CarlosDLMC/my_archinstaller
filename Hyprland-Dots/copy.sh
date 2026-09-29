@@ -221,7 +221,26 @@ for dir in "${config_dirs[@]}"; do
         # Without this, anything another install script had already put in
         # place - or a re-run right after a clean install - left a *.backup-<stamp>
         # directory of identical content behind.
-        if [ -d "$HOME/.config/$dir" ] && diff -rq "$SCRIPT_DIR/config/$dir" "$HOME/.config/$dir" >/dev/null 2>&1; then
+        # gtk-3.0 is compared with $HOME already filled into its bookmarks (the
+        # expansion further down), which is what an up-to-date install holds.
+        # Compared raw, it always differed, so every re-run moved it aside and
+        # the Thunar bookmarks added since were left only in the backup.
+        _cmp_src="$SCRIPT_DIR/config/$dir"
+        _cmp_tmp=""
+        if [ "$dir" = "gtk-3.0" ] && [ -f "$_cmp_src/bookmarks" ]; then
+            _cmp_tmp=$(mktemp -d)
+            cp -r "$_cmp_src/." "$_cmp_tmp/"
+            sed -i "s|\$HOME|$HOME|g" "$_cmp_tmp/bookmarks"
+            _cmp_src="$_cmp_tmp"
+        fi
+        _same=no
+        if [ -d "$HOME/.config/$dir" ] && diff -rq "$_cmp_src" "$HOME/.config/$dir" >/dev/null 2>&1; then
+            _same=yes
+        fi
+        if [ -n "$_cmp_tmp" ]; then
+            rm -rf "$_cmp_tmp"
+        fi
+        if [ "$_same" = yes ]; then
             echo "  ${NOTE} Existing $dir is identical to the repo copy - no backup needed"
         elif [ -d "$HOME/.config/$dir" ]; then
             # The stamp only has second resolution, so two runs inside the same
