@@ -111,7 +111,7 @@ menu() {
         magick "$pic_path[0]" -resize 1920x1080 "$cache_gif_image"
       fi
       printf "%s\x00icon\x1f%s\n" "$pic_name" "$cache_gif_image"
-    elif [[ "$pic_name" =~ \.(mp4|mkv|mov|webm|MP4|MKV|MOV|WEBM)$ ]]; then
+    elif [[ "${pic_name,,}" =~ \.(mp4|mkv|mov|webm)$ ]]; then
       cache_preview_image="$HOME/.cache/video_preview/${pic_name}.png"
       if [[ ! -f "$cache_preview_image" ]]; then
         mkdir -p "$HOME/.cache/video_preview"
@@ -185,7 +185,15 @@ modify_startup_config() {
   #   run("awww-daemon --format argb")
   #   -- run("mpvpaper '*' ... " .. livewallpaper)
   # Image wallpaper: awww on, mpvpaper commented. Video: the other way round.
-  if [[ "$selected_file" =~ \.(mp4|mkv|mov|webm)$ ]]; then
+  # A newline cannot be written into the one-line Lua assignment (the third sed
+  # failed after the first two had already switched to the video lines).
+  if [[ "$selected_file" == *$'\n'* ]]; then
+    echo "Wallpaper path contains a newline - not saved for the next login."
+    return 1
+  fi
+  # Case-insensitive, like main() and the find -iname listing: clip.MP4 played
+  # as a video but was saved as an image, so the next login showed a still.
+  if [[ "${selected_file,,}" =~ \.(mp4|mkv|mov|webm)$ ]]; then
     # For video wallpapers:
     sed -i -E 's|^(\s*)run\("awww-daemon --format argb"\)|\1-- run("awww-daemon --format argb")|' "$startup_config"
     sed -i -E 's|^(\s*)--\s*run\("mpvpaper |\1run("mpvpaper |' "$startup_config"
@@ -207,6 +215,11 @@ modify_startup_config() {
     # For image wallpapers:
     sed -i -E 's|^(\s*)--\s*run\("awww-daemon --format argb"\)|\1run("awww-daemon --format argb")|' "$startup_config"
     sed -i -E 's|^(\s*)run\("mpvpaper |\1-- run("mpvpaper |' "$startup_config"
+    # And forget the video: left in place, the stale path made copy.sh see
+    # Startup_Apps.lua as changed and back hypr up on the next re-run.
+    # The whole line, comment included, exactly as the repo ships it - the video
+    # branch above drops the comment, and anything else still differs.
+    sed -i -E 's|^local livewallpaper = .*|local livewallpaper = ""  -- WallpaperSelect.sh rewrites this line for video wallpapers|' "$startup_config"
 
     echo "Configured for static wallpaper (image)."
   fi
@@ -315,7 +328,7 @@ main() {
   # so the NEXT login comes up with no wallpaper at all and stays that way until
   # the Lua is hand-edited or an image is picked again. Refuse before anything
   # is written, not after.
-  if [[ "$selected_file" =~ \.(mp4|mkv|mov|webm|MP4|MKV|MOV|WEBM)$ ]] \
+  if [[ "${selected_file,,}" =~ \.(mp4|mkv|mov|webm)$ ]] \
      && ! command -v mpvpaper &>/dev/null; then
     notify-send -i "$iDIR/error.png" "Video wallpaper unavailable" \
       "mpvpaper is not installed, so $(basename "$selected_file") cannot be used. Nothing was changed." 2>/dev/null
@@ -327,7 +340,7 @@ main() {
   modify_startup_config "$selected_file"
 
   # **CHECK FIRST** if it's a video or an image **before calling any function**
-  if [[ "$selected_file" =~ \.(mp4|mkv|mov|webm|MP4|MKV|MOV|WEBM)$ ]]; then
+  if [[ "${selected_file,,}" =~ \.(mp4|mkv|mov|webm)$ ]]; then
     apply_video_wallpaper "$selected_file"
   else
     apply_image_wallpaper "$selected_file"
