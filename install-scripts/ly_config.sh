@@ -98,7 +98,14 @@ ly_install 755 "$PARENT_DIR/assets/ly/start.sh" /etc/ly/start.sh
 # counts a missing NoExtract file as intended, not as damage.
 _uwsm_entry=/usr/share/wayland-sessions/hyprland-uwsm.desktop
 if pacman -Q uwsm &>/dev/null; then
-  echo "${NOTE} uwsm is installed, so ${_uwsm_entry##*/} works - leaving it in ly's session list." | tee -a "$LOG"
+  # Checked, not assumed: pacman.sh's NoExtract from a run before uwsm was
+  # installed keeps the file off disk, and a hyprland reinstall does not bring
+  # it back while that line is there.
+  if [ -e "$_uwsm_entry" ]; then
+    echo "${NOTE} uwsm is installed, so ${_uwsm_entry##*/} works - leaving it in ly's session list." | tee -a "$LOG"
+  else
+    echo "${WARN} uwsm is installed but ${_uwsm_entry} is not on disk, so ly has no uwsm session. If /etc/pacman.conf has NoExtract for it, delete that line, then: sudo pacman -S hyprland" | tee -a "$LOG"
+  fi
 else
   if [ -e "$_uwsm_entry" ]; then
     sudo rm -f "$_uwsm_entry" 2>&1 | tee -a "$LOG"
