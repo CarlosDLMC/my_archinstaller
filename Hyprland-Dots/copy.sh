@@ -350,11 +350,15 @@ for dir in "${config_dirs[@]}"; do
                 BACKUP_OF["$dir"]="$backup"
             else
                 echo "  ${ERROR} Could not back up existing $dir - skipping it rather than merging over it"
+                # The comparison copy (a full hypr tree, ~9 MB) was left in
+                # $TMPDIR on this path before.
+                if [ -n "$_cmp_tmp" ]; then
+                    rm -rf "$_cmp_tmp"
+                fi
                 continue
             fi
         fi
 
-        printf "  ${INFO} Copying $dir from $SCRIPT_DIR/config/$dir to $HOME/.config/\n"
         # Identical: copy the tree it was compared against (for hypr, the one
         # with this machine's state in it), so the templates never reset it.
         # Backed up: the plain repo copy - the state is restored from the backup
@@ -362,6 +366,9 @@ for dir in "${config_dirs[@]}"; do
         _copy_src="$SCRIPT_DIR/config/$dir"
         if [ "$_same" = yes ] && [ -n "$_cmp_tmp" ]; then
             _copy_src="$_cmp_tmp"
+            printf "  ${INFO} Copying $dir (repo copy with this machine's state kept) to $HOME/.config/\n"
+        else
+            printf "  ${INFO} Copying $dir from $SCRIPT_DIR/config/$dir to $HOME/.config/\n"
         fi
         mkdir -p "$HOME/.config/$dir"
         if cp -r "$_copy_src/." "$HOME/.config/$dir/" 2>&1; then
