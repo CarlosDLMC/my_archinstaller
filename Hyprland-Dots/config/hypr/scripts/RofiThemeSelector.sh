@@ -38,8 +38,10 @@ apply_rofi_theme_to_config() {
   temp_rofi_config_file=$(mktemp)
   cp "$ROFI_CONFIG_FILE" "$temp_rofi_config_file"
 
-  # Comment out any existing @theme entry
-  sed -i -E 's/^(\s*@theme)/\\/\\/\1/' "$temp_rofi_config_file"
+  # Comment out any existing @theme entry. | as the delimiter: the old
+  # 's/^(\s*@theme)/\\/\\/\1/' was not valid sed ("unknown option to `s'"), so
+  # no @theme line was ever commented out and every preview appended another.
+  sed -i -E 's|^(\s*@theme)|//\1|' "$temp_rofi_config_file"
 
   # Add the new @theme entry at the end of the file
   echo "@theme \"$theme_path_with_tilde\"" >>"$temp_rofi_config_file"
@@ -50,12 +52,18 @@ apply_rofi_theme_to_config() {
 
   # Prune old commented-out theme lines to prevent clutter
   local max_lines=10
-  local total_lines=$(grep -c '^//\s*@theme' "$ROFI_CONFIG_FILE")
+  local total_lines
+  total_lines=$(grep -c '^\s*//\s*@theme' "$ROFI_CONFIG_FILE")
   if [ "$total_lines" -gt "$max_lines" ]; then
-    local excess=$((total_lines - max_lines))
-    for ((i = 1; i <= excess; i++)); do
-      sed -i '0,/^\s*\/\/@theme/s///' "$ROFI_CONFIG_FILE"
-    done
+    # Delete the oldest WHOLE lines. The old 's///' removed only the "//@theme"
+    # text and left a bare "path" line behind - which rofi rejects as a config
+    # syntax error. (It never ran before, because the sed above never matched.)
+    local pruned
+    pruned=$(mktemp)
+    awk -v drop=$((total_lines - max_lines)) \
+      '/^[[:space:]]*\/\/[[:space:]]*@theme/ && drop > 0 { drop--; next } { print }' \
+      "$ROFI_CONFIG_FILE" >"$pruned" && cat "$pruned" >"$ROFI_CONFIG_FILE"
+    rm -f "$pruned"
   fi
 
   return 0
