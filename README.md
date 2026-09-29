@@ -110,7 +110,7 @@ first prompt.
 
 1. **Clone this repository:**
    ```bash
-   cd ~/Documents
+   mkdir -p ~/Documents && cd ~/Documents
    git clone https://github.com/CarlosDLMC/my_archinstaller.git
    cd my_archinstaller
    ```
@@ -1636,14 +1636,19 @@ chmod +x install.sh
 ## Verification
 
 `02-Final-Check.sh` is the post-install verification, and `install.sh` runs it
-for you at the end of every run. To re-run it by hand, with the same selection
-the shipped preset makes:
+for you at the end of every run. To re-run it by hand:
 
 ```bash
 cd ~/Documents/my_archinstaller
-INSTALL_SELECTED_OPTIONS="ly gtk_themes bluetooth thunar quickshell xdph zsh pokemon dots handy nopasswd_sudo printing docker plymouth limine herdr neovim hunk" \
-  ./install-scripts/02-Final-Check.sh
+./install-scripts/02-Final-Check.sh
 ```
+
+It checks the selection the last `install.sh` run saved in
+`Install-Logs/.selected-options`, with every `auto` option already resolved for this
+machine. A hardcoded list used to give false failures where `auto` had turned an
+option off (plymouth on plain Arch, bluetooth without a controller) and skipped the
+NVIDIA checks where it had turned one on. To check a different selection, set it
+yourself: `INSTALL_SELECTED_OPTIONS="ly dots ..." ./install-scripts/02-Final-Check.sh`.
 
 `verify-before-transfer.sh` is something else: it checks that the **repo** is
 complete before you copy or push it (every script and asset present), not that
