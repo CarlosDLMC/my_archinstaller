@@ -17,6 +17,39 @@ printf "\n${NOTE} Copying customized dotfiles to your home directory...\n\n"
 # One stamp for the whole run, so a single invocation's backups group together.
 BACKUP_STAMP="$(date +%Y%m%d-%H%M%S)"
 
+# A video wallpaper chosen in WallpaperSelect.sh lives in three lines of
+# hypr/configs/Startup_Apps.lua: livewallpaper, awww-daemon commented out,
+# mpvpaper live. Copy that choice from one Startup_Apps.lua to another with the
+# same seds WallpaperSelect.sh uses - never the whole file, which is the repo's
+# and should still update. Returns 1 when <from> holds no video choice.
+# ENVIRON, not awk -v: -v would unescape backslashes in the path.
+copy_video_wallpaper() { # from to
+    local _from="$1" _to="$2" _lw _t
+    [ -f "$_from" ] && [ -f "$_to" ] || return 1
+    grep -qE '^\s*run\("mpvpaper ' "$_from" || return 1
+    sed -i -E 's|^(\s*)run\("awww-daemon --format argb"\)|\1-- run("awww-daemon --format argb")|; s|^(\s*)--\s*run\("mpvpaper |\1run("mpvpaper |' "$_to"
+    _lw=$(grep -E '^local livewallpaper = ' "$_from" | head -n 1)
+    if [ -n "$_lw" ]; then
+        _t=$(mktemp)
+        LW="$_lw" awk '/^local livewallpaper = /{print ENVIRON["LW"]; next} {print}' "$_to" > "$_t" && cat "$_t" > "$_to"
+        rm -f "$_t"
+    fi
+    return 0
+}
+
+# Is <file> one of the animation presets Animations.sh copies in? Only then is
+# a UserAnimations.lua a CHOICE; an untouched copy of an older repo version is
+# not, and must not be kept over the updated one.
+is_animation_preset() { # file animations-dir
+    local _a
+    for _a in "$2"/*.lua; do
+        if [ -f "$_a" ] && cmp -s "$_a" "$1"; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Copy shell configuration files - backing up the existing ones like every config
 # directory below. ZshChangeTheme.sh edits ~/.zshrc in place and people add aliases;
 # a re-run used to discard that silently.
@@ -251,6 +284,29 @@ for dir in "${config_dirs[@]}"; do
             sed -i "s|\$HOME|$HOME|g" "$_cmp_tmp/bookmarks"
             _cmp_src="$_cmp_tmp"
         fi
+        # hypr likewise: compared against the repo copy with this machine's
+        # state already in it - the monitor layout, the lock screen's generated
+        # hyprlock-monitors.conf (rewritten at every login and lock), a chosen
+        # animation preset and a video wallpaper. Everything below restores
+        # those onto the fresh copy anyway, so without this the directory never
+        # matched again and every re-run backed it up (~9 MB). When it does
+        # match, the identical branch copies THIS tree, so nothing is reset.
+        if [ "$dir" = "hypr" ] && [ -d "$HOME/.config/hypr" ]; then
+            _live="$HOME/.config/hypr"
+            _cmp_tmp=$(mktemp -d)
+            cp -r "$_cmp_src/." "$_cmp_tmp/"
+            for _f in monitors.lua workspaces.lua hyprlock-monitors.conf; do
+                if [ -f "$_live/$_f" ]; then
+                    cp "$_live/$_f" "$_cmp_tmp/$_f"
+                fi
+            done
+            if [ -f "$_live/UserConfigs/UserAnimations.lua" ] \
+               && is_animation_preset "$_live/UserConfigs/UserAnimations.lua" "$_cmp_tmp/animations"; then
+                cp "$_live/UserConfigs/UserAnimations.lua" "$_cmp_tmp/UserConfigs/UserAnimations.lua"
+            fi
+            copy_video_wallpaper "$_live/configs/Startup_Apps.lua" "$_cmp_tmp/configs/Startup_Apps.lua" || true
+            _cmp_src="$_cmp_tmp"
+        fi
         # Runtime files this script seeds itself (all gitignored), left out of the
         # comparison: with them counted, hypr, quickshell, wallust, rofi and cava
         # were backed up on every re-run with no edits at all, ~12 MB each time.
@@ -276,9 +332,6 @@ for dir in "${config_dirs[@]}"; do
         if [ -d "$HOME/.config/$dir" ] && diff -rq "${_cmp_args[@]}" "$_cmp_src" "$HOME/.config/$dir" >/dev/null 2>&1; then
             _same=yes
         fi
-        if [ -n "$_cmp_tmp" ]; then
-            rm -rf "$_cmp_tmp"
-        fi
         if [ "$_same" = yes ]; then
             echo "  ${NOTE} Existing $dir is identical to the repo copy - no backup needed"
         elif [ -d "$HOME/.config/$dir" ]; then
@@ -302,11 +355,26 @@ for dir in "${config_dirs[@]}"; do
         fi
 
         printf "  ${INFO} Copying $dir from $SCRIPT_DIR/config/$dir to $HOME/.config/\n"
-        if cp -r "$SCRIPT_DIR/config/$dir" "$HOME/.config/" 2>&1; then
+        # Identical: copy the tree it was compared against (for hypr, the one
+        # with this machine's state in it), so the templates never reset it.
+        # Backed up: the plain repo copy - the state is restored from the backup
+        # further down.
+        _copy_src="$SCRIPT_DIR/config/$dir"
+        if [ "$_same" = yes ] && [ -n "$_cmp_tmp" ]; then
+            _copy_src="$_cmp_tmp"
+        fi
+        mkdir -p "$HOME/.config/$dir"
+        if cp -r "$_copy_src/." "$HOME/.config/$dir/" 2>&1; then
             echo "  ${OK} Copied $dir"
         else
             echo "  ${ERROR} Failed to copy $dir"
+            if [ -n "$_cmp_tmp" ]; then
+                rm -rf "$_cmp_tmp"
+            fi
             exit 1
+        fi
+        if [ -n "$_cmp_tmp" ]; then
+            rm -rf "$_cmp_tmp"
         fi
     else
         printf "  ${WARN} $dir not found in $SCRIPT_DIR/config/, skipping\n"
@@ -505,32 +573,25 @@ if [ -n "$_hypr_bak" ]; then
     # nwg-displays overwrites on Apply. Unlike the files above these DO exist in
     # the fresh copy (as the templates), so the backup has to win outright -
     # otherwise a re-run reset every monitor to the catch-all highres/auto rule.
-    # UserAnimations.lua is state too: Animations.sh copies the chosen preset
-    # over it, and a re-run reset it to the repo's with the choice left only in
-    # the backup.
-    for _state in monitors.lua workspaces.lua UserConfigs/UserAnimations.lua; do
+    for _state in monitors.lua workspaces.lua; do
         if [ -f "$_hypr_bak/$_state" ] && ! cmp -s "$_hypr_bak/$_state" "$HOME/.config/hypr/$_state"; then
             cp "$_hypr_bak/$_state" "$HOME/.config/hypr/$_state" && echo "  ${OK} Kept your $_state from the previous install"
         fi
     done
 
-    # A video wallpaper chosen in WallpaperSelect.sh lives in three lines of
-    # Startup_Apps.lua (livewallpaper, awww-daemon commented, mpvpaper live). The
-    # file itself is the repo's and should update on a re-run, so it is not
-    # restored whole - only those three edits are re-applied, the same seds
-    # WallpaperSelect.sh uses. Without this the next login showed a still image.
-    _sa="configs/Startup_Apps.lua"
-    if [ -f "$_hypr_bak/$_sa" ] && [ -f "$HOME/.config/hypr/$_sa" ] \
-       && grep -qE '^\s*run\("mpvpaper ' "$_hypr_bak/$_sa"; then
-        _lw=$(grep -E '^local livewallpaper = ' "$_hypr_bak/$_sa" | head -n 1)
-        sed -i -E 's|^(\s*)run\("awww-daemon --format argb"\)|\1-- run("awww-daemon --format argb")|; s|^(\s*)--\s*run\("mpvpaper |\1run("mpvpaper |' "$HOME/.config/hypr/$_sa"
-        if [ -n "$_lw" ]; then
-            _tmp_sa=$(mktemp)
-            awk -v lw="$_lw" '/^local livewallpaper = /{print lw; next} {print}' "$HOME/.config/hypr/$_sa" > "$_tmp_sa" \
-                && cat "$_tmp_sa" > "$HOME/.config/hypr/$_sa"
-            rm -f "$_tmp_sa"
-        fi
-        echo "  ${OK} Kept your video wallpaper (${_lw#local livewallpaper = }) from the previous install"
+    # UserAnimations.lua is state too - Animations.sh copies the chosen preset
+    # over it - but only when it IS one of the presets: an untouched copy of an
+    # older repo version is not a choice, and keeping it blocked repo updates.
+    _ua="UserConfigs/UserAnimations.lua"
+    if [ -f "$_hypr_bak/$_ua" ] && ! cmp -s "$_hypr_bak/$_ua" "$HOME/.config/hypr/$_ua" \
+       && is_animation_preset "$_hypr_bak/$_ua" "$HOME/.config/hypr/animations"; then
+        cp "$_hypr_bak/$_ua" "$HOME/.config/hypr/$_ua" && echo "  ${OK} Kept your animation preset ($_ua) from the previous install"
+    fi
+
+    # The video wallpaper: only its three lines, not the whole Startup_Apps.lua
+    # (see copy_video_wallpaper). Without this the next login showed a still image.
+    if copy_video_wallpaper "$_hypr_bak/configs/Startup_Apps.lua" "$HOME/.config/hypr/configs/Startup_Apps.lua"; then
+        echo "  ${OK} Kept your video wallpaper from the previous install"
     fi
 fi
 
