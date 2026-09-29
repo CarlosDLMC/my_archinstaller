@@ -66,6 +66,12 @@ for DIR1 in "${DIRS_TO_COPY[@]}"; do
   else
     echo -e "${NOTE} Config for ${YELLOW}$DIR1${RESET} not found, copying from the dotfiles." 2>&1 | tee -a "$LOG"
     cp -r "Hyprland-Dots/config/$DIR1" ~/.config/ && echo "${OK} Copy $DIR1 completed!" || echo "${ERROR} Failed to copy $DIR1 config files." 2>&1 | tee -a "$LOG"
+    # The tracked bookmarks say file://$HOME/...; copy.sh expands that, but
+    # copy.sh only runs with dots. Copied raw, $HOME parses as a URI host and
+    # every sidebar bookmark was dead.
+    if [ "$DIR1" = "gtk-3.0" ] && [ -f "$DIRPATH/bookmarks" ]; then
+      sed -i "s|\$HOME|$HOME|g" "$DIRPATH/bookmarks" || echo "${WARN} Could not expand \$HOME in $DIRPATH/bookmarks." 2>&1 | tee -a "$LOG"
+    fi
   fi
 done
 
