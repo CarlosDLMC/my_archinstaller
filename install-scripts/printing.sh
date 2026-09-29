@@ -106,5 +106,5 @@ printf "\n${NOTE} ${SKY_BLUE}CUPS${RESET} installed. Add your printer with ${MAG
 printf "${NOTE} (Administration -> Add Printer). If that page is refused, cupsd is not running yet -\n"
 printf "${NOTE} port 631 does not start it; ${MAGENTA}sudo systemctl start cups${RESET} does.\n"
 printf "${NOTE} A network IPP printer is normally discovered automatically -\n"
-printf "${NOTE} avahi and nss-mdns are already wired up by services.sh.\n"
+printf "${NOTE} avahi and nss-mdns (network printer discovery) are wired up by services.sh at the end of the run.\n"
 printf "\n%.0s" {1..2}
