@@ -41,11 +41,17 @@ python3 "$HOME/.config/hypr/scripts/SovietLockGen.py" >>"$LOG" 2>&1
 _gen_rc=$?
 echo "  generator rc=$_gen_rc" >>"$LOG" 2>&1
 
-# If the generator failed, the shipped hyprlock-monitors.conf may name outputs this
-# machine does not have (a black lock screen with no clock or input field). Blank the
-# monitor selectors so every widget block applies to whatever monitor is present.
-if [ "$_gen_rc" -ne 0 ] && [ -f "$HOME/.config/hypr/hyprlock-monitors.conf" ]; then
-    sed -i -E 's/^([[:space:]]*monitor[[:space:]]*=).*/\1/' "$HOME/.config/hypr/hyprlock-monitors.conf"
+# If the generator failed, the hyprlock-monitors.conf in place may name outputs this
+# machine does not have (a black lock screen with no clock or input field). Keep only
+# the FIRST monitor's block ("# ══ <name>" starts each one), then blank its monitor
+# selectors so it applies to whatever monitor is present. Blanking every block of a
+# multi-monitor file drew each monitor's clock and input field on every screen, on
+# top of each other.
+_lock_conf="$HOME/.config/hypr/hyprlock-monitors.conf"
+if [ "$_gen_rc" -ne 0 ] && [ -f "$_lock_conf" ]; then
+    awk '/^# ══ /{ n++ } n <= 1' "$_lock_conf" \
+        | sed -E 's/^([[:space:]]*monitor[[:space:]]*=).*/\1/' >"$_lock_conf.tmp" \
+        && mv "$_lock_conf.tmp" "$_lock_conf"
 fi
 
 echo "--- hyprlock ---" >>"$LOG" 2>&1
