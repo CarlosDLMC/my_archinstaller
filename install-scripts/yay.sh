@@ -77,15 +77,52 @@ else
 
   # Subshell, so a failed cd cannot leave the rest of the script running from
   # the wrong directory.
+  #
+  # Built with -s, installed separately: `makepkg -si` hands the package to
+  # `pacman -U --noconfirm`, and when a broken helper of the same family is
+  # installed (yay, yay-git - the libalpm soname case this script now rebuilds for) pacman
+  # asks "Remove it? [y/N]" and --noconfirm takes the N. The build finished and
+  # the install failed every time. The conflicting package is removed only
+  # after the build succeeded, so a failed build never leaves less than before.
   (
     cd "$BUILD_DIR" || exit 1
-    makepkg -si --noconfirm 2>&1
+    makepkg -s --noconfirm 2>&1
   ) | tee -a "$LOG"
 
   # tee is last in the pipeline, so ${PIPESTATUS[0]} is makepkg's status, not
   # tee's. Checking $? here would report success on every failed build.
   if [ "${PIPESTATUS[0]}" -ne 0 ]; then
-    printf "%s - Failed to build and install ${YELLOW}$pkg${RESET}\n" "${ERROR}"
+    printf "%s - Failed to build ${YELLOW}$pkg${RESET}\n" "${ERROR}"
+    exit 1
+  fi
+
+  # --packagelist, not a glob: makepkg.conf may set PKGDEST elsewhere.
+  _built=()
+  while IFS= read -r _p; do
+    case "${_p##*/}" in *-debug-*) continue ;; esac
+    if [ -f "$_p" ]; then
+      _built+=("$_p")
+    fi
+  done < <(cd "$BUILD_DIR" && makepkg --packagelist 2>/dev/null)
+  if [ ${#_built[@]} -eq 0 ]; then
+    printf "%s - Built ${YELLOW}$pkg${RESET}, but found no package file to install\n" "${ERROR}"
+    exit 1
+  fi
+  _conflicting=()
+  for _c in yay yay-git; do
+    # Exact name: pacman -Q also answers for a package that merely provides
+    # it (`pacman -Q yay` prints yay-bin).
+    if [ "$(pacman -Qq "$_c" 2>/dev/null)" = "$_c" ]; then
+      _conflicting+=("$_c")
+    fi
+  done
+  if [ ${#_conflicting[@]} -gt 0 ]; then
+    printf "%s - Removing ${YELLOW}${_conflicting[*]}${RESET}, which conflicts with $pkg\n" "${NOTE}" | tee -a "$LOG"
+    sudo pacman -Rdd --noconfirm "${_conflicting[@]}" 2>&1 | tee -a "$LOG"
+  fi
+  sudo pacman -U --noconfirm "${_built[@]}" 2>&1 | tee -a "$LOG"
+  if [ "${PIPESTATUS[0]}" -ne 0 ]; then
+    printf "%s - Failed to install ${YELLOW}$pkg${RESET}\n" "${ERROR}"
     exit 1
   fi
 
