@@ -61,20 +61,6 @@ fi
 # Set the name of the log file to include the current date and time
 LOG="Install-Logs/01-Hyprland-Install-Scripts-$(date +%Y%m%d-%H%M%S).log"
 
-# Reset the failed-package manifest that Global_functions.sh appends to and
-# 02-Final-Check.sh reads. Truncated per run so a failure from a previous
-# install is never reported against this one - the path must stay in step with
-# FAILED_PACKAGES_MANIFEST in install-scripts/Global_functions.sh.
-#
-# Below the root check on purpose: run as root this would leave a root-owned
-# file that every later non-root run then fails to truncate.
-: > "Install-Logs/.failed-packages"
-# Same treatment for the checksum-failure manifest, for the same reason: a
-# stale tarball from a previous run must not be reported against this one.
-: > "Install-Logs/.checksum-failures"
-# And for failed initramfs rebuilds (INITRAMFS_FAILED_MANIFEST).
-: > "Install-Logs/.initramfs-failures"
-
 # Authenticate sudo once, first thing, and keep the timestamp alive for the whole
 # run. This used to happen halfway down, after hardware detection - but the
 # base-devel, libnewt and pciutils installs below it already call sudo, so on a
@@ -785,6 +771,25 @@ export INSTALL_SELECTED_OPTIONS="$selected_options"
 # README used to give false failures or skip checks.
 printf '%s\n' "$selected_options" > Install-Logs/.selected-options 2>/dev/null || true
 
+# Reset the failed-package manifest that Global_functions.sh appends to and
+# 02-Final-Check.sh reads. Truncated per run so a failure from a previous
+# install is never reported against this one - the path must stay in step with
+# FAILED_PACKAGES_MANIFEST in install-scripts/Global_functions.sh.
+#
+# HERE, next to .selected-options, not at the top: a run that stopped before
+# this point (sudo refused, PulseAudio found, a cancelled menu) used to empty
+# these lists while the previous run's selection stayed - and a final check run
+# by hand then paired the old selection with no failures, passing a machine
+# whose last real run had failed. Nothing before this point records into them.
+# Still below the root check: run as root this would leave a root-owned file
+# that every later non-root run then fails to truncate.
+: > "Install-Logs/.failed-packages"
+# Same treatment for the checksum-failure manifest, for the same reason: a
+# stale tarball from a previous run must not be reported against this one.
+: > "Install-Logs/.checksum-failures"
+# And for failed initramfs rebuilds (INITRAMFS_FAILED_MANIFEST).
+: > "Install-Logs/.initramfs-failures"
+
 # Sudo, once, up front - and then never again for the rest of the run.
 #
 # Every install_* function runs `sudo pacman`/`yay` in the background with its
@@ -1175,6 +1180,9 @@ if pacman -Q hyprland &> /dev/null || pacman -Q hyprland-git &> /dev/null; then
     if [ "$asus_dgpu_off" == "true" ]; then
         echo "${WARN} Reminder: the ASUS dGPU was switched off (Eco mode), so no NVIDIA driver was installed for it."
         echo "${NOTE} Switch to Hybrid (${MAGENTA}supergfxctl -m Hybrid${RESET}), reboot, then run ${MAGENTA}install-scripts/nvidia.sh${RESET}."
+        # The saved selection has no nvidia in it, so a plain re-check would skip
+        # exactly the checks that matter after that.
+        echo "${NOTE} Then verify it with nvidia in the selection: ${MAGENTA}INSTALL_SELECTED_OPTIONS=\"\$(cat Install-Logs/.selected-options) nvidia\" ./install-scripts/02-Final-Check.sh${RESET}"
         printf "\n%.0s" {1..1}
     fi
 
