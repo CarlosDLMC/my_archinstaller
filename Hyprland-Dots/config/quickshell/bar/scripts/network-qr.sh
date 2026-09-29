@@ -50,9 +50,12 @@ wep_key=${fields[4]:-}
 [[ $key_management != *eap* && $key_management != *ieee8021x* ]] \
   || fail "Enterprise Wi-Fi cannot be shared by password QR"
 
+# The WIFI: QR format escapes \ ; , " and : with a backslash. ${v//;/\;} left
+# the ; bare (in a replacement \; is just ;), so a name or password with a ; in
+# it gave a QR the phone could not join; " was not escaped at all.
 escape_wifi_qr() {
   local v=$1
-  v=${v//\\/\\\\}; v=${v//;/\;}; v=${v//,/\\,}; v=${v//:/\\:}
+  v=${v//\\/\\\\}; v=${v//;/'\;'}; v=${v//,/\\,}; v=${v//:/\\:}; v=${v//\"/\\\"}
   printf '%s' "$v"
 }
 
