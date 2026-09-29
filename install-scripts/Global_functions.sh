@@ -49,8 +49,9 @@ fi
 # rather than the short hardcoded list it used to be limited to.
 #
 # The path is relative to the repo root, which every install script cd's into
-# before sourcing this file. install.sh truncates it at the start of each run,
-# so a failure from a previous install is never reported against this one.
+# before sourcing this file. install.sh truncates it once a run's selection is
+# made (next to Install-Logs/.selected-options), so a failure from a previous
+# install is never reported against this one.
 FAILED_PACKAGES_MANIFEST="Install-Logs/.failed-packages"
 
 record_package_failure() {

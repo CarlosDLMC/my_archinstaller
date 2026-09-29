@@ -128,6 +128,15 @@ sel=" ${INSTALL_SELECTED_OPTIONS:-} "
 
 selected() { [[ "$sel" == *" $1 "* ]]; }
 
+# install.sh removes this marker right before it runs this check, so it is only
+# here when the last run stopped part-way (a failed pacman.sh or locales.sh, the
+# AUR helper build, Ctrl-C) or is still running. Its failure lists then cover
+# only part of the run, and passing on them would say an unfinished install is
+# fine.
+if [ -f Install-Logs/.run-in-progress ]; then
+    outcome_failures+=("the last install.sh run (started $(cat Install-Logs/.run-in-progress 2>/dev/null)) did not finish, so its failure lists are incomplete - see its log in Install-Logs/ and re-run ./install.sh")
+fi
+
 # check_outcome <what failed> <command...>
 check_outcome() {
     local what="$1"; shift

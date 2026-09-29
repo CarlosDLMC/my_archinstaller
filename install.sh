@@ -789,6 +789,12 @@ printf '%s\n' "$selected_options" > Install-Logs/.selected-options 2>/dev/null |
 : > "Install-Logs/.checksum-failures"
 # And for failed initramfs rebuilds (INITRAMFS_FAILED_MANIFEST).
 : > "Install-Logs/.initramfs-failures"
+# Until this run reaches its final check, the lists above hold only part of it:
+# pacman.sh, locales.sh or the AUR helper build can still stop the whole run
+# (run_required), and a final check run by hand then paired this selection with
+# near-empty lists and passed. The marker says so; it is removed right before
+# the final check below, and 02-Final-Check.sh reports it when it is still here.
+date '+%F %T' > Install-Logs/.run-in-progress 2>/dev/null || true
 
 # Sudo, once, up front - and then never again for the rest of the run.
 #
@@ -1149,6 +1155,8 @@ printf "\n%.0s" {1..2}
 # zsh the login shell, the locales generated, ...). Its exit code gates the
 # preset auto-reboot below: an incomplete install must not reboot out from
 # under you with the warning scrolled off the screen.
+# Every step has run, so the failure lists are complete for this run.
+rm -f Install-Logs/.run-in-progress
 if execute_script "02-Final-Check.sh"; then
     install_complete="true"
 else
