@@ -6,7 +6,8 @@
 # assets/limine/theme.conf to limine.conf, then sets `timeout: no` so the menu waits
 # for a choice instead of booting the default after a countdown.
 #
-# THIS IS THE ONE PLACE THE REPO WRITES TO A BOOTLOADER CONFIG, and it was added
+# THIS IS ONE OF THE TWO PLACES THE REPO WRITES TO A BOOTLOADER CONFIG (plymouth.sh,
+# which adds `splash` to the kernel command line, is the other), and it was added
 # knowingly (2026-09-13) after the rest of the repo went out of its way not to. The
 # blast radius is kept small:
 #   - only when limine.conf already exists (preset "auto" = Limine detected);

@@ -411,6 +411,14 @@ fi
 if selected plymouth; then
     check_outcome "plymouth default theme is not 'soviet' (install-scripts/plymouth.sh)" \
         bash -c '[ "$(plymouth-set-default-theme 2>/dev/null)" = soviet ]'
+    # plymouth.sh puts the hook in where the distro did not (a drop-in in
+    # /etc/mkinitcpio.conf.d). Without it the image never starts plymouth and
+    # the theme is never drawn. A missing `splash` comes through the failed
+    # list instead, as "plymouth-splash".
+    if command -v mkinitcpio &>/dev/null; then
+        check_outcome "plymouth is not in the mkinitcpio HOOKS - the splash never starts (install-scripts/plymouth.sh)" \
+            mkinitcpio_has_hook plymouth
+    fi
 fi
 
 if selected limine; then
@@ -479,12 +487,13 @@ fi
 if [ ${#missing[@]} -ne 0 ]; then
     echo "${WARN} The following packages are NOT installed and will be logged:"
     for pkg in "${missing[@]}"; do
-        # These four are recorded by their scripts, not by pacman, so yay -S
-        # cannot fix them - name the script instead.
+        # These are recorded by their scripts, not by pacman, so yay -S
+        # cannot fix them - say what does instead.
         case "$pkg" in
             herdr | hunk)     _hint=" (not a package - re-run install-scripts/$pkg.sh)" ;;
             lazyvim)          _hint=" (not a package - re-run install-scripts/neovim.sh)" ;;
             plymouth-theme-*) _hint=" (not a package - re-run install-scripts/plymouth.sh)" ;;
+            plymouth-splash)  _hint=" (not a package - 'splash' is not on the kernel command line; the plymouth log in Install-Logs/ says where to add it)" ;;
             *)                _hint="" ;;
         esac
         echo "${WARNING}$pkg${RESET}$_hint"

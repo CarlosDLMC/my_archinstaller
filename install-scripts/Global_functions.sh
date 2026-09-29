@@ -60,7 +60,8 @@ record_package_failure() {
 
 # Take a name back out of the list once the thing it stands for is in place.
 # 02-Final-Check.sh re-verifies every entry with pacman, so for a name that is
-# not a pacman package - herdr, hunk, lazyvim, plymouth-theme-soviet - only
+# not a pacman package - herdr, hunk, lazyvim, plymouth-theme-soviet,
+# plymouth-splash - only
 # this clears it: a successful re-run of the script that recorded it used to
 # leave it reported as missing for good.
 clear_package_failure() {
