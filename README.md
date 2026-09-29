@@ -962,7 +962,8 @@ those three commands — the VPN widget is the only thing here that depends on i
 - `SUPER + Return` - Open terminal (foot)
 - `SUPER + Q` - Close active window
 - `SUPER + SHIFT + Q` - Terminate active process
-- `SUPER + M` - Exit Hyprland
+- `CTRL + ALT + Delete` - Exit Hyprland
+- `SUPER + M` - Split ratio 0.3 (the focused split on dwindle, the master width on master)
 - `SUPER + SPACE` - Switch keyboard layout (US → ES → RU)
 - `SUPER + SHIFT + SPACE` - Float current window
 - `SUPER + CTRL + ALT + B` - Toggle quickshell bar
