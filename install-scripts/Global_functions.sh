@@ -485,15 +485,21 @@ rebuild_initramfs() {
   out=$(mktemp)
   sudo "${gen[@]}" 2>&1 | tee -a "$log" "$out"
   rc=${PIPESTATUS[0]}
-  # limine-mkinitcpio exits 0 even when a kernel's image was NOT built: its
-  # limine-mkinitcpio-install prints "ERROR: mkinitcpio failed for kernel X,
-  # skipping." and swallows the failure (process_regular_kernel || return 0,
-  # process_kernel || true), and never checks the ESP copy at all. Its errors
-  # are the only trace, so an "ERROR:" line at the start of one (colour codes
-  # stripped) counts as a failure too. mkinitcpio's own "==> ERROR:" lines are
-  # not matched - mkinitcpio already reports those through its exit status.
+  # limine-mkinitcpio exits 0 even when a kernel's image was NOT built or NOT
+  # copied to the ESP, so its messages are the only trace:
+  #  - limine-mkinitcpio-install prints "ERROR: mkinitcpio failed for kernel X,
+  #    skipping." and swallows it (process_regular_kernel || return 0,
+  #    process_kernel || true);
+  #  - it then copies the image with limine-entry-tool --add-kernel and never
+  #    checks the result. That tool catches its own I/O errors and prints them
+  #    WITHOUT the ERROR: prefix - "Failed to copy: <src> -> <dst> (No space
+  #    left on device)" on a full ESP - and still exits 0.
+  # So any of those, at the start of a line once colour codes are stripped,
+  # counts as a failure. mkinitcpio's own "==> ERROR:" lines are not matched -
+  # mkinitcpio already reports those through its exit status.
   if [ "$rc" -eq 0 ] && [ "${gen[0]}" = limine-mkinitcpio ] \
-     && sed 's/\x1b\[[0-9;]*m//g' "$out" | grep -q '^ERROR: '; then
+     && sed 's/\x1b\[[0-9;]*m//g' "$out" \
+        | grep -qE '^(ERROR: |Failed to (copy|write|move|create directory):|Command failed:)'; then
     rc=1
   fi
   rm -f "$out"
