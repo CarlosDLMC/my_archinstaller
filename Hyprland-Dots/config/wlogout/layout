@@ -30,7 +30,7 @@
 }
 {
     "label" : "hibernate",
-    "action" : "systemctl hibernate",
+    "action" : "systemctl hibernate || notify-send -u normal 'Hibernate unavailable' 'This machine has no disk swap with resume= set up, so it cannot hibernate'",
     "text" : "Hibernate",
     "keybind" : "h"
 }
