@@ -58,11 +58,25 @@ Singleton {
         updateAll();
     }
 
+    // Only while the overview is open, plus one full refresh the moment it
+    // opens. Every Hyprland event used to spawn 4-5 hyprctl processes here all
+    // session long - once the overview had been opened a single time, it kept
+    // polling in the background for nothing.
     Connections {
         target: Hyprland
 
         function onRawEvent(event) {
-            updateAll()
+            if (GlobalStates.overviewOpen)
+                root.updateAll()
+        }
+    }
+
+    Connections {
+        target: GlobalStates
+
+        function onOverviewOpenChanged() {
+            if (GlobalStates.overviewOpen)
+                root.updateAll()
         }
     }
 
