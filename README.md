@@ -920,9 +920,12 @@ rm ~/wireguard-configs.tar.gz.gpg
 the first without a password prompt, the second printing `active`:
 
 ```bash
-sudo -n true && echo "passwordless sudo OK"
+sudo -k; sudo -n true && echo "passwordless sudo OK"
 systemctl is-active systemd-resolved
 ```
+
+`sudo -k` first: without it, a `sudo` you ran in the last few minutes leaves a
+cached timestamp and `sudo -n true` succeeds even with no passwordless rule.
 
 If `sudo` prompts, run `install-scripts/sudoers_nopasswd.sh` (see below). If
 resolved is inactive, `sudo systemctl enable --now systemd-resolved` — every
@@ -1473,8 +1476,10 @@ The third source is the **outcome checks**: for each component the preset
 selected, the script verifies the result rather than the package — the
 dotfiles are actually in `~/.config`, `ly@tty2.service` is enabled and
 `/etc/ly/config.ini` matches the repo, zsh is your login shell, the
-`ru_RU.UTF-8` locale is generated, `systemd-resolved` is enabled, `sudo -n`
-works, the icon and cursor themes are extracted. Each failure names the script
+`ru_RU.UTF-8` locale is generated, `systemd-resolved` is enabled, the
+passwordless sudo rule is in place (`sudo -n -l` lists `NOPASSWD: ALL` - a bare
+`sudo -n true` also passes on a cached timestamp), the icon and cursor themes are
+extracted. Each failure names the script
 to re-run. These exist because the failures that hurt most were never
 packages: a `copy.sh` that died left vanilla Hyprland with every package
 "installed", and a `locales.sh` that was killed before it ran left the clock in
@@ -1649,6 +1654,11 @@ machine. A hardcoded list used to give false failures where `auto` had turned an
 option off (plymouth on plain Arch, bluetooth without a controller) and skipped the
 NVIDIA checks where it had turned one on. To check a different selection, set it
 yourself: `INSTALL_SELECTED_OPTIONS="ly dots ..." ./install-scripts/02-Final-Check.sh`.
+
+Do that too after running one install script by hand for something the last run
+did not select - `install-scripts/nvidia.sh` after switching an ASUS laptop out of
+Eco mode, say. The saved selection does not know about it, so the NVIDIA module
+checks would be skipped: add `nvidia` to the list you pass.
 
 `verify-before-transfer.sh` is something else: it checks that the **repo** is
 complete before you copy or push it (every script and asset present), not that
