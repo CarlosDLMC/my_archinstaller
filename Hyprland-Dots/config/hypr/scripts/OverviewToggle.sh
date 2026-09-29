@@ -10,13 +10,21 @@ if pgrep -f "qs -c overview" >/dev/null 2>&1; then
   fi
 fi
 
-# If QS isn't running, but the CLI exists, try starting it and retry once
+# Not answering yet: start it if it is not running, then retry for up to ~3 s.
+# A freshly started overview takes a moment before its IPC answers, and one try
+# after a fixed 0.6 s often came too early - the first SUPER+A of a session fell
+# through to "Neither Quickshell nor AGS is available". It also used to start a
+# second instance when the first was running but slow to answer.
 if command -v qs >/dev/null 2>&1; then
-  qs -c overview >/dev/null 2>&1 &
-  sleep 0.6
-  if qs ipc -c overview call overview toggle >/dev/null 2>&1; then
-    exit 0
+  if ! pgrep -f "qs -c overview" >/dev/null 2>&1; then
+    qs -c overview >/dev/null 2>&1 &
   fi
+  for _ in $(seq 1 15); do
+    sleep 0.2
+    if qs ipc -c overview call overview toggle >/dev/null 2>&1; then
+      exit 0
+    fi
+  done
 fi
 
 # 2) Fall back to AGS template
