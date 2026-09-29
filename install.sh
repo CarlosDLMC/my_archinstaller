@@ -1205,6 +1205,7 @@ if pacman -Q hyprland &> /dev/null || pacman -Q hyprland-git &> /dev/null; then
         echo "${CAT} Fix what is listed above, then reboot with ${MAGENTA}systemctl reboot${RESET}."
         echo "${NOTE} Most package failures are AUR builds. Retry one with:"
         echo "        ${MAGENTA}yay -S <package>${RESET}"
+        echo "${NOTE} herdr, hunk, lazyvim and plymouth-theme-* are not packages - the list above names the script to re-run."
         echo "${NOTE} A failed component can be retried with its script, e.g. ${MAGENTA}install-scripts/dotfiles-main.sh${RESET}"
         echo "${NOTE} The full list is in ${MAGENTA}Install-Logs/00_CHECK-*_installed.log${RESET}"
         printf "\n%.0s" {1..2}

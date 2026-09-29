@@ -117,6 +117,9 @@ if [ "$_cp_theme" -ne 0 ] || [ "$_cp_mark" -ne 0 ]; then
   record_package_failure "plymouth-theme-$THEME"
   exit 1
 fi
+# The theme files are in place: take back a failure an earlier run recorded
+# (not a pacman package, so the final check cannot re-verify it itself).
+clear_package_failure "plymouth-theme-$THEME"
 sudo find "$SPINNER_DIR" -maxdepth 1 -name '*.png' ! -name 'watermark.png' \
   -exec cp -n {} "$DEST_DIR/" \; 2>&1 | tee -a "$LOG"
 sudo chmod 644 "$DEST_DIR"/* 2>&1 | tee -a "$LOG"

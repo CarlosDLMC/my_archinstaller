@@ -58,6 +58,21 @@ record_package_failure() {
   echo "$1" >> "$FAILED_PACKAGES_MANIFEST"
 }
 
+# Take a name back out of the list once the thing it stands for is in place.
+# 02-Final-Check.sh re-verifies every entry with pacman, so for a name that is
+# not a pacman package - herdr, hunk, lazyvim, plymouth-theme-soviet - only
+# this clears it: a successful re-run of the script that recorded it used to
+# leave it reported as missing for good.
+clear_package_failure() {
+  local _t
+  [ -f "$FAILED_PACKAGES_MANIFEST" ] || return 0
+  _t=$(mktemp) || return 0
+  grep -vxF -- "$1" "$FAILED_PACKAGES_MANIFEST" > "$_t" || true
+  cat "$_t" > "$FAILED_PACKAGES_MANIFEST"
+  rm -f "$_t"
+  return 0
+}
+
 # Packages that failed makepkg's source integrity check rather than failing to
 # build. Kept apart from the manifest above because the two need different
 # advice: a build failure is usually a missing dependency or a compiler error,
@@ -525,6 +540,10 @@ rebuild_initramfs() {
     echo "$(basename "$0")" >> "$INITRAMFS_FAILED_MANIFEST"
     return 1
   fi
+  # A rebuild regenerates every image, so a success supersedes every failure
+  # recorded before it - in this run or an earlier one. Without this, a failed
+  # rebuild stayed "failed" through every later successful re-run.
+  : > "$INITRAMFS_FAILED_MANIFEST"
 }
 
 # Function for removing packages

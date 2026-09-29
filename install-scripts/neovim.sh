@@ -141,6 +141,11 @@ if [ ! -d "$NVIM_CFG" ]; then
     exit 0
   fi
 fi
+# The config is in place: take back a "lazyvim" an earlier failed run recorded
+# (not a pacman package, so the final check cannot re-verify it itself).
+if [ -f "$NVIM_CFG/lua/config/lazy.lua" ]; then
+  clear_package_failure "lazyvim"
+fi
 
 # ------------------------------------------------------------------- the theme
 # The PyCharm-matched colorscheme, so a fresh machine looks like this one rather

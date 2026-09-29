@@ -195,7 +195,7 @@ fi
 # A failed initramfs rebuild boots the previous image: no NVIDIA modules, no
 # nouveau blacklist, no new plymouth theme. Nothing else here can see that.
 if [ -s "$INITRAMFS_FAILED_MANIFEST" ]; then
-    outcome_failures+=("initramfs rebuild failed in: $(sort -u "$INITRAMFS_FAILED_MANIFEST" | tr '\n' ' ')- fix the error in Install-Logs/ and rebuild it (sudo limine-mkinitcpio on CachyOS+Limine, else sudo mkinitcpio -P)")
+    outcome_failures+=("initramfs rebuild failed in: $(sort -u "$INITRAMFS_FAILED_MANIFEST" | tr '\n' ' ')- fix the error in Install-Logs/, then re-run that script: a successful rebuild clears this. By hand works too (sudo limine-mkinitcpio on CachyOS+Limine, else sudo mkinitcpio -P), then empty Install-Logs/.initramfs-failures")
 fi
 
 if selected dots; then
@@ -465,8 +465,16 @@ fi
 if [ ${#missing[@]} -ne 0 ]; then
     echo "${WARN} The following packages are NOT installed and will be logged:"
     for pkg in "${missing[@]}"; do
-        echo "${WARNING}$pkg${RESET}"
-        echo "$pkg" >> "$LOG"
+        # These four are recorded by their scripts, not by pacman, so yay -S
+        # cannot fix them - name the script instead.
+        case "$pkg" in
+            herdr | hunk)     _hint=" (not a package - re-run install-scripts/$pkg.sh)" ;;
+            lazyvim)          _hint=" (not a package - re-run install-scripts/neovim.sh)" ;;
+            plymouth-theme-*) _hint=" (not a package - re-run install-scripts/plymouth.sh)" ;;
+            *)                _hint="" ;;
+        esac
+        echo "${WARNING}$pkg${RESET}$_hint"
+        echo "$pkg$_hint" >> "$LOG"
     done
 fi
 
