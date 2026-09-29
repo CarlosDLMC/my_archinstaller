@@ -142,14 +142,19 @@ build_menu() {
       cache_gif_image="$HOME/.cache/gif_preview/${pic_name}.png"
       if [[ ! -f "$cache_gif_image" ]]; then
         mkdir -p "$HOME/.cache/gif_preview"
-        magick "$pic_path[0]" -resize 1920x1080 "$cache_gif_image" </dev/null
+        # % doubled: magick reads %d in a file name as a frame number, so "anim
+        # %d.gif" was opened as "anim 0.gif" and never got a preview.
+        magick "${pic_path//\%/%%}[0]" -resize 1920x1080 "${cache_gif_image//\%/%%}" </dev/null
       fi
       add_menu_entry file "$pic_path" "$pic_name" "$cache_gif_image"
     elif [[ "${pic_name,,}" =~ \.(mp4|mkv|mov|webm)$ ]]; then
       cache_preview_image="$HOME/.cache/video_preview/${pic_name}.png"
       if [[ ! -f "$cache_preview_image" ]]; then
         mkdir -p "$HOME/.cache/video_preview"
-        ffmpeg -nostdin -v error -y -i "$pic_path" -ss 00:00:01.000 -vframes 1 "$cache_preview_image" </dev/null
+        # -update 1: one image, not a numbered sequence - without it an output
+        # name with %d in it ("only %d.mp4.png") was written as "only 1.mp4.png",
+        # so the cache never matched and the preview was redone every time.
+        ffmpeg -nostdin -v error -y -i "$pic_path" -ss 00:00:01.000 -vframes 1 -update 1 "$cache_preview_image" </dev/null
       fi
       add_menu_entry file "$pic_path" "$pic_name" "$cache_preview_image"
     else
