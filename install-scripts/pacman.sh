@@ -92,6 +92,11 @@ fi
 uwsm_entry="usr/share/wayland-sessions/hyprland-uwsm.desktop"
 if pacman -Q uwsm &>/dev/null; then
     echo -e "${CAT} uwsm is installed - not adding NoExtract for ${MAGENTA}${uwsm_entry##*/}${RESET}. ${RESET}" 2>&1 | tee -a "$LOG"
+    # An earlier run (before uwsm was installed) added the line, and it is never
+    # taken out by itself: it keeps the uwsm session off disk for good.
+    if grep -qE "^[[:space:]]*NoExtract[[:space:]]*=.*${uwsm_entry//./\\.}" "$pacman_conf"; then
+        echo "${WARN} $pacman_conf still has NoExtract for ${uwsm_entry##*/} from an earlier run. Delete that line, then: sudo pacman -S hyprland" 2>&1 | tee -a "$LOG"
+    fi
 elif grep -qE "^[[:space:]]*NoExtract[[:space:]]*=.*${uwsm_entry//./\\.}" "$pacman_conf"; then
     echo -e "${CAT} NoExtract for ${MAGENTA}${uwsm_entry##*/}${RESET} is already set. ${RESET}" 2>&1 | tee -a "$LOG"
 else
