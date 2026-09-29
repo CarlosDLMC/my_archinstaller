@@ -497,7 +497,7 @@ existed — which is exactly the kind of gap a fresh install exposes. Check with
 
 ```bash
 resolvectl status | head -5     # should list a DNS server per link
-readlink /etc/resolv.conf       # ../run/systemd/resolve/stub-resolv.conf
+readlink /etc/resolv.conf       # /run/systemd/resolve/stub-resolv.conf
 ```
 
 ### Power profiles
@@ -717,6 +717,9 @@ sudo cp assets/limine/limine-wallpaper.png /boot/limine-wallpaper.png   # /boot 
 sudo cp /boot/limine.conf /boot/limine.conf.pre-theme
 cat assets/limine/theme.conf <(sudo cat /boot/limine.conf) | sudo tee /boot/limine.conf.new >/dev/null && sudo mv /boot/limine.conf.new /boot/limine.conf
 sudo sed -i 's/^timeout: .*/timeout: no/' /boot/limine.conf
+# Enrolled config (ENABLE_ENROLL_LIMINE_CONFIG=yes in /etc/default/limine)? Then
+# the new hash must be enrolled, or Limine refuses the edited file at boot:
+grep -qE '^\s*ENABLE_ENROLL_LIMINE_CONFIG\s*=\s*"?yes' /etc/default/limine 2>/dev/null && sudo limine-enroll-config
 ```
 
 `limine-entry-tool` only rewrites the kernel entries under the CachyOS heading, so
@@ -1602,7 +1605,7 @@ If dotfiles weren't copied:
 ```bash
 cd ~/Documents/my_archinstaller/Hyprland-Dots
 ./copy.sh
-hyprctl dispatch exit  # Restart Hyprland
+hyprctl dispatch 'hl.dsp.exit()'  # Restart Hyprland (the Lua form - plain 'dispatch exit' no longer exists)
 ```
 
 ### Check Installation Logs
