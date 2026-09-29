@@ -392,7 +392,9 @@ DropdownWidget {
                 monitorDebounce.restart()
             }
         }
-        Component.onCompleted: running = true
+        // No `Component.onCompleted: running = true` here: assigning running
+        // replaced the hasWifi binding above, so the monitor ran on wired
+        // desktops too.
     }
 
     // Icon content
@@ -489,7 +491,12 @@ DropdownWidget {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            wifiConnectProc.command = ["nmcli", "connection", "down", wifiWidget.wifiSSID]
+                            // By device, not `nmcli connection down <SSID>`: nmcli
+                            // matches the saved connection's NAME there, which can
+                            // differ from the SSID (a second profile becomes
+                            // "Foo 1"), and then the button silently did nothing.
+                            wifiConnectProc.command = ["sh", "-c",
+                                "nmcli -t -f DEVICE,TYPE,STATE device | awk -F: '$2 == \"wifi\" && $3 == \"connected\" { print $1 }' | while IFS= read -r d; do nmcli device disconnect \"$d\"; done"]
                             wifiConnectProc.running = true
                         }
                     }
