@@ -481,8 +481,23 @@ rebuild_initramfs() {
     echo "$(basename "$0")" >> "$INITRAMFS_FAILED_MANIFEST"
     return 1
   fi
-  sudo "${gen[@]}" 2>&1 | tee -a "$log"
-  if [ "${PIPESTATUS[0]}" -ne 0 ]; then
+  local out rc
+  out=$(mktemp)
+  sudo "${gen[@]}" 2>&1 | tee -a "$log" "$out"
+  rc=${PIPESTATUS[0]}
+  # limine-mkinitcpio exits 0 even when a kernel's image was NOT built: its
+  # limine-mkinitcpio-install prints "ERROR: mkinitcpio failed for kernel X,
+  # skipping." and swallows the failure (process_regular_kernel || return 0,
+  # process_kernel || true), and never checks the ESP copy at all. Its errors
+  # are the only trace, so an "ERROR:" line at the start of one (colour codes
+  # stripped) counts as a failure too. mkinitcpio's own "==> ERROR:" lines are
+  # not matched - mkinitcpio already reports those through its exit status.
+  if [ "$rc" -eq 0 ] && [ "${gen[0]}" = limine-mkinitcpio ] \
+     && sed 's/\x1b\[[0-9;]*m//g' "$out" | grep -q '^ERROR: '; then
+    rc=1
+  fi
+  rm -f "$out"
+  if [ "$rc" -ne 0 ]; then
     echo "${ERROR} initramfs rebuild failed - check $log" | tee -a "$log"
     # Recorded, not just printed: callers run this as `|| true` so the rest of
     # their setup still happens, and 02-Final-Check.sh's modinfo and plymouth
