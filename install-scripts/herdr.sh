@@ -118,6 +118,14 @@ else
   rm -f "$TMP"
 fi
 
+# Installed and starting: take back a "herdr" an earlier failed run put in the
+# failed-package list (the final check can only re-verify it through pacman,
+# which does not know it). A failed update with the old binary still working
+# is not "missing" either - its error is in the log.
+if [ -x "$BIN" ] && "$BIN" --version >/dev/null 2>&1; then
+  clear_package_failure "herdr"
+fi
+
 [ -x "$BIN" ] || { printf "\n%s Herdr binary missing - skipping configuration.\n" "${WARN}"; exit 0; }
 
 # ------------------------------------------------- config from the dotfiles

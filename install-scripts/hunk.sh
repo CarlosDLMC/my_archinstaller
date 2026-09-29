@@ -167,6 +167,12 @@ else
   rm -rf "$TMPD" "$REL.new"
 fi
 
+# Installed and starting: take back a "hunk" an earlier failed run put in the
+# failed-package list (see the same step in herdr.sh).
+if [ -x "$BIN" ] && "$BIN" --version >/dev/null 2>&1; then
+  clear_package_failure "hunk"
+fi
+
 [ -x "$BIN" ] || { printf "\n%s Hunk binary missing - nothing else to do.\n" "${WARN}"; exit 0; }
 
 # The layout functions are dotfiles (config/zsh/herdr-layouts.zsh, sourced from
