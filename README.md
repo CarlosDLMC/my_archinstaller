@@ -96,7 +96,7 @@ If any of those is wrong, fix it from a root shell and log back in as your user:
 useradd -m -G wheel -s /bin/bash yourname   # skip if the account already exists
 usermod -aG wheel yourname                  # if it exists but is not in wheel
 passwd yourname
-pacman -S --needed sudo
+pacman -S --needed sudo nano                # base ships no editor, and visudo needs one
 EDITOR=nano visudo                          # uncomment: %wheel ALL=(ALL:ALL) ALL
 ```
 
@@ -1373,10 +1373,12 @@ the GPU, `/sys/class/dmi/id/sys_vendor` for ASUS hardware. On an ASUS laptop
 `asusctl` and `rog-control-center` are installed, and `supergfxctl` only when
 there are two GPUs to switch between. `ON` and `OFF` still
 force the decision, for when you mean it — `nvidia="OFF"` to stay on the
-open-source driver, for instance. A forced `ON` is still ignored with a note if
-the hardware is not there, so a stale preset cannot install an NVIDIA driver on
-an AMD box - and a forced `nvidia="ON"` is ignored the same way on a Kepler-or-older
-card, which no maintained driver supports.
+open-source driver, for instance. For `nvidia` and `nouveau` a forced `ON` is
+still ignored with a note if the hardware is not there, so a stale preset cannot
+install an NVIDIA driver on an AMD box - and a forced `nvidia="ON"` is ignored the
+same way on a Kepler-or-older card, which no maintained driver supports. `rog` and
+`bluetooth` are not gated: `ON` there installs them whatever the hardware (for a
+Bluetooth controller whose firmware is not loaded yet, say).
 
 One case `auto` cannot see: an ASUS hybrid laptop left in **Eco mode**
 (`/sys/devices/platform/asus-nb-wmi/dgpu_disable` = 1) keeps its dGPU powered off,
