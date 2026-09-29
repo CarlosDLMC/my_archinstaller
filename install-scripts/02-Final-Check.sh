@@ -56,8 +56,15 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PARENT_DIR="$SCRIPT_DIR/.."
 cd "$PARENT_DIR" || { echo "[ERROR] Failed to change directory to $PARENT_DIR"; exit 1; }
 
-# Source the global functions script
-source "$(dirname "$(readlink -f "$0")")/Global_functions.sh"
+# Source the global functions script - from $SCRIPT_DIR (worked out before the
+# cd above), and fatal if it fails. The old $(dirname "$(readlink -f "$0")")
+# resolved a relative $0 against the NEW directory, so `cd install-scripts &&
+# ./02-Final-Check.sh` sourced a file that does not exist and carried on without
+# the failure lists - printing "GREAT!" with failures outstanding.
+if ! source "$SCRIPT_DIR/Global_functions.sh"; then
+  echo "[ERROR] Cannot source $SCRIPT_DIR/Global_functions.sh - not checking anything."
+  exit 1
+fi
 
 # Set the name of the log file to include the current date and time
 LOG="Install-Logs/00_CHECK-$(date +%Y%m%d-%H%M%S)_installed.log"
