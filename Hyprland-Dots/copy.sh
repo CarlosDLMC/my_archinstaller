@@ -23,15 +23,19 @@ BACKUP_STAMP="$(date +%Y%m%d-%H%M%S)"
 # same seds WallpaperSelect.sh uses - never the whole file, which is the repo's
 # and should still update. Returns 1 when <from> holds no video choice.
 # ENVIRON, not awk -v: -v would unescape backslashes in the path.
+# LC_ALL=C and grep -a throughout: a line saved by an older WallpaperSelect.sh
+# can hold raw bytes that are not valid UTF-8, and in a UTF-8 locale grep then
+# printed "binary file matches" instead of the line - the path came back empty
+# and the next login had video mode with no video.
 copy_video_wallpaper() { # from to
     local _from="$1" _to="$2" _lw _t
     [ -f "$_from" ] && [ -f "$_to" ] || return 1
-    grep -qE '^\s*run\("mpvpaper ' "$_from" || return 1
-    sed -i -E 's|^(\s*)run\("awww-daemon --format argb"\)|\1-- run("awww-daemon --format argb")|; s|^(\s*)--\s*run\("mpvpaper |\1run("mpvpaper |' "$_to"
-    _lw=$(grep -E '^local livewallpaper = ' "$_from" | head -n 1)
+    LC_ALL=C grep -aqE '^\s*run\("mpvpaper ' "$_from" || return 1
+    LC_ALL=C sed -i -E 's|^(\s*)run\("awww-daemon --format argb"\)|\1-- run("awww-daemon --format argb")|; s|^(\s*)--\s*run\("mpvpaper |\1run("mpvpaper |' "$_to"
+    _lw=$(LC_ALL=C grep -aE '^local livewallpaper = ' "$_from" | head -n 1)
     if [ -n "$_lw" ]; then
         _t=$(mktemp)
-        LW="$_lw" awk '/^local livewallpaper = /{print ENVIRON["LW"]; next} {print}' "$_to" > "$_t" && cat "$_t" > "$_to"
+        LW="$_lw" LC_ALL=C awk '/^local livewallpaper = /{print ENVIRON["LW"]; next} {print}' "$_to" > "$_t" && cat "$_t" > "$_to"
         rm -f "$_t"
     fi
     return 0
