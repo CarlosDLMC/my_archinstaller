@@ -185,12 +185,6 @@ modify_startup_config() {
   #   run("awww-daemon --format argb")
   #   -- run("mpvpaper '*' ... " .. livewallpaper)
   # Image wallpaper: awww on, mpvpaper commented. Video: the other way round.
-  # A newline cannot be written into the one-line Lua assignment (the third sed
-  # failed after the first two had already switched to the video lines).
-  if [[ "$selected_file" == *$'\n'* ]]; then
-    echo "Wallpaper path contains a newline - not saved for the next login."
-    return 1
-  fi
   # Case-insensitive, like main() and the find -iname listing: clip.MP4 played
   # as a video but was saved as an image, so the next login showed a still.
   if [[ "${selected_file,,}" =~ \.(mp4|mkv|mov|webm)$ ]]; then
@@ -203,10 +197,18 @@ modify_startup_config() {
     # Escaped for the sed replacement: \ & and the | delimiter are special there,
     # so a path like "a & b.mp4" pasted the whole matched line into the file
     # and "back\tab" became a tab.
-    # The line is Lua, so backslashes are first doubled for the Lua string (a
-    # lone \s is an invalid escape there, which broke the whole config).
-    local _repl="${selected_file//\"/}"
+    # The line is a Lua string, so the path is escaped for Lua first:
+    #  - \ doubled (a lone \s is an invalid escape, which broke the config);
+    #  - " escaped, not deleted (stripping it saved a path that did not exist,
+    #    so the video was gone after the next login);
+    #  - a carriage return or newline written as \r / \n. Raw, either one ends
+    #    the string ("unfinished string") and hyprland.lua's require of this
+    #    file failed - taking every config loaded after it down with it.
+    local _repl="$selected_file"
     _repl="${_repl//\\/\\\\}"
+    _repl="${_repl//\"/\\\"}"
+    _repl="${_repl//$'\r'/\\r}"
+    _repl="${_repl//$'\n'/\\n}"
     _repl=$(printf '%s' "$_repl" | sed -e 's/[\\&|]/\\&/g')
     sed -i -E "s|^local livewallpaper = .*|local livewallpaper = \"${_repl}\"|" "$startup_config"
 
@@ -304,13 +306,14 @@ main() {
       fi
     fi
 
-    # Otherwise it is a wallpaper in the current folder. Resolve the display
-    # name back to a real file within THIS directory only (non-recursive), so
-    # same-named files in different folders can't collide.
-    choice_basename=$(basename "$choice" | sed 's/\(.*\)\.[^.]*$/\1/')
-    selected_file=$(find "$current_dir" -mindepth 1 -maxdepth 1 -iname "$choice_basename.*" -print -quit)
+    # Otherwise it is a wallpaper in the current folder. menu() shows the full
+    # file name, so it is used as it is. It used to be looked up again with
+    # find -iname "<name without extension>.*": a glob, so "clip [1080p].mp4"
+    # was "not found", "a*b.png" matched some other file, and with clip.png
+    # and clip.mp4 side by side picking the PNG could apply the video.
+    selected_file="$current_dir/$choice"
 
-    if [[ -z "$selected_file" ]]; then
+    if [[ ! -f "$selected_file" ]]; then
       echo "File not found. Selected choice: $choice"
       exit 1
     fi
