@@ -1048,9 +1048,13 @@ sleep 1
 # thunar_sort.sh turns on /misc-directory-specific-settings, and xfconf-query
 # stores that in ~/.config/xfce4/xfconf/xfce-perchannel-xml/thunar.xml. But
 # "xfce4" is one of the directories copy.sh replaces wholesale, and the tracked
-# copy of thunar.xml does not carry that property - so running the sort script
+# copy of thunar.xml did not carry that property - so running the sort script
 # inside the thunar) case (which the option order puts before dots) wrote the
-# setting and then had dotfiles-main.sh copy it straight back off again.
+# setting and then had dotfiles-main.sh copy it straight back off again. The
+# tracked thunar.xml carries it now too: without it every re-run also backed
+# up xfce4 over this one line, and a re-run inside a live session lost it for
+# good - xfconfd still answered "true" from memory, so thunar_sort.sh skipped,
+# and it never rewrites a value that has not changed.
 #
 # The symptom was quiet and misleading: the gio metadata on the folders lives in
 # ~/.local/share/gvfs-metadata and DOES survive, so the per-folder sort was set

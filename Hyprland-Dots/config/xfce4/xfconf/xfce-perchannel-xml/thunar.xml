@@ -11,4 +11,5 @@
   <property name="last-side-pane" type="string" value="THUNAR_SIDEPANE_TYPE_SHORTCUTS"/>
   <property name="last-window-width" type="int" value="1270"/>
   <property name="last-window-height" type="int" value="693"/>
+  <property name="misc-directory-specific-settings" type="bool" value="true"/>
 </channel>
