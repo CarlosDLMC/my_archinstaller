@@ -1655,6 +1655,11 @@ option off (plymouth on plain Arch, bluetooth without a controller) and skipped 
 NVIDIA checks where it had turned one on. To check a different selection, set it
 yourself: `INSTALL_SELECTED_OPTIONS="ly dots ..." ./install-scripts/02-Final-Check.sh`.
 
+If the last `install.sh` run stopped part-way (a failed `pacman.sh`, `locales.sh` or
+AUR helper build, or Ctrl-C), its failure lists only cover part of the run, so the
+check does not pass on them: it reports that the run did not finish
+(`Install-Logs/.run-in-progress` is still there) until a run completes.
+
 Do that too after running one install script by hand for something the last run
 did not select - `install-scripts/nvidia.sh` after switching an ASUS laptop out of
 Eco mode, say. The saved selection does not know about it, so the NVIDIA module
