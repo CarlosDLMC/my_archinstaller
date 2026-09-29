@@ -206,6 +206,13 @@ if [ -s "$INITRAMFS_FAILED_MANIFEST" ]; then
 fi
 
 if selected dots; then
+    # copy.sh leaves this when a config directory could not be copied (it keeps
+    # the version that was there and carries on). The file checks below cannot
+    # see that - the old files are all still present - and install.sh ignores
+    # dotfiles-main.sh's exit status.
+    if [ -f Install-Logs/.dots-failed ]; then
+        outcome_failures+=("the dotfiles copy failed for: $(tr '\n' ' ' < Install-Logs/.dots-failed)- the version already there was kept; fix the error in its log and re-run install-scripts/dotfiles-main.sh")
+    fi
     check_outcome "dotfiles not deployed: ~/.config/hypr/hyprland.lua is missing (install-scripts/dotfiles-main.sh)" \
         test -f "$HOME/.config/hypr/hyprland.lua"
     check_outcome "dotfiles not deployed: ~/.config/quickshell/bar/shell.qml is missing (install-scripts/dotfiles-main.sh)" \
