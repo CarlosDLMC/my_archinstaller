@@ -256,7 +256,11 @@ def weather_qs():
     cond = (data.get("alt") or "").strip()
     info = {
         "loc": grab(r"<b>(.*?)</b>"),
-        "cond": WEATHER_RU.get(cond, cond.upper()),
+        # The table's wording where it has an entry, else the Russian status the
+        # bar's cache already carries (alt_display): the table lacks ten of the
+        # statuses weather-location.py emits ("Slight rain", ...), and those
+        # showed in English.
+        "cond": WEATHER_RU.get(cond) or (data.get("alt_display") or "").strip().upper() or cond.upper(),
         "wind": f"{m_wh.group(1)} КМ/Ч" if m_wh else "",
         "hum": f"{m_wh.group(2)}%" if m_wh else "",
         "vis": f"{m_va.group(1)} КМ" if m_va else "",
