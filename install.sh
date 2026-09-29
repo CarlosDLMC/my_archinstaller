@@ -541,7 +541,11 @@ for _hw in nvidia nouveau rog bluetooth plymouth limine; do
     esac
     if [ "$_want" == "true" ]; then
         printf -v "$_hw" "ON"
-        echo "${NOTE} auto: enabling ${SKY_BLUE}$_hw${RESET} (hardware detected)." | tee -a "$LOG"
+        # Preset runs only: the interactive checklist ignores these values, so
+        # there it logged "enabling bluetooth" for a box left unticked.
+        if [ "$preset_mode" == "true" ]; then
+            echo "${NOTE} auto: enabling ${SKY_BLUE}$_hw${RESET} (hardware detected)." | tee -a "$LOG"
+        fi
     else
         printf -v "$_hw" "OFF"
     fi
