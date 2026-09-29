@@ -779,6 +779,11 @@ printf "\n%.0s" {1..1}
 # each selected component (dots copied, ly enabled, zsh the login shell, ...)
 # and not only whether packages landed - see the outcome checks in that file.
 export INSTALL_SELECTED_OPTIONS="$selected_options"
+# Also saved, for re-running the final check by hand: "auto" options resolve per
+# machine (no plymouth on plain Arch, no bluetooth on a desktop without a
+# controller, nvidia only where there is one), so a selection copied from the
+# README used to give false failures or skip checks.
+printf '%s\n' "$selected_options" > Install-Logs/.selected-options 2>/dev/null || true
 
 # Sudo, once, up front - and then never again for the rest of the run.
 #

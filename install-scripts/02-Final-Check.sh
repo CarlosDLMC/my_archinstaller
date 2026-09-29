@@ -118,6 +118,12 @@ fi
 # install.sh exports the selection as INSTALL_SELECTED_OPTIONS. Checks that
 # do not depend on a selection always run.
 outcome_failures=()
+# Run by hand, it takes the selection the last install.sh run saved - the "auto"
+# options already resolved for this machine.
+if [ -z "${INSTALL_SELECTED_OPTIONS:-}" ] && [ -r Install-Logs/.selected-options ]; then
+    INSTALL_SELECTED_OPTIONS=$(cat Install-Logs/.selected-options)
+    echo "${INFO} Checking the selection of the last install run: $INSTALL_SELECTED_OPTIONS" | tee -a "$LOG"
+fi
 sel=" ${INSTALL_SELECTED_OPTIONS:-} "
 
 selected() { [[ "$sel" == *" $1 "* ]]; }
