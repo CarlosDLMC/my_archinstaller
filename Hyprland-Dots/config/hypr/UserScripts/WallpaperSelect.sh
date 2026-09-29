@@ -67,7 +67,7 @@ WALL_FIND_TYPES=(
 )
 
 # Retrieve every wallpaper in the tree - used ONLY to pick the ". random" entry.
-# The menu itself is now browsed one directory at a time (see menu() below).
+# The menu itself is now browsed one directory at a time (see build_menu() below).
 mapfile -d '' PICS < <(find -L "${wallDIR}" -type f \( "${WALL_FIND_TYPES[@]}" \) -print0)
 
 RANDOM_PIC=""
@@ -123,33 +123,39 @@ build_menu() {
 
   # Immediate sub-folders, sorted. ${path##*/}, not $(basename): a command
   # substitution drops a trailing newline from the name.
+  #
+  # Both loops read the file list on fd 3, not stdin: anything in the loop that
+  # reads stdin eats the next NUL-separated path. ffmpeg does (it polls for
+  # keys while it works), so a video preview that took over ~0.5 s cut the first
+  # bytes off the next path - and with MENU_PATH holding the real path, that
+  # pick then failed with "File not found".
   local subdir
-  while IFS= read -r -d '' subdir; do
+  while IFS= read -r -d '' -u 3 subdir; do
     add_menu_entry dir "$subdir" "${subdir##*/}/" "folder"
-  done < <(find -L "$dir" -mindepth 1 -maxdepth 1 -type d -print0 | sort -z)
+  done 3< <(find -L "$dir" -mindepth 1 -maxdepth 1 -type d -print0 | sort -z)
 
   # Wallpapers directly in this folder (non-recursive), sorted.
   local pic_path pic_name cache_gif_image cache_preview_image
-  while IFS= read -r -d '' pic_path; do
+  while IFS= read -r -d '' -u 3 pic_path; do
     pic_name="${pic_path##*/}"
     if [[ "$pic_name" =~ \.gif$ ]]; then
       cache_gif_image="$HOME/.cache/gif_preview/${pic_name}.png"
       if [[ ! -f "$cache_gif_image" ]]; then
         mkdir -p "$HOME/.cache/gif_preview"
-        magick "$pic_path[0]" -resize 1920x1080 "$cache_gif_image"
+        magick "$pic_path[0]" -resize 1920x1080 "$cache_gif_image" </dev/null
       fi
       add_menu_entry file "$pic_path" "$pic_name" "$cache_gif_image"
     elif [[ "${pic_name,,}" =~ \.(mp4|mkv|mov|webm)$ ]]; then
       cache_preview_image="$HOME/.cache/video_preview/${pic_name}.png"
       if [[ ! -f "$cache_preview_image" ]]; then
         mkdir -p "$HOME/.cache/video_preview"
-        ffmpeg -v error -y -i "$pic_path" -ss 00:00:01.000 -vframes 1 "$cache_preview_image"
+        ffmpeg -nostdin -v error -y -i "$pic_path" -ss 00:00:01.000 -vframes 1 "$cache_preview_image" </dev/null
       fi
       add_menu_entry file "$pic_path" "$pic_name" "$cache_preview_image"
     else
       add_menu_entry file "$pic_path" "$pic_name" "$pic_path"
     fi
-  done < <(find -L "$dir" -mindepth 1 -maxdepth 1 -type f \( "${WALL_FIND_TYPES[@]}" \) -print0 | sort -z)
+  done 3< <(find -L "$dir" -mindepth 1 -maxdepth 1 -type f \( "${WALL_FIND_TYPES[@]}" \) -print0 | sort -z)
 }
 
 print_menu() {
