@@ -33,8 +33,23 @@ fi
 # Everything below is relative to the repo root (Install-Logs/, install-scripts/,
 # Hyprland-Dots/), so run from there wherever the script was invoked from. A
 # relative --preset path is resolved first, against the caller's directory.
-if [[ "${1:-}" == "--preset" && -n "${2:-}" && "${2:0:1}" != "/" ]]; then
-    set -- "$1" "$(readlink -f "$2")"
+#
+# A --preset with no file, or one readlink cannot resolve (its folder does not
+# exist), used to fall through to an INTERACTIVE run: readlink printed nothing,
+# $2 became empty, and the -n "$2" test below skipped load_preset - and with it
+# the "Preset file not found" exit. A preset that cannot be found is an error.
+if [[ "${1:-}" == "--preset" ]]; then
+    if [ -z "${2:-}" ]; then
+        echo "${ERROR} --preset needs a file: ./install.sh --preset custom-preset.conf"
+        exit 1
+    fi
+    if [ "${2:0:1}" != "/" ]; then
+        if ! _preset_abs=$(readlink -f "$2") || [ -z "$_preset_abs" ]; then
+            echo "${ERROR} Preset file not found: $2"
+            exit 1
+        fi
+        set -- "$1" "$_preset_abs"
+    fi
 fi
 cd "$(dirname "$(readlink -f "$0")")" || { echo "${ERROR} Cannot cd to the repo directory"; exit 1; }
 
