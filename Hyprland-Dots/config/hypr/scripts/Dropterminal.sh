@@ -260,34 +260,27 @@ spawn_terminal() {
 
   # Get window count before spawning
   local windows_before=$(hyprctl clients -j)
-  local count_before=$(echo "$windows_before" | jq 'length')
 
   # Launch terminal directly in special workspace to avoid visible spawn
   # exec with window rules: float, size, and open silently on the scratchpad.
   # The command goes in a Lua long string so quotes inside $TERMINAL_CMD survive.
   hyprctl dispatch "hl.dsp.exec_cmd([==[$TERMINAL_CMD]==], { float = true, size = '$width $height', workspace = 'special:scratchpad silent' })"
 
-  # Wait for window to appear
-  sleep 0.1
-
-  # Get windows after spawning
-  local windows_after=$(hyprctl clients -j)
-  local count_after=$(echo "$windows_after" | jq 'length')
-
-  local new_addr=""
-
-  if [ "$count_after" -gt "$count_before" ]; then
-    # Find the new window by comparing before/after lists
+  # Wait for the new window: compare the client list with the one taken before
+  # the spawn, polling for up to ~2 s. It used to look once after 0.1 s and then
+  # fall back to "sort_by(.focusHistoryID) | .[-1]" - but focusHistoryID 0 is
+  # the FOCUSED window, so that picked the least recently focused one: a slow
+  # terminal start moved, pinned and slid in some other window, and left the new
+  # terminal hidden in the scratchpad. No match means no guess.
+  local new_addr="" _try
+  for _try in $(seq 1 20); do
+    sleep 0.1
     new_addr=$(comm -13 \
       <(echo "$windows_before" | jq -r '.[].address' | sort) \
-      <(echo "$windows_after" | jq -r '.[].address' | sort) |
+      <(hyprctl clients -j | jq -r '.[].address' | sort) |
       head -1)
-  fi
-
-  # Fallback: try to find by the most recently mapped window
-  if [ -z "$new_addr" ] || [ "$new_addr" = "null" ]; then
-    new_addr=$(hyprctl clients -j | jq -r 'sort_by(.focusHistoryID) | .[-1] | .address')
-  fi
+    [ -n "$new_addr" ] && break
+  done
 
   if [ -n "$new_addr" ] && [ "$new_addr" != "null" ]; then
     # Store the address and monitor name
