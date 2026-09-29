@@ -63,7 +63,7 @@ then continue with the [Installation Steps](#installation-steps) below.
 - **Neovim with LazyVim**, which is where the file tree beside the agents comes from
 - **Hunk** review-first diff viewer, for reading what the agents actually wrote
 - **Whole-Workspace Move** with SUPER + ALT + number, rebuilding the tiling layout window for window
-- **Boot Splash** with the repo logo (Plymouth, optional - replaces the CachyOS one)
+- **Boot Splash** with the repo logo on every machine (Plymouth - replaces the CachyOS one, and is wired into boot where the distro did not set it up)
 - **All Essential Packages** pre-configured
 
 ## Quick Install (Fresh Arch System)
@@ -636,14 +636,35 @@ BIOS leaves only black, then the logo. That is the closest you can get to a
 custom vendor logo without flashing modified firmware, which ASUS boards reject
 through every official path.
 
-- `plymouth="auto"` (the shipped preset) acts only where plymouth is already
-  installed **and** in the mkinitcpio `HOOKS` - CachyOS does both. On a plain
-  Arch install it does nothing.
-- `plymouth="ON"` installs plymouth and the theme anywhere, then prints the two
-  steps it deliberately does not do: adding the `plymouth` hook to
-  `/etc/mkinitcpio.conf` and `splash` to the kernel command line. The command
-  line lives in the bootloader entry, and this repo never writes to a
-  bootloader.
+- `plymouth="ON"` (the shipped preset, and ticked by default in the interactive
+  menu) puts the logo on every machine. It installs plymouth and the theme, and
+  where the distro did not set plymouth up - plain Arch - it also wires it into
+  boot, since a theme alone is never drawn:
+  - **the hook:** a drop-in, `/etc/mkinitcpio.conf.d/zz-my_archinstaller-plymouth.conf`,
+    puts `plymouth` right after `systemd` (or `udev`) in whatever `HOOKS` you
+    have, which also keeps it ahead of `encrypt`/`sd-encrypt` for the LUKS
+    prompt. A preset that runs mkinitcpio with its own config file (`-c`, which
+    skips drop-ins) gets the same lines appended to that file instead.
+  - **`splash` on the kernel command line**, wherever the machine keeps one:
+    the `options` line of each systemd-boot entry that boots Linux,
+    `GRUB_CMDLINE_LINUX_DEFAULT` in `/etc/default/grub` (then `grub-mkconfig`),
+    the `cmdline:` lines of a `limine.conf` that nothing generates, a
+    `KERNEL_CMDLINE[default]+="splash"` line in `/etc/default/limine` where
+    Limine's entry tool writes the entries (CachyOS), and `/etc/kernel/cmdline`
+    for UKIs. Each edit adds that one word and nothing else - a separate check
+    confirms it before the file is replaced - and keeps the original as
+    `<file>.pre-plymouth`. `quiet` is not added.
+
+  When one of these cannot be done (another bootloader, a GRUB line it cannot
+  parse), the script says what to add by hand, and the final check stops the
+  auto-reboot with `plymouth-splash` or a missing-hook line.
+- `plymouth="auto"` acts only where plymouth is already installed **and** in the
+  mkinitcpio `HOOKS`, as on CachyOS, and does nothing on plain Arch.
+
+To take the wiring out again: delete the drop-in, put the `.pre-plymouth` copies
+back (or remove `splash` by hand), then rebuild with `sudo mkinitcpio -P` (and
+`sudo grub-mkconfig -o /boot/grub/grub.cfg` on GRUB, `sudo limine-mkinitcpio`
+with Limine's entry tool).
 
 Only `soviet.plymouth` and the pictures are in the repo; the spinner frames and
 dialog artwork are copied at install time from plymouth's own `spinner` theme.
@@ -700,8 +721,9 @@ shipped preset) applies it wherever a `limine.conf` exists - `/boot`, `/efi` or
 `<ESP>/EFI/<dir>/`, where archinstall puts it (`EFI/arch-limine/`, or `EFI/BOOT/`):
 wallpaper onto the root of the partition holding the conf (Limine's `boot():/`),
 theme block prepended, and `timeout: no` so the menu waits for a choice instead of
-booting the default after a countdown. This is the one place the repo edits a
-bootloader config, added knowingly on 2026-09-13; the safeguards are a backup kept
+booting the default after a countdown. This is one of the two places the repo edits a
+bootloader config (the other is the `splash` word [Plymouth](#boot-splash-plymouth)
+adds), added knowingly on 2026-09-13; the safeguards are a backup kept
 as `limine.conf.pre-theme` (a record, not a restore point - see the revert note
 below), an edit confined to the marked block plus the `timeout:`
 line, a before/after comparison of the OS entries that aborts the write if they

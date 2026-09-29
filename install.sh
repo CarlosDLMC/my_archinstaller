@@ -622,7 +622,7 @@ options_command+=(
     "nopasswd_sudo" "Passwordless sudo for wheel? (needed by the bar's VPN widget)" "OFF"
     "printing" "Install CUPS printing? (nothing else pulls in a print stack)" "OFF"
     "docker" "Install Docker, socket-activated? (adds you to the root-equivalent 'docker' group)" "ON"
-    "plymouth" "Plymouth boot splash with the repo logo? (replaces the distro's)" "OFF"
+    "plymouth" "Plymouth boot splash with the repo logo? (wires it into boot if needed)" "ON"
     "limine" "Theme the Limine boot menu and disable its countdown? (edits limine.conf, backup kept)" "OFF"
     "herdr" "Install Herdr terminal workspace manager for AI coding agents?" "OFF"
     "neovim" "Install Neovim with LazyVim? (the file explorer beside the agents)" "OFF"
@@ -1212,7 +1212,7 @@ if pacman -Q hyprland &> /dev/null || pacman -Q hyprland-git &> /dev/null; then
         echo "${CAT} Fix what is listed above, then reboot with ${MAGENTA}systemctl reboot${RESET}."
         echo "${NOTE} Most package failures are AUR builds. Retry one with:"
         echo "        ${MAGENTA}yay -S <package>${RESET}"
-        echo "${NOTE} herdr, hunk, lazyvim and plymouth-theme-* are not packages - the list above names the script to re-run."
+        echo "${NOTE} herdr, hunk, lazyvim, plymouth-theme-* and plymouth-splash are not packages - the list above says what to re-run or fix."
         echo "${NOTE} A failed component can be retried with its script, e.g. ${MAGENTA}install-scripts/dotfiles-main.sh${RESET}"
         echo "${NOTE} The full list is in ${MAGENTA}Install-Logs/00_CHECK-*_installed.log${RESET}"
         printf "\n%.0s" {1..2}
