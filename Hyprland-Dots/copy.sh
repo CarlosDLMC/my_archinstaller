@@ -392,7 +392,18 @@ rollback_replace() {
     unset "BACKUP_OF[$_d]"
     _replacing=""
 }
-trap 'echo; rollback_replace; exit 130' INT TERM HUP
+# SIGPIPE is ignored for the whole run, not only inside the handler.
+# dotfiles-main.sh runs this script as `copy.sh | tee`, and Ctrl-C or a closed
+# terminal kills tee as well, so the next write went to a pipe with no reader
+# and SIGPIPE ended the script before the rollback could run - the original
+# stayed in its backup behind a half-copied directory. For Ctrl-C that write
+# was the handler's own echo; for SIGHUP and SIGTERM it comes even earlier,
+# from bash reporting the killed cp ("Hangup") before the handler starts.
+# Ignored, those writes just fail. The handler also ignores INT, TERM and HUP,
+# so a second Ctrl-C cannot cut the rm/mv short: the commands it starts
+# inherit the ignored signals.
+trap '' PIPE
+trap 'trap "" INT TERM HUP; echo; rollback_replace; exit 130' INT TERM HUP
 
 # Directories that could not be copied. The run carries on with the rest, then
 # exits 1 and leaves Install-Logs/.dots-failed for 02-Final-Check.sh - it used to
