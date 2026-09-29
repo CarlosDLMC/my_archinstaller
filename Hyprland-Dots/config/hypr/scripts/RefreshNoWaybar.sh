@@ -2,7 +2,7 @@
 
 # Modified version of Refresh.sh but waybar wont refresh
 # Used by automatic wallpaper change
-# Modified inorder to refresh rofi background, Wallust, mako only
+# Modified inorder to refresh rofi background, Wallust, dunst only
 
 SCRIPTSDIR=$HOME/.config/hypr/scripts
 UserScripts=$HOME/.config/hypr/UserScripts
@@ -50,8 +50,12 @@ done
 ${SCRIPTSDIR}/WallustSwww.sh
 sleep 0.2
 
-# reload mako
-killall -SIGUSR1 dunst >/dev/null 2>&1
+# Reload dunst's settings. NOT `killall -SIGUSR1 dunst`: that line replaced
+# `makoctl reload` in the switch from mako, but for dunst SIGUSR1 means PAUSE
+# (dunst(1): "send SIGUSR1 and SIGUSR2 to pause and unpause"). Every wallpaper
+# change, refresh and game-mode toggle held all notifications - the volume and
+# brightness popups included - until a restart or a click on the bar's bell.
+dunstctl reload >/dev/null 2>&1
 
 # Relaunching rainbow borders if the script exists
 sleep 1

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Scripts for refreshing quickshell, rofi, mako, wallust
+# Scripts for refreshing quickshell, rofi, dunst, wallust
 
 SCRIPTSDIR=$HOME/.config/hypr/scripts
 UserScripts=$HOME/.config/hypr/UserScripts
@@ -53,9 +53,13 @@ done
 
 sleep 0.1
 
-# reload mako
+# Reload dunst's settings. NOT `killall -SIGUSR1 dunst`: that line replaced
+# `makoctl reload` in the switch from mako, but for dunst SIGUSR1 means PAUSE
+# (dunst(1): "send SIGUSR1 and SIGUSR2 to pause and unpause"). Every wallpaper
+# change, refresh and game-mode toggle held all notifications - the volume and
+# brightness popups included - until a restart or a click on the bar's bell.
 sleep 0.3
-killall -SIGUSR1 dunst >/dev/null 2>&1
+dunstctl reload >/dev/null 2>&1
 
 # Relaunching rainbow borders if the script exists
 sleep 1
