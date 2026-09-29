@@ -9,6 +9,17 @@ local U = V.UserScripts
 local wallDIR = V.home .. "/Pictures/wallpapers"
 local livewallpaper = ""  -- WallpaperSelect.sh rewrites this line for video wallpapers
 
+-- hl.exec_cmd runs its command through sh -c, so the video path is quoted for
+-- the shell here. Pasted in bare, "my vids/a.mp4" reached mpvpaper as two
+-- arguments and "a & b.mp4" ran in the background as a broken command - the
+-- video played when picked and was gone after the next login. WallpaperSelect.sh
+-- writes the path as "$HOME/...", which single quotes would stop the shell
+-- expanding, so $HOME is resolved first.
+local function shell_quote(path)
+    path = path:gsub("^%$HOME", function() return V.home end)
+    return "'" .. path:gsub("'", "'\\''") .. "'"
+end
+
 hl.on("hyprland.start", function()
     local run = hl.exec_cmd
 
@@ -16,7 +27,7 @@ hl.on("hyprland.start", function()
     -- WallpaperSelect.sh comments one of the next two lines out and uncomments
     -- the other when switching between image and video wallpapers.
     run("awww-daemon --format argb")
-    -- run("mpvpaper '*' -o \"load-scripts=no no-audio --loop\" " .. livewallpaper)
+    -- run("mpvpaper '*' -o \"load-scripts=no no-audio --loop\" " .. shell_quote(livewallpaper))
     -- run(U .. "/WallpaperAutoChange.sh " .. wallDIR) -- random wallpaper every 30 min
 
     ---- startup ----
