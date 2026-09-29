@@ -561,8 +561,15 @@ else
       if [ -f /etc/resolv.conf ] && [ ! -L /etc/resolv.conf ]; then
         sudo cp /etc/resolv.conf /etc/resolv.conf.bak-"$(date +%Y%m%d-%H%M%S)"
       fi
-      sudo ln -sf "$stub" /etc/resolv.conf
-      echo "${OK} /etc/resolv.conf -> $stub" | tee -a "$LOG"
+      # Guarded: this runs under Global_functions.sh's set -e, and a resolv.conf
+      # frozen with `chattr +i` (the wiki's way to keep NM off it) makes ln fail
+      # even as root. Unguarded, that ended services.sh right here - no power
+      # profile daemon, no nss-mdns, no avahi - and the final check still passed.
+      if sudo ln -sf "$stub" /etc/resolv.conf; then
+        echo "${OK} /etc/resolv.conf -> $stub" | tee -a "$LOG"
+      else
+        echo "${WARN} Could not replace /etc/resolv.conf (immutable? check: lsattr /etc/resolv.conf) - it is left as it is, so DNS does not go through systemd-resolved." | tee -a "$LOG"
+      fi
     else
       echo "${OK} /etc/resolv.conf already points at the resolved stub." | tee -a "$LOG"
     fi
@@ -617,16 +624,19 @@ if ! pacman -Qi nss-mdns &>/dev/null; then
 elif grep -E '^hosts:' /etc/nsswitch.conf | grep -qE 'mdns_minimal.*\bresolve\b|mdns_minimal.*\bdns\b' && ! grep -E '^hosts:' /etc/nsswitch.conf | grep -qE '\bresolve\b.*mdns_minimal'; then
   echo "${OK} nsswitch.conf already resolves .local names." | tee -a "$LOG"
 else
-  sudo cp /etc/nsswitch.conf /etc/nsswitch.conf.bak-"$(date +%Y%m%d-%H%M%S)"
+  # Every edit here is `|| true`: set -e is on, and an nsswitch.conf that cannot
+  # be written (immutable, say) must not end the script. The grep below reports
+  # whether the edit actually landed.
+  sudo cp /etc/nsswitch.conf /etc/nsswitch.conf.bak-"$(date +%Y%m%d-%H%M%S)" || true
   # mdns_minimal must come BEFORE `resolve [!UNAVAIL=return]`, otherwise resolved
   # answers (or fails) every .local lookup first and the module is never consulted -
   # which is exactly where the old edit ("before dns") put it on a resolved system.
   # Remove any earlier insertion, then insert before resolve if present, else before dns.
-  sudo sed -i -E '/^hosts:/ s/mdns_minimal \[NOTFOUND=return\] //g' /etc/nsswitch.conf
+  sudo sed -i -E '/^hosts:/ s/mdns_minimal \[NOTFOUND=return\] //g' /etc/nsswitch.conf || true
   if grep -E '^hosts:' /etc/nsswitch.conf | grep -qw resolve; then
-    sudo sed -i -E '/^hosts:/ s/\bresolve\b/mdns_minimal [NOTFOUND=return] resolve/' /etc/nsswitch.conf
+    sudo sed -i -E '/^hosts:/ s/\bresolve\b/mdns_minimal [NOTFOUND=return] resolve/' /etc/nsswitch.conf || true
   else
-    sudo sed -i -E '/^hosts:/ s/\bdns\b/mdns_minimal [NOTFOUND=return] dns/' /etc/nsswitch.conf
+    sudo sed -i -E '/^hosts:/ s/\bdns\b/mdns_minimal [NOTFOUND=return] dns/' /etc/nsswitch.conf || true
   fi
   if grep -E '^hosts:' /etc/nsswitch.conf | grep -q 'mdns_minimal'; then
     echo "${OK} .local name resolution enabled: $(grep -E '^hosts:' /etc/nsswitch.conf)" | tee -a "$LOG"
