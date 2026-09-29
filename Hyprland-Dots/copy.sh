@@ -779,11 +779,10 @@ fi
 
 # Point the rofi background symlink at the deployed wallpaper.
 #
-# Outside the if/elif above on purpose. rofi/ is replaced wholesale by this
-# script and the link is gitignored, so it has to be recreated on EVERY run -
-# but it used to live in the elif branch, which a re-run never reaches (the
-# active wallpaper is recovered from the hypr/ backup, so the first branch
-# wins). Six rofi themes then had no background until the next wallpaper
+# Outside the if/elif above on purpose: the link is gitignored, so a fresh
+# rofi/ has none, and it used to live in the elif branch, which a re-run never
+# reaches (the active wallpaper is recovered from the hypr/ backup, so the first
+# branch wins). Six rofi themes then had no background until the next wallpaper
 # change relinked it.
 if [ -f "$_default_src" ] || [ -n "${BACKUP_OF[rofi]:-}" ]; then
     # WallustSwww.sh re-links this on every wallpaper change, so it is runtime
@@ -794,20 +793,16 @@ if [ -f "$_default_src" ] || [ -n "${BACKUP_OF[rofi]:-}" ]; then
     #
     # Linked to ~/Pictures/wallpapers rather than into the repo, because that is
     # where the wallpaper still is after the repo is moved or deleted.
-    # Like the wallust outputs above, the rofi/ backup is consulted first so a
-    # re-install keeps whatever wallpaper you were actually using.
     _rofi_link="$HOME/.config/rofi/.current_wallpaper"
-    _rofi_live="${BACKUP_OF[rofi]:+${BACKUP_OF[rofi]}/.current_wallpaper}"
-    _rofi_target="$HOME/Pictures/wallpapers/$DEFAULT_WALLPAPER"
-
-    if [ -n "$_rofi_live" ] && [ -e "$_rofi_live" ]; then
-        # -e, not -L: a symlink left dangling by a deleted wallpaper is no use.
-        _rofi_target="$(readlink -f "$_rofi_live")"
-        echo "  ${NOTE} Keeping your current rofi background"
-    fi
-
-    if ln -sfn "$_rofi_target" "$_rofi_link"; then
-        echo "  ${OK} rofi background linked to $(basename "$_rofi_target")"
+    # Only when missing or dangling (-e follows the link). It used to be pointed
+    # at the default wallpaper on every run that did not back rofi/ up - which,
+    # since rofi/ is only replaced when it differs, was every normal re-run: the
+    # rofi background went back to the default while the desktop kept the
+    # wallpaper you picked. A backed-up link was restored by restore_state.
+    if [ -e "$_rofi_link" ]; then
+        echo "  ${NOTE} rofi background left as it is"
+    elif ln -sfn "$HOME/Pictures/wallpapers/$DEFAULT_WALLPAPER" "$_rofi_link"; then
+        echo "  ${OK} rofi background linked to $(basename "$DEFAULT_WALLPAPER")"
     else
         echo "  ${ERROR} Could not link $_rofi_link - rofi themes will have no background"
     fi
