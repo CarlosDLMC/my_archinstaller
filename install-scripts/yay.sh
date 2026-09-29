@@ -86,7 +86,11 @@ else
   # after the build succeeded, so a failed build never leaves less than before.
   (
     cd "$BUILD_DIR" || exit 1
-    makepkg -s --noconfirm 2>&1
+    # -f: with PKGDEST set to a folder that persists, a package of the same
+    # version already there made -s stop with "A package has already been built"
+    # (and the old -si reinstalled that stale package - for a paru broken by a
+    # libalpm bump, the broken one). Always a fresh build.
+    makepkg -sf --noconfirm 2>&1
   ) | tee -a "$LOG"
 
   # tee is last in the pipeline, so ${PIPESTATUS[0]} is makepkg's status, not
