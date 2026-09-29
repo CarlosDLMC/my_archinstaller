@@ -317,9 +317,22 @@ execute_script() {
 }
 
 
-# Check if yay or paru is installed
+# Check if yay or paru is installed - and actually starts. `command -v` alone
+# took a helper that is on PATH but broken (linked against a libalpm soname
+# pacman no longer ships) as installed, so nothing rebuilt it, and every re-run
+# ended at "No working AUR helper ... read the build error above" with no build
+# having run at all.
+aur_helper_works() {
+    local _h
+    for _h in yay paru; do
+        if command -v "$_h" &>/dev/null && "$_h" --version &>/dev/null; then
+            return 0
+        fi
+    done
+    return 1
+}
 echo "${INFO} - Checking if yay or paru is installed"
-if ! command -v yay &>/dev/null && ! command -v paru &>/dev/null; then
+if ! aur_helper_works; then
     if [ "$preset_mode" == "true" ]; then
         # A preset run must not stop to ask. yay is the default because yay.sh
         # builds it from the yay-bin/ PKGBUILD that is vendored in this repo, so
@@ -330,7 +343,7 @@ if ! command -v yay &>/dev/null && ! command -v paru &>/dev/null; then
     else
     echo "${CAT} - Neither yay nor paru found. Asking 🗣️ USER to select..."
     while true; do
-        aur_helper=$(whiptail --title "Neither Yay nor Paru is installed" --checklist "Neither Yay nor Paru is installed. Choose one AUR.\n\nNOTE: Select only 1 AUR helper!\nINFO: spacebar to select" 12 60 2 \
+        aur_helper=$(whiptail --title "No working AUR helper" --checklist "Neither yay nor paru is installed (or it no longer starts). Choose one AUR helper.\n\nNOTE: Select only 1 AUR helper!\nINFO: spacebar to select" 12 60 2 \
             "yay" "AUR Helper yay" "OFF" \
             "paru" "AUR Helper paru" "OFF" \
             3>&1 1>&2 2>&3)
@@ -828,6 +841,14 @@ echo "${INFO} Generating ${SKY_BLUE}locales${RESET}..." | tee -a "$LOG"
 run_required "locales.sh"
 sleep 1
 
+# pacman.sh's full upgrade runs after the check above, and a libalpm bump
+# there can break a helper that still worked then. Rebuild yay in that case too
+# (from the vendored PKGBUILD, as for a fresh machine).
+if [ -z "${aur_helper:-}" ] && ! aur_helper_works; then
+    aur_helper="yay"
+    echo "${WARN} The installed AUR helper no longer starts (after the system upgrade?) - rebuilding ${SKY_BLUE}yay${RESET}." | tee -a "$LOG"
+fi
+
 # Execute AUR helper script after other installations if applicable
 if [ "$aur_helper" == "paru" ]; then
     execute_script "paru.sh"
@@ -842,11 +863,7 @@ fi
 # `--version`, not only `command -v`: an AUR helper that is on PATH but cannot
 # start (paru-bin linked against a libalpm soname that pacman no longer ships)
 # passed the old check, and then every one of ~150 installs failed.
-_aur_works=false
-for _h in yay paru; do
-    command -v "$_h" &>/dev/null && "$_h" --version &>/dev/null && { _aur_works=true; break; }
-done
-if [ "$_aur_works" != "true" ]; then
+if ! aur_helper_works; then
     echo "${ERROR} No working AUR helper after ${aur_helper:-yay}.sh ran. Nothing else can install without one." | tee -a "$LOG"
     echo "${NOTE} Read the build error above (also in Install-Logs/), fix it, and re-run the installer." | tee -a "$LOG"
     exit 1

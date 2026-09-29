@@ -36,7 +36,15 @@ if [ ! -d Install-Logs ]; then
 fi
 
 # Check for AUR helper and install if not found
-ISAUR=$(command -v yay || command -v paru)
+# A helper that is on PATH but does not start (libalpm soname bump) is not
+# "already installed" - it is the case this script exists to fix.
+ISAUR=""
+for _h in yay paru; do
+  if command -v "$_h" &>/dev/null && "$_h" --version &>/dev/null; then
+    ISAUR=$(command -v "$_h")
+    break
+  fi
+done
 if [ -n "$ISAUR" ]; then
   printf "\n%s - ${SKY_BLUE}AUR helper${RESET} already installed, moving on.\n" "${OK}"
 else

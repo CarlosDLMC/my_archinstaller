@@ -312,7 +312,18 @@ install_package_pacman() {
 # before yay.sh and sources this with a bare `source` (locales.sh did) simply
 # never happened on a fresh install: the Russian locale was not generated, and
 # the clock, calendar and lock screen quietly fell back to C.
-ISAUR=$(command -v yay || command -v paru || true)
+# The first helper that actually starts: a working paru next to a broken yay
+# used to leave every install going through the broken yay.
+ISAUR=""
+for _h in yay paru; do
+  if command -v "$_h" &>/dev/null && "$_h" --version &>/dev/null; then
+    ISAUR=$(command -v "$_h")
+    break
+  fi
+done
+if [ -z "$ISAUR" ]; then
+  ISAUR=$(command -v yay || command -v paru || true)
+fi
 # The environment every AUR helper call runs under. LC_ALL=C.UTF-8 (built into
 # glibc, so always present; UTF-8 so builds that expect it still work) makes
 # makepkg print
