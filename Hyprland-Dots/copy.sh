@@ -438,7 +438,7 @@ for dir in "${config_dirs[@]}"; do
             _live="$HOME/.config/hypr"
             _cmp_tmp=$(mktemp -d)
             cp -r "$_cmp_src/." "$_cmp_tmp/"
-            for _f in monitors.lua workspaces.lua hyprlock-monitors.conf; do
+            for _f in monitors.lua workspaces.lua monitors.conf workspaces.conf hyprlock-monitors.conf; do
                 if [ -f "$_live/$_f" ]; then
                     cp "$_live/$_f" "$_cmp_tmp/$_f"
                 fi
@@ -448,6 +448,19 @@ for dir in "${config_dirs[@]}"; do
                 cp "$_live/UserConfigs/UserAnimations.lua" "$_cmp_tmp/UserConfigs/UserAnimations.lua"
             fi
             copy_video_wallpaper "$_live/configs/Startup_Apps.lua" "$_cmp_tmp/configs/Startup_Apps.lua" || true
+            _cmp_src="$_cmp_tmp"
+        fi
+        # xfce4: Thunar rewrites its last-* window and view keys in thunar.xml
+        # (window size, column widths, last view) as it is used, so every re-run
+        # after opening Thunar backed xfce4 up and reset them. Compared with the
+        # live thunar.xml in place when the two differ only in those keys - and
+        # then kept, as the tree the identical branch copies.
+        _tx="xfconf/xfce-perchannel-xml/thunar.xml"
+        if [ "$dir" = "xfce4" ] && [ -f "$HOME/.config/xfce4/$_tx" ] && [ -f "$_cmp_src/$_tx" ] \
+           && cmp -s <(grep -v 'name="last-' "$_cmp_src/$_tx") <(grep -v 'name="last-' "$HOME/.config/xfce4/$_tx"); then
+            _cmp_tmp=$(mktemp -d)
+            cp -r "$_cmp_src/." "$_cmp_tmp/"
+            cp "$HOME/.config/xfce4/$_tx" "$_cmp_tmp/$_tx"
             _cmp_src="$_cmp_tmp"
         fi
         # Runtime files this script seeds itself (all gitignored), left out of the
@@ -466,7 +479,13 @@ for dir in "${config_dirs[@]}"; do
             wallust)    _cmp_x=(output) ;;
             rofi)       _cmp_x=(wallust .current_wallpaper) ;;
             cava)       _cmp_x=(config) ;;
+            # nwg-displays' saved profiles: its own state, not tracked (restored
+            # from the backup by restore_state when the directory is replaced).
+            nwg-displays) _cmp_x=(profiles active_profile.json) ;;
         esac
+        # Never tracked anywhere (gitignored): python's bytecode caches next to
+        # the dots' scripts would otherwise force a backup for nothing.
+        _cmp_x+=(__pycache__)
         _cmp_args=()
         for _x in "${_cmp_x[@]}"; do
             _cmp_args+=(-x "$_x")
