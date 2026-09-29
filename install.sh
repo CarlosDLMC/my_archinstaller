@@ -638,6 +638,11 @@ if [ "$preset_mode" == "true" ]; then
                     echo "${NOTE} Preset forces 'nvidia' but this GPU is Kepler or older - no maintained driver supports it. Skipping." | tee -a "$LOG"
                     continue
                 fi
+                # Same card, other side: nouveau is the only driver it has.
+                if [ "$_opt" == "nouveau" ] && [ "$nvidia_supported" != "true" ]; then
+                    echo "${NOTE} Preset forces 'nouveau' but this GPU is Kepler or older - nouveau is its only driver, so it is not blacklisted. Skipping." | tee -a "$LOG"
+                    continue
+                fi
                 ;;
             rog|bluetooth)
                 # No gate: "auto" already resolved to OFF when nothing was detected, so an
@@ -907,7 +912,14 @@ for option in "${options[@]}"; do
             fi
             ;;
         nouveau)
-            if [[ " $selected_options " == *" nvidia "* ]] && [ "${nvidia_ok:-false}" != "true" ]; then
+            # Only on top of a working NVIDIA driver. Ticking nouveau without
+            # nvidia (or a preset forcing nouveau="ON" while nvidia resolved OFF)
+            # used to blacklist it anyway: no GPU driver at all, Hyprland on
+            # simpledrm, and the final check - whose NVIDIA checks only run when
+            # nvidia is selected - passed and let the preset reboot.
+            if [[ " $selected_options " != *" nvidia "* ]]; then
+                echo "${WARN} Not blacklisting ${SKY_BLUE}nouveau${RESET}: the NVIDIA driver is not selected, and nouveau would be this GPU's only driver." | tee -a "$LOG"
+            elif [ "${nvidia_ok:-false}" != "true" ]; then
                 # It used to say "nouveau is the only driver left", as if skipping
                 # this kept it working. It did not: nvidia-utils ships its own
                 # "blacklist nouveau" (/usr/lib/modprobe.d/nvidia-utils.conf), so
