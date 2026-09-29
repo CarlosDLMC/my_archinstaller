@@ -105,28 +105,22 @@ fi
 # boot - decide that BEFORE touching the file. The same goes for --revert: taking
 # the block out changes the file's hash just as much as putting it in.
 #
-# limine-entry-tool reads its settings from more than /etc/default/limine: also
-# /etc/limine-entry-tool.conf and the drop-ins in /etc/limine-entry-tool.d/. This
-# used to look at /etc/default/limine only, so enrollment switched on through
-# either of the others was missed, the config was rewritten without a new hash,
-# and Limine refused it at boot - a machine you can only recover from a live USB.
-# So every source is read, and when they disagree (one says yes, another no) the
-# script refuses to guess: which one wins is the tool's business, and guessing
-# wrong in either direction is an unbootable menu.
-_enroll_values=""
-for _src in /etc/default/limine /etc/limine-entry-tool.conf /etc/limine-entry-tool.d/*.conf; do
-  [ -f "$_src" ] || continue
-  _v=$(sed -nE 's/^\s*ENABLE_ENROLL_LIMINE_CONFIG\s*=\s*"?([A-Za-z]+)"?.*/\1/p' "$_src" 2>/dev/null | tail -1 | tr '[:upper:]' '[:lower:]')
-  [ -n "$_v" ] && _enroll_values+="$_v "
-  [ -n "$_v" ] && echo "${INFO} $_src: ENABLE_ENROLL_LIMINE_CONFIG=$_v" | tee -a "$LOG"
-done
+# Only /etc/default/limine decides. limine-entry-tool does read
+# /etc/limine-entry-tool.conf and /etc/limine-entry-tool.d/ for its other
+# settings, but load_config (/usr/lib/limine/limine-common-functions) blanks
+# ENABLE_ENROLL_LIMINE_CONFIG after them ("Do not use ENABLE_ENROLL_LIMINE_CONFIG
+# in any random configs") and only then loads /etc/default/limine. An earlier
+# version read all three and refused when they disagreed, which blocked the
+# theme (and the reboot) over a value the tool itself ignores.
 ENROLL=no
-if [[ " $_enroll_values " == *" yes "* ]] && [[ " $_enroll_values " == *" no "* ]]; then
-  echo "${ERROR} ENABLE_ENROLL_LIMINE_CONFIG is 'yes' in one limine config file and 'no' in another - not editing $CONF." | tee -a "$LOG"
-  echo "${NOTE} Make them agree, then re-run install-scripts/limine.sh." | tee -a "$LOG"
-  exit 1
+_enroll=""
+if [ -f /etc/default/limine ]; then
+  _enroll=$(sed -nE 's/^\s*ENABLE_ENROLL_LIMINE_CONFIG\s*=\s*"?([A-Za-z]+)"?.*/\1/p' /etc/default/limine 2>/dev/null | tail -1 | tr '[:upper:]' '[:lower:]')
 fi
-if [[ " $_enroll_values " == *" yes "* ]]; then
+if [ -n "$_enroll" ]; then
+  echo "${INFO} /etc/default/limine: ENABLE_ENROLL_LIMINE_CONFIG=$_enroll" | tee -a "$LOG"
+fi
+if [ "$_enroll" = yes ]; then
   if command -v limine-enroll-config &>/dev/null; then
     ENROLL=yes
   else

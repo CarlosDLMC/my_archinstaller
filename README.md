@@ -706,10 +706,9 @@ as `limine.conf.pre-theme` (a record, not a restore point - see the revert note
 below), an edit confined to the marked block plus the `timeout:`
 line, a before/after comparison of the OS entries that aborts the write if they
 differ, and a re-enroll when `ENABLE_ENROLL_LIMINE_CONFIG` is on. That setting
-is read from every file `limine-entry-tool` uses (`/etc/default/limine`,
-`/etc/limine-entry-tool.conf`, `/etc/limine-entry-tool.d/*.conf`), and if they
-disagree the script writes nothing: an unenrolled hash is a menu Limine refuses
-at boot. Re-running replaces the block rather than duplicating it, and keeps
+is read from `/etc/default/limine` only, the one place `limine-entry-tool` takes it
+from (it blanks the value after reading `/etc/limine-entry-tool.conf` and its
+drop-ins). An unenrolled hash is a menu Limine refuses at boot. Re-running replaces the block rather than duplicating it, and keeps
 anything that sits above it (a `default_entry:` at the very top, for example).
 To do it by hand instead:
 
