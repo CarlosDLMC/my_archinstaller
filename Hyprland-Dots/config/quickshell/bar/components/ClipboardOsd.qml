@@ -272,6 +272,16 @@ PanelWindow {
                             // scrolling decodes what you look at rather than
                             // all fifty screenshots up front.
                             Component.onCompleted: if (isImage) ClipboardState.requestThumb(modelData.id)
+                            // ...and again on every open: close() drops the decoded
+                            // pictures, but a reopen reuses these rows, so
+                            // onCompleted never ran again and they stayed blank.
+                            Connections {
+                                target: ClipboardState
+                                function onDialogOpenChanged() {
+                                    if (ClipboardState.dialogOpen && row.isImage)
+                                        ClipboardState.requestThumb(row.modelData.id)
+                                }
+                            }
 
                             Row {
                                 anchors.fill: parent
@@ -340,6 +350,7 @@ PanelWindow {
 
                     // ------------------------------------------- preview
                     Rectangle {
+                        id: previewPane
                         anchors.left: list.right
                         anchors.leftMargin: osd.pad
                         anchors.right: parent.right
@@ -354,6 +365,14 @@ PanelWindow {
                             if (isImage) ClipboardState.requestThumb(entry.id)
                         onEntryChanged:
                             if (isImage) ClipboardState.requestThumb(entry.id)
+                        // Same on reopen as the rows above: the entry may not change.
+                        Connections {
+                            target: ClipboardState
+                            function onDialogOpenChanged() {
+                                if (ClipboardState.dialogOpen && previewPane.isImage)
+                                    ClipboardState.requestThumb(previewPane.entry.id)
+                            }
+                        }
 
                         Image {
                             id: bigImage
