@@ -404,7 +404,7 @@ on purpose: telling someone to hand-edit a working boot entry is a good way to
 end up with one that is broken.
 
 **systemd-boot or limine**, without that hook — both are reported, never
-edited. The installer does not write to any bootloader, on purpose: a malformed
+edited. The microcode step does not write to any bootloader, on purpose: a malformed
 boot entry is an unbootable machine that cannot be repaired from the desktop
 that failed to come up, and that is a far worse outcome than a microcode update
 that has not been wired up yet. So it names what is missing and prints the
@@ -644,27 +644,45 @@ through every official path.
     puts `plymouth` right after `systemd` (or `udev`) in whatever `HOOKS` you
     have, which also keeps it ahead of `encrypt`/`sd-encrypt` for the LUKS
     prompt. A preset that runs mkinitcpio with its own config file (`-c`, which
-    skips drop-ins) gets the same lines appended to that file instead.
+    skips drop-ins) gets the same lines appended to that file instead. Whether
+    it took is checked the way mkinitcpio reads its config - the files joined
+    in its own order and sourced once - so a later drop-in that sets `HOOKS`
+    again is caught, not missed.
   - **`splash` on the kernel command line**, wherever the machine keeps one:
-    the `options` line of each systemd-boot entry that boots Linux,
-    `GRUB_CMDLINE_LINUX_DEFAULT` in `/etc/default/grub` (then `grub-mkconfig`),
-    the `cmdline:` lines of a `limine.conf` that nothing generates, a
-    `KERNEL_CMDLINE[default]+="splash"` line in `/etc/default/limine` where
-    Limine's entry tool writes the entries (CachyOS), and `/etc/kernel/cmdline`
-    for UKIs. Each edit adds that one word and nothing else - a separate check
-    confirms it before the file is replaced - and keeps the original as
-    `<file>.pre-plymouth`. `quiet` is not added.
+    the `options` line of each systemd-boot entry that boots one of this
+    system's kernels (another system's entries on a shared ESP are left alone),
+    `LINUX_OPTIONS` in CachyOS's `/etc/sdboot-manage.conf`,
+    `GRUB_CMDLINE_LINUX_DEFAULT` in `/etc/default/grub` (then `grub-mkconfig`,
+    with `grub.cfg` backed up first), the `cmdline:` lines of a `limine.conf`
+    that nothing generates, a `KERNEL_CMDLINE[default]+="splash"` line in
+    `/etc/default/limine` where Limine's entry tool writes the entries
+    (CachyOS), and `/etc/kernel/cmdline` for UKIs. Each edit adds that one word
+    and nothing else, and that is checked on the command line the boot tool
+    actually computes, not only on the file's text: Limine's entry tool is
+    asked for every kernel's command line before and after
+    (`limine-entry-tool --get-cmdline`), and GRUB's file is sourced the way
+    `grub-mkconfig` reads it. An edit that would change anything else - a
+    blank `KERNEL_CMDLINE` that would leave the kernel with only `splash`, an
+    `export`ed GRUB variable - is not written, or is put back. The original is
+    kept as `<file>.pre-plymouth`. `quiet` is not added, and a `splash=verbose`
+    (plymouth's "text, please") is kept.
 
-  When one of these cannot be done (another bootloader, a GRUB line it cannot
-  parse), the script says what to add by hand, and the final check stops the
-  auto-reboot with `plymouth-splash` or a missing-hook line.
+  When one of these cannot be done (a form of the file it does not edit, a
+  per-kernel `KERNEL_CMDLINE` override), the script says what to add by hand,
+  and the final check stops the auto-reboot with `plymouth-splash` or
+  `plymouth-hook`. A bootloader it does not know at all (rEFInd, EFISTUB) only
+  counts as a failure when this boot's own command line has no `splash`
+  either.
 - `plymouth="auto"` acts only where plymouth is already installed **and** in the
   mkinitcpio `HOOKS`, as on CachyOS, and does nothing on plain Arch.
 
-To take the wiring out again: delete the drop-in, put the `.pre-plymouth` copies
-back (or remove `splash` by hand), then rebuild with `sudo mkinitcpio -P` (and
-`sudo grub-mkconfig -o /boot/grub/grub.cfg` on GRUB, `sudo limine-mkinitcpio`
-with Limine's entry tool).
+To take the wiring out again: delete the drop-in, remove the word `splash` from
+the command line in the files the run reported, then rebuild with
+`sudo mkinitcpio -P` (and `sudo grub-mkconfig -o /boot/grub/grub.cfg` on GRUB,
+`sudo limine-mkinitcpio` with Limine's entry tool). Removing the word is safer
+than copying the `.pre-plymouth` files back: a `limine.conf.pre-plymouth` was
+taken before `limine.sh` added its theme, and an entry file may have been
+rewritten by a kernel update since.
 
 Only `soviet.plymouth` and the pictures are in the repo; the spinner frames and
 dialog artwork are copied at install time from plymouth's own `spinner` theme.
