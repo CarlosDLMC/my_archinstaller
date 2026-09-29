@@ -68,6 +68,109 @@ is_animation_preset() { # file animations-dir
     return 1
 }
 
+# Every path below is a `target` in config/wallust/wallust.toml - the palette,
+# regenerated in full on every wallpaper change, so runtime state and
+# gitignored. Defined up here because restore_state (in the config loop) and
+# the seeding step further down both use it; see "Seed the wallust output
+# files" for why each one has to exist.
+wallust_targets=(
+    "cava/config"
+    "hypr/wallust/wallust-hyprland.lua"
+    "rofi/wallust/colors-rofi.rasi"
+    "wallust/output/colors-waybar.css"
+    "quickshell/qml_color.json"
+    # bar/Theme.qml reads this through a FileView. The bar and initial-boot.sh's
+    # first `wallust run` start in parallel from hyprland.start, so without a
+    # seed the bar can load before the file exists and sit on its fallback
+    # palette until it is restarted.
+    "quickshell/bar/wallust-colors.json"
+)
+
+# Put hypr/'s machine state back from its backup: what the repo's copy either
+# lacks or holds only as a template.
+restore_hypr_state() { # backup
+    local _bak="$1" _state _ua _rc
+    # Not in the repo at all: the first-boot marker, the active wallpaper, and
+    # the monitors.conf / workspaces.conf nwg-displays writes next to the .lua.
+    for _state in .initial_startup_done wallpaper_effects/.wallpaper_current wallpaper_effects/.wallpaper_modified monitors.conf workspaces.conf; do
+        if [ -f "$_bak/$_state" ] && [ ! -e "$HOME/.config/hypr/$_state" ]; then
+            mkdir -p "$(dirname "$HOME/.config/hypr/$_state")"
+            cp "$_bak/$_state" "$HOME/.config/hypr/$_state" && echo "  ${OK} Kept your $_state from the previous install"
+        fi
+    done
+
+    # The monitor and workspace layout belong to the machine, not the repo: the
+    # tracked monitors.lua / workspaces.lua are generic templates that
+    # nwg-displays overwrites on Apply. Unlike the files above these DO exist in
+    # the fresh copy (as the templates), so the backup has to win outright -
+    # otherwise a re-run reset every monitor to the catch-all highres/auto rule.
+    for _state in monitors.lua workspaces.lua; do
+        if [ -f "$_bak/$_state" ] && ! cmp -s "$_bak/$_state" "$HOME/.config/hypr/$_state"; then
+            cp "$_bak/$_state" "$HOME/.config/hypr/$_state" && echo "  ${OK} Kept your $_state from the previous install"
+        fi
+    done
+
+    # UserAnimations.lua is state too - Animations.sh copies the chosen preset
+    # over it - but only when it IS one of the presets: an untouched copy of an
+    # older repo version is not a choice, and keeping it blocked repo updates.
+    _ua="UserConfigs/UserAnimations.lua"
+    if [ -f "$_bak/$_ua" ] && ! cmp -s "$_bak/$_ua" "$HOME/.config/hypr/$_ua" \
+       && is_animation_preset "$_bak/$_ua" "$HOME/.config/hypr/animations"; then
+        cp "$_bak/$_ua" "$HOME/.config/hypr/$_ua" && echo "  ${OK} Kept your animation preset ($_ua) from the previous install"
+    fi
+
+    # The video wallpaper: only its three lines, not the whole Startup_Apps.lua
+    # (see copy_video_wallpaper). Without this the next login showed a still image.
+    copy_video_wallpaper "$_bak/configs/Startup_Apps.lua" "$HOME/.config/hypr/configs/Startup_Apps.lua"
+    _rc=$?
+    if [ "$_rc" -eq 0 ]; then
+        echo "  ${OK} Kept your video wallpaper from the previous install"
+    elif [ "$_rc" -eq 2 ]; then
+        echo "  ${WARN} Your Startup_Apps.lua had mpvpaper on, but the video could not be carried over (no livewallpaper line this script can read, or no room for a temp file). It is in $(basename "$_bak"); pick it again with SUPER+W."
+    fi
+}
+
+# Put a directory's machine state back from its backup RIGHT AFTER the loop
+# below copies it. It used to happen only at the very end, after every other
+# directory and the 49 MB wallpaper copy, from the backup path remembered in
+# that same run: anything that stopped the run in between (Ctrl-C, a closed
+# terminal, a full disk, a failed cp) left the monitor layout, the animation
+# preset, the video wallpaper, the palette and the first-boot marker in a
+# hypr.backup-* the next run never looked at - by then hypr/ matched the repo
+# again, so nothing was backed up and nothing restored.
+restore_state() { # dir backup
+    local _dir="$1" _bak="$2" _t _s
+    # This directory's palette files.
+    for _t in "${wallust_targets[@]}"; do
+        [ "${_t%%/*}" = "$_dir" ] || continue
+        _s="${_t#*/}"
+        if [ -f "$_bak/$_s" ] && [ ! -e "$HOME/.config/$_t" ]; then
+            mkdir -p "$(dirname "$HOME/.config/$_t")"
+            cp "$_bak/$_s" "$HOME/.config/$_t" && echo "  ${OK} Kept your current palette for $_t"
+        fi
+    done
+    case "$_dir" in
+    hypr) restore_hypr_state "$_bak" ;;
+    rofi)
+        # The rofi background link. -e, not -L: one left dangling by a deleted
+        # wallpaper is no use.
+        if [ -e "$_bak/.current_wallpaper" ] && [ ! -e "$HOME/.config/rofi/.current_wallpaper" ]; then
+            ln -sfn "$(readlink -f "$_bak/.current_wallpaper")" "$HOME/.config/rofi/.current_wallpaper" \
+                && echo "  ${NOTE} Keeping your current rofi background"
+        fi
+        ;;
+    nwg-displays)
+        # Saved display profiles and the active one: nwg-displays' own state,
+        # which the repo does not track and the backup took along.
+        for _s in profiles active_profile.json; do
+            if [ -e "$_bak/$_s" ] && [ ! -e "$HOME/.config/nwg-displays/$_s" ]; then
+                cp -a "$_bak/$_s" "$HOME/.config/nwg-displays/$_s" && echo "  ${OK} Kept your nwg-displays $_s"
+            fi
+        done
+        ;;
+    esac
+}
+
 # Copy shell configuration files - backing up the existing ones like every config
 # directory below. ZshChangeTheme.sh edits ~/.zshrc in place and people add aliases;
 # a re-run used to discard that silently.
@@ -276,6 +379,28 @@ config_dirs=(
 # just displaced - see the comment there.
 declare -A BACKUP_OF
 
+# A directory is "half-replaced" from the moment it is moved aside until its copy
+# and state restore are done. If the run is stopped in that window (Ctrl-C, the
+# terminal closed, a kill), put the original back instead of leaving a partial
+# copy with the real one stranded in a backup.
+_replacing=""
+rollback_replace() {
+    [ -n "$_replacing" ] || return 0
+    local _d="${_replacing%%|*}" _b="${_replacing#*|}"
+    rm -rf "$HOME/.config/$_d" && mv -T "$_b" "$HOME/.config/$_d" \
+        && echo "  ${WARN} Put your original $_d back (from $(basename "$_b"))"
+    unset "BACKUP_OF[$_d]"
+    _replacing=""
+}
+trap 'echo; rollback_replace; exit 130' INT TERM HUP
+
+# Directories that could not be copied. The run carries on with the rest, then
+# exits 1 and leaves Install-Logs/.dots-failed for 02-Final-Check.sh - it used to
+# `exit 1` on the spot, which skipped every later step, and install.sh ignores
+# dotfiles-main.sh's status, so the final check then passed anyway.
+copy_failed=()
+DOTS_FAILED="$SCRIPT_DIR/../Install-Logs/.dots-failed"
+
 for dir in "${config_dirs[@]}"; do
     if [ -d "$SCRIPT_DIR/config/$dir" ]; then
         # Back up to a timestamped name. A fixed "$dir.backup" target breaks on
@@ -366,6 +491,7 @@ for dir in "${config_dirs[@]}"; do
             if mv -T "$HOME/.config/$dir" "$backup"; then
                 printf "  ${NOTE} Backed up existing $dir to $(basename "$backup")\n"
                 BACKUP_OF["$dir"]="$backup"
+                _replacing="$dir|$backup"
             else
                 echo "  ${ERROR} Could not back up existing $dir - skipping it rather than merging over it"
                 # The comparison copy (a full hypr tree, ~9 MB) was left in
@@ -391,13 +517,15 @@ for dir in "${config_dirs[@]}"; do
         mkdir -p "$HOME/.config/$dir"
         if cp -r "$_copy_src/." "$HOME/.config/$dir/" 2>&1; then
             echo "  ${OK} Copied $dir"
-        else
-            echo "  ${ERROR} Failed to copy $dir"
-            if [ -n "$_cmp_tmp" ]; then
-                rm -rf "$_cmp_tmp"
+            if [ -n "${BACKUP_OF[$dir]:-}" ]; then
+                restore_state "$dir" "${BACKUP_OF[$dir]}"
             fi
-            exit 1
+        else
+            echo "  ${ERROR} Failed to copy $dir - keeping the version that was there"
+            copy_failed+=("$dir")
+            rollback_replace
         fi
+        _replacing=""
         if [ -n "$_cmp_tmp" ]; then
             rm -rf "$_cmp_tmp"
         fi
@@ -463,18 +591,8 @@ fi
 # initial-boot.sh is guarded by ~/.config/hypr/.initial_startup_done and does
 # not run a second time. Nothing would repaint until the next wallpaper change.
 printf "\n${INFO} Seeding wallust output files...\n"
-wallust_targets=(
-    "cava/config"
-    "hypr/wallust/wallust-hyprland.lua"
-    "rofi/wallust/colors-rofi.rasi"
-    "wallust/output/colors-waybar.css"
-    "quickshell/qml_color.json"
-    # bar/Theme.qml reads this through a FileView. The bar and initial-boot.sh's
-    # first `wallust run` start in parallel from hyprland.start, so without a
-    # seed the bar can load before the file exists and sit on its fallback
-    # palette until it is restarted.
-    "quickshell/bar/wallust-colors.json"
-)
+# (wallust_targets is defined at the top; restore_state already put a backed-up
+# palette back as each directory was copied, so this mostly seeds a fresh install.)
 
 for _target in "${wallust_targets[@]}"; do
     _seed="$SCRIPT_DIR/defaults/$_target"
@@ -581,48 +699,9 @@ fi
 # the default gets chosen.
 DEFAULT_WALLPAPER="sovietpunk/sovietpunk_2k_2560x1440.png"
 
-# On a re-run, hypr/ was just moved aside - and with it the first-boot marker and the
-# active wallpaper. Recover them first, or the next login runs initial-boot.sh again on
-# the default wallpaper and undoes the palette this script just preserved above.
-_hypr_bak="${BACKUP_OF[hypr]:-}"
-if [ -n "$_hypr_bak" ]; then
-    for _state in .initial_startup_done wallpaper_effects/.wallpaper_current wallpaper_effects/.wallpaper_modified; do
-        if [ -f "$_hypr_bak/$_state" ] && [ ! -e "$HOME/.config/hypr/$_state" ]; then
-            mkdir -p "$(dirname "$HOME/.config/hypr/$_state")"
-            cp "$_hypr_bak/$_state" "$HOME/.config/hypr/$_state" && echo "  ${OK} Kept your $_state from the previous install"
-        fi
-    done
-
-    # The monitor and workspace layout belong to the machine, not the repo: the
-    # tracked monitors.lua / workspaces.lua are generic templates that
-    # nwg-displays overwrites on Apply. Unlike the files above these DO exist in
-    # the fresh copy (as the templates), so the backup has to win outright -
-    # otherwise a re-run reset every monitor to the catch-all highres/auto rule.
-    for _state in monitors.lua workspaces.lua; do
-        if [ -f "$_hypr_bak/$_state" ] && ! cmp -s "$_hypr_bak/$_state" "$HOME/.config/hypr/$_state"; then
-            cp "$_hypr_bak/$_state" "$HOME/.config/hypr/$_state" && echo "  ${OK} Kept your $_state from the previous install"
-        fi
-    done
-
-    # UserAnimations.lua is state too - Animations.sh copies the chosen preset
-    # over it - but only when it IS one of the presets: an untouched copy of an
-    # older repo version is not a choice, and keeping it blocked repo updates.
-    _ua="UserConfigs/UserAnimations.lua"
-    if [ -f "$_hypr_bak/$_ua" ] && ! cmp -s "$_hypr_bak/$_ua" "$HOME/.config/hypr/$_ua" \
-       && is_animation_preset "$_hypr_bak/$_ua" "$HOME/.config/hypr/animations"; then
-        cp "$_hypr_bak/$_ua" "$HOME/.config/hypr/$_ua" && echo "  ${OK} Kept your animation preset ($_ua) from the previous install"
-    fi
-
-    # The video wallpaper: only its three lines, not the whole Startup_Apps.lua
-    # (see copy_video_wallpaper). Without this the next login showed a still image.
-    copy_video_wallpaper "$_hypr_bak/configs/Startup_Apps.lua" "$HOME/.config/hypr/configs/Startup_Apps.lua"
-    _rc=$?
-    if [ "$_rc" -eq 0 ]; then
-        echo "  ${OK} Kept your video wallpaper from the previous install"
-    elif [ "$_rc" -eq 2 ]; then
-        echo "  ${WARN} Your Startup_Apps.lua had mpvpaper on but no livewallpaper line this script can read, so the video was not carried over (it is in $(basename "$_hypr_bak")). Pick it again with SUPER+W."
-    fi
-fi
+# hypr/'s state from a backup (the first-boot marker, the active wallpaper, the
+# monitor layout, the animation preset, the video wallpaper) was already put back
+# by restore_state, right after the loop above copied hypr/.
 
 # Deploy herdr's config and sounds INTO ~/.config/herdr, never replacing it.
 #
@@ -656,7 +735,7 @@ if [ -d "$SCRIPT_DIR/config/herdr" ]; then
         fi
     else
         echo "  ${ERROR} Failed to copy herdr config"
-        exit 1
+        copy_failed+=("herdr")
     fi
 fi
 
@@ -714,5 +793,13 @@ if [ -f "$_default_src" ] || [ -n "${BACKUP_OF[rofi]:-}" ]; then
         echo "  ${ERROR} Could not link $_rofi_link - rofi themes will have no background"
     fi
 fi
+
+if [ ${#copy_failed[@]} -gt 0 ]; then
+    mkdir -p "$(dirname "$DOTS_FAILED")"
+    printf '%s\n' "${copy_failed[@]}" >"$DOTS_FAILED"
+    printf "\n${ERROR} Could not copy: ${copy_failed[*]} - the version already there was kept. Fix the error above, then re-run install-scripts/dotfiles-main.sh.\n\n"
+    exit 1
+fi
+rm -f "$DOTS_FAILED"
 
 printf "\n${OK} Dotfiles installation complete!\n\n"
