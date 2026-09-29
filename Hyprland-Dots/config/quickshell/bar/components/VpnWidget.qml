@@ -100,12 +100,22 @@ DropdownWidget {
         id: vpnActionProc
         property string targetVpn: ""
         property bool isDisconnect: false
-        command: isDisconnect ?
-            ["sudo", "wg-quick", "down", targetVpn] :
-            ["sudo", "wg-quick", "up", targetVpn]
+        // Set when switching straight from one tunnel to another: both steps then
+        // run as ONE command. The click used to start this same Process twice -
+        // down, then at once up - but setting running = true on a Process that is
+        // still running does nothing, so the old tunnel went down and the new one
+        // never came up. The names go in as positional parameters, like the sync
+        // commands below, so sh never re-parses them.
+        property string switchFrom: ""
+        command: switchFrom !== "" ?
+            ["sh", "-c", "sudo wg-quick down \"$1\"; sudo wg-quick up \"$2\"", "sh", switchFrom, targetVpn] :
+            (isDisconnect ?
+                ["sudo", "wg-quick", "down", targetVpn] :
+                ["sudo", "wg-quick", "up", targetVpn])
         onRunningChanged: {
             if (!running) {
                 vpnWidget.isConnecting = false
+                switchFrom = ""
                 // Clear status immediately if disconnecting
                 if (isDisconnect) {
                     vpnWidget.activeVpn = ""
@@ -336,6 +346,7 @@ DropdownWidget {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
+                            vpnActionProc.switchFrom = ""
                             vpnActionProc.targetVpn = vpnWidget.activeVpn
                             vpnActionProc.isDisconnect = true
                             vpnWidget.isConnecting = true
@@ -526,13 +537,9 @@ DropdownWidget {
                         cursorShape: Qt.PointingHandCursor
                         enabled: modelData !== vpnWidget.activeVpn
                         onClicked: {
-                            // Disconnect current if connected
-                            if (vpnWidget.activeVpn) {
-                                vpnActionProc.targetVpn = vpnWidget.activeVpn
-                                vpnActionProc.isDisconnect = true
-                                vpnActionProc.running = true
-                            }
-                            // Connect to new VPN
+                            // Connected already? Then down and up run as one
+                            // command (see switchFrom on vpnActionProc).
+                            vpnActionProc.switchFrom = vpnWidget.activeVpn
                             vpnActionProc.targetVpn = modelData
                             vpnActionProc.isDisconnect = false
                             vpnWidget.isConnecting = true
