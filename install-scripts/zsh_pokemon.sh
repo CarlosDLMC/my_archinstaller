@@ -24,7 +24,9 @@ printf "${NOTE} Removing any traces of ${SKY_BLUE}Pokemon Color Scripts${RESET}\
 # Install Pokemon Color Scripts
 printf "${NOTE} Installing ${SKY_BLUE}Pokemon Color Scripts${RESET}\n"
 for pok in "pokemon-colorscripts-git"; do
-  install_package_f "$pok" "$LOG"
+  # install_package, not install_package_f: the _f variant never checks, so every
+  # re-run rebuilt this -git package from source.
+  install_package "$pok" "$LOG"
 done
 
 printf "\n%.0s" {1..1}
