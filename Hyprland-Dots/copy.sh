@@ -769,6 +769,79 @@ if [ -d "$SCRIPT_DIR/config/herdr" ]; then
     fi
 fi
 
+# Deploy LibreWolf's new-tab setup: 2 rows x 10 pinned sites, wider gaps.
+#
+# NOT in config_dirs: ~/.config/librewolf is where a fresh LibreWolf keeps its
+# profiles, so moving it aside would take the bookmarks, logins and history with
+# it. Two files go in:
+#   - librewolf.overrides.cfg into the profile ROOT, read at every start: the
+#     rows and per-row prefs, and the pref that makes userContent.css load.
+#   - chrome/userContent.css into the profile itself, whose directory has a
+#     random name and does not exist until LibreWolf first starts - so on a
+#     fresh install it is started once here, headless, to create it.
+# The root is ~/.librewolf when that holds a profiles.ini (an install that
+# predates LibreWolf's XDG support keeps using it), else the XDG one - and the
+# overrides file is looked for in the same root, so the two always match.
+printf "\n${INFO} Setting up LibreWolf's new tab page...\n"
+_lw_src="$SCRIPT_DIR/config/librewolf"
+if [ -d "$_lw_src" ] && ! command -v librewolf >/dev/null 2>&1; then
+    echo "  ${WARN} librewolf is not installed - its new-tab settings were skipped"
+elif [ -d "$_lw_src" ]; then
+    if [ -f "$HOME/.librewolf/profiles.ini" ]; then
+        _lw_root="$HOME/.librewolf"
+    else
+        _lw_root="${XDG_CONFIG_HOME:-$HOME/.config}/librewolf/librewolf"
+    fi
+    # The profile this LibreWolf install starts with: Default= in its
+    # [Install<hash>] section, relative to the root unless absolute.
+    _lw_profile() {
+        local _p
+        _p=$(sed -n '/^\[Install/,/^\[/s/^Default=//p' "$_lw_root/profiles.ini" 2>/dev/null | head -n 1)
+        [ -n "$_p" ] || return 1
+        case "$_p" in /*) ;; *) _p="$_lw_root/$_p" ;; esac
+        [ -d "$_p" ] && printf '%s\n' "$_p"
+    }
+
+    # The overrides file goes in first, so the headless start below already
+    # applies it.
+    mkdir -p "$_lw_root"
+    _lw_cfg="$_lw_root/librewolf.overrides.cfg"
+    if [ -f "$_lw_cfg" ] && ! cmp -s "$_lw_src/librewolf.overrides.cfg" "$_lw_cfg"; then
+        cp "$_lw_cfg" "$_lw_cfg.backup-$BACKUP_STAMP" && echo "  ${NOTE} Backed up existing librewolf.overrides.cfg to librewolf.overrides.cfg.backup-$BACKUP_STAMP"
+    fi
+    if cp "$_lw_src/librewolf.overrides.cfg" "$_lw_cfg"; then
+        echo "  ${OK} Copied librewolf.overrides.cfg (2 rows x 10 pinned sites)"
+    else
+        echo "  ${ERROR} Failed to copy librewolf.overrides.cfg"
+        copy_failed+=("librewolf")
+    fi
+
+    _lw_dir=$(_lw_profile)
+    if [ -z "$_lw_dir" ]; then
+        # --screenshot loads the page and exits by itself; --no-remote keeps it
+        # from handing off to a LibreWolf that is already running.
+        _lw_tmp=$(mktemp -d)
+        timeout 60 librewolf --headless --no-remote --screenshot "$_lw_tmp/first-start.png" about:blank >/dev/null 2>&1
+        rm -rf "$_lw_tmp"
+        _lw_dir=$(_lw_profile)
+    fi
+    if [ -z "$_lw_dir" ]; then
+        echo "  ${WARN} Could not find or create a LibreWolf profile - copy $_lw_src/chrome/userContent.css into its chrome/ folder by hand"
+    else
+        _lw_css="$_lw_dir/chrome/userContent.css"
+        mkdir -p "$_lw_dir/chrome"
+        if [ -f "$_lw_css" ] && ! cmp -s "$_lw_src/chrome/userContent.css" "$_lw_css"; then
+            cp "$_lw_css" "$_lw_css.backup-$BACKUP_STAMP" && echo "  ${NOTE} Backed up existing userContent.css to userContent.css.backup-$BACKUP_STAMP"
+        fi
+        if cp "$_lw_src/chrome/userContent.css" "$_lw_css"; then
+            echo "  ${OK} Copied userContent.css into $(basename "$_lw_dir") (new-tab tile spacing; restart LibreWolf if it is open)"
+        else
+            echo "  ${ERROR} Failed to copy userContent.css"
+            copy_failed+=("librewolf")
+        fi
+    fi
+fi
+
 printf "\n${INFO} Setting default wallpaper...\n"
 _default_src="$SCRIPT_DIR/wallpapers/$DEFAULT_WALLPAPER"
 if [ -f "$HOME/.config/hypr/wallpaper_effects/.wallpaper_current" ]; then
