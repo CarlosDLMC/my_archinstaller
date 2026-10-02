@@ -79,4 +79,4 @@ fi
 # the capture and whatever the caller does next - the screenshot editor sat
 # waiting for the sound to play out before it opened, and every volume keypress
 # paid for it too.
-{ pw-play "$sound_file" || pa-play "$sound_file"; } &
+{ pw-play "$sound_file" || paplay "$sound_file"; } &
