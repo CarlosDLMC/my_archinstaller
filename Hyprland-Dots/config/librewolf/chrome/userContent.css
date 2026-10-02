@@ -1,0 +1,37 @@
+/* Disable font ligatures (== -> ⹀, => -> ⇒, != -> ≠, etc.) on web pages.
+   Requires: about:config -> toolkit.legacyUserProfileCustomizations.stylesheets = true */
+
+@-moz-document url-prefix(http://), url-prefix(https://), url-prefix(file://) {
+
+  pre, code, kbd, samp, tt, var,
+  textarea, input,
+  .CodeMirror, .cm-editor, .monaco-editor,
+  [class*="code"], [class*="Code"],
+  [class*="mono"], [class*="Mono"],
+  [class*="editor"], [class*="Editor"] {
+    font-variant-ligatures: none !important;
+    font-feature-settings: "liga" 0, "clig" 0, "calt" 0, "dlig" 0 !important;
+  }
+
+  /* Nuclear option — uncomment if ligatures still show up somewhere.
+     Also kills fi/ffi ligatures in normal body text. */
+  /*
+  * {
+    font-variant-ligatures: none !important;
+    font-feature-settings: "liga" 0, "clig" 0, "calt" 0, "dlig" 0 !important;
+  }
+  */
+
+}
+
+/* New tab page: wider spacing between the pinned-site tiles.
+   Tune the two values below. Tiles per row is a pref, not CSS:
+   about:config -> browser.newtabpage.activity-stream.topSitesMaxSitesPerRow */
+@-moz-document url("about:newtab"), url("about:home") {
+
+  .top-sites-list {
+    column-gap: 24px !important;   /* space between tiles in a row (default 0) */
+    row-gap: 16px !important;      /* space between rows (default ~8px) */
+  }
+
+}

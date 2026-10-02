@@ -239,7 +239,11 @@ first prompt.
 - Whole-workspace move that preserves the dwindle layout
 
 ### Applications
-- LibreWolf (browser, `extra/librewolf` — `librewolf-bin` no longer exists in the AUR)
+- LibreWolf (browser, `extra/librewolf` — `librewolf-bin` no longer exists in the AUR).
+  Its new tab page comes set to 2 rows × 10 pinned sites with wider gaps between
+  them, from `config/librewolf/`: `copy.sh` puts `librewolf.overrides.cfg` in the
+  profile root and `chrome/userContent.css` in the profile, starting LibreWolf
+  once headless on a fresh install so the profile exists
 - vim (the `$EDITOR` the Hyprland config names) and nano
 - Thunar (file manager)
 - btop, cava, fastfetch
