@@ -393,18 +393,28 @@ def edit_entry(text, var):
     return 'added', '\n'.join(lines)
 
 # limine.conf written by hand or by archinstall (not by limine-entry-tool). An
-# entry starts at a line whose first character is "/"; only the ones with
-# protocol: linux take a kernel command line - an efi entry (a UKI, Windows)
-# gets its command line from elsewhere or not at all.
+# entry starts at a line whose first character is "/". Two kinds take a kernel
+# command line: protocol: linux, and an efi entry that boots a unified kernel
+# image (its path in EFI/Linux/) and has a cmdline line of its own. Limine hands
+# that line to the image, and with Secure Boot off systemd-stub uses it instead
+# of the one built in - so archinstall's UKI entries, which carry one, booted
+# without the splash /etc/kernel/cmdline had just been given, and nothing said
+# so. An efi entry with no cmdline line leaves the image's own in charge, and
+# one outside EFI/Linux/ (Windows, a firmware tool) takes no kernel command line.
 CMDLINE = re.compile(r'^(\s*(?:kernel_cmdline|cmdline)\s*:)(.*)$')
+UKI_PATH = re.compile(r'^\s*(?:path|image_path)\s*:.*/EFI/Linux/[^/\s]+\.efi\s*$', re.I)
 
 def limine_entries(lines):
     starts = [i for i, l in enumerate(lines) if re.match(r'\s*/', l)]
     out = []
     for n, s in enumerate(starts):
         body = list(range(s + 1, starts[n + 1] if n + 1 < len(starts) else len(lines)))
+        cl = [i for i in body if CMDLINE.match(lines[i])]
         if any(re.match(r'\s*protocol\s*:\s*linux\s*$', lines[i], re.I) for i in body):
-            out.append((s, body, [i for i in body if CMDLINE.match(lines[i])]))
+            out.append((s, body, cl))
+        elif cl and any(re.match(r'\s*protocol\s*:\s*efi(?:_chainload)?\s*$', lines[i], re.I) for i in body) \
+                and any(UKI_PATH.match(lines[i]) for i in body):
+            out.append((s, body, cl))
     return out
 
 def limine_value(lines, cl):
@@ -850,13 +860,23 @@ if [ -f /etc/sdboot-manage.conf ]; then
   report_splash /etc/sdboot-manage.conf "$_sp"
 fi
 
+# GRUB that boots no kernel of its own - archinstall's UKI setup, where 15_uki
+# hands the images to GRUB's `uki` command and 10_linux is switched off, so
+# grub.cfg has no `linux` line at all. GRUB_CMDLINE_LINUX_DEFAULT reaches no
+# kernel there: the images carry /etc/kernel/cmdline, handled above. Editing it
+# anyway ended with the check below finding no 'splash' in grub.cfg, putting
+# both files back and recording a failure that stopped the preset's reboot -
+# for a splash that was in place.
+if command -v grub-mkconfig &>/dev/null && [ -f /etc/default/grub ] && sudo test -f /boot/grub/grub.cfg \
+   && ! sudo grep -qE '^[[:space:]]*linux[[:space:]]' /boot/grub/grub.cfg; then
+  echo "${NOTE} GRUB boots no kernel of its own here (/boot/grub/grub.cfg has no 'linux' line - unified kernel images), so /etc/default/grub is left alone: an image takes its command line from /etc/kernel/cmdline, not from GRUB." | tee -a "$LOG"
 # GRUB: GRUB_CMDLINE_LINUX_DEFAULT in /etc/default/grub (the normal entries -
 # the recovery ones stay without), then grub.cfg rebuilt from it. Only when
 # this run changed the file, since grub-mkconfig would also apply anything else
 # that is pending in it. grub.cfg is copied to grub.cfg.pre-plymouth first, and
 # both files go back if grub-mkconfig fails, gives no entry the word, or leaves
 # out a menu entry the old grub.cfg had (os-prober's, one written by hand).
-if command -v grub-mkconfig &>/dev/null && [ -f /etc/default/grub ] && sudo test -f /boot/grub/grub.cfg; then
+elif command -v grub-mkconfig &>/dev/null && [ -f /etc/default/grub ] && sudo test -f /boot/grub/grub.cfg; then
   _grub_cfg=/boot/grub/grub.cfg
   grub_cfg_splash() {
     sudo grep -qE '^[[:space:]]*linux[[:space:]].*[[:space:]]splash([=[:space:]]|$)' "$_grub_cfg"
