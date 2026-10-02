@@ -513,18 +513,12 @@ DropdownWidget {
                             elide: Text.ElideRight
                         }
 
-                        // Location indicator based on config name
+                        // Location indicator: config names start with a two-letter country code
                         Text {
                             text: {
-                                var name = modelData.toLowerCase()
-                                if (name.includes("de")) return "🇩🇪"
-                                if (name.includes("pl")) return "🇵🇱"
-                                if (name.includes("ge")) return "🇬🇪"
-                                if (name.includes("es")) return "🇪🇸"
-                                if (name.includes("ua")) return "🇺🇦"
-                                if (name.includes("lt")) return "🇱🇹"
-                                if (name.includes("id")) return "🇮🇩"
-                                return ""
+                                var flags = { de: "🇩🇪", pl: "🇵🇱", ge: "🇬🇪", es: "🇪🇸",
+                                              ua: "🇺🇦", lt: "🇱🇹", id: "🇮🇩" }
+                                return flags[modelData.substring(0, 2).toLowerCase()] || ""
                             }
                             font.pixelSize: Theme.fontSize + 2
                         }

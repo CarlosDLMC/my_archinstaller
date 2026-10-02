@@ -48,6 +48,7 @@ esac
 declare -A VPN_MAP=(
     ["de-ber"]="berlin:Europe/Berlin:+01:00"
     ["pl-waw"]="warsaw:Europe/Warsaw:+01:00"
+    ["pl-own"]="warsaw:Europe/Warsaw:+01:00"
     ["ge-tbs"]="tbilisi:Asia/Tbilisi:+04:00"
     ["es-mad"]="madrid:Europe/Madrid:+01:00"
     ["ua-iev"]="kyiv:Europe/Kiev:+02:00"
