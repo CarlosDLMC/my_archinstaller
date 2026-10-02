@@ -300,6 +300,11 @@ if selected pokemon; then
 fi
 
 if selected gtk_themes; then
+    # The same three gtk_themes.sh looks for after extracting - it only prints
+    # its error, so this is where a missing one stops the reboot. The GTK theme
+    # is what DarkLight.sh switches to from ~/.themes.
+    check_outcome "GTK theme Flat-Remix-GTK-Blue-Dark not extracted to ~/.themes (GTK-themes-icons/auto-extract.sh)" \
+        test -d "$HOME/.themes/Flat-Remix-GTK-Blue-Dark"
     check_outcome "icon theme Flat-Remix-Blue-Dark not extracted to ~/.icons (GTK-themes-icons/auto-extract.sh)" \
         test -d "$HOME/.icons/Flat-Remix-Blue-Dark"
     check_outcome "cursor theme Bibata-Modern-Ice not extracted to ~/.icons (GTK-themes-icons/auto-extract.sh)" \
