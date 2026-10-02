@@ -10,13 +10,12 @@ import Quickshell.Io
 // per screen, and this one polls a network endpoint - two monitors would mean
 // two calls to Anthropic every five minutes to render the same number twice.
 //
-// Two cadences, because the two halves cost very different things:
-//   limits  one HTTPS probe, every 5 minutes, always - this is what the bar
-//           readout shows, so it has to be current whether or not the card
-//           has ever been opened.
-//   full    the above plus a transcript scan, only while the card is open.
-//           Cold that reads 160MB; the collector caches per file, so a repeat
-//           costs about 0.1s of CPU.
+// Nothing here talks to the network on its own. The only background work is
+// one local "check" at startup, which decides whether the widget shows at all.
+// The HTTPS probe runs only when you open the card (and the last reading is
+// over two minutes old) or middle-click the icon; the transcript scan runs
+// only while the card is open. Cold that scan reads 160MB; the collector
+// caches per file, so a repeat costs about 0.1s of CPU.
 Singleton {
     id: root
 
@@ -48,7 +47,8 @@ Singleton {
 
     // Set only when the endpoint was never reached - no route, no DNS. An HTTP
     // status, 429 included, does NOT set it: a server answered, and trying
-    // again sooner cannot help.
+    // again sooner cannot help. Nothing retries on it automatically any more;
+    // a middle-click is the retry.
     property bool retryAdvised: false
     readonly property bool hasData: loaded && (limits.length > 0 || byDay.length > 0)
 
@@ -68,6 +68,9 @@ Singleton {
         try {
             var j = JSON.parse(text)
             if (j.installed === true) root.installed = true
+            // The startup check carries nothing else, and must not mark the
+            // card as loaded.
+            if (j.checkOnly === true) return
 
             // Only a run that actually talked to the endpoint may touch the
             // allowance state. A stats-only run carries no limits, and reading
@@ -134,16 +137,10 @@ Singleton {
     // runs when something is actually rendering it.
     property bool cardOpen: false
 
-    // The background cadence. 15 minutes, not 5: the icon carries no number any
-    // more, so nothing on screen depends on this being fresh - it exists only
-    // to keep the card instant when opened and the disk cache warm.
-    Timer {
-        interval: 900000            // 15 minutes
-        running: true
-        repeat: true
-        triggeredOnStart: true
-        onTriggered: root.run("limits")
-    }
+    // No background probe: the endpoint is called only when you ask, by opening
+    // the card or middle-clicking. This local check (no network, no transcript
+    // scan) is what lets the widget appear in the bar at all.
+    Component.onCompleted: run("check")
 
     // While the card is open, re-read the LOCAL transcripts every minute - the
     // token charts do move as you work. No network call: this used to run a
@@ -159,19 +156,4 @@ Singleton {
     // Opening the card probes only if the reading is over two minutes old;
     // otherwise it just refreshes the charts.
     onCardOpenChanged: if (cardOpen) refresh(120000)
-
-    // One sooner try, and only when the endpoint was never reached - typically
-    // the seconds after login before the network is up. Matches Omarchy's rule.
-    //
-    // What this deliberately does NOT do is retry on an HTTP status. The first
-    // version here backed off 60s -> 300s on any failure, which meant a rate
-    // limited endpoint got answered back every minute; a 429 is a server
-    // telling you to stop, so the right response is to wait for the next
-    // ordinary refresh.
-    Timer {
-        interval: 30000
-        running: root.retryAdvised
-        repeat: false
-        onTriggered: root.run("limits")
-    }
 }

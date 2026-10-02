@@ -8,7 +8,8 @@ machine runs, and given an incremental cache, because a full rescan of
 ~/.claude/projects reads 160MB and takes about 1.5s - far too slow to sit
 behind a panel that opens on a click.
 
-Three modes:
+Four modes:
+  check    is Claude Code installed - NO network call, no transcript scan
   limits   the OAuth probe only
   stats    the transcript scan only - NO network call whatsoever
   full     both
@@ -408,6 +409,14 @@ def main():
     # rate limiting us right now", which is easy to provoke and transient.
     d = claude_dir()
     out["installed"] = (d / ".credentials.json").exists() or (d / "projects").is_dir()
+
+    # What the bar runs at startup, so the widget knows whether to show itself
+    # without touching the network or the transcripts.
+    if mode == "check":
+        out["checkOnly"] = True
+        json.dump(out, sys.stdout)
+        sys.stdout.write("\n")
+        return
 
     if not out["probed"]:
         try:
