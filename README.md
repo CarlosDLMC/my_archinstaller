@@ -22,6 +22,11 @@ select exactly this and nothing else:
   sub-groups. Network gives you NetworkManager to get online on first boot;
   hardware carries `linux-firmware`, which nothing else on the page or in this
   repo installs. Every other sub-group is duplicated by the install scripts.
+- **Plymouth** (a group of its own since the installer update of 2026-09-23):
+  leave it ticked, as it comes. `plymouth.sh` puts the repo's logo in place of
+  the CachyOS one either way; unticked, there is no Plymouth at all, and the
+  install has to add it and wire it into the boot itself - which works, but is
+  the less-travelled path on CachyOS.
 - Uncheck everything else: the shell configuration, every desktop entry
   (especially **Hyprland** - it brings SDDM and its own bar, which would fight
   ly and the Quickshell bar), Firefox, both printing groups and accessibility.
