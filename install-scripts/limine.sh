@@ -91,14 +91,26 @@ fi
 echo "${INFO} Limine config: $CONF" | tee -a "$LOG"
 
 if [ "$MODE" = apply ]; then
-  # 1. Backup, once. `cp -n` keeps the very first pre-theme copy on re-runs. A
+  # Both copies below are checked, and both come before limine.conf is touched.
+  # Under Global_functions.sh's set -e a failed one (a full ESP) used to end the
+  # script on the spot with nothing printed.
+  #
+  # 1. Backup, once: an existing .pre-theme is the very first original, kept on
+  #    re-runs. Tested for rather than left to `cp -n`, whose exit status for a
+  #    target that already exists has changed between coreutils releases. A
   #    record of the original, not a restore point: see --revert at the top.
-  sudo cp -n "$CONF" "$CONF.pre-theme"
+  if ! sudo test -e "$CONF.pre-theme" && ! sudo cp "$CONF" "$CONF.pre-theme"; then
+    echo "${ERROR} Could not back up $CONF to $CONF.pre-theme (is $ESP_DIR full or read-only?) - limine.conf was not touched." | tee -a "$LOG"
+    exit 1
+  fi
   echo "${OK} Backup kept at $CONF.pre-theme (a record only - undo with --revert, not by copying it back)" | tee -a "$LOG"
 
   # 2. Wallpaper at the partition root. theme.conf references it as boot():/limine-wallpaper.png,
   #    i.e. relative to the partition Limine booted from, so the mount point does not matter.
-  sudo cp "$WALL" "$ESP_DIR/limine-wallpaper.png"
+  if ! sudo cp "$WALL" "$ESP_DIR/limine-wallpaper.png"; then
+    echo "${ERROR} Could not copy the wallpaper to $ESP_DIR/limine-wallpaper.png (is that partition full or read-only?) - limine.conf was not touched." | tee -a "$LOG"
+    exit 1
+  fi
   echo "${OK} Wallpaper copied to $ESP_DIR/limine-wallpaper.png ($(stat -c %s "$WALL") bytes)" | tee -a "$LOG"
 fi
 
