@@ -3,7 +3,13 @@
 
 herdr exposes no event stream, so this polls. It only writes when the
 (workspace_id -> number) mapping actually changes, so it is idle most of
-the time. Exits quietly whenever the herdr server is not running.
+the time.
+
+While no herdr server is running it does not exit - the unit's
+Restart=always would only start it again 5 s later. It waits instead: every
+3 s it checks that the server's socket exists, which is a stat and not a
+process, and it asks herdr itself only every 30 s, in case the socket lives
+somewhere this does not know about.
 """
 import json
 import os
@@ -11,9 +17,17 @@ import subprocess
 import time
 
 HERDR = os.path.expanduser("~/.local/bin/herdr")
+# What `herdr workspace list` connects to: HERDR_SOCKET_PATH, else the default
+# session's socket.
+SOCKET = os.environ.get("HERDR_SOCKET_PATH") or os.path.expanduser("~/.config/herdr/herdr.sock")
 last = None
+asked = None
 
 while True:
+    if not os.path.exists(SOCKET) and asked is not None and time.monotonic() - asked < 30:
+        time.sleep(3)
+        continue
+    asked = time.monotonic()
     try:
         out = subprocess.run([HERDR, "workspace", "list"],
                              capture_output=True, text=True, timeout=10)
