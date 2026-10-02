@@ -139,10 +139,13 @@ components/         # Modular widget components
 
   `AgentUsage` is a **singleton** for the same reason `SystemStats` is: the bar
   is instantiated per screen, and this polls a network endpoint - two monitors
-  would otherwise mean two calls to Anthropic every five minutes for the same
-  number. It runs two cadences: the OAuth probe alone every 5 minutes (cheap,
-  always, because the bar readout needs it), and the probe plus a transcript
-  scan only while a card is open.
+  would otherwise mean two calls to Anthropic for the same number. It makes
+  **no network call on its own**: at startup it runs only a local `check`
+  (is `~/.claude` there - which decides whether the widget shows), and the
+  OAuth probe runs only when the card is opened (and the last reading is over
+  two minutes old) or the icon is middle-clicked. There is no background poll
+  and no automatic retry. While the card is open, the local transcripts are
+  re-read every minute, with no network call.
 
   `scripts/agent-usage.py` is the collector. The access token comes from the
   Claude CLI's own store and goes exactly one place - the Authorization header
