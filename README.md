@@ -968,6 +968,28 @@ sudo find /etc/wireguard -name '*.conf' -exec chmod 600 {} +   # zsh cannot glob
 rm ~/wireguard-configs.tar.gz.gpg
 ```
 
+**Add the killswitch.** The installer puts two helpers in `/usr/local/bin`
+(from `assets/vpn/`, via `install-scripts/vpn_tools.sh`). Run the first once,
+after the configs are in place:
+
+```bash
+sudo add-wireguard-killswitch-to-configs
+```
+
+It adds `FwMark = 51820` under `[Interface]` and a `PostUp`/`PostDown` pair
+after the `DNS =` line of every config, so while a tunnel is up, any traffic
+that does not leave through it is rejected. Re-running it is safe: it removes
+its own lines before adding them again. If a tunnel dies with the killswitch
+still in place and nothing can reach the network, run:
+
+```bash
+vpn-recover            # pick from a list
+vpn-recover de-ber     # or name the config
+```
+
+It removes the stale rule, brings the tunnel back up, and restores the rule if
+that fails. It re-runs itself through `sudo`.
+
 **Check the two things the widget depends on.** Both commands must succeed —
 the first without a password prompt, the second printing `active`:
 

@@ -911,6 +911,10 @@ echo "${INFO} Setting up the ${SKY_BLUE}battery charge limit...${RESET}" | tee -
 sleep 1
 execute_script "battery_charge_limit.sh"
 
+echo "${INFO} Installing the ${SKY_BLUE}WireGuard killswitch helpers...${RESET}" | tee -a "$LOG"
+sleep 1
+execute_script "vpn_tools.sh"
+
 echo "${INFO} Installing ${SKY_BLUE}pipewire and pipewire-audio...${RESET}" | tee -a "$LOG"
 sleep 1
 execute_script "pipewire.sh"

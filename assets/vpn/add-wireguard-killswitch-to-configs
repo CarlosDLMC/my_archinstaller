@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+WG_DIR="/etc/wireguard"
+
+FW_MARK='FwMark = 51820'
+POST_UP='PostUp = iptables -I OUTPUT ! -o %i -m mark ! --mark 51820 -m addrtype ! --dst-type LOCAL -m comment --comment "wireguard-killswitch" -j REJECT'
+POST_DOWN='PostDown = iptables -D OUTPUT ! -o %i -m mark ! --mark 51820 -m addrtype ! --dst-type LOCAL -m comment --comment "wireguard-killswitch" -j REJECT'
+
+for file in "$WG_DIR"/*.conf; do
+    [[ -f "$file" ]] || continue
+
+    echo "Updating: $file"
+
+    tmp="$(mktemp)"
+
+    # Remove any existing FwMark and killswitch lines/comments.
+    sed \
+        -e '/^[[:space:]]*FwMark[[:space:]]*=/d' \
+        -e '/wireguard-killswitch/d' \
+        -e '/^[[:space:]]*# WireGuard killswitch[[:space:]]*$/d' \
+        -e '/^[[:space:]]*# Add these lines to block all traffic if the VPN drops[[:space:]]*$/d' \
+        "$file" > "$tmp"
+
+    # Add FwMark immediately after [Interface].
+    awk -v fwmark="$FW_MARK" '
+        /^\[Interface\][[:space:]]*$/ {
+            print
+            print fwmark
+            next
+        }
+        { print }
+    ' "$tmp" > "${tmp}.2"
+
+    mv "${tmp}.2" "$tmp"
+
+    # Add PostUp/PostDown immediately after the DNS line.
+    awk \
+        -v postup="$POST_UP" \
+        -v postdown="$POST_DOWN" '
+        !inserted && /^[[:space:]]*DNS[[:space:]]*=/ {
+            print
+            print postup
+            print postdown
+            inserted=1
+            next
+        }
+        { print }
+    ' "$tmp" > "${tmp}.2"
+
+    mv "${tmp}.2" "$file"
+    rm -f "$tmp"
+
+    # Protect the WireGuard private key.
+    chmod 600 "$file"
+    chown root:root "$file"
+
+    echo "Updated: $file"
+done
+
+echo
+echo "Done. All WireGuard configs now use FwMark 51820 and the killswitch."

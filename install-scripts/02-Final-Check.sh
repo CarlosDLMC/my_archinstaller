@@ -45,7 +45,9 @@ packages=(
 
 # Local packages that should be in /usr/local/bin/
 local_pkgs_installed=(
-
+  # vpn_tools.sh, from assets/vpn/
+  add-wireguard-killswitch-to-configs
+  vpn-recover
 )
 
 ## WARNING: DO NOT EDIT BEYOND THIS LINE IF YOU DON'T KNOW WHAT YOU ARE DOING! ##

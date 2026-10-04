@@ -1,0 +1,99 @@
+#!/bin/bash
+
+WIREGUARD_DIR="/etc/wireguard"
+MARK="51820"
+
+if [[ $EUID -ne 0 ]]; then
+    exec sudo /usr/local/bin/vpn-recover "$@"
+fi
+
+mapfile -t configs < <(
+    find "$WIREGUARD_DIR" -maxdepth 1 -type f -name '*.conf' \
+        -printf '%f\n' | sed 's/\.conf$//' | sort
+)
+
+if [[ ${#configs[@]} -eq 0 ]]; then
+    echo "No WireGuard configs found."
+    exit 1
+fi
+
+if [[ $# -eq 0 ]]; then
+    echo
+    echo "Available WireGuard configs:"
+    echo
+
+    for i in "${!configs[@]}"; do
+        printf "  %d) %s\n" "$((i + 1))" "${configs[$i]}"
+    done
+
+    echo
+    read -rp "Select VPN [1-${#configs[@]}]: " choice
+
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] ||
+       (( choice < 1 || choice > ${#configs[@]} )); then
+        echo "Invalid selection."
+        exit 1
+    fi
+
+    vpn="${configs[$((choice - 1))]}"
+else
+    vpn="$1"
+fi
+
+if [[ ! -f "$WIREGUARD_DIR/$vpn.conf" ]]; then
+    echo "Config not found: $WIREGUARD_DIR/$vpn.conf"
+    exit 1
+fi
+
+echo
+echo "Recovering WireGuard: $vpn"
+
+if iptables -C OUTPUT \
+    ! -o "$vpn" \
+    -m mark ! --mark "$MARK" \
+    -m addrtype ! --dst-type LOCAL \
+    -m comment --comment wireguard-killswitch \
+    -j REJECT 2>/dev/null; then
+
+    echo "Removing stale killswitch..."
+
+    iptables -D OUTPUT \
+        ! -o "$vpn" \
+        -m mark ! --mark "$MARK" \
+        -m addrtype ! --dst-type LOCAL \
+        -m comment --comment wireguard-killswitch \
+        -j REJECT
+else
+    echo "No stale killswitch found for $vpn."
+fi
+
+echo "Starting $vpn..."
+echo
+
+if ! wg-quick up "$vpn"; then
+    echo
+    echo "WireGuard failed to start."
+    echo "Restoring killswitch..."
+
+    if ! iptables -C OUTPUT \
+        ! -o "$vpn" \
+        -m mark ! --mark "$MARK" \
+        -m addrtype ! --dst-type LOCAL \
+        -m comment --comment wireguard-killswitch \
+        -j REJECT 2>/dev/null; then
+
+        iptables -I OUTPUT \
+            ! -o "$vpn" \
+            -m mark ! --mark "$MARK" \
+            -m addrtype ! --dst-type LOCAL \
+            -m comment --comment wireguard-killswitch \
+            -j REJECT
+    fi
+
+    echo "Killswitch restored."
+    exit 1
+fi
+
+echo
+echo "VPN connected: $vpn"
+echo "Killswitch active."
