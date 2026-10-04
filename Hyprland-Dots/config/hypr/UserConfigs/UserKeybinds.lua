@@ -21,7 +21,7 @@ bind("CTRL + ALT + right", hl.dsp.focus({ workspace = "r+1" }), { description = 
 -- Custom application launchers
 bind(M .. " + T", exec("Telegram"),  { description = "open telegram" })
 bind(M .. " + R", exec("rustrover"), { description = "open RustRover" })
-bind("CTRL + " .. M .. " + F8", exec([[notify-send -t 1500 -i audio-input-microphone "Handy" "Toggling transcription" && handy --toggle-transcription]]), { description = "Handy toggle transcription" })
+bind("CTRL + " .. M .. " + F8", exec(U .. [[/handy-paste-settings.sh; notify-send -t 1500 -i audio-input-microphone "Handy" "Toggling transcription" && handy --toggle-transcription]]), { description = "Handy toggle transcription" })
 
 -- Passthrough keyboard into a VM
 -- bind(M .. " + ALT + P", hl.dsp.submap("passthru"))

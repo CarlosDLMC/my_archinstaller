@@ -5,7 +5,10 @@
 # side is owned by the dotfiles and arrives with dotfiles-main.sh:
 #   - UserScripts/handy-start.sh     the launcher (visible until a model is picked,
 #                                    hidden afterwards; exits quietly if handy is missing)
-#   - UserConfigs/UserKeybinds.lua   CTRL+SUPER+F8 -> notify + handy --toggle-transcription
+#   - UserScripts/handy-paste-settings.sh  pins paste = direct (wtype) + 700 ms delay
+#                                    before Handy starts, so held SUPER/CTRL keys
+#                                    don't turn typed letters into binds
+#   - UserConfigs/UserKeybinds.lua   CTRL+SUPER+F8 -> paste settings + notify + handy --toggle-transcription
 #   - UserConfigs/Startup_Apps.lua   the (commented-out) autostart line
 #
 # It used to write its own copy of the launcher over the shipped one and append a

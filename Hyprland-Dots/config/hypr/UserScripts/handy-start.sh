@@ -14,6 +14,9 @@ settings="$HOME/.local/share/com.pais.handy/settings_store.json"
 
 command -v handy >/dev/null 2>&1 || exit 0
 
+# Type the transcript (works in terminals) after a 700 ms wait (keys released).
+"$(dirname "$0")/handy-paste-settings.sh"
+
 selected_model=""
 if [ -r "$settings" ]; then
     # settings_store.json nests everything under a "settings" key. Fall back to
