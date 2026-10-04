@@ -968,7 +968,11 @@ sudo find /etc/wireguard -name '*.conf' -exec chmod 600 {} +   # zsh cannot glob
 rm ~/wireguard-configs.tar.gz.gpg
 ```
 
-**Add the killswitch.** The installer puts two helpers in `/usr/local/bin`
+**Add the killswitch.** 
+Once the configs are in /etc/wireguard/, you can execute the script to add a killswitchch, 
+so in case that when using one vpn it interrupts, your ip is never showed.
+
+The installer puts two helpers in `/usr/local/bin`
 (from `assets/vpn/`, via `install-scripts/vpn_tools.sh`). Run the first once,
 after the configs are in place:
 
@@ -979,8 +983,9 @@ sudo add-wireguard-killswitch-to-configs
 It adds `FwMark = 51820` under `[Interface]` and a `PostUp`/`PostDown` pair
 after the `DNS =` line of every config, so while a tunnel is up, any traffic
 that does not leave through it is rejected. Re-running it is safe: it removes
-its own lines before adding them again. If a tunnel dies with the killswitch
-still in place and nothing can reach the network, run:
+its own lines before adding them again. If a tunner dies, killswitch will be executed 
+and you won't be able to use the internet at all. 
+In that case, use this for the vpn you were using:
 
 ```bash
 vpn-recover            # pick from a list
