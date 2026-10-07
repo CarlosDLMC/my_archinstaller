@@ -881,15 +881,39 @@ elif command -v grub-mkconfig &>/dev/null && [ -f /etc/default/grub ] && sudo te
   grub_cfg_splash() {
     sudo grep -qE '^[[:space:]]*linux[[:space:]].*[[:space:]]splash([=[:space:]]|$)' "$_grub_cfg"
   }
-  grub_titles() {
-    sudo grep -oE "^[[:space:]]*(menuentry|submenu)[[:space:]]+('[^']*'|\"[^\"]*\")" "$_grub_cfg" 2>/dev/null \
-      | sed -E 's/^[[:space:]]*(menuentry|submenu)[[:space:]]+//' | sort -u
+  # One line per menu entry: "<key><TAB><quoted title>", keyed by the entry's
+  # $menuentry_id_option id ('gnulinux-simple-<uuid>', 'osprober-...'), and by
+  # its title only when it has none (an entry written by hand in 40_custom).
+  # Not by title: grub-mkconfig translates titles ("Advanced options for %s"
+  # and the per-kernel ones) into the language it runs in, archinstall wrote
+  # grub.cfg under LC_ALL=C, and sudo keeps LANG/LC_MESSAGES - so on a
+  # Spanish or Russian system every regeneration "lost" the English submenu,
+  # put both files back and stopped the reboot. Ids are never translated.
+  #
+  # Left out: 31_efi_bootnext's 'efi-bootnext-<n>' entries (grub 2.16). They
+  # mirror the firmware's Boot#### list, not anything in grub.d - the USB stick
+  # the system was installed from is one, and firmware drops it at the next
+  # boot without the stick - so one vanishing says nothing about this edit.
+  grub_entries() {
+    sudo cat -- "$_grub_cfg" 2>/dev/null | awk -v q="'" '
+      match($0, "^[[:space:]]*(menuentry|submenu)[[:space:]]+(" q "[^" q "]*" q "|\"[^\"]*\")") {
+        title = substr($0, RSTART, RLENGTH)
+        sub(/^[[:space:]]*(menuentry|submenu)[[:space:]]+/, "", title)
+        key = "title:" title
+        if (match($0, "[$]menuentry_id_option[[:space:]]+(" q "[^" q "]*" q "|\"[^\"]*\")")) {
+          id = substr($0, RSTART, RLENGTH)
+          sub(/^[$]menuentry_id_option[[:space:]]+/, "", id)
+          key = "id:" id
+        }
+        if (key ~ ("^id:" q "efi-bootnext-")) next
+        print key "\t" title
+      }' | LC_ALL=C sort -u
     return 0
   }
   ensure_splash shellvar /etc/default/grub GRUB_CMDLINE_LINUX_DEFAULT /etc/default/grub.d/*.cfg
   if [ "$_sp" = added ]; then
     cp "$PLY_TMP/old" "$PLY_TMP/grub-default.old"
-    _grub_titles_before=$(grub_titles)
+    _grub_entries_before=$(grub_entries)
     if ! sudo cp -- "$_grub_cfg" "$_grub_cfg.pre-plymouth" 2>>"$LOG"; then
       echo "${ERROR} Could not back up $_grub_cfg - putting /etc/default/grub back." | tee -a "$LOG"
       sudo cp -- "$PLY_TMP/grub-default.old" /etc/default/grub 2>>"$LOG" || true
@@ -899,7 +923,17 @@ elif command -v grub-mkconfig &>/dev/null && [ -f /etc/default/grub ] && sudo te
       sudo cp -- "$PLY_TMP/grub-default.old" /etc/default/grub 2>>"$LOG" || true
       _sp=failed
     else
-      _grub_lost=$(comm -23 <(printf '%s\n' "$_grub_titles_before") <(grub_titles) | sed '/^$/d' | paste -sd, -)
+      # The titles of the entries whose key is gone, for the message - or the
+      # key itself if the title cannot be found again, so a lost entry is never
+      # dropped from the list. Through ENVIRON, not -v: awk expands backslash
+      # escapes in -v values, and a key holding one (a hand-written title with
+      # \") would never match.
+      _grub_lost=$(LC_ALL=C comm -23 <(printf '%s\n' "$_grub_entries_before" | cut -f1 | LC_ALL=C sort -u) \
+                                     <(grub_entries | cut -f1 | LC_ALL=C sort -u) | sed '/^$/d' \
+        | while IFS= read -r _k; do
+            printf '%s\n' "$_grub_entries_before" \
+              | _k="$_k" awk -F'\t' '$1 == ENVIRON["_k"] { print $2; f = 1; exit } END { if (!f) print ENVIRON["_k"] }'
+          done | paste -sd, -)
       if [ -n "$_grub_lost" ] || ! grub_cfg_splash; then
         if [ -n "$_grub_lost" ]; then
           echo "${ERROR} The regenerated grub.cfg lost menu entries ($_grub_lost) - putting grub.cfg and /etc/default/grub back." | tee -a "$LOG"
