@@ -1448,8 +1448,9 @@ attempted. The same applied to `rog="OFF"` on an ASUS laptop.
 
 With `auto`, the installer answers these from the machine instead: `lspci` for
 the GPU, `/sys/class/dmi/id/sys_vendor` for ASUS hardware. On an ASUS laptop
-`asusctl` and `rog-control-center` are installed, and `supergfxctl` only when
-there are two GPUs to switch between. `ON` and `OFF` still
+`asusctl` and `rog-control-center` are installed. `supergfxctl` is not: asusctl
+6.x switches the GPU itself, and supergfxd's default config switched a dGPU that
+Eco mode had turned off back on at every boot. `ON` and `OFF` still
 force the decision, for when you mean it — `nvidia="OFF"` to stay on the
 open-source driver, for instance. For `nvidia` and `nouveau` a forced `ON` is
 still ignored with a note if the hardware is not there, so a stale preset cannot
@@ -1462,8 +1463,15 @@ One case `auto` cannot see: an ASUS hybrid laptop left in **Eco mode**
 (`/sys/devices/platform/asus-nb-wmi/dgpu_disable` = 1) keeps its dGPU powered off,
 so it is not on the PCI bus and no NVIDIA driver is detected or installed. Even a
 forced `nvidia="ON"` is skipped. The installer warns about this at detection time
-and again at the end. Switch to Hybrid (`supergfxctl -m Hybrid`), reboot, then run
-`install-scripts/nvidia.sh`.
+and again at the end. Switch to Hybrid (ROG Control Center -> GPU Configuration,
+or `asusctl armoury set dgpu_disable 0`; asusd writes it at shutdown), reboot,
+then run `install-scripts/nvidia.sh`. Both need the kernel's asus-armoury driver
+(mainline since 6.19, and in the CachyOS kernels); on an older kernel without it,
+`echo 0 | sudo tee /sys/devices/platform/asus-nb-wmi/dgpu_disable` and reboot.
+
+A machine that got `supergfxctl` from an older run of this installer still has
+it, and it keeps undoing Eco mode. `rog.sh` warns about it; to remove it:
+`sudo systemctl disable --now supergfxd && sudo pacman -Rns supergfxctl && sudo rm -f /etc/modprobe.d/supergfxd.conf`.
 
 This is also why there is no CPU/GPU vendor prompt: `--preset` runs
 unattended by design, so a dialog could only appear in the interactive path —

@@ -28,31 +28,21 @@ LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_rog.log"
 
 ### Install software for Asus ROG laptops ###
 
-# supergfxctl only switches between an integrated and a discrete GPU. install.sh
-# treats any ASUS laptop as ROG hardware, and Zenbooks and Vivobooks are mostly
-# Intel-only - they got an enabled supergfxd for a switch they do not have.
-# Two or more display controllers (PCI class 03xx) is the hybrid case.
+# No supergfxctl. asusctl 6.x switches the GPU itself (ROG Control Center ->
+# GPU Configuration, or `asusctl armoury set dgpu_disable 0|1`; the change is
+# written at shutdown by asus-shutdown.service), its changelog says "Remove
+# supergfxctl completely", and its docs say to remove supergfxd. Worse, the two
+# fight: supergfxd's default config (hotplug_type None) finds dgpu_disable=1 at
+# boot, writes it back to 0 and blacklists nouveau - so Eco/Integrated never
+# survived a reboot, and a dGPU switched off before the install came back on
+# with no driver at all.
 #
-# dgpu_disable is the other signal: a hybrid laptop left in Eco mode keeps its
-# dGPU powered off across a reinstall, so it is not on the PCI bus and the count
-# says 1 - skipping the one tool that can switch it back on. The attribute only
-# exists on ASUS hybrid machines.
-gpu_count=$(lspci -n 2>/dev/null | awk '$2 ~ /^03/' | wc -l)
-if [ -e /sys/devices/platform/asus-nb-wmi/dgpu_disable ] && [ "$gpu_count" -lt 2 ]; then
-  echo "${NOTE} dGPU is switched off (Eco mode) - counting it as a hybrid laptop anyway." | tee -a "$LOG"
-  gpu_count=2
-  # The same invisibility hid the card from install.sh's NVIDIA detection, so
-  # no NVIDIA driver was installed for it. supergfxctl (installed below) is the
-  # way to switch it back on; the driver is a separate step after that.
-  if [ "$(cat /sys/devices/platform/asus-nb-wmi/dgpu_disable 2>/dev/null)" = "1" ]; then
-    echo "${WARN} If this dGPU is NVIDIA, its driver was NOT installed: it cannot be detected while switched off." | tee -a "$LOG"
-    echo "${NOTE} After this install: ${MAGENTA}supergfxctl -m Hybrid${RESET}, reboot, then run ${MAGENTA}install-scripts/nvidia.sh${RESET}." | tee -a "$LOG"
-  fi
-fi
-if [ "$gpu_count" -ge 2 ]; then
-  rog+=(supergfxctl)
-else
-  echo "${NOTE} Single GPU - skipping supergfxctl (it only switches iGPU/dGPU)." | tee -a "$LOG"
+# A hybrid laptop left in Eco mode keeps its dGPU powered off across a
+# reinstall, so it is not on the PCI bus and install.sh's NVIDIA detection
+# could not see it: say how to get the driver afterwards.
+if [ "$(cat /sys/devices/platform/asus-nb-wmi/dgpu_disable 2>/dev/null)" = "1" ]; then
+  echo "${WARN} The dGPU is switched off (Eco mode). If it is NVIDIA, its driver was NOT installed: it cannot be detected while switched off." | tee -a "$LOG"
+  echo "${NOTE} After this install: ROG Control Center -> GPU Configuration -> Hybrid (or ${MAGENTA}asusctl armoury set dgpu_disable 0${RESET}), reboot, then run ${MAGENTA}install-scripts/nvidia.sh${RESET}." | tee -a "$LOG"
 fi
 
 printf " Installing ${SKY_BLUE}ASUS ROG packages${RESET}...\n"
@@ -60,24 +50,27 @@ for ASUS in "${rog[@]}"; do
 install_package  "$ASUS" "$LOG"
 done
 
-printf " Activating ROG services...\n"
 # asusd is the daemon asusctl, rog-control-center and the keyboard/fan controls
-# talk to; the package does not enable it, so without this line the tools
-# install and then fail with "asusd not running" after reboot.
-#
-# One unit per call. `systemctl enable asusd supergfxd` fails as a whole when
-# either unit is missing - supergfxctl is an AUR build, and when it failed,
-# asusd was left disabled too, with the error hidden behind `| tee`.
-for _unit in asusd supergfxd; do
-  if systemctl list-unit-files "$_unit.service" 2>/dev/null | grep -q "^$_unit\.service"; then
-    if sudo systemctl enable "$_unit.service" >> "$LOG" 2>&1; then
-      echo "${OK} $_unit.service enabled" | tee -a "$LOG"
-    else
-      echo "${ERROR} Could not enable $_unit.service - see $LOG" | tee -a "$LOG"
-    fi
-  elif [ "$_unit" = asusd ] || [ "$gpu_count" -ge 2 ]; then
-    echo "${WARN} $_unit.service does not exist - its package did not install." | tee -a "$LOG"
-  fi
-done
+# talk to. asusctl 6.x ships it as a static unit that udev starts when
+# asus-nb-wmi binds (SYSTEMD_WANTS in its rules file), so there is nothing to
+# enable - `systemctl enable` on it does nothing and used to print "[OK]
+# enabled" all the same. Older packaging had an [Install] section; enable it
+# only there.
+if ! systemctl list-unit-files asusd.service 2>/dev/null | grep -q '^asusd\.service'; then
+  echo "${WARN} asusd.service does not exist - asusctl did not install." | tee -a "$LOG"
+elif [ "$(systemctl is-enabled asusd.service 2>/dev/null)" = "static" ]; then
+  echo "${OK} asusd is started by udev at boot on the ASUS families its rules list (check with ${MAGENTA}systemctl status asusd${RESET} after the reboot)." | tee -a "$LOG"
+elif sudo systemctl enable asusd.service >> "$LOG" 2>&1; then
+  echo "${OK} asusd.service enabled" | tee -a "$LOG"
+else
+  echo "${ERROR} Could not enable asusd.service - see $LOG" | tee -a "$LOG"
+fi
+
+# Left over from an earlier run of this installer, which used to install it:
+# said, not removed - it is a system-wide GPU setting and may be wanted.
+if systemctl is-enabled supergfxd.service &>/dev/null; then
+  echo "${WARN} supergfxd is enabled. With asusctl 6.x it undoes Eco/Integrated mode at every boot." | tee -a "$LOG"
+  echo "${NOTE} To remove it: ${MAGENTA}sudo systemctl disable --now supergfxd && sudo pacman -Rns supergfxctl && sudo rm -f /etc/modprobe.d/supergfxd.conf${RESET}" | tee -a "$LOG"
+fi
 
 printf "\n%.0s" {1..2}

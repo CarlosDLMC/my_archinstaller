@@ -432,30 +432,30 @@ fi
 # the card is not on the PCI bus and nvidia_detect.sh above says "none".
 # nvidia="auto" then resolves to OFF and even a forced nvidia="ON" is skipped:
 # after switching to Hybrid later, the NVIDIA GPU came up with no proprietary
-# driver, and nothing in the run had said so. rog.sh knew the dGPU was hidden
-# (it installs supergfxctl for exactly this case); this detection did not.
+# driver, and nothing in the run had said so.
 #
 # Said, not fixed: dgpu_disable is not written from here. Switching the GPU
-# mode is supergfxctl's job and takes a reboot to settle, so the driver is a
-# step for afterwards, and the warning is repeated at the end of the run.
+# mode is asusd's job (asusctl 6.x; the value is written at shutdown) and takes
+# a reboot to settle, so the driver is a step for afterwards, and the warning is
+# repeated at the end of the run.
 asus_dgpu_off=false
 if [ "$nvidia_detected" != "true" ] \
    && [ "$(cat /sys/devices/platform/asus-nb-wmi/dgpu_disable 2>/dev/null)" = "1" ]; then
     asus_dgpu_off=true
     echo "${WARN} ASUS dGPU is switched OFF (Eco mode, dgpu_disable=1). If it is an NVIDIA GPU, it is invisible to this run: its driver cannot be detected or installed." | tee -a "$LOG"
-    echo "${NOTE} To get the NVIDIA driver: switch to Hybrid (${MAGENTA}supergfxctl -m Hybrid${RESET}, or rog-control-center/asusctl), reboot, then run ${MAGENTA}install-scripts/nvidia.sh${RESET}." | tee -a "$LOG"
+    echo "${NOTE} To get the NVIDIA driver: switch to Hybrid (ROG Control Center -> GPU Configuration, or ${MAGENTA}asusctl armoury set dgpu_disable 0${RESET}), reboot, then run ${MAGENTA}install-scripts/nvidia.sh${RESET}." | tee -a "$LOG"
     if [ "$preset_mode" != "true" ]; then
-        whiptail --title "ASUS dGPU is switched off" --msgbox "This ASUS laptop's discrete GPU is switched off (Eco mode, dgpu_disable=1), so it is not visible and no NVIDIA driver can be detected or installed now.\n\nTo get it afterwards: switch to Hybrid (supergfxctl -m Hybrid, or rog-control-center/asusctl), reboot, then run install-scripts/nvidia.sh." 14 78
+        whiptail --title "ASUS dGPU is switched off" --msgbox "This ASUS laptop's discrete GPU is switched off (Eco mode, dgpu_disable=1), so it is not visible and no NVIDIA driver can be detected or installed now.\n\nTo get it afterwards: switch to Hybrid (ROG Control Center -> GPU Configuration, or asusctl armoury set dgpu_disable 0), reboot, then run install-scripts/nvidia.sh." 14 78
     fi
 fi
 
-# Check if this is an ASUS LAPTOP (asusctl/supergfxctl target ROG laptops: fan
-# curves, keyboard backlight, hybrid-GPU switching). DMI is the same question
+# Check if this is an ASUS LAPTOP (asusctl targets ROG laptops: fan curves,
+# keyboard backlight, hybrid-GPU switching). DMI is the same question
 # rog="ON" was asking the user to answer by hand.
 #
 # Vendor alone is not enough: a desktop built on an ASUS motherboard reports
-# sys_vendor "ASUS" too, and got asusctl plus an enabled supergfxd for a GPU
-# switch it does not have. So it must also look like a laptop - a battery in
+# sys_vendor "ASUS" too, and got asusctl for laptop controls it does not
+# have. So it must also look like a laptop - a battery in
 # /sys/class/power_supply, or a portable DMI chassis type (8-11 and 14), the
 # same test configs/Vars.lua uses to skip the laptop keybinds.
 is_laptop=false
@@ -1197,7 +1197,7 @@ if pacman -Q hyprland &> /dev/null || pacman -Q hyprland-git &> /dev/null; then
         # GPU may be AMD, and then nvidia.sh finds no NVIDIA card and the verify
         # step below would fail every kernel's NVIDIA module check.
         echo "${WARN} Reminder: the ASUS dGPU was switched off (Eco mode), so it was not visible to this run."
-        echo "${NOTE} If it is an NVIDIA GPU: switch to Hybrid (${MAGENTA}supergfxctl -m Hybrid${RESET}), reboot, then run ${MAGENTA}install-scripts/nvidia.sh${RESET}."
+        echo "${NOTE} If it is an NVIDIA GPU: switch to Hybrid (ROG Control Center -> GPU Configuration, or ${MAGENTA}asusctl armoury set dgpu_disable 0${RESET}), reboot, then run ${MAGENTA}install-scripts/nvidia.sh${RESET}."
         # The saved selection has no nvidia in it, so a plain re-check would skip
         # exactly the checks that matter after that.
         echo "${NOTE} Then verify it with nvidia in the selection: ${MAGENTA}INSTALL_SELECTED_OPTIONS=\"\$(cat Install-Logs/.selected-options) nvidia\" ./install-scripts/02-Final-Check.sh${RESET}"
