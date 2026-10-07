@@ -5,8 +5,10 @@
 # side is owned by the dotfiles and arrives with dotfiles-main.sh:
 #   - UserScripts/handy-start.sh     the launcher (visible until a model is picked,
 #                                    hidden afterwards; exits quietly if handy is missing)
-#   - UserScripts/handy-paste-settings.sh  pins paste = direct (wtype) + 700 ms delay
-#                                    before Handy starts, so held SUPER/CTRL keys
+#   - UserScripts/handy-paste-settings.sh  pins paste = External Script before
+#                                    Handy starts, the script being
+#   - UserScripts/handy-type.sh      which types the transcript with wtype 700 ms
+#                                    after transcription, so held SUPER/CTRL keys
 #                                    don't turn typed letters into binds
 #   - UserConfigs/UserKeybinds.lua   CTRL+SUPER+F8 -> paste settings + notify + handy --toggle-transcription
 #   - UserConfigs/Startup_Apps.lua   the (commented-out) autostart line
@@ -16,7 +18,7 @@
 # checked settings.json, the real file is settings_store.json), the copy lacked the
 # missing-binary guard and the first-login hint, and the appended autostart baked
 # this machine's absolute $HOME into an otherwise portable config. Removed 2026-09-13:
-# a file has one owner, and for these three it is the dotfiles.
+# a file has one owner, and for these it is the dotfiles.
 #
 # NOTE: runs AFTER dotfiles-main.sh in install.sh, so the check below sees the files.
 

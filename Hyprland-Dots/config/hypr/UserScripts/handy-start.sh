@@ -4,7 +4,7 @@
 # Handy needs a model before it can transcribe anything, and the model is picked
 # in its GUI. So on a machine that has never chosen one, start it visible; once
 # selected_model is set, start it hidden and let the Hyprland keybind
-# (SUPER + CTRL + F8, UserKeybinds.conf) drive it from the background.
+# (SUPER + CTRL + F8, UserKeybinds.lua) drive it from the background.
 #
 # Note that Handy's own "Shortcut" field does not work under Hyprland: Wayland
 # does not let an application register a global shortcut. The keybind is what
@@ -14,7 +14,8 @@ settings="$HOME/.local/share/com.pais.handy/settings_store.json"
 
 command -v handy >/dev/null 2>&1 || exit 0
 
-# Type the transcript (works in terminals) after a 700 ms wait (keys released).
+# Paste through handy-type.sh: typed (works in terminals), 700 ms after the
+# transcription ends, so held SUPER/CTRL keys are released first.
 "$(dirname "$0")/handy-paste-settings.sh"
 
 selected_model=""
