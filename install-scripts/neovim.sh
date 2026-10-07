@@ -101,6 +101,11 @@ if [ -n "$RUSTUP" ]; then
     echo "${OK} Installed rust-analyzer as a rustup component." | tee -a "$LOG"
   else
     echo "${WARN} rustup could not add rust-analyzer - see $LOG" | tee -a "$LOG"
+    # The usual cause: rustup with no default toolchain, which `component add`
+    # (and every bare cargo/rustc) refuses to guess.
+    if ! "$RUSTUP" default >/dev/null 2>&1; then
+      echo "${NOTE} rustup has no default toolchain. Run ${MAGENTA}${RUSTUP} default stable${RESET}, then ${MAGENTA}${RUSTUP} component add rust-analyzer${RESET}." | tee -a "$LOG"
+    fi
   fi
 else
   install_package rust-analyzer "$LOG"

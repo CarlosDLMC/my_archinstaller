@@ -77,6 +77,17 @@ hypr_package=(
   awww
   systemd-resolvconf
   unzip # needed later
+  # rust BEFORE wallust. wallust is an AUR build that makedepends on `cargo`,
+  # and with no Rust installed yay picks the first repo package that provides
+  # it. On CachyOS that is now cachyos-extra's rustup (the CachyOS rebuild of
+  # rust is gone and rust itself is only in [extra], which comes later), and
+  # rustup arrives with no default toolchain: wallust still builds (its PKGBUILD
+  # exports RUSTUP_TOOLCHAIN=stable), but afterwards every bare cargo/rustc
+  # fails with "no default is configured", neovim.sh cannot add rust-analyzer,
+  # and AUR builds that run a bare `cargo build` die. Asked for by name,
+  # `rust` resolves to [extra] on both distros; where rustup is already the
+  # user's choice, `-Q rust` finds it through its provides and this is skipped.
+  rust
   wallust
   wget
   wf-recorder
