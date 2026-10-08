@@ -274,10 +274,18 @@ first prompt.
 
 ### Applications
 - LibreWolf (browser, `extra/librewolf` — `librewolf-bin` no longer exists in the AUR).
-  Its new tab page comes set to 2 rows × 10 pinned sites with wider gaps between
-  them, from `config/librewolf/`: `copy.sh` puts `librewolf.overrides.cfg` in the
-  profile root and `chrome/userContent.css` in the profile, starting LibreWolf
-  once headless on a fresh install so the profile exists
+  Set up from `config/librewolf/`: `copy.sh` puts `librewolf.overrides.cfg` in the
+  profile root, and `chrome/userContent.css` and `chrome/userChrome.css` in the
+  profile. On a fresh install it starts LibreWolf once headless so that the
+  profile exists. What that gives you:
+  - the new tab page has 2 rows × 10 pinned sites with wider gaps between them,
+    and it is also the start page;
+  - the pre-157 look (the "Nova" redesign off), in LibreWolf's own dark colours
+    rather than the GTK theme's;
+  - the drop-down of saved logins under a field stays dark (157 started to colour
+    it like the page's input box, which resistFingerprinting makes white);
+  - Google's sign-in skips resistFingerprinting, so it can be dark;
+  - WebRTC is locked off.
 - vim (the `$EDITOR` the Hyprland config names) and nano
 - Thunar (file manager)
 - btop, cava, fastfetch
