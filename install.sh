@@ -249,12 +249,16 @@ limine="auto"
 known_options="ly nvidia nouveau input_group gtk_themes bluetooth thunar \
 quickshell xdph zsh pokemon rog dots handy nopasswd_sudo printing plymouth \
 limine docker herdr neovim hunk"
+# The ones that also take "auto" (resolved from the hardware further down).
+auto_options="nvidia nouveau rog bluetooth plymouth limine"
 
 # Function to load preset file
 load_preset() {
     if [ -f "$1" ]; then
         echo "✅ Loading preset: $1"
-        source "$1"
+        # Without its CRs: a preset saved with Windows line endings made every
+        # blank line a command named $'\r' ("command not found").
+        source <(tr -d '\r' < "$1")
 
         # Collect any key the preset sets that this installer does not use.
         #
@@ -277,6 +281,37 @@ load_preset() {
         # `docker = "OFF"` is not setting docker at all (it tries to *run*
         # docker) and must not be counted as though it had.
         done < <(grep -oE '^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=' "$1" | tr -d '[:blank:]=')
+
+        # The values, normalised and checked. Only the exact strings ON and auto
+        # ever meant anything: nvidia="Auto", dots="on", thunar="yes", ly="ON "
+        # (a trailing space) or a CRLF line ending from a Windows editor all read
+        # as OFF without a word - the NVIDIA driver included. Case, spaces and
+        # the CR are dropped now and yes/no spellings accepted; anything else
+        # stops the run here, before it has done anything.
+        local _opt _v _bad=()
+        for _opt in $known_options; do
+            [ -n "${!_opt+x}" ] || continue
+            _v=$(printf '%s' "${!_opt}" | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+            case "${_v,,}" in
+                on|yes|true|1)  _v=ON ;;
+                off|no|false|0) _v=OFF ;;
+                auto)
+                    if [[ " $auto_options " == *" $_opt "* ]]; then
+                        _v=auto
+                    else
+                        _bad+=("$_opt=\"${!_opt}\" - auto only works for: $auto_options")
+                        continue
+                    fi
+                    ;;
+                *)  _bad+=("$_opt=\"${!_opt}\" - use ON or OFF"); continue ;;
+            esac
+            printf -v "$_opt" '%s' "$_v"
+        done
+        if [ ${#_bad[@]} -gt 0 ]; then
+            echo "❌ $1 has values this installer does not understand:"
+            printf '   %s\n' "${_bad[@]}"
+            exit 1
+        fi
     else
         # Do not fall through to the defaults here: they are all "OFF", so a
         # mistyped preset path would run a fully non-interactive install that
@@ -605,7 +640,7 @@ fi
 # Resolve "auto" into ON/OFF from what was just detected. Only the preset loop
 # reads these - the interactive checklist below ships its own defaults - so an
 # interactive run is unaffected.
-for _hw in nvidia nouveau rog bluetooth plymouth limine; do
+for _hw in $auto_options; do
     [ "${!_hw}" == "auto" ] || continue
     case "$_hw" in
         # A GPU no maintained driver supports stays on nouveau under "auto".
