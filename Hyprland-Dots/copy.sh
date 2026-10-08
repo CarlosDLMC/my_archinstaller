@@ -237,6 +237,12 @@ restore_state() { # dir backup
             echo "  ${OK} Kept your rofi theme (${_t##*/})"
         fi
         ;;
+    Thunar)
+        # Keyboard shortcuts edited in Thunar: the repo's accels.scm binds nothing.
+        if [ -f "$_bak/accels.scm" ] && ! cmp -s "$_bak/accels.scm" "$HOME/.config/Thunar/accels.scm"; then
+            cp "$_bak/accels.scm" "$HOME/.config/Thunar/accels.scm" && echo "  ${OK} Kept your Thunar keyboard shortcuts (accels.scm)"
+        fi
+        ;;
     gtk-3.0)
         # Sidebar bookmarks added in Thunar or a file chooser (Ctrl+D).
         _s=$(keep_added_lines "$_bak/bookmarks" "$HOME/.config/gtk-3.0/bookmarks" uri expand-home)
@@ -595,6 +601,11 @@ for dir in "${config_dirs[@]}"; do
             # nwg-displays' saved profiles: its own state, not tracked (restored
             # from the backup by restore_state when the directory is replaced).
             nwg-displays) _cmp_x=(profiles active_profile.json) ;;
+            # Thunar rewrites accels.scm whenever it quits (its own header, its
+            # own order), and the tracked one is only comments - so opening
+            # Thunar once made every later re-run back up Thunar/ for nothing.
+            # A replaced Thunar/ gets the user's accels.scm back (restore_state).
+            Thunar)     _cmp_x=(accels.scm) ;;
         esac
         # Never tracked anywhere (gitignored): python's bytecode caches next to
         # the dots' scripts would otherwise force a backup for nothing.
@@ -646,9 +657,19 @@ for dir in "${config_dirs[@]}"; do
         else
             printf "  ${INFO} Copying $dir from $SCRIPT_DIR/config/$dir to $HOME/.config/\n"
         fi
+        # Thunar counts as identical with its own accels.scm (see _cmp_x), and
+        # the copy below would replace that with the repo's comment-only file -
+        # the user's shortcuts gone, with no backup. Kept across the copy.
+        _keep_accels=""
+        if [ "$dir" = Thunar ] && [ "$_same" = yes ] && [ -f "$HOME/.config/Thunar/accels.scm" ]; then
+            _keep_accels=$(cat "$HOME/.config/Thunar/accels.scm")
+        fi
         mkdir -p "$HOME/.config/$dir"
         if cp -r "$_copy_src/." "$HOME/.config/$dir/" 2>&1; then
             echo "  ${OK} Copied $dir"
+            if [ -n "$_keep_accels" ]; then
+                printf '%s\n' "$_keep_accels" > "$HOME/.config/Thunar/accels.scm"
+            fi
             if [ -n "${BACKUP_OF[$dir]:-}" ]; then
                 restore_state "$dir" "${BACKUP_OF[$dir]}"
             fi
