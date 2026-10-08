@@ -102,11 +102,39 @@ early_install() {
         && sudo pacman -S --needed --noconfirm "$@"
 }
 
-# Check if PulseAudio package is installed
-if pacman -Qq | grep -qw '^pulseaudio$'; then
-    echo "$ERROR PulseAudio is detected as installed. Uninstall it first, or comment out the execute_script 'pipewire.sh' call in install.sh." | tee -a "$LOG"
-    printf "\n%.0s" {1..2} 
-    exit 1
+# PulseAudio -> PipeWire.
+#
+# pipewire.sh installs pipewire-pulse, which conflicts with pulseaudio, and under
+# --noconfirm pacman answers "Remove pulseaudio?" with its default, no. So this
+# used to stop the run right here, and archinstall's "Audio: PulseAudio" choice
+# was all it took; the advice it printed (comment out pipewire.sh) could not
+# help, because this check ran whatever was commented out. Swap it here instead.
+# First the modules that need pulseaudio itself (pulseaudio-bluetooth and the
+# like: the pulseaudio-* names in its "Required By"), with pulseaudio, and without
+# dependency checks - desktop packages that only need *a* pulse server
+# (pulse-native-provider) are satisfied again a moment later by pipewire-pulse.
+# That goes in right away, so nothing installed below can pick PulseAudio as the
+# provider again. A preset run does this unattended; an interactive run asks.
+if pacman -Qq pulseaudio &>/dev/null; then
+    _pa_pkgs=(pulseaudio)
+    for _p in $(pacman -Qi pulseaudio | sed -n 's/^Required By *: //p'); do
+        case "$_p" in pulseaudio-*) _pa_pkgs+=("$_p") ;; esac
+    done
+    echo "${NOTE} PulseAudio is installed, and this setup uses PipeWire: replacing ${_pa_pkgs[*]} with pipewire-pulse." | tee -a "$LOG"
+    if [[ "${1:-}" != "--preset" ]]; then
+        read -r -p "Replace PulseAudio with PipeWire now? [y/N] " _pa_answer
+        if [[ "$_pa_answer" != [yY]* ]]; then
+            echo "${ERROR} This setup needs PipeWire. Uninstall PulseAudio, or answer y, and run it again." | tee -a "$LOG"
+            exit 1
+        fi
+    fi
+    systemctl --user disable --now pulseaudio.socket pulseaudio.service >> "$LOG" 2>&1 || true
+    if sudo pacman -Rdd --noconfirm "${_pa_pkgs[@]}" >> "$LOG" 2>&1 && early_install pipewire-pulse >> "$LOG" 2>&1; then
+        echo "${OK} PulseAudio replaced by PipeWire." | tee -a "$LOG"
+    else
+        echo "${ERROR} Could not replace PulseAudio with PipeWire - see $LOG" | tee -a "$LOG"
+        exit 1
+    fi
 fi
 
 # Check if base-devel is installed
