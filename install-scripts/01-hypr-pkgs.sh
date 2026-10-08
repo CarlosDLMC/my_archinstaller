@@ -113,6 +113,11 @@ hypr_package_2=(
   # http/https at librewolf.desktop, so there was no default browser either.
   librewolf
   mousepad
+  # GLib (Thunar, every GTK "open") runs a Terminal=true app - nvim, vim, micro,
+  # btop - through xdg-terminal-exec, or else through a fixed list of terminals
+  # that has no foot. Without it, "Open With > Neovim" failed with "Unable to
+  # find terminal required for application"; it picks foot.desktop on its own.
+  xdg-terminal-exec
   # vim is the editor UserConfigs/01-UserDefaults.lua names and ENVariables.lua
   # exports as $EDITOR. Only nano was installed, so $EDITOR pointed at nothing.
   vim

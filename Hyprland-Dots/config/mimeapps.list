@@ -14,8 +14,8 @@ x-scheme-handler/jetbrains=jetbrainsd.desktop
 [Added Associations]
 text/csv=libreoffice-calc.desktop;
 application/pdf=libreoffice-draw.desktop;chromium.desktop;
-text/x-qml=org.gnome.gedit.desktop;
-text/plain=org.gnome.gedit.desktop;
-application/x-shellscript=org.gnome.gedit.desktop;
+text/x-qml=org.gnome.gedit.desktop;org.xfce.mousepad.desktop;
+text/plain=org.gnome.gedit.desktop;org.xfce.mousepad.desktop;
+application/x-shellscript=org.gnome.gedit.desktop;org.xfce.mousepad.desktop;
 image/jpeg=org.gnome.Loupe.desktop;satty.desktop;chromium.desktop;
 image/png=org.gnome.Loupe.desktop;satty.desktop;
