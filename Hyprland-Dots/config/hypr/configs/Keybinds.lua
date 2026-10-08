@@ -45,7 +45,7 @@ bind(M .. " + CTRL + B", exec([[pkill -f "^qs -c bar"; sleep 0.5; qs -c bar]]), 
 
 bind(M .. " + SHIFT + F", hl.dsp.window.fullscreen(),                       { description = "fullscreen" })
 bind(M .. " + CTRL + F",  hl.dsp.window.fullscreen({ mode = "maximized" }), { description = "maximize window" })
-bind(M .. " + space",     hl.dsp.global("quickshell:layoutNext"),           { description = "switch keyboard layout", locked = true })
+bind(M .. " + space",     exec(S .. "/LayoutNext.sh"),                      { description = "switch keyboard layout", locked = true })
 bind(M .. " + SHIFT + space", hl.dsp.window.float(),                        { description = "toggle floating (active window)" })
 
 -- Float / tile every window on the current workspace (was `workspaceopt allfloat`).
@@ -87,13 +87,15 @@ bind(M .. " + SHIFT + A", exec(S .. "/Animations.sh"),        { description = "a
 -- Both press orders of ALT+SHIFT, so the gesture works whichever modifier lands
 -- first. Both go through quickshell, which owns the MRU ordering and the OSD -
 -- a direct `hyprctl switchxkblayout` here would switch the layout but leave the
--- bar showing the old one. Both are locked, so they work on the lock screen.
+-- bar showing the old one. LayoutNext.sh does that only when the bar is not
+-- running, so the layout still switches without it. Both are locked, so they
+-- work on the lock screen.
 -- The modifier half must be a modifier NAME (ALT / SHIFT): "ALT_L" and
 -- "SHIFT_L" are keysyms, and hl.bind("ALT_L + SHIFT_L") silently gave a bind
 -- with no modifier at all (`hyprctl binds` showed modmask 0), so it never fired
 -- and the cheat sheet listed a bare "SHIFT_L".
-bind("ALT + SHIFT_L", hl.dsp.global("quickshell:layoutNext"), { description = "switch keyboard layout", locked = true })
-bind("SHIFT + ALT_L", hl.dsp.global("quickshell:layoutNext"), { description = "switch keyboard layout", locked = true, non_consuming = true })
+bind("ALT + SHIFT_L", exec(S .. "/LayoutNext.sh"), { description = "switch keyboard layout", locked = true })
+bind("SHIFT + ALT_L", exec(S .. "/LayoutNext.sh"), { description = "switch keyboard layout", locked = true, non_consuming = true })
 
 bind(M .. " + ALT + C", exec(U .. "/RofiCalc.sh"), { description = "calculator" })
 

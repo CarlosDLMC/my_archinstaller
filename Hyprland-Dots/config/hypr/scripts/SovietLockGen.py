@@ -375,7 +375,7 @@ label {{
     color = $ink
     font_size = {fs}
     font_family = $mono
-    onclick = hyprctl dispatch 'hl.dsp.global("quickshell:layoutNext")'
+    onclick = {SCRIPTS}/LayoutNext.sh
     position = {l_x}, {l_y}
     halign = center
     valign = center
