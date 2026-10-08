@@ -1,7 +1,20 @@
 #!/bin/bash
+# vpn-recover [name]   get the network back after a tunnel died, and connect <name>
+# vpn-recover --off    the same clean-up without connecting: no VPN, no block
+#
+# A tunnel that dies without its PostDown leaves its killswitch rule behind, and
+# that rule blocks everything. This used to delete only the rule named after the
+# config you picked - after a server died you usually pick another one, so the
+# dead tunnel's rule stayed, nothing could get out, and it still said "VPN
+# connected". A tunnel whose interface was still there could not be brought up
+# at all ("already exists"). And when `wg-quick up` failed, it added a
+# block-everything rule even where no killswitch had been active, leaving the
+# machine offline until a reboot. Now: every WireGuard interface still up comes
+# down, every killswitch rule goes, then the tunnel comes up; if that fails,
+# only the rules that were in force before go back.
 
 WIREGUARD_DIR="/etc/wireguard"
-MARK="51820"
+TAG="wireguard-killswitch"
 
 if [[ $EUID -ne 0 ]]; then
     exec sudo /usr/local/bin/vpn-recover "$@"
@@ -12,12 +25,14 @@ mapfile -t configs < <(
         -printf '%f\n' | sed 's/\.conf$//' | sort
 )
 
-if [[ ${#configs[@]} -eq 0 ]]; then
+off=false
+vpn=""
+if [[ "${1:-}" == "--off" ]]; then
+    off=true
+elif [[ ${#configs[@]} -eq 0 ]]; then
     echo "No WireGuard configs found."
     exit 1
-fi
-
-if [[ $# -eq 0 ]]; then
+elif [[ $# -eq 0 ]]; then
     echo
     echo "Available WireGuard configs:"
     echo
@@ -40,31 +55,39 @@ else
     vpn="$1"
 fi
 
-if [[ ! -f "$WIREGUARD_DIR/$vpn.conf" ]]; then
+if [[ "$off" == false && ! -f "$WIREGUARD_DIR/$vpn.conf" ]]; then
     echo "Config not found: $WIREGUARD_DIR/$vpn.conf"
     exit 1
 fi
 
-echo
-echo "Recovering WireGuard: $vpn"
+# 1. Every WireGuard interface still up comes down. Through wg-quick when it has
+# a config (that also takes out its DNS and routes); otherwise just the link.
+for iface in $(wg show interfaces 2>/dev/null); do
+    echo "Bringing down $iface..."
+    if [[ -f "$WIREGUARD_DIR/$iface.conf" ]] && wg-quick down "$iface" >/dev/null 2>&1; then
+        continue
+    fi
+    ip link delete dev "$iface" 2>/dev/null || true
+done
 
-if iptables -C OUTPUT \
-    ! -o "$vpn" \
-    -m mark ! --mark "$MARK" \
-    -m addrtype ! --dst-type LOCAL \
-    -m comment --comment wireguard-killswitch \
-    -j REJECT 2>/dev/null; then
-
-    echo "Removing stale killswitch..."
-
-    iptables -D OUTPUT \
-        ! -o "$vpn" \
-        -m mark ! --mark "$MARK" \
-        -m addrtype ! --dst-type LOCAL \
-        -m comment --comment wireguard-killswitch \
-        -j REJECT
+# 2. Every killswitch rule left in OUTPUT, whichever config put it there - saved
+# first, as `iptables -S` prints them, so a failed connect can put back exactly
+# what was in force.
+mapfile -t stale < <(iptables -S OUTPUT 2>/dev/null | grep -- "--comment $TAG")
+if [[ ${#stale[@]} -gt 0 ]]; then
+    echo "Removing ${#stale[@]} stale killswitch rule(s)..."
+    # By line number, highest first, so the numbers below stay valid.
+    for n in $(iptables -L OUTPUT -n --line-numbers 2>/dev/null | awk -v tag="$TAG" '$0 ~ tag { print $1 }' | sort -rn); do
+        iptables -D OUTPUT "$n"
+    done
 else
-    echo "No stale killswitch found for $vpn."
+    echo "No stale killswitch rules."
+fi
+
+if [[ "$off" == true ]]; then
+    echo
+    echo "No VPN, and nothing blocked: the network is in the clear."
+    exit 0
 fi
 
 echo "Starting $vpn..."
@@ -73,27 +96,24 @@ echo
 if ! wg-quick up "$vpn"; then
     echo
     echo "WireGuard failed to start."
-    echo "Restoring killswitch..."
-
-    if ! iptables -C OUTPUT \
-        ! -o "$vpn" \
-        -m mark ! --mark "$MARK" \
-        -m addrtype ! --dst-type LOCAL \
-        -m comment --comment wireguard-killswitch \
-        -j REJECT 2>/dev/null; then
-
-        iptables -I OUTPUT \
-            ! -o "$vpn" \
-            -m mark ! --mark "$MARK" \
-            -m addrtype ! --dst-type LOCAL \
-            -m comment --comment wireguard-killswitch \
-            -j REJECT
+    if [[ ${#stale[@]} -gt 0 ]]; then
+        # Fail closed, as the killswitch that was in force would have.
+        for rule in "${stale[@]}"; do
+            read -ra spec <<< "${rule#-A OUTPUT }"
+            iptables -I OUTPUT "${spec[@]}"
+        done
+        echo "The killswitch that was in force is back: nothing gets out."
+        echo "Try another server (vpn-recover), or unblock with: vpn-recover --off"
+    else
+        echo "No killswitch was in force, so the network is not blocked."
     fi
-
-    echo "Killswitch restored."
     exit 1
 fi
 
 echo
 echo "VPN connected: $vpn"
-echo "Killswitch active."
+if iptables -S OUTPUT 2>/dev/null | grep -- "--comment $TAG" | grep -q -- "! -o $vpn "; then
+    echo "Killswitch active."
+else
+    echo "This config has no killswitch (a split tunnel, or add-wireguard-killswitch-to-configs not run)."
+fi

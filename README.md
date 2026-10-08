@@ -993,17 +993,22 @@ every full-tunnel config (`0.0.0.0/0` in `AllowedIPs`), so while such a tunnel
 is up, any traffic that does not leave through it is rejected. A split tunnel
 (one subnet: a work or home LAN) gets none - it would cut everything else off -
 and the script lists which configs got one. Re-running it is safe: it removes
-its own lines before adding them again. It re-runs itself through `sudo`. If a tunner dies, killswitch will be executed 
-and you won't be able to use the internet at all. 
-In that case, use this for the vpn you were using:
+its own lines before adding them again. It re-runs itself through `sudo`.
+
+If a tunnel dies without taking its killswitch rule down, nothing gets out at
+all. Then use:
 
 ```bash
-vpn-recover            # pick from a list
-vpn-recover de-ber     # or name the config
+vpn-recover            # pick a config from a list
+vpn-recover de-ber     # or name it - the one that died, or any other
+vpn-recover --off      # no VPN: just unblock the network
 ```
 
-It removes the stale rule, brings the tunnel back up, and restores the rule if
-that fails. It re-runs itself through `sudo`.
+It brings down any WireGuard interface still up, removes every killswitch rule
+left behind (whichever config put it there), and brings the chosen tunnel up.
+If that fails, the rules that were in force go back - nothing leaks - and
+`vpn-recover --off` is the way out; if none were, nothing is blocked. It
+re-runs itself through `sudo`.
 
 **Check the two things the widget depends on.** Both commands must succeed —
 the first without a password prompt, the second printing `active`:
