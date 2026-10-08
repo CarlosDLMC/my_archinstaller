@@ -275,7 +275,11 @@ restore_state() { # dir backup
 printf "${INFO} Copying shell configuration files...\n"
 for file in .zshrc .zprofile .bashrc .bash_profile pokefetch_perfect; do
     if [ -f "$SCRIPT_DIR/$file" ]; then
-        if [ -f "$HOME/$file" ] && ! cmp -s "$SCRIPT_DIR/$file" "$HOME/$file"; then
+        # Not a copy of the untouched /etc/skel file: useradd put that there, so
+        # every fresh install started with .bashrc and .bash_profile backups of
+        # distro boilerplate that nobody wrote.
+        if [ -f "$HOME/$file" ] && ! cmp -s "$SCRIPT_DIR/$file" "$HOME/$file" \
+           && ! cmp -s "/etc/skel/$file" "$HOME/$file"; then
             cp "$HOME/$file" "$HOME/$file.backup-$BACKUP_STAMP" && echo "  ${NOTE} Backed up existing $file to $file.backup-$BACKUP_STAMP"
         fi
         if cp "$SCRIPT_DIR/$file" "$HOME/" 2>/dev/null; then
