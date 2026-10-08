@@ -1182,7 +1182,7 @@ manifest and `02-Final-Check.sh` reports it at the end. If a Herdr binary is
 already installed, it is kept and still configured; only the update is skipped.
 
 The binary is the only thing `herdr.sh` downloads. The config, the sounds and
-the four helper scripts are dotfiles, which is why `install.sh` runs `herdr.sh`
+the five helper scripts are dotfiles, which is why `install.sh` runs `herdr.sh`
 *after* `dotfiles-main.sh` — the other order would substitute paths into a file
 that does not exist yet and then have `copy.sh` lay the untouched template back
 on top of it.

@@ -13,6 +13,7 @@
 #   - config/herdr/sounds/*.mp3         done/request tones (freedesktop, -> mp3)
 #   - .local/bin/herdr-goto-tab         focus-or-create tab, on CTRL+ALT+1..9
 #   - .local/bin/herdr-close-workspace  ALT+Q popup: close workspace + worktree
+#   - .local/bin/herdr-close-tab        ALT+C popup: close tab
 #   - .local/bin/herdr-sync-workspace-numbers   one-shot $num token stamp
 #   - .local/bin/herdr-watch-workspace-numbers  the daemon behind the unit below
 #   - config/hypr/UserConfigs/UserKeybinds.lua  unbinds ALT+Tab so herdr gets it
