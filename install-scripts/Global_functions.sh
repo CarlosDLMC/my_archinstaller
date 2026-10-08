@@ -259,7 +259,7 @@ retry_without_checksums() {
   } >> "$LOG"
 
   (
-    stdbuf -oL env $AUR_ENV $ISAUR -S --noconfirm --mflags --skipchecksums "${targets[@]}" 2>&1
+    stdbuf -oL env --default-signal=INT $AUR_ENV $ISAUR -S --noconfirm --mflags --skipchecksums "${targets[@]}" 2>&1
   ) >> "$LOG" 2>&1 &
   local pid=$!
   show_progress "$pid" "${targets[*]} (--skipchecksums)"
@@ -272,7 +272,7 @@ retry_without_checksums() {
     # with verification ON - only the allowlisted package gets the override.
     if ! printf '%s\n' "${targets[@]}" | grep -qx -- "$asked"; then
       (
-        stdbuf -oL env $AUR_ENV $ISAUR -S --noconfirm "$asked" 2>&1
+        stdbuf -oL env --default-signal=INT $AUR_ENV $ISAUR -S --noconfirm "$asked" 2>&1
       ) >> "$LOG" 2>&1 &
       pid=$!
       show_progress "$pid" "$asked"
@@ -286,7 +286,15 @@ retry_without_checksums() {
   return 1
 }
 
-# Show progress function
+# Spinner for a package job started in the background (`( ... ) &`).
+#
+# Ctrl-C. A non-interactive bash starts background jobs with SIGINT ignored, and
+# the helper, makepkg and cargo inherited that: Ctrl-C ended the installer and
+# left the build running on its own - it later ran `sudo pacman -U` unattended,
+# and a re-run raced it for the pacman lock - with the cursor still hidden from
+# here. Every job is started with `env --default-signal=INT` now, so it stops
+# with the installer, and this puts the cursor back before the script dies of
+# the signal, as it would have.
 show_progress() {
     local pid=$1
     local package_name=$2
@@ -294,6 +302,7 @@ show_progress() {
                       "○○○○○●○○○○" "○○○○○○●○○○" "○○○○○○○●○○" "○○○○○○○○●○" "○○○○○○○○○●") 
     local i=0
 
+    trap '_tput cnorm; printf "\n"; trap - INT; kill -INT $$' INT
     _tput civis
     printf "\r${NOTE} Installing ${YELLOW}%s${RESET} ..." "$package_name"
 
@@ -305,6 +314,7 @@ show_progress() {
 
     printf "\r${NOTE} Installing ${YELLOW}%s${RESET} ... Done!%-20s \n" "$package_name" ""
     _tput cnorm
+    trap - INT
 }
 
 
@@ -317,7 +327,7 @@ install_package_pacman() {
   else
     # Run pacman and redirect all output to a log file
     (
-      stdbuf -oL sudo pacman -S --noconfirm "$1" 2>&1
+      stdbuf -oL env --default-signal=INT sudo pacman -S --noconfirm "$1" 2>&1
     ) >> "$LOG" 2>&1 &
     PID=$!
     show_progress $PID "$1" 
@@ -364,7 +374,7 @@ install_package() {
   else
     local _mark; _mark=$(log_mark)
     (
-      stdbuf -oL env $AUR_ENV $ISAUR -S --noconfirm "$1" 2>&1
+      stdbuf -oL env --default-signal=INT $AUR_ENV $ISAUR -S --noconfirm "$1" 2>&1
     ) >> "$LOG" 2>&1 &
     PID=$!
     show_progress $PID "$1"  
@@ -390,7 +400,7 @@ install_package() {
 install_package_f() {
   local _mark; _mark=$(log_mark)
   (
-    stdbuf -oL env $AUR_ENV $ISAUR -S --noconfirm "$1" 2>&1
+    stdbuf -oL env --default-signal=INT $AUR_ENV $ISAUR -S --noconfirm "$1" 2>&1
   ) >> "$LOG" 2>&1 &
   PID=$!
   show_progress $PID "$1"  
