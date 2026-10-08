@@ -44,31 +44,12 @@ https://github.com/user-attachments/assets/79ceb141-6b9e-4956-8e09-aaf72b66550c
 
 ### Setup
 
-1. **Clone this repository** to your Quickshell config directory:
-   ```bash
-   git clone https://github.com/Shanu-Kumawat/quickshell-overview ~/.config/quickshell/overview
-   ```
-
-2. **Add keybind** to your Hyprland config (`~/.config/hypr/hyprland.conf`):
-   ```conf
-   bind = Super, TAB, exec, qs ipc -c overview call overview toggle
-   ```
-
-3. **Auto-start** the overview (add to Hyprland config):
-   ```conf
-   exec-once = qs -c overview
-   ```
-
-4. **Reload Hyprland**:
-   ```bash
-   hyprctl reload
-   ```
-
-### Manual Start (if needed)
-
-```bash
-qs -c overview &
-```
+Nothing to do by hand in this repo. `Hyprland-Dots/copy.sh` deploys this folder
+to `~/.config/quickshell/overview`, and SUPER+A runs
+`~/.config/hypr/scripts/OverviewToggle.sh` (bound in `configs/Keybinds.lua` -
+the Hyprland config here is Lua, not `hyprland.conf`), which starts
+`qs -c overview` on first use and toggles it through
+`qs ipc -c overview call overview toggle` after that.
 
 ## 🎮 Usage
 

@@ -42,22 +42,14 @@ A modern, feature-rich status bar for Hyprland built with [Quickshell](https://q
 
 ## Installation
 
-1. Install Quickshell following the [official guide](https://quickshell.outfoxxed.me/docs/guide/intro.html)
+Nothing to do by hand in this repo. `Hyprland-Dots/copy.sh` deploys this folder
+to `~/.config/quickshell/bar`, and Hyprland starts it as `qs -c bar`
+(`configs/Startup_Apps.lua`). A bare `quickshell` would look for
+`~/.config/quickshell/shell.qml`, which does not exist here.
 
-2. Clone this repository:
-   ```bash
-   git clone https://github.com/yourusername/quickshell-config.git ~/.config/quickshell
-   ```
-
-3. Start Quickshell:
-   ```bash
-   quickshell
-   ```
-
-4. (Optional) Add to your Hyprland config to start on login:
-   ```ini
-   exec-once = quickshell
-   ```
+To restart it, press SUPER+CTRL+B. From a terminal, `setsid -f qs -c bar` after
+stopping the running one - `pkill qs` would take the overview with it, and a
+bar started as a plain job of the terminal dies when the terminal closes.
 
 ## Configuration
 

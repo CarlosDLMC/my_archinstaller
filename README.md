@@ -313,7 +313,7 @@ Three places consume it, and all three want Russian:
   the lock screen reads `Четверг, 10 сентября 2026`
 
 The bar's calendar picks up `firstDayOfWeek` and its `MMMM yyyy` heading from
-`Qt.locale()`. The bar's *clock* does not — `Clock.qml` formats `"HH:mm"`
+`Qt.locale()`. The bar's *clock* does not — `components/CenterInfo.qml` formats `"HH:mm"`
 directly, so it is 24-hour regardless of locale.
 
 **To change it**, edit `LC_TIME` in both `locale.conf` and `ENVariables.lua`,
@@ -1077,7 +1077,10 @@ curl -s https://ipinfo.io/country   # should print the server's country
 sudo wg-quick down de-ber
 ```
 
-Then restart the bar to pick them up: `pkill qs; qs -c bar &`.
+Nothing needs restarting: the bar's VPN dropdown reads `/etc/wireguard` again
+every time it opens. (To restart the bar anyway, use SUPER+CTRL+B. A
+`pkill qs; qs -c bar &` in a terminal also kills the overview, and leaves the
+new bar a job of that terminal, which takes it down when it closes.)
 
 **This needs passwordless sudo.** `VpnWidget.qml` runs `sudo find`,
 `sudo wg-quick up|down` and `sudo timedatectl set-timezone` from a QML `Process`,
