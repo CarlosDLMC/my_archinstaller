@@ -177,12 +177,20 @@ start_recorder() {
 }
 
 # Pick the output (monitor) whose bounds contain the given x,y point.
+#
+# In logical coordinates, as the window's position is: .width/.height are the
+# monitor's pixels, so on a scaled panel (2560 px at 1.6 = 1600 logical) a
+# window on the monitor to its right still fell inside it, and the whole wrong
+# monitor was recorded. Rotated (odd transform) swaps the two.
 output_for_point() {
     local x=$1 y=$2
     hyprctl -j monitors | jq -r --argjson x "$x" --argjson y "$y" '
-        .[] | select(
-            $x >= .x and $x < (.x + .width) and
-            $y >= .y and $y < (.y + .height)
+        .[]
+        | ((if (.transform % 2) == 1 then .height else .width end) / .scale) as $w
+        | ((if (.transform % 2) == 1 then .width else .height end) / .scale) as $h
+        | select(
+            $x >= .x and $x < (.x + $w) and
+            $y >= .y and $y < (.y + $h)
         ) | .name' | head -1
 }
 
