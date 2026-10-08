@@ -556,8 +556,22 @@ else
     # Point /etc/resolv.conf at the stub so every resolver, not just NM, goes
     # through resolved. Kept as a backup rather than deleted if it is a real
     # file (NM or archinstall wrote it).
+    #
+    # Except under connman, which the network step above leaves in place when it
+    # holds the Wi-Fi password. connman answers DNS itself, through its own
+    # /run/connman/resolv.conf (its tmpfiles.d links /etc/resolv.conf there), and
+    # never hands its servers to resolved - pointed at the stub, nothing resolved.
+    # resolved still runs, for wg-quick's DNS= line. A machine that an earlier
+    # run broke that way gets connman's link back.
     stub="/run/systemd/resolve/stub-resolv.conf"
-    if [ "$(readlink -f /etc/resolv.conf)" != "$stub" ]; then
+    connman_rc="/run/connman/resolv.conf"
+    if systemctl is-enabled --quiet connman.service 2>/dev/null || systemctl is-active --quiet connman.service; then
+      if [ "$(readlink -f /etc/resolv.conf)" = "$stub" ] && sudo ln -sf "$connman_rc" /etc/resolv.conf; then
+        echo "${OK} /etc/resolv.conf -> $connman_rc again: connman answers DNS here, not systemd-resolved." | tee -a "$LOG"
+      else
+        echo "${NOTE} connman answers DNS here; /etc/resolv.conf is left to it." | tee -a "$LOG"
+      fi
+    elif [ "$(readlink -f /etc/resolv.conf)" != "$stub" ]; then
       if [ -f /etc/resolv.conf ] && [ ! -L /etc/resolv.conf ]; then
         sudo cp /etc/resolv.conf /etc/resolv.conf.bak-"$(date +%Y%m%d-%H%M%S)"
       fi
