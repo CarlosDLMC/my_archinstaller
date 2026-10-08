@@ -34,7 +34,10 @@ printf "\n%.0s" {1..1}
 if ! command -v git &> /dev/null
 then
     echo "${INFO} Git not found! ${SKY_BLUE}Installing Git...${RESET}"
-    if ! sudo pacman -S git --noconfirm; then
+    # -Syu: a plain -S resolves against the package database from install day,
+    # and once git has been updated the mirrors no longer carry that version
+    # (404) - install.sh guards its own early installs the same way.
+    if ! sudo pacman -Syu --needed --noconfirm git; then
         echo "${ERROR} Failed to install Git. Exiting."
         exit 1
     fi

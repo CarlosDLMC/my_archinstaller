@@ -47,8 +47,12 @@ NVIDIA's GLX library there broke every XWayland OpenGL app.
 git is not part of that selection, so after the first login:
 
 ```bash
-sudo pacman -S git
+sudo pacman -Syu git
 ```
+
+`-Syu`, not `-S`: against the package database from install day, the git
+version it names may no longer be on the mirrors (404), once git has been
+updated since.
 
 then continue with the [Installation Steps](#installation-steps) below.
 
@@ -77,7 +81,7 @@ then continue with the [Installation Steps](#installation-steps) below.
 
 - Fresh Arch Linux installation with the `base` system and a kernel
 - Internet connection
-- git installed (`sudo pacman -S git`; only `auto-install.sh` installs it for you)
+- git installed (`sudo pacman -Syu git`; only `auto-install.sh` installs it for you)
 - **A normal user account that can `sudo`** — see below
 
 The sudo requirement is the one that actually bites, because a minimal
