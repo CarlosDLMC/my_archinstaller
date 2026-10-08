@@ -136,8 +136,20 @@ fi
 CFG="$HOME/.config/herdr/config.toml"
 if [ -f "$CFG" ]; then
   # __HOME__ -> the real home. See the header for why the dotfile is templated.
+  # The binds are type = "shell" commands, so a home that needs quoting (a space:
+  # /home/John Doe) goes in single-quoted - raw, every tab bind and ALT+Q ran
+  # "/home/John" with arguments. TOML-escaped as well, since the commands sit in
+  # double-quoted strings. An ordinary home goes in as it is.
   if grep -q '__HOME__' "$CFG"; then
-    sed -i "s#__HOME__#$HOME#g" "$CFG"
+    python3 - "$CFG" <<'PY'
+import os, shlex, sys
+p = sys.argv[1]
+home = shlex.quote(os.path.expanduser("~")).replace("\\", "\\\\").replace('"', '\\"')
+with open(p) as f:
+    text = f.read()
+with open(p, "w") as f:
+    f.write(text.replace("__HOME__", home))
+PY
     echo "${OK} Resolved __HOME__ paths in $CFG" | tee -a "$LOG"
   fi
   # Checked by herdr itself (`herdr --default-config` only prints the built-in

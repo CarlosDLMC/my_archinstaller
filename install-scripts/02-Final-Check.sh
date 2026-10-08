@@ -397,7 +397,7 @@ if selected herdr; then
     # bindings out of the installed config rather than listing the helpers here
     # means a binding added later is covered without touching this file.
     check_outcome "a herdr keybinding points at a helper script that is not installed or not executable (Hyprland-Dots/.local/bin, Hyprland-Dots/copy.sh)" \
-        python3 -c 'import tomllib, os, sys; cfg = os.path.expanduser("~/.config/herdr/config.toml"); d = tomllib.load(open(cfg, "rb")); cmds = d.get("keys", {}).get("command", []); missing = [c["command"] for c in cmds if not os.access(c["command"].split()[0], os.X_OK)]; print("\n".join(missing)); sys.exit(1 if missing else 0)'
+        python3 -c 'import tomllib, os, shlex, sys; cfg = os.path.expanduser("~/.config/herdr/config.toml"); d = tomllib.load(open(cfg, "rb")); cmds = d.get("keys", {}).get("command", []); missing = [c["command"] for c in cmds if not os.access(shlex.split(c["command"])[0], os.X_OK)]; print("\n".join(missing)); sys.exit(1 if missing else 0)'
 fi
 
 if selected neovim; then

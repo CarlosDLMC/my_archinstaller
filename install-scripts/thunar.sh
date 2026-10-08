@@ -70,7 +70,9 @@ for DIR1 in "${DIRS_TO_COPY[@]}"; do
     # copy.sh only runs with dots. Copied raw, $HOME parses as a URI host and
     # every sidebar bookmark was dead.
     if [ "$DIR1" = "gtk-3.0" ] && [ -f "$DIRPATH/bookmarks" ]; then
-      sed -i "s|\$HOME|$HOME|g" "$DIRPATH/bookmarks" || echo "${WARN} Could not expand \$HOME in $DIRPATH/bookmarks." 2>&1 | tee -a "$LOG"
+      # Percent-encoded, as copy.sh does: a home with a space broke every URI.
+      _home_uri=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$HOME" 2>/dev/null) || _home_uri="$HOME"
+      sed -i "s|\$HOME|$_home_uri|g" "$DIRPATH/bookmarks" || echo "${WARN} Could not expand \$HOME in $DIRPATH/bookmarks." 2>&1 | tee -a "$LOG"
     fi
   fi
 done

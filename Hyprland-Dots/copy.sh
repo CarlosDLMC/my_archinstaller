@@ -17,6 +17,11 @@ printf "\n${NOTE} Copying customized dotfiles to your home directory...\n\n"
 # One stamp for the whole run, so a single invocation's backups group together.
 BACKUP_STAMP="$(date +%Y%m%d-%H%M%S)"
 
+# $HOME as it goes into a file:// URI (GTK/Thunar bookmarks): percent-encoded.
+# Put in raw, a home with a space (/home/John Doe) turned every sidebar entry
+# into file:///home/John, labelled "Doe/Documents".
+HOME_URI=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$HOME" 2>/dev/null) || HOME_URI="$HOME"
+
 # A video wallpaper chosen in WallpaperSelect.sh lives in three lines of
 # hypr/configs/Startup_Apps.lua: livewallpaper, awww-daemon commented out,
 # mpvpaper live. Copy that choice from one Startup_Apps.lua to another with the
@@ -81,7 +86,7 @@ keep_added_lines() { # backup-file new-file key [expand-home]
         echo 0
         return 0
     fi
-    if _n=$(EXPAND="${4:-}" awk -v key="$3" -v home="$HOME" -v out="$_tmp" '
+    if _n=$(EXPAND="${4:-}" awk -v key="$3" -v home="$HOME_URI" -v out="$_tmp" '
         function k(s,   f) {
             if (key == "uri") { split(s, f, /[ \t]/); return f[1] }
             if (key == "name") return substr(s, 1, index(s "|", "|") - 1)
@@ -682,7 +687,7 @@ fi
 printf "\n${INFO} Expanding \$HOME in GTK bookmarks...\n"
 _bookmarks="$HOME/.config/gtk-3.0/bookmarks"
 if [ -f "$_bookmarks" ]; then
-    if sed -i "s|\$HOME|$HOME|g" "$_bookmarks"; then
+    if sed -i "s|\$HOME|$HOME_URI|g" "$_bookmarks"; then
         echo "  ${OK} Thunar sidebar bookmarks point at $HOME"
     else
         echo "  ${ERROR} Could not expand \$HOME in $_bookmarks - the sidebar bookmarks will be dead links"
