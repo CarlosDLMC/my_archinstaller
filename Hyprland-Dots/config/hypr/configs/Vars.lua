@@ -45,14 +45,16 @@ end
 
 V.is_laptop = detect_laptop()
 
--- Returns a function that multiplies cursor.zoom_factor by `mult` (never below 1).
+-- Returns a function that multiplies cursor.zoom_factor by `mult`, kept within
+-- the option's own range 1..10: past 8x the next step asked for 16, which
+-- hl.config rejects - a red "Runtime error in lua" notification on every tick.
 -- Used by the SUPER+ALT+scroll binds and the 4-finger swipe gestures; replaces
 -- the old `hyprctl keyword cursor:zoom_factor "$(hyprctl getoption ... | awk ...)"`.
 function V.zoom_by(mult)
     return function()
         local f = hl.get_config("cursor.zoom_factor")
         if type(f) ~= "number" or f < 1 then f = 1 end
-        hl.config({ cursor = { zoom_factor = math.max(1, f * mult) } })
+        hl.config({ cursor = { zoom_factor = math.min(10, math.max(1, f * mult)) } })
     end
 end
 
