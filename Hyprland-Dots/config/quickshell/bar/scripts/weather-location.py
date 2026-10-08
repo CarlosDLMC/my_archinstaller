@@ -62,6 +62,7 @@ VPN_LOCATIONS = {
     "warsaw": (52.237049, 21.017532),
     "tbilisi": (41.715138, 44.827096),
     "madrid": (40.416775, -3.703790),
+    "barcelona": (41.387400, 2.168600),
     "kyiv": (50.450001, 30.523333),
     "vilnius": (54.687157, 25.279652),
     "jakarta": (-6.200000, 106.816666),
@@ -69,12 +70,13 @@ VPN_LOCATIONS = {
 
 # Russian display names for the VPN cities above. Everywhere else the city name
 # is localised by ip-api itself (&lang=ru), so there is nothing to maintain here
-# beyond these seven overrides.
+# beyond these overrides.
 VPN_LOCATION_NAMES_RU = {
     "berlin": "Берлин",
     "warsaw": "Варшава",
     "tbilisi": "Тбилиси",
     "madrid": "Мадрид",
+    "barcelona": "Барселона",
     "kyiv": "Киев",
     "vilnius": "Вильнюс",
     "jakarta": "Джакарта",

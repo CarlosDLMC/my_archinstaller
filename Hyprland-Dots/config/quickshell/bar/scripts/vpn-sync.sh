@@ -51,6 +51,7 @@ declare -A VPN_MAP=(
     ["pl-own"]="warsaw:Europe/Warsaw:+01:00"
     ["ge-tbs"]="tbilisi:Asia/Tbilisi:+04:00"
     ["es-mad"]="madrid:Europe/Madrid:+01:00"
+    ["es-bcn"]="barcelona:Europe/Madrid:+01:00"
     ["ua-iev"]="kyiv:Europe/Kiev:+02:00"
     ["lt-vno"]="vilnius:Europe/Vilnius:+02:00"
     ["id-jak"]="jakarta:Asia/Jakarta:+07:00"
@@ -63,6 +64,9 @@ echo "Mapping: $MAPPING" >> "$LOG_FILE"
 if [ -z "$MAPPING" ]; then
     echo "Error: Unknown VPN: $VPN_NAME" >> "$LOG_FILE"
     echo "Unknown VPN: $VPN_NAME"
+    # Said, not only logged: the Time and Weather buttons otherwise just did
+    # nothing for a config this table does not know (es-bcn did).
+    notify-send -u normal "VPN" "No city for $VPN_NAME: add it to VPN_MAP in ~/.config/quickshell/bar/scripts/vpn-sync.sh (and its coordinates to weather-location.py)." 2>/dev/null
     exit 1
 fi
 

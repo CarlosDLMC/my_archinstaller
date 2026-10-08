@@ -105,10 +105,12 @@ DropdownWidget {
         // down, then at once up - but setting running = true on a Process that is
         // still running does nothing, so the old tunnel went down and the new one
         // never came up. The names go in as positional parameters, like the sync
-        // commands below, so sh never re-parses them.
+        // commands below, so sh never re-parses them. vpn-switch.sh holds a guard
+        // over the moment between down and up: with a plain down-then-up, nothing
+        // blocked traffic in between, and it went out in the clear.
         property string switchFrom: ""
         command: switchFrom !== "" ?
-            ["sh", "-c", "sudo wg-quick down \"$1\"; sudo wg-quick up \"$2\"", "sh", switchFrom, targetVpn] :
+            ["sh", "-c", "$HOME/.config/quickshell/bar/scripts/vpn-switch.sh \"$1\" \"$2\"", "sh", switchFrom, targetVpn] :
             (isDisconnect ?
                 ["sudo", "wg-quick", "down", targetVpn] :
                 ["sudo", "wg-quick", "up", targetVpn])
