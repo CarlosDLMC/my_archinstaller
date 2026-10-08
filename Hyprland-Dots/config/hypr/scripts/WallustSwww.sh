@@ -41,10 +41,19 @@ if [[ -z "${wallpaper_path:-}" || ! -f "$wallpaper_path" ]]; then
   exit 0
 fi
 
-# Update helpers that depend on the path
-ln -sf "$wallpaper_path" "$rofi_link" || true
-mkdir -p "$(dirname "$wallpaper_current")"
-cp -f "$wallpaper_path" "$wallpaper_current" || true
+# Update helpers that depend on the path - unless what awww shows is an effect
+# image (WallpaperEffects.sh's .wallpaper_modified, made FROM .wallpaper_current).
+# Callers without a path (Game Mode, the animations menu, monitor profiles) used
+# to copy it over .wallpaper_current, and "No Effects" could no longer bring the
+# original back. The colours still follow what is on screen.
+case "$wallpaper_path" in
+  "$HOME/.config/hypr/wallpaper_effects/"*) ;;
+  *)
+    ln -sf "$wallpaper_path" "$rofi_link" || true
+    mkdir -p "$(dirname "$wallpaper_current")"
+    cp -f "$wallpaper_path" "$wallpaper_current" || true
+    ;;
+esac
 
 # Run wallust (silent) to regenerate templates defined in ~/.config/wallust/wallust.toml
 # -s is used in this repo to keep things quiet and avoid extra prompts
