@@ -77,6 +77,9 @@ fi
 # Per-folder view settings are ignored entirely unless this is on - without it
 # Thunar keeps a single sort order shared by every folder, so setting one folder
 # to newest-first would reorder the whole filesystem.
+# One flag for every step: the closing note used to say both folders now open
+# newest-first even right after both [ERROR] lines below.
+_sort_failed=false
 if [ "$(run_with_bus xfconf-query -c thunar -p /misc-directory-specific-settings 2>/dev/null)" = "true" ]; then
   echo "${INFO} Directory-specific settings already enabled, skipping." | tee -a "$LOG"
 else
@@ -87,6 +90,7 @@ else
     echo "${OK} Enabled per-directory view settings in Thunar." | tee -a "$LOG"
   else
     echo "${ERROR} Failed to enable per-directory view settings - the per-folder sort below will not take effect." | tee -a "$LOG"
+    _sort_failed=true
   fi
 fi
 
@@ -124,9 +128,14 @@ for ENTRY in "${sort_dirs_relative[@]}"; do
     echo "${OK} ${MAGENTA}$TARGET${RESET} set to newest-first." | tee -a "$LOG"
   else
     echo "${ERROR} Failed to set sort order on $TARGET." | tee -a "$LOG"
+    _sort_failed=true
   fi
 done
 
-printf "\n${NOTE} ${SKY_BLUE}Screenshots${RESET} and ${SKY_BLUE}Recordings${RESET} now open newest-first in Thunar; every other folder keeps its own sort order. Already-open Thunar windows do not reload this - run ${YELLOW}thunar -q${RESET} and reopen. To undo one folder: ${MAGENTA}gio set -t unset <folder> metadata::thunar-sort-column${RESET}.\n"
+if [ "$_sort_failed" = true ]; then
+  printf "\n${WARN} The newest-first sort for Screenshots and Recordings is not fully in place (see the errors above). Re-run ${MAGENTA}install-scripts/thunar_sort.sh${RESET} from the desktop session.\n" | tee -a "$LOG"
+else
+  printf "\n${NOTE} ${SKY_BLUE}Screenshots${RESET} and ${SKY_BLUE}Recordings${RESET} now open newest-first in Thunar; every other folder keeps its own sort order. Already-open Thunar windows do not reload this - run ${YELLOW}thunar -q${RESET} and reopen. To undo one folder: ${MAGENTA}gio set -t unset <folder> metadata::thunar-sort-column${RESET}.\n"
+fi
 
 printf "\n%.0s" {1..2}
