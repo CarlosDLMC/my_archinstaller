@@ -432,11 +432,16 @@ is already handled.
 Anything else (rEFInd, a UKI) gets the same treatment: a description of what to
 add, and no changes made.
 
-After rebooting, confirm it took:
+After rebooting:
 
 ```bash
-journalctl -k -b | grep microcode      # want: "microcode updated early"
+journalctl -k -b | grep microcode      # "Current revision: 0x..."
 ```
+
+"microcode updated early" appears only when the package carries a newer
+revision than your firmware already has. With current firmware a correct setup
+never prints it - the line above with no "updated early" is normal, not a sign
+that the microcode image is not loaded.
 
 ### Network
 

@@ -125,6 +125,11 @@ else
   printf "${NOTE} main one, or the microcode update will not apply.\n" | tee -a "$LOG"
 fi
 
-printf "\n${NOTE} After rebooting, confirm with: ${MAGENTA}journalctl -k -b | grep microcode${RESET}\n"
-printf "${NOTE} A working setup reports ${SKY_BLUE}'microcode updated early'${RESET}.\n"
+# Not "a working setup reports 'microcode updated early'": that line appears only
+# when the package carries a newer revision than the firmware already has, so a
+# correct setup with current firmware (this repo's own Ryzen desktop) never
+# shows it - and taking its absence as a fault led people to add initrd lines
+# to boot entries that were already right.
+printf "\n${NOTE} After rebooting, ${MAGENTA}journalctl -k -b | grep microcode${RESET} shows ${SKY_BLUE}'Current revision: 0x...'${RESET}.\n"
+printf "${NOTE} ${SKY_BLUE}'updated early'${RESET} appears only when the package is newer than your firmware; without it, the firmware's revision is current.\n"
 printf "\n%.0s" {1..2}
