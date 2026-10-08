@@ -1497,8 +1497,12 @@ Two of them are load-bearing rather than optional, despite the names:
 
 #### Hardware options
 
-`nvidia`, `nouveau` and `rog` take a third value, **`auto`**, which is their
-default, and it is what the shipped preset uses.
+Six options take a third value, **`auto`**, resolved from this machine:
+`nvidia`, `nouveau`, `rog`, `bluetooth`, `plymouth` and `limine`. It is their
+default, and the shipped preset uses it for all but `plymouth` (`ON`). Values
+are checked when the preset loads: `ON`, `OFF` (yes/no and any case work too)
+and `auto` where allowed - anything else stops the run before it starts,
+instead of quietly counting as `OFF`.
 
 A preset is carried from machine to machine, which makes it the worst possible
 place to record what hardware a machine has. This one was written on a laptop
@@ -1796,6 +1800,11 @@ chmod +x install.sh
 - ✅ printing (CUPS — nothing else pulls in a print stack; see [Printing](#printing))
 - ✅ pokemon (`pokemon-colorscripts`, which `.zshrc` needs for the pokefetch
   greeting — see [Terminal greeting](#terminal-greeting-pokefetch))
+- ✅ zsh (the shell the dotfiles are written for)
+- ✅ thunar (the file manager the binds and bookmarks expect)
+- and the rest as `custom-preset.conf` has them: herdr, neovim, hunk, docker and
+  plymouth `ON`; nvidia, nouveau, rog, bluetooth and limine are resolved from the
+  hardware when you pick `auto` in a preset
 
 ## Verification
 
