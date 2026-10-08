@@ -73,4 +73,39 @@ if systemctl is-enabled supergfxd.service &>/dev/null; then
   echo "${NOTE} To remove it: ${MAGENTA}sudo systemctl disable --now supergfxd && sudo pacman -Rns supergfxctl && sudo rm -f /etc/modprobe.d/supergfxd.conf${RESET}" | tee -a "$LOG"
 fi
 
+# asusd and power-profiles-daemon both drive /sys/firmware/acpi/platform_profile
+# and the CPU EPP. asusd's defaults switch to Performance on AC and Quiet on
+# battery at every plug event, over whatever was picked in the bar (which talks
+# to power-profiles-daemon, installed by power_profiles.sh before this runs, or
+# tuned-ppd providing it). asusctl's MANUAL.md calls running both a race and gives
+# two ways out; this is its option 2: keep the profile daemon, and turn asusd's
+# own profile management off in /etc/asusd/asusd.ron. asusd writes that file
+# with its defaults on its first start, so it is started once if it has not run
+# yet, and stopped around the edit so it cannot write its old values back.
+asusd_conf=/etc/asusd/asusd.ron
+asusd_keys='change_platform_profile_on_ac|change_platform_profile_on_battery|platform_profile_linked_epp'
+if pacman -T power-profiles-daemon &>/dev/null && systemctl list-unit-files asusd.service 2>/dev/null | grep -q '^asusd\.service'; then
+  if ! sudo test -f "$asusd_conf"; then
+    sudo systemctl start asusd.service >> "$LOG" 2>&1 || true
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      sudo test -f "$asusd_conf" && break
+      sleep 0.5
+    done
+  fi
+  if sudo test -f "$asusd_conf"; then
+    _asusd_was_active=false
+    systemctl is-active --quiet asusd.service && _asusd_was_active=true
+    sudo systemctl stop asusd.service >> "$LOG" 2>&1 || true
+    sudo sed -i -E "s/^([[:space:]]*($asusd_keys):[[:space:]]*)true,/\1false,/" "$asusd_conf"
+    [ "$_asusd_was_active" = true ] && { sudo systemctl start asusd.service >> "$LOG" 2>&1 || true; }
+    if [ "$(sudo grep -cE "^[[:space:]]*($asusd_keys):[[:space:]]*false," "$asusd_conf")" -eq 3 ]; then
+      echo "${OK} asusd leaves power profiles to the profile daemon (and the bar): its own switching is off in $asusd_conf." | tee -a "$LOG"
+    else
+      echo "${WARN} Could not turn off asusd's own profile switching - set change_platform_profile_on_ac, change_platform_profile_on_battery and platform_profile_linked_epp to false in $asusd_conf." | tee -a "$LOG"
+    fi
+  else
+    echo "${WARN} asusd has not written $asusd_conf (it only runs on the ASUS models its udev rules list). If it appears after the reboot, set change_platform_profile_on_ac, change_platform_profile_on_battery and platform_profile_linked_epp to false in it." | tee -a "$LOG"
+  fi
+fi
+
 printf "\n%.0s" {1..2}
