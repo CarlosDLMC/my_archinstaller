@@ -43,13 +43,9 @@ else
   install_package power-profiles-daemon "$LOG"
 fi
 
-# The widget calls the CLI, not the bus, so a provider without powerprofilesctl
-# leaves the dropdown inert even though the daemon is running fine.
-if command -v powerprofilesctl &>/dev/null; then
-  printf "${OK} powerprofilesctl is available - the bar's power widget will work.\n" | tee -a "$LOG"
-else
-  printf "${WARN} powerprofilesctl is not installed. The bar's power profile widget\n" | tee -a "$LOG"
-  printf "${WARN} will show nothing and switching profiles from it will do nothing.\n" | tee -a "$LOG"
-fi
+# The bar's widget talks to the daemon over D-Bus (busctl, part of systemd), so
+# any provider of the API will do. It used to call powerprofilesctl, which
+# tuned-ppd does not ship: on archinstall's "tuned" choice the widget could not
+# read or set a profile, and this script only warned about it.
 
 printf "\n%.0s" {1..2}

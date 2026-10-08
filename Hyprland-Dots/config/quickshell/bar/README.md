@@ -28,7 +28,7 @@ A modern, feature-rich status bar for Hyprland built with [Quickshell](https://q
 - [Hyprland](https://hyprland.org/) - Wayland compositor
 - `nmcli` - WiFi management
 - `bluetoothctl` - Bluetooth management
-- `powerprofilesctl` - Power profile switching
+- `busctl` (systemd) - Power profile switching, over D-Bus (power-profiles-daemon or tuned-ppd)
 - `dunst` / `dunstctl` - Notification daemon with DND support
 - `wpctl` / `pactl` - Audio control
 - `hyprctl` - Hyprland IPC

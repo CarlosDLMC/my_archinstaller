@@ -32,14 +32,22 @@ DropdownWidget {
         }
     }
 
-    // Get current profile
+    // The profile daemon over D-Bus (busctl comes with systemd), not the
+    // powerprofilesctl CLI: archinstall's "tuned" power-management choice
+    // installs tuned-ppd, which serves the same net.hadess.PowerProfiles API
+    // but ships no powerprofilesctl, so this widget could neither read nor set
+    // a profile there. power-profiles-daemon answers the same calls.
+    readonly property var ppdActiveProfile: ["net.hadess.PowerProfiles", "/net/hadess/PowerProfiles", "net.hadess.PowerProfiles", "ActiveProfile"]
+
+    // Get current profile. busctl prints it as: s "balanced"
     Process {
         id: profileGetProc
-        command: ["powerprofilesctl", "get"]
+        command: ["busctl", "--system", "get-property"].concat(powerWidget.ppdActiveProfile)
         stdout: SplitParser {
             onRead: data => {
-                if (data && data.trim()) {
-                    powerWidget.currentProfile = data.trim()
+                const m = /"([^"]+)"/.exec(data || "")
+                if (m) {
+                    powerWidget.currentProfile = m[1]
                 }
             }
         }
@@ -50,7 +58,7 @@ DropdownWidget {
     Process {
         id: profileSetProc
         property string targetProfile: ""
-        command: ["sh", "-c", "powerprofilesctl set " + targetProfile]
+        command: ["busctl", "--system", "set-property"].concat(powerWidget.ppdActiveProfile, ["s", targetProfile])
         onRunningChanged: {
             if (!running && targetProfile !== "") {
                 profileGetProc.running = true

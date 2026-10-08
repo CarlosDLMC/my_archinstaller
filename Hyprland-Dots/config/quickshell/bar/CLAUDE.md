@@ -596,7 +596,7 @@ singleton that the widgets render; only the rendering should be per-screen. See
 
 - `nmcli` for WiFi scanning/connecting
 - `bluetoothctl` for Bluetooth management
-- `powerprofilesctl` for power profile management
+- `busctl` (D-Bus, net.hadess.PowerProfiles) for power profile management - not powerprofilesctl, which tuned-ppd does not ship
 - `/usr/local/bin/battery-charge-limit` (installed by `install-scripts/battery_charge_limit.sh`)
   for setting the battery charge threshold. Optional: without it the battery card
   still shows every reading and only hides the limit picker

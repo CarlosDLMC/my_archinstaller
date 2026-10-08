@@ -525,10 +525,10 @@ through a run whose whole point is being unattended.
 
 `install-scripts/power_profiles.sh` asks `pacman -T` whether anything already
 satisfies the dependency (which counts `provides`) and installs
-`power-profiles-daemon` only when nothing does. It then checks that
-`powerprofilesctl` actually exists, because the widget calls the CLI rather
-than the bus — a provider without it leaves the dropdown inert even with the
-daemon running.
+`power-profiles-daemon` only when nothing does. The bar's widget talks to the
+daemon over D-Bus (`busctl`) rather than through `powerprofilesctl`, so
+`tuned-ppd` - archinstall's "tuned" choice, which serves the same API but ships
+no `powerprofilesctl` - works as well as `power-profiles-daemon`.
 
 `services.sh` enables whichever unit is present: `power-profiles-daemon.service`,
 or `tuned-ppd.service` with `tuned.service` under it. The unit name is not
