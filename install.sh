@@ -101,7 +101,17 @@ fi
 # returning for up to a minute after every stop that was not a reboot.
 ( while true; do sudo -n true 2>/dev/null; sleep 60; kill -0 "$$" 2>/dev/null || exit; done ) >/dev/null 2>&1 &
 sudo_keepalive_pid=$!
-trap 'kill "$sudo_keepalive_pid" 2>/dev/null' EXIT
+
+# No suspend while it runs. logind suspends on lid close by default
+# (HandleLidSwitch=suspend, on a bare TTY too), so closing a laptop's lid on the
+# hour-long unattended run stopped it mid-download, and it came back with
+# timed-out installs. The lock belongs to a root loop that ends within seconds
+# of this script, however it exits; the trap ends it at once. Through sudo, so
+# it is granted from SSH as well.
+sudo -n systemd-inhibit --what=sleep:idle:handle-lid-switch --who=my_archinstaller --why="Installing" --mode=block \
+    sh -c "while kill -0 $$ 2>/dev/null; do sleep 5; done" >/dev/null 2>&1 &
+inhibit_pid=$!
+trap 'kill "$sudo_keepalive_pid" "$inhibit_pid" 2>/dev/null' EXIT
 
 # Install a package before pacman.sh's full upgrade has run.
 #
