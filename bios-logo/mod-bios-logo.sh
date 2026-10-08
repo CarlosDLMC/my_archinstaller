@@ -13,9 +13,12 @@
 #       Board, vendor, current BIOS version, the logo the firmware reports (BGRT),
 #       and the boards.conf match if any.
 #   mod-bios-logo.sh build --image <stock firmware file> [--name <OUT>] [--logo <img>]
-#                          [--height <px>] [--colors <n>] [--out <dir>]
+#                          [--height <px>] [--colors <n>] [--keep-size] [--out <dir>]
 #       Produce <dir>/<OUT> (default: name from boards.conf, else the input name with
 #       "-logo" appended) plus a verification report. Never flashes anything.
+#       --keep-size stores the logo at its own pixel size, on black, instead of
+#       fitting it into the stock logo's dimensions - only for a board whose
+#       boards.conf status says its firmware accepts that.
 #   mod-bios-logo.sh usb --device /dev/sdX --file <modded firmware file>
 #       Wipe the stick to one FAT32 partition on MBR with no label, copy the file to
 #       the root, verify the checksum, unmount. Asks for confirmation; shows what is
@@ -96,7 +99,7 @@ cmd_detect() {
 
 # ---------------------------------------------------------------- build
 cmd_build() {
-  local image="" name="" logo="$LOGO_DEFAULT" height="" colors="128" out=""
+  local image="" name="" logo="$LOGO_DEFAULT" height="" colors="128" out="" keep_size=false
   while [ $# -gt 0 ]; do
     case "$1" in
       --image)  image="$2"; shift 2 ;;
@@ -105,6 +108,7 @@ cmd_build() {
       --height) height="$2"; shift 2 ;;
       --colors) colors="$2"; shift 2 ;;
       --out)    out="$2"; shift 2 ;;
+      --keep-size) keep_size=true; shift ;;
       *) die "unknown option $1" ;;
     esac
   done
@@ -178,15 +182,20 @@ EOF
   # 4. Build a same-format replacement that fits
   [ -n "$height" ] || height=$(( h * 8 / 10 ))
   local new="$WORK/new.${kind,,}"
+  # --keep-size: the logo as it is (transparency onto black), no resize or
+  # extent. The stock dimensions are what the firmware was built with, so this is
+  # only for a board where a flash has shown it draws other sizes too.
+  local fit=(-resize "x$height" -background black -gravity center -extent "${w}x${h}")
+  [ "$keep_size" = true ] && fit=(-background black -flatten)
   build_image() {  # $1 = colours ("full" for none)
     local q=(); [ "$1" != full ] && q=(-dither None -colors "$1")
     case "$kind" in
       BMP)
         local depth=(-type TrueColor); [ "$bpp" = 8 ] && depth=(-type Palette -colors 256 -depth 8)
-        magick "$logo" -resize "x$height" -background black -gravity center -extent "${w}x${h}" "${q[@]}" "${depth[@]}" \
+        magick "$logo" "${fit[@]}" "${q[@]}" "${depth[@]}" \
                -define bmp:format=bmp3 -compress none "BMP3:$new" ;;
-      JPEG) magick "$logo" -resize "x$height" -background black -gravity center -extent "${w}x${h}" -quality 85 "JPEG:$new" ;;
-      PNG)  magick "$logo" -resize "x$height" -background black -gravity center -extent "${w}x${h}" "${q[@]}" "PNG24:$new" ;;
+      JPEG) magick "$logo" "${fit[@]}" -quality 85 "JPEG:$new" ;;
+      PNG)  magick "$logo" "${fit[@]}" "${q[@]}" "PNG24:$new" ;;
     esac
   }
   measure() {  # predicted on-flash size
@@ -244,7 +253,7 @@ EOF
   (cd "$out" && sha256sum "modded/$name" "stock/$name" > SHA256SUMS)
   cat > "$out/README.txt" <<EOF
 Built $(date +%F) by bios-logo/mod-bios-logo.sh on ${bname:-unknown board}
-modded/$name  - firmware with the repo logo (Logo file $guid, ${kind} ${w}x${h} ${bpp}-bit)
+modded/$name  - firmware with the repo logo (Logo file $guid, ${kind} $(magick identify -format "%wx%h" "$new") ${bpp}-bit)
 stock/$name   - untouched vendor file = the recovery file. Same name on purpose: the
                 flasher wants exactly this name, and a stick can only hold one of them.
 Flash and recovery procedure: bios-logo/README.md in the repo.

@@ -37,6 +37,12 @@ bios-logo/mod-bios-logo.sh usb --device /dev/sdX --file ~/Downloads/bios-mod-<bo
    few tens of KB; full colour from a JPEG source is 4-5x larger. If the section is
    uncompressed, same dimensions and depth give the identical byte size, which is what
    the volume expects.
+   `--keep-size` skips the fitting: the logo goes in at its own pixel size (transparency
+   onto black), so a tall picture is not shrunk into a wide slot - more detail, no
+   black bars in the file. Only for a compressed section, and only on a board whose
+   `boards.conf` status says a flash has shown the firmware draws other sizes (the TUF
+   B650M does: a 468x620 logo, 2026-10-08). Elsewhere it is a guess, and a wrong one
+   means no logo or a FlashBack recovery.
 4. Replaces the section with `uefireplace` (UEFITool 0.28), which recompresses and
    fixes the FFS checksums, and leaves everything else - including a vendor capsule
    header - untouched.
