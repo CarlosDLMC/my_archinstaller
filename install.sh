@@ -241,6 +241,9 @@ printing="OFF"
 docker="ON"
 # "auto": only where plymouth is already installed and hooked into the initramfs.
 plymouth="auto"
+# Takes `quiet` and `splash` off the kernel command line, so the boot shows the
+# kernel and systemd messages. Skipped when plymouth is selected too.
+text_boot="OFF"
 # "auto": only where a limine.conf exists (Limine is the bootloader).
 limine="auto"
 
@@ -248,7 +251,7 @@ limine="auto"
 # its only job is to catch a preset key that no longer matches one - see below.
 known_options="ly nvidia nouveau input_group gtk_themes bluetooth thunar \
 quickshell xdph zsh pokemon rog dots handy nopasswd_sudo printing plymouth \
-limine docker herdr neovim hunk"
+text_boot limine docker herdr neovim hunk"
 # The ones that also take "auto" (resolved from the hardware further down).
 auto_options="nvidia nouveau rog bluetooth plymouth limine"
 
@@ -727,7 +730,8 @@ options_command+=(
     "nopasswd_sudo" "Passwordless sudo for wheel? (needed by the bar's VPN widget)" "OFF"
     "printing" "Install CUPS printing? (nothing else pulls in a print stack)" "OFF"
     "docker" "Install Docker, socket-activated? (adds you to the root-equivalent 'docker' group)" "ON"
-    "plymouth" "Plymouth boot splash with the repo logo? (wires it into boot if needed)" "ON"
+    "plymouth" "Plymouth boot splash with the repo logo? (wires it into boot if needed)" "OFF"
+    "text_boot" "Text boot: show the kernel/systemd messages, no splash? (not with plymouth)" "ON"
     "limine" "Theme the Limine boot menu and disable its countdown? (edits limine.conf, backup kept)" "OFF"
     "herdr" "Install Herdr terminal workspace manager for AI coding agents?" "OFF"
     "neovim" "Install Neovim with LazyVim? (the file explorer beside the agents)" "OFF"
@@ -743,7 +747,7 @@ if [ "$preset_mode" == "true" ]; then
     selected_options=""
     for _opt in ly nvidia nouveau input_group gtk_themes bluetooth thunar \
                 quickshell xdph zsh pokemon rog dots handy nopasswd_sudo \
-                printing plymouth limine docker herdr neovim hunk; do
+                printing plymouth text_boot limine docker herdr neovim hunk; do
         [ "${!_opt}" == "ON" ] || continue
 
         # Respect the same conditions the interactive menu applies before it
@@ -869,6 +873,14 @@ done
 fi
 
 printf "\n%.0s" {1..1}
+
+# plymouth asks for the splash and text_boot takes it away: with both, the
+# splash wins and text_boot is dropped here, before the selection is exported,
+# so the final check does not look for its outcome either.
+if [[ " $selected_options " == *" plymouth "* && " $selected_options " == *" text_boot "* ]]; then
+    echo "${NOTE} Both 'plymouth' and 'text_boot' are selected - keeping the Plymouth splash and skipping text_boot." | tee -a "$LOG"
+    selected_options=$(tr -s ' ' '\n' <<< "$selected_options" | grep -vx 'text_boot' | paste -sd' ' -)
+fi
 
 # The selection is exported so 02-Final-Check.sh can verify the *outcome* of
 # each selected component (dots copied, ly enabled, zsh the login shell, ...)
@@ -1166,6 +1178,10 @@ for option in "${options[@]}"; do
             echo "${INFO} Installing the ${SKY_BLUE}Plymouth boot splash${RESET} theme..." | tee -a "$LOG"
             execute_script "plymouth.sh"
             ;;
+        text_boot)
+            echo "${INFO} Switching the boot to ${SKY_BLUE}text${RESET} (no quiet, no splash)..." | tee -a "$LOG"
+            execute_script "text-boot.sh"
+            ;;
         limine)
             echo "${INFO} Theming the ${SKY_BLUE}Limine boot menu${RESET}..." | tee -a "$LOG"
             execute_script "limine.sh"
@@ -1336,7 +1352,7 @@ if pacman -Q hyprland &> /dev/null || pacman -Q hyprland-git &> /dev/null; then
         echo "${CAT} Fix what is listed above, then reboot with ${MAGENTA}systemctl reboot${RESET}."
         echo "${NOTE} Most package failures are AUR builds. Retry one with:"
         echo "        ${MAGENTA}yay -S <package>${RESET}"
-        echo "${NOTE} herdr, hunk, lazyvim, plymouth-theme-*, plymouth-hook and plymouth-splash are not packages - the list above says what to re-run or fix."
+        echo "${NOTE} herdr, hunk, lazyvim, plymouth-theme-*, plymouth-hook, plymouth-splash and text-boot are not packages - the list above says what to re-run or fix."
         echo "${NOTE} A failed component can be retried with its script, e.g. ${MAGENTA}install-scripts/dotfiles-main.sh${RESET}"
         echo "${NOTE} The full list is in ${MAGENTA}Install-Logs/00_CHECK-*_installed.log${RESET}"
         printf "\n%.0s" {1..2}

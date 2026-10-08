@@ -28,12 +28,13 @@ select exactly this and nothing else:
   one. Also gone for good when unticked: `rsync`, `alsa-utils`, `cpupower`,
   `upower`, `reflector` and some fonts.
 - **Plymouth** (a group of its own in the installer's source since
-  2026-09-23): leave it ticked, as it comes. `plymouth.sh` puts the repo's logo
-  in place of the CachyOS one either way. The installer release current when
-  this was written still installs plymouth with its base packages even with
-  the group unticked; if a later one does not, the install adds it and wires
-  it into the boot itself - which works, but is the less-travelled path on
-  CachyOS.
+  2026-09-23): leave it as it comes. The shipped preset boots in text
+  ([Text boot](#text-boot)): `text-boot.sh` takes CachyOS's `quiet splash` off
+  the kernel command line, so its watermark splash never shows, and plymouth -
+  installed with the base packages even with the group unticked - just runs in
+  text mode. With `plymouth="ON"` instead, `plymouth.sh` puts the repo's logo
+  in place of the CachyOS one, and adds and wires plymouth itself if a later
+  installer release no longer ships it.
 - Uncheck everything else: the shell configuration, every desktop entry
   (especially **Hyprland** - it brings SDDM and its own bar, which would fight
   ly and the Quickshell bar), Firefox, both printing groups and accessibility.
@@ -79,7 +80,7 @@ then continue with the [Installation Steps](#installation-steps) below.
 - **Neovim with LazyVim**, which is where the file tree beside the agents comes from
 - **Hunk** review-first diff viewer, for reading what the agents actually wrote
 - **Whole-Workspace Move** with SUPER + ALT + number, rebuilding the tiling layout window for window
-- **Boot Splash** with the repo logo on every machine (Plymouth - replaces the CachyOS one, and is wired into boot where the distro did not set it up)
+- **Text Boot**: the kernel and systemd `[  OK  ]` lines on screen instead of the CachyOS splash - or, with `plymouth="ON"`, a **Boot Splash** with the repo logo (Plymouth, wired into boot where the distro did not set it up)
 - **All Essential Packages** pre-configured
 
 ## Quick Install (Fresh Arch System)
@@ -102,9 +103,9 @@ With `archinstall`, the choices that matter:
 - **User account: mark it as superuser**, which gives it sudo (see below).
 - Audio, power management and bootloader can stay as they are. PulseAudio is
   swapped for PipeWire by the installer, the bar's power widget works with
-  `tuned` as well as `power-profiles-daemon`, and plymouth.sh puts `splash` on
-  the kernel command line for systemd-boot, GRUB, Limine and rEFInd. With
-  EFISTUB it says what to add to the boot entry by hand.
+  `tuned` as well as `power-profiles-daemon`, and text-boot.sh (or plymouth.sh,
+  for the splash) edits the kernel command line for systemd-boot, GRUB, Limine
+  and rEFInd. With EFISTUB they say what to change in the boot entry by hand.
 - **In a virtual machine**, turn on 3D acceleration: Hyprland needs it.
 
 The sudo requirement is the one that actually bites, because a minimal
@@ -680,6 +681,40 @@ Laptop detection lives in `V.is_laptop` (`configs/Vars.lua`). A battery is the
 primary signal; DMI `chassis_type` is the fallback, so a laptop running with a
 dead or removed battery is still treated as one.
 
+### Text boot
+
+The shipped preset has `text_boot="ON"` and `plymouth="OFF"` (also the defaults
+in the interactive menu). After the bootloader menu the screen shows the
+kernel's messages and systemd's `[  OK  ] Started ...` lines up to ly, as on a
+plain Arch install, instead of a splash.
+
+CachyOS boots with `quiet splash`: `quiet` hides those lines, and `splash` starts
+plymouth's graphical screen - the CachyOS watermark - over them.
+`install-scripts/text-boot.sh` takes those two words off the kernel command
+line wherever the machine keeps one: `KERNEL_CMDLINE` in `/etc/default/limine`
+(or `/etc/limine-entry-tool.conf`) for Limine's entry tool, a `limine.conf`
+nothing generates, `/etc/kernel/cmdline` (UKIs), this system's systemd-boot
+entries and `/etc/sdboot-manage.conf`, `refind_linux.conf`, and
+`GRUB_CMDLINE_LINUX(_DEFAULT)` in `/etc/default/grub` (then `grub-mkconfig`).
+Each edit removes the two words and nothing else: it is checked line by line
+before it is written, and for Limine's entry tool and GRUB the command line
+the tool itself computes has to come out as before minus the two words, or the
+file goes back. The original is kept as `<file>.pre-text-boot`. Limine's
+entries (and UKIs) are then regenerated, and the generated `limine.conf` is read
+back. A failure is recorded as `text-boot` and stops the preset's auto-reboot.
+
+Plymouth is not removed where the distro installed it: without `splash` it runs
+in text mode, and the LUKS password prompt is a plain text one. Selecting both
+options keeps the splash: install.sh drops `text_boot` from the run.
+
+Expect a couple of seconds of black screen during the boot on AMD graphics:
+that is `amdgpu` taking the display over from the firmware framebuffer (reset
+and monitor resync). The splash used to hide it.
+
+To go back to a splash, run `./install-scripts/plymouth.sh` (it adds `splash`;
+add `quiet` yourself if you want it), or copy the `.pre-text-boot` files back
+and regenerate (`sudo limine-mkinitcpio` with Limine's entry tool).
+
 ### Boot splash (Plymouth)
 
 The `plymouth` preset option installs a Plymouth theme (`assets/plymouth/soviet/`)
@@ -694,8 +729,9 @@ BIOS leaves only black, then the logo. That is the closest you can get to a
 custom vendor logo without flashing modified firmware, which ASUS boards reject
 through every official path.
 
-- `plymouth="ON"` (the shipped preset, and ticked by default in the interactive
-  menu) puts the logo on every machine. It installs plymouth and the theme, and
+- `plymouth="ON"` (`OFF` in the shipped preset and unticked in the interactive
+  menu since 2026-10-08, which boot in [text](#text-boot) instead) puts the logo
+  on every machine. It installs plymouth and the theme, and
   where the distro did not set plymouth up - plain Arch - it also wires it into
   boot, since a theme alone is never drawn:
   - **the hook:** a drop-in, `/etc/mkinitcpio.conf.d/zz-my_archinstaller-plymouth.conf`,
@@ -1507,7 +1543,7 @@ Two of them are load-bearing rather than optional, despite the names:
 
 Six options take a third value, **`auto`**, resolved from this machine:
 `nvidia`, `nouveau`, `rog`, `bluetooth`, `plymouth` and `limine`. It is their
-default, and the shipped preset uses it for all but `plymouth` (`ON`). Values
+default, and the shipped preset uses it for all but `plymouth` (`OFF`). Values
 are checked when the preset loads: `ON`, `OFF` (yes/no and any case work too)
 and `auto` where allowed - anything else stops the run before it starts,
 instead of quietly counting as `OFF`.
@@ -1811,7 +1847,7 @@ chmod +x install.sh
 - ✅ zsh (the shell the dotfiles are written for)
 - ✅ thunar (the file manager the binds and bookmarks expect)
 - and the rest as `custom-preset.conf` has them: herdr, neovim, hunk, docker and
-  plymouth `ON`; nvidia, nouveau, rog, bluetooth and limine are resolved from the
+  text_boot `ON`, plymouth `OFF`; nvidia, nouveau, rog, bluetooth and limine are resolved from the
   hardware when you pick `auto` in a preset
 
 ## Verification

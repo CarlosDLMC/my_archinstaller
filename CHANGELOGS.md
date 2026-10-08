@@ -1,5 +1,20 @@
 ## CHANGELOGS
 
+## October 2026
+
+Changed (2026-10-08) - the boot is text by default: the kernel and systemd
+`[  OK  ]` lines instead of a splash.
+
+New `text_boot` option (`install-scripts/text-boot.sh`), `ON` in the shipped
+preset and the interactive menu, with `plymouth` now `OFF` in both. It takes
+`quiet` and `splash` off the kernel command line - Limine's entry tool
+(`/etc/default/limine`), a plain `limine.conf`, `/etc/kernel/cmdline`,
+systemd-boot entries and sdboot-manage, rEFInd and GRUB - checking each edit
+against the command line the tool computes and keeping `<file>.pre-text-boot`.
+CachyOS's watermark splash no longer shows; plymouth stays installed and runs in
+text mode. `plymouth="ON"` works as before, and wins when both are selected. See
+README "Text boot".
+
 ## September 2026
 
 Changed (2026-09-16) - the sidebar's focused and cursor rows stopped borrowing
