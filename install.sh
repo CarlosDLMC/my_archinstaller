@@ -50,6 +50,14 @@ if [[ "${1:-}" == "--preset" ]]; then
         fi
         set -- "$1" "$_preset_abs"
     fi
+    # readlink -f also resolves a file that does not exist in a folder that
+    # does, so a typo (custom-preset.cof) passed here and was only reported by
+    # load_preset - after the sudo prompt and the base installs, sometimes a
+    # full -Syu.
+    if [ ! -f "$2" ]; then
+        echo "${ERROR} Preset file not found: $2"
+        exit 1
+    fi
 fi
 cd "$(dirname "$(readlink -f "$0")")" || { echo "${ERROR} Cannot cd to the repo directory"; exit 1; }
 
