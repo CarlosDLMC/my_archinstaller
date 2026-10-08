@@ -9,12 +9,16 @@ if pidof rofi > /dev/null; then
   pkill rofi
 fi
 
-sed '1,/^# # DATA # #$/d' "$0" | \
-rofi -i -dmenu -mesg "$msg" -config $rofi_theme | \
-awk '{print $1}' | \
-head -n 1 | \
-tr -d '\n' | \
-wl-copy
+sel=$(sed '1,/^# # DATA # #$/d' "$0" | \
+  rofi -i -dmenu -mesg "$msg" -config "$rofi_theme" | \
+  awk '{print $1}' | \
+  head -n 1)
+
+# Only a pick goes to the clipboard. Esc makes rofi print nothing, and wl-copy
+# on empty input replaced whatever was in the clipboard with an empty selection.
+if [ -n "$sel" ]; then
+  printf '%s' "$sel" | wl-copy
+fi
 
 exit
 
