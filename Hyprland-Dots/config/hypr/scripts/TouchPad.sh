@@ -46,12 +46,11 @@ disable_touchpad() {
     set_touchpads false
 }
 
-if ! [ -f "$STATUS_FILE" ]; then
+# No status file (it lives on the runtime tmpfs, gone at every login) means
+# enabled - Laptops.lua turns the touchpad on at startup. It used to take the
+# enable branch, so the first press of every session did nothing.
+if [ "$(cat "$STATUS_FILE" 2>/dev/null)" = "false" ]; then
   enable_touchpad
 else
-  if [ $(cat "$STATUS_FILE") = "true" ]; then
-    disable_touchpad
-  elif [ $(cat "$STATUS_FILE") = "false" ]; then
-    enable_touchpad
-  fi
+  disable_touchpad
 fi

@@ -29,4 +29,13 @@ bind(M .. " + CTRL + F6",  exec(S .. "/ScreenShot.sh --in5"),    { description =
 bind(M .. " + ALT + F6",   exec(S .. "/ScreenShot.sh --in10"),   { description = "screenshot (10 secs delay)" })
 bind("ALT + F6",           exec(S .. "/ScreenShot.sh --active"), { description = "screenshot (active window only)" })
 
-hl.device({ name = Touchpad_Device, enabled = true })
+-- What TouchPad.sh last set, so a config reload (every save of a .lua here)
+-- does not turn a switched-off touchpad back on behind its back - the next
+-- press then "enabled" it again and did nothing.
+local tp_enabled = true
+local tp_status = io.open((os.getenv("XDG_RUNTIME_DIR") or "") .. "/touchpad.status", "r")
+if tp_status then
+    tp_enabled = tp_status:read("l") ~= "false"
+    tp_status:close()
+end
+hl.device({ name = Touchpad_Device, enabled = tp_enabled })
