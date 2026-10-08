@@ -21,7 +21,10 @@ plugins=(
 # Project page: https://gitlab.com/phoneybadger/pokemon-colorscripts#on-other-distros-and-macos
 #pokemon-colorscripts --no-title -s -r #without fastfetch
 #pokemon-colorscripts --no-title -s -r | fastfetch -c $HOME/.config/fastfetch/config-pokemon.jsonc --logo-type file-raw --logo-height 10 --logo-width 5 --logo -
-[ -x "$HOME/pokefetch_perfect" ] && ~/pokefetch_perfect
+# The real shell goes in by name: fastfetch's shell module reports its parent
+# process, and that is pokefetch_perfect - a bash script - so the greeting said
+# "Shell: bash" in every zsh terminal.
+[ -x "$HOME/pokefetch_perfect" ] && POKEFETCH_SHELL="zsh $ZSH_VERSION" ~/pokefetch_perfect
 
 # Every external-tool hook below is guarded: this file is deployed verbatim
 # onto fresh machines by the installer, where fnm/brew/cargo/uv are absent

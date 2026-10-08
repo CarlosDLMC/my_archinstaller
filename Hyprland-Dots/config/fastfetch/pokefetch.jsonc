@@ -30,8 +30,10 @@
       "keyColor": "red"
     },
     {
-      "type": "shell",
-      "keyColor": "red"
+      "type": "command",
+      "key": "Shell",
+      "keyColor": "red",
+      "text": "echo \"${POKEFETCH_SHELL:-$(basename \"$SHELL\")}\""
     },
     {
       "type": "theme",
