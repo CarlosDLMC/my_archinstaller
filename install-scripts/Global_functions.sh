@@ -458,7 +458,9 @@ mkinitcpio_has_hook() {
 # final check then failed it and blocked the reboot.
 #
 # The old five paths still come first, in the same order, so a machine that was
-# detected before resolves to the same file. Then exactly one directory level
+# detected before resolves to the same file. /boot/efi/limine/ follows them: the
+# list had limine/ under /boot and /efi but not under /boot/efi, so with the ESP
+# mounted there limine="auto" resolved to OFF. Then exactly one directory level
 # under each ESP's EFI/, with EFI/BOOT/ (the removable fallback) last: where
 # both exist, the firmware's boot entry points at the named one. A glob, not a
 # find, and evaluated by root in one sudo call - the ESP is routinely mounted
@@ -466,7 +468,8 @@ mkinitcpio_has_hook() {
 find_limine_conf() {
   sudo sh -c '
     for c in /boot/limine.conf /efi/limine.conf /boot/efi/limine.conf \
-             /boot/limine/limine.conf /efi/limine/limine.conf; do
+             /boot/limine/limine.conf /efi/limine/limine.conf \
+             /boot/efi/limine/limine.conf; do
       [ -f "$c" ] && { echo "$c"; exit 0; }
     done
     for esp in /boot /efi /boot/efi; do
