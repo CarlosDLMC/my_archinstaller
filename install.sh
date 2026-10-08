@@ -82,8 +82,18 @@ LOG="Install-Logs/01-Hyprland-Install-Scripts-$(date +%Y%m%d-%H%M%S).log"
 # message saying why, and the "once" happened somewhere else. Everything after
 # this point, including the ESP-only Limine detection, reuses this one prompt.
 echo "${INFO} Authenticating ${SKY_BLUE}sudo${RESET} once for the whole run..." | tee -a "$LOG"
-if ! sudo -v; then
-    echo "${ERROR} sudo did not accept your password, or $USER is not allowed to sudo. See README: Prerequisites." | tee -a "$LOG"
+# `sudo -n true` first. `sudo -v` asks for a password unless EVERY sudoers rule
+# that matches the user is NOPASSWD (verifypw=all), and archinstall, Calamares
+# and the README's prerequisite all leave a password rule next to this
+# installer's wheel NOPASSWD one - so even a re-run asked, and a run with no
+# terminal (`ssh host ./install.sh` without -t) died here, blaming sudo
+# membership. Running a command uses the last matching rule instead.
+if ! sudo -n true 2>/dev/null && ! sudo -v; then
+    if [ -t 0 ]; then
+        echo "${ERROR} sudo did not accept your password, or $USER is not allowed to sudo. See README: Prerequisites." | tee -a "$LOG"
+    else
+        echo "${ERROR} sudo needs a password here and there is no terminal to ask on. Run it from a terminal (ssh -t) once; after that the passwordless rule lets it run without one." | tee -a "$LOG"
+    fi
     exit 1
 fi
 ( while true; do sudo -n true 2>/dev/null; sleep 60; kill -0 "$$" 2>/dev/null || exit; done ) &
