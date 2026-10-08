@@ -38,7 +38,14 @@ hl.env("QT_QUICK_CONTROLS_STYLE", "org.hyprland.style")
 hl.env("GDK_SCALE", "1")
 hl.env("QT_SCALE_FACTOR", "1")
 
----- Cursor (needs the hyprcursor version of the theme) ----
+---- Cursor ----
+-- Without XCURSOR_THEME, Hyprland loads the XCursor theme "default" (Adwaita),
+-- and with cursor.sync_gsettings_theme on it writes 'default' into gsettings at
+-- every start - so the Bibata cursor gtk_themes.sh installs was never used, by
+-- Hyprland or by GTK apps. Child apps (XWayland, Qt) read the same two.
+hl.env("XCURSOR_THEME", "Bibata-Modern-Ice")
+hl.env("XCURSOR_SIZE", "24")
+-- The hyprcursor version of the theme would be set like this instead:
 -- hl.env("HYPRCURSOR_THEME", "Bibata-Modern-Ice")
 -- hl.env("HYPRCURSOR_SIZE", "24")
 
