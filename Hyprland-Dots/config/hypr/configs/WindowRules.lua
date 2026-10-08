@@ -132,9 +132,12 @@ rule({ match = { title = "^(Picture-in-Picture)$" }, pin = true, keep_aspect_rat
 ---- BLUR & FULLSCREEN ----
 rule({ match = { tag = "games*" }, no_blur = true, fullscreen = true })
 
--- Do not steal focus for the popups IntelliJ products open on hover
-rule({ match = { class = "^(jetbrains-*)" }, no_initial_focus = true })
-rule({ match = { title = "^(wind.*)$" },     no_initial_focus = true })
+-- Do not steal focus for the popups IntelliJ products open on hover: windows of
+-- a jetbrains-* class titled win0, win1, ... One rule with both matches. Window
+-- rules full-match (RE2), so "^(jetbrains-*)" meant "jetbrains" plus dashes and
+-- never matched jetbrains-rustrover, while a separate "^(wind.*)$" title rule
+-- hit unrelated windows instead (any title starting "wind").
+rule({ match = { class = "^(jetbrains-.*)$", title = "^(win[0-9]+)$" }, no_initial_focus = true })
 
 -- rule({ match = { fullscreen = true }, border_color = "rgb(EE4B55) rgb(880808)" })
 -- rule({ match = { float = true },      border_color = "rgb(282737) rgb(1E1D2D)" })
