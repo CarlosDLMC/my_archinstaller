@@ -242,15 +242,22 @@ shotwin() {
 }
 
 shotarea() {
-	[[ $annotate == true ]] && { edit_shot -g "$(slurp)"; return; }
+	# Esc in slurp is a cancel, not a failure: it used to go on into grim with
+	# an empty geometry, then "Screenshot NOT Saved" with the error sound, and
+	# leave an empty temp file in /tmp every time.
+	local geom
+	geom=$(slurp) || exit 0
+	[[ $annotate == true ]] && { edit_shot -g "$geom"; return; }
 
 	tmpfile=$(mktemp)
-	grim -l 1 -g "$(slurp)" - >"$tmpfile"
+	grim -l 1 -g "$geom" - >"$tmpfile"
 
   # Copy with saving
 	if [[ -s "$tmpfile" ]]; then
 		wl-copy <"$tmpfile"
 		mv "$tmpfile" "$dir/$file"
+	else
+		rm -f "$tmpfile"
 	fi
 	notify_view
 }
