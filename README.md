@@ -943,10 +943,11 @@ These are machine-specific, so a fresh install starts without them:
   up got committed and the next wallpaper change dirtied the tree, which
   `auto-install.sh` then refuses to pull over.
 
-  They still have to *exist*: `UserDecorations.lua` requires
-  `wallust-hyprland.lua`, twelve rofi themes `@theme` `colors-rofi.rasi` and
-  wlogout's `style.css` `@import`s `colors-waybar.css` — a missing file there is
-  a config error on first launch, not a silent fallback. So a rendered snapshot
+  Most of them still have to *exist*: twelve rofi themes `@theme`
+  `colors-rofi.rasi` and wlogout's `style.css` `@import`s `colors-waybar.css` —
+  a missing file there is an error on first launch, not a silent fallback.
+  (`UserDecorations.lua` is the exception: it loads `wallust-hyprland.lua`
+  through `pcall` and falls back to a built-in palette.) So a rendered snapshot
   of each lives in **`Hyprland-Dots/defaults/`**, mirroring its path under
   `~/.config/`, and `copy.sh` puts it in place. `initial-boot.sh` runs wallust on
   first login and overwrites all of them from your actual wallpaper.
@@ -1095,7 +1096,9 @@ those three commands — the VPN widget is the only thing here that depends on i
 - `SUPER + SHIFT + Q` - Terminate active process
 - `CTRL + ALT + Delete` - Exit Hyprland
 - `SUPER + M` - Split ratio 0.3 (the focused split on dwindle, the master width on master)
-- `SUPER + SPACE` - Switch keyboard layout (US → ES → RU)
+- `SUPER + SPACE` - Switch keyboard layout. Most recent first, like Alt+Tab: a
+  tap toggles between the last two (US ⇄ ES); press again while the popup is
+  open to go further (RU)
 - `SUPER + SHIFT + SPACE` - Float current window
 - `SUPER + CTRL + ALT + B` - Toggle quickshell bar
 - `SUPER + CTRL + F8` - Handy: toggle speech-to-text (press once to start recording, press again to stop and transcribe into the focused field)
