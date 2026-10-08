@@ -988,10 +988,12 @@ after the configs are in place:
 sudo add-wireguard-killswitch-to-configs
 ```
 
-It adds `FwMark = 51820` under `[Interface]` and a `PostUp`/`PostDown` pair
-after the `DNS =` line of every config, so while a tunnel is up, any traffic
-that does not leave through it is rejected. Re-running it is safe: it removes
-its own lines before adding them again. If a tunner dies, killswitch will be executed 
+It adds `FwMark = 51820` and a `PostUp`/`PostDown` pair under `[Interface]` of
+every full-tunnel config (`0.0.0.0/0` in `AllowedIPs`), so while such a tunnel
+is up, any traffic that does not leave through it is rejected. A split tunnel
+(one subnet: a work or home LAN) gets none - it would cut everything else off -
+and the script lists which configs got one. Re-running it is safe: it removes
+its own lines before adding them again. It re-runs itself through `sudo`. If a tunner dies, killswitch will be executed 
 and you won't be able to use the internet at all. 
 In that case, use this for the vpn you were using:
 

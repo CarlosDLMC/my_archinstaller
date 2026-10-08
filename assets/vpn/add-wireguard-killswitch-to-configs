@@ -15,11 +15,30 @@ FW_MARK='FwMark = 51820'
 POST_UP='PostUp = iptables -I OUTPUT ! -o %i -m mark ! --mark 51820 -m addrtype ! --dst-type LOCAL -m comment --comment "wireguard-killswitch" -j REJECT'
 POST_DOWN='PostDown = iptables -D OUTPUT ! -o %i -m mark ! --mark 51820 -m addrtype ! --dst-type LOCAL -m comment --comment "wireguard-killswitch" -j REJECT'
 
-for file in "$WG_DIR"/*.conf; do
-    [[ -f "$file" ]] || continue
+# Root: /etc/wireguard is root-only. Run as yourself the glob matched nothing,
+# and it still printed "Done. All WireGuard configs now use ... the killswitch".
+if [[ $EUID -ne 0 ]]; then
+    exec sudo "$0" "$@"
+fi
 
-    echo "Updating: $file"
+shopt -s nullglob
+configs=("$WG_DIR"/*.conf)
+if [[ ${#configs[@]} -eq 0 ]]; then
+    echo "No WireGuard configs in $WG_DIR - copy them there first."
+    exit 1
+fi
 
+# Whether a config routes everything (0.0.0.0/0 in an AllowedIPs list).
+full_tunnel() {
+    awk -F= '/^[[:space:]]*AllowedIPs[[:space:]]*=/ {
+        n = split($2, a, ",")
+        for (i = 1; i <= n; i++) { gsub(/[[:space:]]/, "", a[i]); if (a[i] == "0.0.0.0/0") found = 1 }
+    } END { exit !found }' "$1"
+}
+
+added=0
+skipped=0
+for file in "${configs[@]}"; do
     tmp="$(mktemp)"
 
     # Remove any existing FwMark and killswitch lines/comments.
@@ -30,41 +49,46 @@ for file in "$WG_DIR"/*.conf; do
         -e '/^[[:space:]]*# Add these lines to block all traffic if the VPN drops[[:space:]]*$/d' \
         "$file" > "$tmp"
 
-    # Add FwMark immediately after [Interface].
-    awk -v fwmark="$FW_MARK" '
-        /^\[Interface\][[:space:]]*$/ {
-            print
-            print fwmark
-            next
-        }
+    # Full tunnels only. A split tunnel (a work or home LAN: one subnet in
+    # AllowedIPs) carries only its own routes, and with the killswitch on it
+    # everything else was rejected - connecting it cut the internet and the LAN.
+    # One an earlier run gave the killswitch gets it taken out again.
+    if ! full_tunnel "$file"; then
+        if grep -q 'wireguard-killswitch' "$file"; then
+            install -m 600 -o root -g root "$tmp" "$file"
+            echo "Split tunnel, no killswitch (killswitch taken out): $file"
+        else
+            echo "Split tunnel, no killswitch: $file"
+        fi
+        # Still its private key: 0600 root:root, as every config here.
+        chmod 600 "$file"
+        chown root:root "$file"
+        skipped=$((skipped + 1))
+        rm -f "$tmp"
+        continue
+    fi
+
+    # FwMark and the PostUp/PostDown pair, right under [Interface]. The pair
+    # used to go after the DNS line, so a config without one (self-hosted
+    # servers, wg-easy exports) got FwMark alone - no killswitch - and still
+    # counted as done.
+    awk -v fwmark="$FW_MARK" -v postup="$POST_UP" -v postdown="$POST_DOWN" '
+        !done && /^\[Interface\][[:space:]]*$/ { print; print fwmark; print postup; print postdown; done = 1; next }
         { print }
-    ' "$tmp" > "${tmp}.2"
+    ' "$tmp" > "$tmp.2"
+    if ! grep -qF -- "$POST_UP" "$tmp.2"; then
+        echo "No [Interface] section, left alone: $file"
+        skipped=$((skipped + 1))
+        rm -f "$tmp" "$tmp.2"
+        continue
+    fi
 
-    mv "${tmp}.2" "$tmp"
-
-    # Add PostUp/PostDown immediately after the DNS line.
-    awk \
-        -v postup="$POST_UP" \
-        -v postdown="$POST_DOWN" '
-        !inserted && /^[[:space:]]*DNS[[:space:]]*=/ {
-            print
-            print postup
-            print postdown
-            inserted=1
-            next
-        }
-        { print }
-    ' "$tmp" > "${tmp}.2"
-
-    mv "${tmp}.2" "$file"
-    rm -f "$tmp"
-
-    # Protect the WireGuard private key.
-    chmod 600 "$file"
-    chown root:root "$file"
-
-    echo "Updated: $file"
+    # 0600 root:root - it holds the private key.
+    install -m 600 -o root -g root "$tmp.2" "$file"
+    rm -f "$tmp" "$tmp.2"
+    echo "Killswitch added: $file"
+    added=$((added + 1))
 done
 
 echo
-echo "Done. All WireGuard configs now use FwMark 51820 and the killswitch."
+echo "Done: the killswitch is in $added config(s); $skipped have none (see above)."
