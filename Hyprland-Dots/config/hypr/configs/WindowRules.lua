@@ -68,7 +68,10 @@ rule({ match = { title = "^(Keybindings)$" }, center = true })
 rule({ match = { class = "^(pavucontrol|org.pulseaudio.pavucontrol|com.saivert.pwvucontrol)$" }, center = true })
 rule({ match = { class = "^([Ww]hatsapp-for-linux|ZapZap|com.rtosta.zapzap)$" }, center = true })
 rule({ match = { class = "^([Ff]erdium)$" }, center = true })
-rule({ match = { title = "^(Picture-in-Picture)$" }, move = "72% 7%" })
+-- move/size are math expressions in Lua Hyprland (0.56): monitor_w/monitor_h,
+-- window_w/window_h, cursor_x/cursor_y. A percentage like "72% 7%" is not one -
+-- verify-config accepts it, the rule then fails on every window and does nothing.
+rule({ match = { title = "^(Picture-in-Picture)$" }, move = "monitor_w*0.72 monitor_h*0.07" })
 
 -- idle inhibit for fullscreen apps
 -- rule({ match = { fullscreen = true }, idle_inhibit = "fullscreen" })
@@ -107,21 +110,21 @@ rule({ match = { class = "(codium|codium-url-handler|VSCodium)", title = "negati
 rule({ match = { class = "^(com.heroicgameslauncher.hgl)$", title = "negative:(Heroic Games Launcher)" }, float = true })
 rule({ match = { class = "^([Ss]team)$", title = "negative:^([Ss]team)$" }, float = true })
 rule({ match = { class = "([Tt]hunar)", title = "negative:(.*[Tt]hunar.*)" }, float = true })
-rule({ match = { title = "^(Add Folder to Workspace)$" }, float = true, size = "70% 60%", center = true })
-rule({ match = { title = "^(Save As)$" },                 float = true, size = "70% 60%", center = true })
-rule({ match = { initial_title = "(Open Files)" },        float = true, size = "70% 60%" })
-rule({ match = { title = "^(SDDM Background)$" },         float = true, center = true, size = "16% 12%" }) -- the YAD dialog for the SDDM background
+rule({ match = { title = "^(Add Folder to Workspace)$" }, float = true, size = "monitor_w*0.7 monitor_h*0.6", center = true })
+rule({ match = { title = "^(Save As)$" },                 float = true, size = "monitor_w*0.7 monitor_h*0.6", center = true })
+rule({ match = { initial_title = "(Open Files)" },        float = true, size = "monitor_w*0.7 monitor_h*0.6" })
+rule({ match = { title = "^(SDDM Background)$" },         float = true, center = true, size = "monitor_w*0.16 monitor_h*0.12" }) -- the YAD dialog for the SDDM background
 
 ---- OPACITY ----
 rule({ match = { tag = "terminal*" }, opacity = "0.9 0.7" })
 
 ---- SIZE ----
-rule({ match = { tag = "Cheat_Sheet*" }, size = "65% 90%" })
-rule({ match = { tag = "wallpaper*" },  size = "70% 70%" })
-rule({ match = { tag = "settings*" },   size = "70% 70%" })
-rule({ match = { class = "^([Ww]hatsapp-for-linux|ZapZap|com.rtosta.zapzap)$" }, size = "60% 70%" })
-rule({ match = { class = "^([Ff]erdium)$" }, size = "60% 70%" })
--- rule({ match = { title = "^(Picture-in-Picture)$" }, size = "25% 25%" })
+rule({ match = { tag = "Cheat_Sheet*" }, size = "monitor_w*0.65 monitor_h*0.9" })
+rule({ match = { tag = "wallpaper*" },  size = "monitor_w*0.7 monitor_h*0.7" })
+rule({ match = { tag = "settings*" },   size = "monitor_w*0.7 monitor_h*0.7" })
+rule({ match = { class = "^([Ww]hatsapp-for-linux|ZapZap|com.rtosta.zapzap)$" }, size = "monitor_w*0.6 monitor_h*0.7" })
+rule({ match = { class = "^([Ff]erdium)$" }, size = "monitor_w*0.6 monitor_h*0.7" })
+-- rule({ match = { title = "^(Picture-in-Picture)$" }, size = "monitor_w*0.25 monitor_h*0.25" })
 
 ---- PINNING / extras ----
 rule({ match = { title = "^(Picture-in-Picture)$" }, pin = true, keep_aspect_ratio = true })
