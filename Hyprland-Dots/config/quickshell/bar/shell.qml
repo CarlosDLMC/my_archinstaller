@@ -115,9 +115,17 @@ ShellRoot {
                     // balances the divider: the workspace cell to its left ends
                     // with a glyph advance, so without this the rule sits ~15px
                     // from the workspaces but only ~5px from the title.
+                    //
+                    // Not fillWidth. WindowInfo's root is a RowLayout, and a
+                    // nested layout fills by default: while its title is hidden
+                    // (an empty workspace, right after login) it took all the
+                    // slack, CenterInfo shrank to ~1px, its anti-overlap clamp
+                    // had no room, and below ~1650 logical px (1366x768, 1080p
+                    // at 1.25) the clock was drawn over the CPU readout.
                     WindowInfo {
                         Layout.preferredHeight: parent.height
                         Layout.preferredWidth: 375
+                        Layout.fillWidth: false
                         Layout.leftMargin: 5
                     }
 
