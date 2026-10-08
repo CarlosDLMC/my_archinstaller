@@ -1,14 +1,17 @@
-# Create a Monitor profile you want to on this directory
+# Monitor profiles: one Lua file per layout you want to switch to, in this folder.
 
-# Create a unique file name i.e. Mirror, or Office, Scale, etc etc
+# Give each a unique name ending in .lua, e.g. Mirror.lua, Office.lua, Scale.lua.
+# (Suggest not to call one "default" - that name ships with the dotfiles.)
 
-# tip: You can easily create a profile using nwg-displays
-# after creating a profile using nwg-displays, copy the ~/.config/hypr/monitors.conf file to this directory with a unique file name
-# suggest not to call it default
+# tip: make the layout with nwg-displays and Apply it, then copy the Lua file it
+# writes, ~/.config/hypr/monitors.lua, here under its new name:
+#     cp ~/.config/hypr/monitors.lua ~/.config/hypr/Monitor_Profiles/Office.lua
+# Only .lua files work: SUPER SHIFT E > Monitor Profiles copies <name>.lua over
+# ~/.config/hypr/monitors.lua. (A copy of the hyprlang monitors.conf, which
+# nwg-displays still writes too, would be listed but not applied.)
 
+# Picking a profile overwrites ~/.config/hypr/monitors.lua and keeps no backup
+# of it - save the current layout as a profile first if you want it back.
 
-# Note, after selecting Profiles wanted via Rofi (SUPER SHIFT E), previous content of ~/.config/hypr/monitors.conf will be backed up and named as Previous_Profile.conf
-
-# Monitor profile should be loaded automatically once selected from the rofi settings menu, unless you disabled the auto-reload function on Hyprland settings.
-# However, if it does not load, kindly log out and re-login. This seem apparent if you are using a Virtual Environment.
-
+# The profile loads on its own, through Hyprland's config auto-reload, unless you
+# turned that off. If it does not, log out and back in (seen in virtual machines).

@@ -167,9 +167,9 @@ restore_hypr_state() { # backup
         fi
     done
 
-    # Monitor profiles saved by hand (Monitor_Profiles/README) and
-    # MonitorProfiles.sh's Previous_Profile: the repo ships only default.lua, so
-    # a re-run left nothing else in SUPER+SHIFT+E > Monitor Profiles.
+    # Monitor profiles saved by hand (see Monitor_Profiles/README): the repo
+    # ships only default.lua, so a re-run left nothing else in
+    # SUPER+SHIFT+E > Monitor Profiles.
     for _state in "$_bak"/Monitor_Profiles/*; do
         if [ -f "$_state" ] && [ ! -e "$HOME/.config/hypr/Monitor_Profiles/${_state##*/}" ]; then
             mkdir -p "$HOME/.config/hypr/Monitor_Profiles"
