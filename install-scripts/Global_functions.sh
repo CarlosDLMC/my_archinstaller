@@ -596,3 +596,26 @@ uninstall_package() {
   fi
   return 0
 }
+
+# Whether sudoers_nopasswd.sh's wheel rule is in force for $USER. Prints "now",
+# or "next-login" (and still succeeds), or fails.
+#
+# `sudo -n -l` alone gave a false failure. sudo matches %wheel against the group
+# list of the process that asks, and a user that sudoers_nopasswd.sh has just
+# added to wheel only has wheel in that list from the next login. So on exactly
+# the run that put the rule in place - any machine whose sudo came from a
+# per-user rule rather than wheel - install.sh said the rule "did not land" and
+# the final check blocked the automatic reboot, which is all it takes. For that
+# case the group database decides (`id -nG <name>` reads it, not the groups of
+# this process), with the rule file itself. That file is read through sudo
+# because /etc/sudoers.d is root-only; the run's sudo timestamp covers it.
+nopasswd_rule_status() {
+  if sudo -n -l 2>/dev/null | grep -q "NOPASSWD: ALL"; then
+    echo now
+  elif id -nG "$USER" | tr ' ' '\n' | grep -qx wheel \
+       && sudo -n grep -qxF '%wheel ALL=(ALL:ALL) NOPASSWD: ALL' /etc/sudoers.d/10-wheel-nopasswd 2>/dev/null; then
+    echo next-login
+  else
+    return 1
+  fi
+}

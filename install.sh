@@ -820,10 +820,17 @@ if [[ " $selected_options " == *" nopasswd_sudo "* ]]; then
     # The script's status and the rule itself, not `sudo -n true`: the `sudo -v`
     # and the keepalive loop at the top keep the timestamp valid, so that passed
     # whether or not the rule landed and this said "no longer asks" even after a
-    # failed visudo check. Same test as 02-Final-Check.sh ("NOPASSWD: ALL", not
-    # bluetooth.sh's narrower rule).
-    if execute_script "sudoers_nopasswd.sh" && sudo -n -l 2>/dev/null | grep -q "NOPASSWD: ALL"; then
-        echo "${OK} sudo no longer asks for a password." | tee -a "$LOG"
+    # failed visudo check. Same test as 02-Final-Check.sh: nopasswd_rule_status
+    # in Global_functions.sh ("NOPASSWD: ALL", not bluetooth.sh's narrower rule,
+    # and "next-login" when this run had to add $USER to wheel). Sourced in a
+    # child shell, like find_limine_conf above, because that file sets -e.
+    if execute_script "sudoers_nopasswd.sh" \
+        && _nopasswd=$(bash -c 'source "$1" && nopasswd_rule_status' _ "$script_directory/Global_functions.sh" 2>/dev/null); then
+        if [ "$_nopasswd" = now ]; then
+            echo "${OK} sudo no longer asks for a password." | tee -a "$LOG"
+        else
+            echo "${OK} Passwordless sudo is in place from the next login ($USER was just added to wheel); the keepalive loop carries this run." | tee -a "$LOG"
+        fi
     else
         echo "${WARN} The passwordless sudo rule did not land (see above); the keepalive loop will carry the run instead." | tee -a "$LOG"
     fi

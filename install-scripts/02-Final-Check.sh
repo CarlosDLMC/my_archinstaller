@@ -319,9 +319,12 @@ if selected nopasswd_sudo; then
     # "NOPASSWD: ALL", not "NOPASSWD:" - bluetooth.sh installs a rule of its own
     # (rfkill and systemctl start/stop bluetooth only), and a bare "NOPASSWD:"
     # matched that one too, so a failed wheel rule passed whenever bluetooth
-    # was also selected.
+    # was also selected. nopasswd_rule_status (Global_functions.sh) also passes
+    # a rule that applies from the next login: when this run had to add $USER
+    # to wheel, `sudo -n -l` cannot see it yet, and failing here blocked the
+    # very reboot that makes it apply.
     check_outcome "no NOPASSWD: ALL rule applies to $USER - the bar's VPN widget will not work (install-scripts/sudoers_nopasswd.sh)" \
-        bash -c 'sudo -n -l 2>/dev/null | grep -q "NOPASSWD: ALL"'
+        nopasswd_rule_status
 fi
 
 if selected bluetooth; then
