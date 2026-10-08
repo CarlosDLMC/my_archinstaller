@@ -24,9 +24,10 @@ fonts=(
   # error. "Terminess" is the Nerd Fonts name for Terminus.
   ttf-terminus-nerd
 
-  # ttf-fira-code above covers "Fira Code Semi-Bold", used by dunst and by
-  # gtk-3.0/settings.ini, and ttf-jetbrains-mono-nerd covers
-  # "JetBrainsMono Nerd Font Mono", used by foot, hyprlock and SovietLockGen.py.
+  # ttf-fira-code above covers "Fira Code Semi-Bold", named by
+  # gtk-3.0/settings.ini (99-no-ligatures.conf maps it to JetBrains Mono NL),
+  # and ttf-jetbrains-mono-nerd covers "JetBrainsMono Nerd Font Mono", used by
+  # foot, hyprlock and SovietLockGen.py, and "JetBrainsMono Nerd Font" (dunst).
 
   # The rest of the terminal/bitmap Nerd Fonts on this setup. Nothing in the
   # dots hardcodes them, but they are what is available to pick from when
@@ -48,7 +49,7 @@ fonts=(
 required_families=(
   "Terminess Nerd Font"           # quickshell bar (Theme.qml)
   "JetBrainsMono Nerd Font Mono"  # foot, hyprlock, SovietLockGen.py
-  "Fira Code"                     # dunst, gtk-3.0/settings.ini
+  "Fira Code"                     # gtk-3.0/settings.ini
 )
 
 ## WARNING: DO NOT EDIT BEYOND THIS LINE IF YOU DON'T KNOW WHAT YOU ARE DOING! ##

@@ -332,7 +332,14 @@ The ones that matter:
 | --- | --- | --- |
 | `Terminess Nerd Font` | `ttf-terminus-nerd` | **the quickshell bar** — `bar/Theme.qml` |
 | `JetBrainsMono Nerd Font Mono` | `ttf-jetbrains-mono-nerd` | foot, hyprlock, `SovietLockGen.py` |
-| `Fira Code` | `ttf-fira-code` | dunst, `gtk-3.0/settings.ini` |
+| `JetBrainsMono Nerd Font` | `ttf-jetbrains-mono-nerd` | dunst |
+| `Fira Code` | `ttf-fira-code` | `gtk-3.0/settings.ini` - but see below |
+
+`gtk-3.0/settings.ini` asks for `Fira Code Semi-Bold`, and two things stand in
+its way: `fontconfig/conf.d/99-no-ligatures.conf` maps every `Fira Code` request
+to `JetBrains Mono NL` (Fira Code has no ligature-free cut), and on Wayland
+GTK takes its font from gsettings, which `initial-boot.sh` sets, rather than
+from `settings.ini`.
 
 To change the bar's font, edit `fontFamily` in
 `Hyprland-Dots/config/quickshell/bar/Theme.qml` — every widget renders through
