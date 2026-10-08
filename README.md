@@ -312,12 +312,11 @@ To change the bar's font, edit `fontFamily` in
 it — and add the package to `fonts.sh` and the family to `required_families`
 in the same file.
 
-Two places name fonts that are **not** installed and have never been:
-`config/rofi/themes/LonerOrZ.rasi` asks for `Iosevka`, and the quickshell
-*overview* config (`config.json` / `modules/common/Appearance.qml`, not the bar,
-and not autostarted) asks for `Open Sans` and `FiraConde Nerd Font`. Both render
-substituted here already, so this is inherited from upstream rather than
-something the install broke.
+One place names a font that is **not** installed and never has been:
+`config/rofi/themes/LonerOrZ.rasi` asks for `Iosevka`. It renders substituted
+here already, so this is inherited from upstream rather than something the
+install broke. (The quickshell overview takes its fonts from
+`overview/common/Appearance.qml`, which asks for plain `sans-serif`.)
 
 ### GTK theme
 
@@ -902,7 +901,7 @@ These are machine-specific, so a fresh install starts without them:
   workstation.
 - **The wallust colour files** — `cava/config`,
   `hypr/wallust/wallust-hyprland.lua`, `rofi/wallust/colors-rofi.rasi`,
-  `wallust/output/colors-waybar.css`, `quickshell/qml_color.json` and
+  `wallust/output/colors-waybar.css` and
   `quickshell/bar/wallust-colors.json`. Every one is a `target` in
   `wallust.toml`, rewritten in full each time the wallpaper changes, so they are
   runtime state and are gitignored — otherwise whichever palette happened to be

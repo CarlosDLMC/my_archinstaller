@@ -136,7 +136,6 @@ wallust_targets=(
     "hypr/wallust/wallust-hyprland.lua"
     "rofi/wallust/colors-rofi.rasi"
     "wallust/output/colors-waybar.css"
-    "quickshell/qml_color.json"
     # bar/Theme.qml reads this through a FileView. The bar and initial-boot.sh's
     # first `wallust run` start in parallel from hyprland.start, so without a
     # seed the bar can load before the file exists and sit on its fallback
@@ -594,7 +593,7 @@ for dir in "${config_dirs[@]}"; do
         _cmp_x=()
         case "$dir" in
             hypr)       _cmp_x=(.initial_startup_done .wallpaper_current .wallpaper_modified wallust) ;;
-            quickshell) _cmp_x=(qml_color.json wallust-colors.json) ;;
+            quickshell) _cmp_x=(wallust-colors.json) ;;
             wallust)    _cmp_x=(output) ;;
             rofi)       _cmp_x=(wallust .current_wallpaper) ;;
             cava)       _cmp_x=(config) ;;

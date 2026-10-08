@@ -19,8 +19,9 @@
 # If the bar ever does come up blank after an install, re-run that diff before
 # reaching for the -git package:
 #   pacman -Qlq quickshell | grep qmltypes
+# No qt6-5compat: only the dead top-level KooL overview config imported
+# Qt5Compat.GraphicalEffects, and nothing loads that config any more (gone).
 quick=(
-    qt6-5compat
     quickshell
 )
 
