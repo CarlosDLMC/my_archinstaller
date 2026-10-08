@@ -425,7 +425,17 @@ Singleton {
         running: root.present
         stdout: SplitParser {
             onRead: data => {
-                if (data && data.indexOf("power_supply") >= 0)
+                if (!data || data.indexOf("power_supply") < 0)
+                    return
+                // A pack that comes or goes - the T480's rear battery inserted
+                // after boot - is a new power_supply device, and the list of
+                // packs came only from probeProc at startup: it was never counted
+                // until the bar restarted. The ACPI battery driver registers a
+                // pack on insertion and unregisters it on removal, so "add" and
+                // "remove" are what to look for.
+                if (/\s(add|remove)\s/.test(data))
+                    probeProc.running = true
+                else
                     root.refresh(false)
             }
         }
