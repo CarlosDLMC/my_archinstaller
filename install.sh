@@ -1003,6 +1003,14 @@ fi
 
 sleep 1
 
+# PipeWire before the package list. ffmpeg (behind wf-recorder, cava and mpv)
+# needs a JACK library, and with nothing providing one yet pacman took its
+# first provider, jack2 - which then also blocked pipewire-jack, which conflicts
+# with it. pipewire.sh puts pipewire-jack in place first.
+echo "${INFO} Installing ${SKY_BLUE}pipewire and pipewire-audio...${RESET}" | tee -a "$LOG"
+sleep 1
+execute_script "pipewire.sh"
+
 # Run the Hyprland related scripts
 echo "${INFO} Installing ${SKY_BLUE}additional Hyprland packages...${RESET}" | tee -a "$LOG"
 sleep 1
@@ -1027,10 +1035,6 @@ execute_script "battery_charge_limit.sh"
 echo "${INFO} Installing the ${SKY_BLUE}WireGuard killswitch helpers...${RESET}" | tee -a "$LOG"
 sleep 1
 execute_script "vpn_tools.sh"
-
-echo "${INFO} Installing ${SKY_BLUE}pipewire and pipewire-audio...${RESET}" | tee -a "$LOG"
-sleep 1
-execute_script "pipewire.sh"
 
 echo "${INFO} Installing ${SKY_BLUE}necessary fonts...${RESET}" | tee -a "$LOG"
 sleep 1
