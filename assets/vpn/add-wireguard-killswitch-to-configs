@@ -2,6 +2,13 @@
 
 set -euo pipefail
 
+# The configs hold private keys. Every file this writes is 0600 from the start:
+# the temp copies used to be created under sudo's umask (022), so while it ran
+# /tmp held a world-readable copy of every key.
+umask 077
+tmp=""
+trap 'rm -f "$tmp" "$tmp.2"' EXIT
+
 WG_DIR="/etc/wireguard"
 
 FW_MARK='FwMark = 51820'
