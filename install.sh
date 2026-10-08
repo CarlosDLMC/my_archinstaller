@@ -96,7 +96,10 @@ if ! sudo -n true 2>/dev/null && ! sudo -v; then
     fi
     exit 1
 fi
-( while true; do sudo -n true 2>/dev/null; sleep 60; kill -0 "$$" 2>/dev/null || exit; done ) &
+# Off the script's output: the EXIT trap below ends the loop, but not the
+# `sleep 60` it is in, and that orphan kept `./install.sh ... | tee log` from
+# returning for up to a minute after every stop that was not a reboot.
+( while true; do sudo -n true 2>/dev/null; sleep 60; kill -0 "$$" 2>/dev/null || exit; done ) >/dev/null 2>&1 &
 sudo_keepalive_pid=$!
 trap 'kill "$sudo_keepalive_pid" 2>/dev/null' EXIT
 
