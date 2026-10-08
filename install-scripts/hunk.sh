@@ -78,11 +78,15 @@ case "$(uname -m)" in
 esac
 
 printf "\n%s - Resolving the latest ${SKY_BLUE}Hunk${RESET} release .... \n" "${NOTE}"
+# Downloads give up on a stall, not on a clock: --max-time caps the whole
+# transfer, and at 300 s the ~56 MB hunk (~30 MB herdr) asset failed on any link
+# under ~1.5 Mbit/s - every run, with no retry - while pacman fetched the other
+# ~2 GB on the same link. Now: under 10 KB/s for a minute aborts, three retries.
 # `|| RELEASE=""`: Global_functions.sh runs `set -e`, so a failing curl in a bare
 # assignment ended the script right here, silently - the skip branch below never
 # ran and nothing was recorded. GitHub's unauthenticated rate limit (a 403) is
 # enough to trigger it on a re-run.
-RELEASE=$(curl -fsSL --max-time 30 https://api.github.com/repos/modem-dev/hunk/releases/latest 2>>"$LOG") || RELEASE=""
+RELEASE=$(curl -fsSL --max-time 30 --retry 3 --retry-delay 5 --retry-all-errors https://api.github.com/repos/modem-dev/hunk/releases/latest 2>>"$LOG") || RELEASE=""
 HUNK_VER="" HUNK_URL="" HUNK_SUMS=""
 if [ -n "$RELEASE" ]; then
   read -r HUNK_VER HUNK_URL HUNK_SUMS <<EOF || true
@@ -117,8 +121,8 @@ elif [ -x "$BIN" ] && [ -d "$REL/skills" ] &&
 else
   printf "\n%s - Downloading ${SKY_BLUE}Hunk $HUNK_VER${RESET} .... \n" "${NOTE}"
   TMPD=$(mktemp -d) || exit 0
-  if curl -fsSL --max-time 300 -o "$TMPD/$HUNK_ASSET" "$HUNK_URL" 2>>"$LOG" &&
-     curl -fsSL --max-time 60 -o "$TMPD/SHA256SUMS" "$HUNK_SUMS" 2>>"$LOG"; then
+  if curl -fsSL --connect-timeout 20 --speed-limit 10240 --speed-time 60 --retry 3 --retry-delay 5 --retry-all-errors -o "$TMPD/$HUNK_ASSET" "$HUNK_URL" 2>>"$LOG" &&
+     curl -fsSL --max-time 60 --retry 3 --retry-delay 5 --retry-all-errors -o "$TMPD/SHA256SUMS" "$HUNK_SUMS" 2>>"$LOG"; then
     # Verify before trusting it. SHA256SUMS names the archive exactly, so run the
     # check from inside the directory with only that line - a missing or renamed
     # asset then fails the check instead of silently passing it. The whole line

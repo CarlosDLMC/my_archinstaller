@@ -62,12 +62,16 @@ case "$(uname -m)" in
 esac
 
 printf "\n%s - Fetching ${SKY_BLUE}Herdr${RESET} release manifest .... \n" "${NOTE}"
+# Downloads give up on a stall, not on a clock: --max-time caps the whole
+# transfer, and at 300 s the ~56 MB hunk (~30 MB herdr) asset failed on any link
+# under ~1.5 Mbit/s - every run, with no retry - while pacman fetched the other
+# ~2 GB on the same link. Now: under 10 KB/s for a minute aborts, three retries.
 # `|| MANIFEST=""`: Global_functions.sh runs `set -e`, and a bare assignment
 # from a failing curl is a failing command - the script used to die right here,
 # silently, before the skip branch below could record anything. That also
 # skipped the __HOME__ substitution further down on a re-run, which copy.sh had
 # just made necessary again.
-MANIFEST=$(curl -fsSL --max-time 30 https://herdr.dev/latest.json 2>>"$LOG") || MANIFEST=""
+MANIFEST=$(curl -fsSL --max-time 30 --retry 3 --retry-delay 5 --retry-all-errors https://herdr.dev/latest.json 2>>"$LOG") || MANIFEST=""
 HERDR_VER="" HERDR_URL="" HERDR_SHA=""
 if [ -n "$MANIFEST" ]; then
   read -r HERDR_VER HERDR_URL HERDR_SHA <<EOF2 || true
@@ -99,7 +103,7 @@ elif [ -x "$BIN" ] && [ "$("$BIN" --version 2>/dev/null | grep -oE "[0-9]+(\.[0-
 else
   printf "\n%s - Downloading ${SKY_BLUE}Herdr $HERDR_VER${RESET} .... \n" "${NOTE}"
   TMP=$(mktemp) || exit 0
-  if curl -fsSL --max-time 300 -o "$TMP" "$HERDR_URL" 2>>"$LOG"; then
+  if curl -fsSL --connect-timeout 20 --speed-limit 10240 --speed-time 60 --retry 3 --retry-delay 5 --retry-all-errors -o "$TMP" "$HERDR_URL" 2>>"$LOG"; then
     # Verify before trusting it: this is a binary from outside the distro's
     # package manager, so the sha256 from the manifest is the only integrity
     # check there is. A mismatch means we do not install it at all.
