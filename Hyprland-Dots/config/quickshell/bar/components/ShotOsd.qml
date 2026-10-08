@@ -78,10 +78,16 @@ PanelWindow {
         Keys.onEscapePressed: ShotState.close()
         Keys.onReturnPressed: ShotState.shotFullscreen()
         Keys.onEnterPressed: ShotState.shotFullscreen()
+        // Letters by key position as well. With the Russian layout active Qt
+        // reports the Cyrillic letters (А on the F key, К on R, Ц on W), so
+        // Qt.Key_F never came and only Enter, Esc and the mouse worked.
+        // nativeScanCode is the XKB keycode (evdev + 8), the same key in every
+        // layout here (us, es, ru): F 41, R 27, W 25.
         Keys.onPressed: event => {
-            if (event.key === Qt.Key_F) ShotState.shotFullscreen()
-            else if (event.key === Qt.Key_R) ShotState.shotRegion()
-            else if (event.key === Qt.Key_W) ShotState.shotWindow()
+            const sc = event.nativeScanCode
+            if (event.key === Qt.Key_F || sc === 41) ShotState.shotFullscreen()
+            else if (event.key === Qt.Key_R || sc === 27) ShotState.shotRegion()
+            else if (event.key === Qt.Key_W || sc === 25) ShotState.shotWindow()
         }
 
         Rectangle {

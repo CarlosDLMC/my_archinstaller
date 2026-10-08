@@ -86,12 +86,18 @@ PanelWindow {
         Keys.onEscapePressed: RecordState.close()
         Keys.onReturnPressed: RecordState.recordFullscreen()
         Keys.onEnterPressed: RecordState.recordFullscreen()
+        // Letters by key position as well. With the Russian layout active Qt
+        // reports the Cyrillic letters (А on the F key, К on R, Ц on W, Ы on S,
+        // Ь on M), so Qt.Key_F never came and only Enter, Esc and the mouse
+        // worked. nativeScanCode is the XKB keycode (evdev + 8), the same key in
+        // every layout here (us, es, ru): F 41, R 27, W 25, S 39, M 58.
         Keys.onPressed: event => {
-            if (event.key === Qt.Key_F) RecordState.recordFullscreen()
-            else if (event.key === Qt.Key_R) RecordState.recordRegion()
-            else if (event.key === Qt.Key_W) RecordState.recordWindow()
-            else if (event.key === Qt.Key_S) { RecordState.audioSystem = !RecordState.audioSystem; RecordState.persistAudio() }
-            else if (event.key === Qt.Key_M) { RecordState.audioMic = !RecordState.audioMic; RecordState.persistAudio() }
+            const sc = event.nativeScanCode
+            if (event.key === Qt.Key_F || sc === 41) RecordState.recordFullscreen()
+            else if (event.key === Qt.Key_R || sc === 27) RecordState.recordRegion()
+            else if (event.key === Qt.Key_W || sc === 25) RecordState.recordWindow()
+            else if (event.key === Qt.Key_S || sc === 39) { RecordState.audioSystem = !RecordState.audioSystem; RecordState.persistAudio() }
+            else if (event.key === Qt.Key_M || sc === 58) { RecordState.audioMic = !RecordState.audioMic; RecordState.persistAudio() }
         }
 
         Rectangle {
