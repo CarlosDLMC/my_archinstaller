@@ -15,15 +15,22 @@ if [[ $# -lt 1 ]] || [[ ! -d $1   ]]; then
 	exit 1
 fi
 
-# Edit below to control the images transition
-export SWWW_TRANSITION_FPS=60
-export SWWW_TRANSITION_TYPE=simple
+# Edit below to control the images transition. awww's own names: the SWWW_*
+# ones this exported are swww's, which awww does not read, so it used its
+# defaults instead.
+export AWWW_TRANSITION_FPS=60
+export AWWW_TRANSITION=simple
 
 # This controls (in seconds) when to switch to the next image
 INTERVAL=1800
 
 while true; do
-	find "$1" \
+	# Image files only, as WallpaperRandom.sh lists them: a bare `find` also gave
+	# the directory itself, its subfolders and any other file, `awww img` failed
+	# on those, and the same wallpaper stayed for another half hour.
+	find -L "$1" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o \
+		-iname "*.pnm" -o -iname "*.tga" -o -iname "*.tiff" -o -iname "*.webp" -o \
+		-iname "*.bmp" -o -iname "*.farbfeld" -o -iname "*.gif" \) \
 		| while read -r img; do
 			echo "$((RANDOM % 1000)):$img"
 		done \
