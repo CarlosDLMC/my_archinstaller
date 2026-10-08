@@ -916,15 +916,135 @@ With Secure Boot on, HackBGRT needs shim and a key enrolled by hand at boot (its
 `shim.md`), so the script skips it. After a monitor change, re-run
 `./install-scripts/hackbgrt.sh` to render the picture for the new panel.
 
-### Firmware boot logo (the picture before the bootloader)
+### BIOS logo
 
-`bios-logo/` puts `LOGO.JPG` into the motherboard firmware itself, so the vendor logo
-at power-on is replaced too. It is vendor-independent for the image surgery (AMI
-Aptio V, which ASUS, Gigabyte, MSI and ASRock all use) and documents the vendor
-specific parts: where to download the stock file, what to name it, and which
-button-driven recovery flasher writes a modified image. Verified on the ASUS TUF
-GAMING B650M-PLUS WIFI via USB BIOS FlashBack. Not part of `install.sh` on purpose -
-it is a firmware flash the user does by hand. See `bios-logo/README.md`.
+The very first picture at power-on, before Limine, is drawn by the motherboard
+firmware. `bios-logo/mod-bios-logo.sh` puts our own picture into a copy of the
+board's stock firmware file, so a USB stick can flash it. It is vendor-independent
+for the image surgery (AMI Aptio V, which ASUS, Gigabyte, MSI and ASRock all use);
+the vendor-specific parts - where to download the stock file, what to name it,
+which button flasher writes a modified image - are in `bios-logo/README.md` and
+`bios-logo/boards.conf`. Not part of `install.sh` on purpose: it is a firmware
+flash, and the user presses the button. The target look is the same picture, at
+the same size and place, as the Plymouth splash and the Windows boot screen
+([HackBGRT](#windows-boot-logo-hackbgrt)).
+
+**The pictures in `icons/`**
+
+| File | What it is |
+|---|---|
+| `aisaka.icon` | The source: the girl, 1920x1920 PNG with transparency (content 1449x1920). Everything below is cut from it. |
+| `gopnik-watermark-1080p.png` | 468x620 cut, for panels under 1440 px tall |
+| `gopnik-watermark-1440p.png` | 649x860 cut, for 1440p panels (the one Plymouth showed on the desktop) |
+| `gopnik-watermark-2160p.png` | 1011x1340 cut, for 4K panels |
+| `gopnik-bios.bmp` | The 1080p cut as a 24-bit BMP, 468x620 - the logo of an earlier flash (too small; see "Auto vs Full Screen") |
+| `LOGO.JPG` | The potato - `mod-bios-logo.sh`'s default `--logo`, and the first logo flashed |
+
+The cuts are what `plymouth.sh` and `hackbgrt.sh` pick from by panel height, so
+the firmware logo should use the same one.
+
+**Auto vs Full Screen** (learned on the ASUS TUF B650M; check on other boards)
+
+The firmware does not draw the stored bitmap 1:1. With *Boot Logo Display = Auto*
+it fits any logo into a 1024x576 box in the middle of a 2560x1440 screen - the
+stock 672x378 logo was enlarged into it, a 468x620 one shrunk to 434x576. With
+*Full Screen* it scales the logo to the whole screen. So the logo that looks right
+is a **full-screen image at the panel's resolution** - drawn 1:1 in Full Screen
+mode - with the girl at her Plymouth size and place: the watermark cut, centred,
+5 % from the top (the soviet theme's `WatermarkVerticalAlignment=.05`), on black.
+It is 10 MB as a BMP but mostly black, so it LZMA-compresses to ~176 KB in the
+firmware.
+
+**Making a flashable BIOS on a new computer** (for an agent; the user only
+presses the button at the end)
+
+1. Board, vendor, BIOS version, current logo:
+   ```bash
+   bios-logo/mod-bios-logo.sh detect
+   ```
+   Look the board up in `bios-logo/boards.conf`, else in the vendor table in
+   `bios-logo/README.md`. **Stop if the board has no button-driven recovery
+   flasher** (ASUS FlashBack, Gigabyte Q-Flash Plus, MSI Flash BIOS Button,
+   ASRock BIOS Flashback): most laptops and budget boards can only flash signed
+   images, and a bad flash there is not recoverable. ThinkPads take a custom logo
+   through Lenovo's own updater instead.
+2. Get the stock firmware: the vendor's download for that exact board, normally
+   the **same version** the board runs now (`detect` shows it), so the logo is the
+   only change. The README's vendor table and `boards.conf` give the download URL
+   and the file name the flasher wants (ASUS: e.g. `TG650MPW.CAP`). Unzip it.
+3. The panel's resolution - the preferred (first) mode of the connected display:
+   ```bash
+   for c in /sys/class/drm/card*-*; do [ "$(cat $c/status)" = connected ] && head -1 $c/modes; done
+   ```
+4. The full-screen picture: a black image the size of the panel, with the
+   watermark cut made for that panel pasted at the place Plymouth draws it.
+
+   - **Which cut:** the one named after the panel's height - 4K
+     (3840x2160) takes `gopnik-watermark-2160p.png`, 1440p takes
+     `gopnik-watermark-1440p.png`, 1080p takes `gopnik-watermark-1080p.png`. A
+     panel between those sizes takes the cut for the next size *down* (a 1600 px
+     tall one, the 1440p cut), so she is never taller than Plymouth made her for
+     that height.
+   - **Where it goes** (`x`, `y` = the cut's top-left corner, in pixels from the
+     screen's top-left corner):
+     - `x` = (screen width - cut width) / 2: the space left over, half on each
+       side, so she is centred left-to-right. Rounded down.
+     - `y` = (screen height - cut height) * 0.05: the soviet Plymouth theme puts
+       her 5 % of the way down the leftover space (`WatermarkVerticalAlignment=.05`
+       in `assets/plymouth/soviet/soviet.plymouth`), i.e. near the top, where the
+       password box used to be below her. Rounded down.
+
+   | Panel | Cut | Cut size | x | y |
+   |---|---|---|---|---|
+   | 1920x1080 | `gopnik-watermark-1080p.png` | 468x620 | (1920 - 468) / 2 = **726** | (1080 - 620) * 0.05 = **23** |
+   | 2560x1440 | `gopnik-watermark-1440p.png` | 649x860 | (2560 - 649) / 2 = 955.5 -> **955** | (1440 - 860) * 0.05 = **29** |
+   | 3840x2160 | `gopnik-watermark-2160p.png` | 1011x1340 | (3840 - 1011) / 2 = 1414.5 -> **1414** | (2160 - 1340) * 0.05 = **41** |
+
+   Then, for the panel in the table's middle row (the desktop's):
+   ```bash
+   magick -size 2560x1440 xc:black icons/gopnik-watermark-1440p.png \
+          -geometry +955+29 -composite -type TrueColor PNG24:logo.png
+   ```
+   `-size 2560x1440 xc:black` is the black screen, `-geometry +955+29` is `+x+y`
+   from the table, and `-composite` pastes the cut there (its transparent
+   background lets the black through). For 4K: `-size 3840x2160`, the 2160p
+   cut, `+1414+41`.
+   (Saved as a BMP instead - `-define bmp:format=bmp3 -compress none
+   BMP3:new-logo.bmp` - this is byte for byte the `new-logo.bmp` in the desktop's
+   firmware.)
+5. Build. Never flashes anything; every check failing says "do NOT flash":
+   ```bash
+   bios-logo/mod-bios-logo.sh build --image <stock file> --logo logo.png --colors full --keep-size
+   ```
+   Output in `~/Downloads/bios-mod-<board>/`: `modded/<NAME>` (to flash),
+   `stock/<NAME>` (the recovery file), `modded/new-logo.bmp` and a preview -
+   look at the preview. `--keep-size` (a logo of a size other than the stock
+   one) is only proven on the TUF B650M. On another board the first flash is the
+   test; if the logo then does not show, the safe build is the same command
+   without `--keep-size` (fitted into the stock logo's size: works anywhere, but
+   small in Auto mode). If full colour does not fit the board's free space, the
+   build steps down to 64, 32 and 16 colours by itself; `--colors 256` is the
+   better first step down for a cartoon (indistinguishable at boot).
+6. The stick. **Erases it** - say which device and what is on it, and get the
+   user's OK first:
+   ```bash
+   bios-logo/mod-bios-logo.sh usb --device /dev/sdX --file ~/Downloads/bios-mod-<board>/modded/<NAME>
+   ```
+7. The user flashes with the vendor's button procedure (README vendor table).
+   Before: suspend BitLocker if Windows uses it, and note the BIOS settings -
+   the flash resets them all.
+8. After: in the BIOS set **Boot Logo Display = Full Screen**, and the settings
+   from before again (on the desktop: EXPO, Memory Context Restore, integrated
+   graphics off, Limine first in the boot order).
+9. Check from Linux what the firmware drew: `/sys/firmware/acpi/bgrt/image` (a
+   BMP), `xoffset`, `yoffset`. Full Screen with a matching logo shows the full
+   `W`x`H` image at 0,0. Once it is confirmed, record the board, the command and
+   the sha256 in `bios-logo/boards.conf` - that file is the record of which
+   boards accept what.
+
+Redo it after every BIOS update: a stock update puts the vendor logo back. The
+build for the desktop (TUF GAMING B650M-PLUS WIFI, BIOS 3886) is in `boards.conf`,
+and reproduces its sha256.
 
 ### Printing
 
