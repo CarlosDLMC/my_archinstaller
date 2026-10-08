@@ -53,6 +53,12 @@ if [[ "${1:-}" == "--preset" ]]; then
 fi
 cd "$(dirname "$(readlink -f "$0")")" || { echo "${ERROR} Cannot cd to the repo directory"; exit 1; }
 
+# A re-run from this setup's zsh inherits .zshrc's CARGO_TARGET_DIR (one shared
+# cargo cache for development). makepkg hands it on to cargo, so an AUR Rust
+# build whose PKGBUILD does not set its own target dir would look for
+# target/release/<bin> in package() and fail.
+unset CARGO_TARGET_DIR
+
 # Create Directory for Install Logs
 if [ ! -d Install-Logs ]; then
     mkdir Install-Logs

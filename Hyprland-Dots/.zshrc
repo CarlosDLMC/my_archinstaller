@@ -86,6 +86,10 @@ esac
 # grows its own target/ - ~20GB apiece on a large Rust repo, which fills a
 # 225GB disk after three branches.
 export CARGO_TARGET_DIR="$HOME/.cache/cargo-target"
+# ...but not for package builds. makepkg hands it on to cargo, and a PKGBUILD
+# that does not set its own target dir then looks for target/release/<bin> in
+# package() and finds nothing: `yay -S <rust AUR package>` from this shell failed.
+for _c in yay paru makepkg; do alias $_c="env -u CARGO_TARGET_DIR $_c"; done; unset _c
 
 # Herdr dev layouts: hdl (editor + agent + terminal), hds (adds a live hunk diff),
 # hdlm (one hdl tab per subdirectory), hsl (a grid of identical panes). The file
