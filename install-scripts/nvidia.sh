@@ -174,6 +174,16 @@ for NVIDIA in "${nvidia_pkg[@]}"; do
   install_package "$NVIDIA" "$LOG"
 done
 
+# Hybrid graphics (an Intel or AMD GPU next to the NVIDIA one, i.e. most
+# laptops): the desktop runs on the integrated GPU, and nothing could be sent to
+# the NVIDIA card - there was no render-offload launcher. nvidia-prime ships
+# `prime-run <app>`, which sets the PRIME offload variables for GL and Vulkan.
+# Its nvidia-utils dependency is met by nvidia-580xx-utils as well.
+if lspci -nn 2>/dev/null | grep -iE 'vga|3d controller|display controller' | grep -qvi 'nvidia'; then
+  printf "${NOTE} Hybrid graphics: installing ${SKY_BLUE}nvidia-prime${RESET} - start an app on the NVIDIA GPU with: prime-run <app>\n" | tee -a "$LOG"
+  install_package nvidia-prime "$LOG"
+fi
+
 # "Package installed" is not "module built": when the DKMS build fails inside
 # pacman's hook (a brand-new kernel, a headers mismatch) the dkms package still
 # counts as installed, and the old script carried on to blacklist nouveau and

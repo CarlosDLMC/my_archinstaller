@@ -7,8 +7,9 @@
 # battery) and Vulkan. The 32-bit variants are here because multilib is enabled
 # by pacman.sh and Steam/wine/32-bit games need them.
 #
-# NVIDIA is deliberately not handled here - nvidia.sh owns that, and it is
-# gated behind the preset's nvidia/nouveau options.
+# The proprietary NVIDIA driver is deliberately not handled here - nvidia.sh owns
+# that, and it is gated behind the preset's nvidia/nouveau options. A card that
+# stays on nouveau gets its Mesa Vulkan driver here, like the other vendors.
 
 ## WARNING: DO NOT EDIT BEYOND THIS LINE IF YOU DON'T KNOW WHAT YOU ARE DOING! ##
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -57,9 +58,30 @@ if grep -qiE 'amd|radeon|advanced micro devices' <<< "$gpu_info"; then
   graphics+=(vulkan-radeon lib32-vulkan-radeon)
 fi
 
-if [ ${#graphics[@]} -eq "$base_count" ]; then
-  printf "\n${WARN} No Intel or AMD GPU detected. Installing loaders only.\n" | tee -a "$LOG"
-  printf "${NOTE} If this is an NVIDIA machine, enable 'nvidia' in the preset.\n" | tee -a "$LOG"
+igpu_count=${#graphics[@]}
+
+# NVIDIA. With nvidia selected (nvidia="auto" is resolved before this script
+# runs), nvidia.sh installs the driver later in this run, so there is nothing to
+# do here. Without it - nvidia off, or a card too old for any maintained driver -
+# the card stays on nouveau, and Mesa's Vulkan driver for it (NVK) is this
+# script's job as for the other vendors; it used to get none. The old hint here,
+# "enable 'nvidia' in the preset", printed on every NVIDIA-only machine, even
+# where auto had already enabled it. `pacman -T`: the proprietary utils (or the
+# 580xx ones, which provide nvidia-utils) are already in place, e.g. when this
+# script runs on its own.
+nvidia_selected=false
+if grep -qi 'nvidia' <<< "$gpu_info"; then
+  if [[ " ${INSTALL_SELECTED_OPTIONS:-} " == *" nvidia "* ]] || pacman -T nvidia-utils &>/dev/null; then
+    nvidia_selected=true
+    printf "\n${NOTE} Detected ${SKY_BLUE}NVIDIA${RESET} graphics: nvidia.sh installs its driver.\n" | tee -a "$LOG"
+  else
+    printf "\n${NOTE} Detected ${SKY_BLUE}NVIDIA${RESET} graphics, staying on nouveau: adding its Vulkan driver (NVK).\n" | tee -a "$LOG"
+    graphics+=(vulkan-nouveau lib32-vulkan-nouveau)
+  fi
+fi
+
+if [ ${#graphics[@]} -eq "$base_count" ] && [ "$nvidia_selected" = false ]; then
+  printf "\n${WARN} No Intel, AMD or NVIDIA GPU detected (a virtual machine?). Installing loaders only.\n" | tee -a "$LOG"
 fi
 
 printf "\n${NOTE} Installing ${SKY_BLUE}graphics drivers${RESET}...\n"
@@ -72,6 +94,10 @@ done
 if command -v vainfo &>/dev/null; then
   if vainfo &>/dev/null; then
     printf "${OK} VA-API hardware video decode is working.\n" | tee -a "$LOG"
+  elif [ "$igpu_count" -eq "$base_count" ] && [ "$nvidia_selected" = true ]; then
+    # NVIDIA only: its VA-API driver is libva-nvidia-driver, which nvidia.sh
+    # installs after this script, so a failure here said nothing about it.
+    printf "${NOTE} VA-API for the NVIDIA GPU comes with nvidia.sh (libva-nvidia-driver).\n" | tee -a "$LOG"
   else
     printf "${WARN} VA-API is not working. Video will decode on the CPU.\n" | tee -a "$LOG"
     printf "${NOTE} Run 'vainfo' after reboot - a driver may need the new kernel.\n" | tee -a "$LOG"
