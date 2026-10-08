@@ -14,7 +14,11 @@ hl.animation({ leaf = "windowsIn", enabled = true, speed = 5, bezier = "winIn", 
 hl.animation({ leaf = "windowsOut", enabled = true, speed = 3, bezier = "smoothOut", style = "slide"})
 hl.animation({ leaf = "windowsMove", enabled = true, speed = 5, bezier = "wind", style = "slide"})
 hl.animation({ leaf = "border", enabled = true, speed = 1, bezier = "liner"})
-hl.animation({ leaf = "borderangle", enabled = true, speed = 100, bezier = "liner", style = "loop"}) --used by rainbow borders and rotating colors -- was 180: clamped, Lua caps speed at 100
+-- "once", not "loop": the border here is one colour (UserDecorations.lua), so a
+-- looping angle rotated nothing, yet redrew every window's border every frame -
+-- the compositor never idled (GPU awake, no panel self-refresh). Set it back to
+-- "loop" with a gradient border, e.g. RainbowBorders.
+hl.animation({ leaf = "borderangle", enabled = true, speed = 100, bezier = "liner", style = "once"}) -- was 180: clamped, Lua caps speed at 100
 hl.animation({ leaf = "fade", enabled = true, speed = 3, bezier = "smoothOut"})
 hl.animation({ leaf = "workspaces", enabled = true, speed = 5, bezier = "overshot"})
 
