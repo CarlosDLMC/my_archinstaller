@@ -969,8 +969,10 @@ provider registered to your account), so the same files work on every computer
 you copy them to.
 
 **On the old machine**, fix the permissions first — configs added by hand often
-end up owned by your user and world-readable, and `wg-quick` refuses to use a
-config that is group- or world-readable:
+end up owned by your user and world-readable. `wg-quick` does not refuse such a
+config: it prints a warning (only when the folder is world-accessible too) and
+brings the tunnel up anyway, with the private key readable by everyone. The
+chmod is what protects the key:
 
 ```bash
 sudo chown -R root:root /etc/wireguard
@@ -1010,9 +1012,10 @@ sudo find /etc/wireguard -name '*.conf' -exec chmod 600 {} +   # zsh cannot glob
 rm ~/wireguard-configs.tar.gz.gpg
 ```
 
-**Add the killswitch.** 
-Once the configs are in /etc/wireguard/, you can execute the script to add a killswitchch, 
-so in case that when using one vpn it interrupts, your ip is never showed.
+**Add the killswitch.**
+Once the configs are in /etc/wireguard/, run the script that adds the
+killswitch, so that if a tunnel drops while you use it, your real IP is never
+shown.
 
 The installer puts two helpers in `/usr/local/bin`
 (from `assets/vpn/`, via `install-scripts/vpn_tools.sh`). Run the first once,
