@@ -64,27 +64,22 @@ if command -v zsh >/dev/null; then
       mv -T "$HOME/.oh-my-zsh" "$_omz_bak"
       echo "${NOTE} ~/.oh-my-zsh had no oh-my-zsh.sh - moved it to $(basename "$_omz_bak") and reinstalling." | tee -a "$LOG"
     fi
-    # --keep-zshrc, and the installer's own .zshrc thrown away again. The .zshrc
-    # that ends up here is the repo's - deployed below, or by copy.sh when dots
-    # is selected - and both back up what they replace. Left to itself the
-    # installer moved an existing .zshrc to .zshrc.pre-oh-my-zsh and wrote its
-    # template in its place, so the backup made next was of that template
-    # rather than your file; on a fresh machine, where there is no .zshrc yet,
-    # it still writes the template, and every install then left a .zshrc
-    # backup holding nothing but oh-my-zsh boilerplate.
-    _had_zshrc=false
-    if [ -e "$HOME/.zshrc" ] || [ -L "$HOME/.zshrc" ]; then _had_zshrc=true; fi
-    # Not fatal. This used to `exit 1`, which also skipped chsh and everything
-    # else below that does not need Oh My Zsh - bash stayed the login shell over
-    # one network blip. The final check reports the missing ~/.oh-my-zsh.
-    if omz_installer="$(curl -fsSL https://install.ohmyz.sh)"; then
-      sh -c "$omz_installer" "" --unattended --keep-zshrc || echo "${ERROR} Oh My Zsh installer failed - continuing without it" | tee -a "$LOG"
+    # A plain clone, not https://install.ohmyz.sh piped into a shell: that script
+    # came unpinned from a separate deployment (Vercel, not the GitHub repo) and
+    # ran unread, with passwordless sudo already in place - and with
+    # --unattended --keep-zshrc all it did was this clone, plus a template
+    # .zshrc that had to be thrown away again. Same git settings and umask as
+    # its own clone, so `omz update` works as usual. Not fatal: this used to
+    # `exit 1`, which also skipped chsh and everything else below that does not
+    # need Oh My Zsh. The final check reports a missing ~/.oh-my-zsh.
+    if (umask g-w,o-w; git clone --quiet --depth=1 --branch master \
+          -c core.eol=lf -c core.autocrlf=false -c fsck.zeroPaddedFilemode=ignore \
+          -c fetch.fsck.zeroPaddedFilemode=ignore -c receive.fsck.zeroPaddedFilemode=ignore \
+          -c oh-my-zsh.remote=origin -c oh-my-zsh.branch=master \
+          https://github.com/ohmyzsh/ohmyzsh.git "$HOME/.oh-my-zsh") >> "$LOG" 2>&1; then
+      echo "${OK} Oh My Zsh cloned to ~/.oh-my-zsh" | tee -a "$LOG"
     else
-      echo "${ERROR} Could not download the Oh My Zsh installer (network?) - continuing without it" | tee -a "$LOG"
-    fi
-    # A .zshrc that was not there before the installer ran is its template.
-    if [ "$_had_zshrc" = false ] && [ -f "$HOME/.zshrc" ]; then
-      rm -f "$HOME/.zshrc"
+      echo "${ERROR} Could not clone Oh My Zsh (network?) - continuing without it" | tee -a "$LOG"
     fi
   else
     echo "${INFO} Directory .oh-my-zsh already exists. Skipping re-installation." 2>&1 | tee -a "$LOG"
