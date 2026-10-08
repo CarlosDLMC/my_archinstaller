@@ -11,7 +11,7 @@
 # block-everything rule even where no killswitch had been active, leaving the
 # machine offline until a reboot. Now: every WireGuard interface still up comes
 # down, every killswitch rule goes, then the tunnel comes up; if that fails,
-# only the rules that were in force before go back.
+# exactly the rules that were in force when it started go back.
 
 WIREGUARD_DIR="/etc/wireguard"
 TAG="wireguard-killswitch"
@@ -61,6 +61,17 @@ if [[ "$off" == false && ! -f "$WIREGUARD_DIR/$vpn.conf" ]]; then
     exit 1
 fi
 
+# 0. The killswitch rules in force now, as `iptables -S` prints them, so a
+# failed connect can put exactly these back. Saved before anything comes down:
+# step 1's `wg-quick down` runs each tunnel's PostDown, which takes that
+# tunnel's own rules out. Saved after it, a dead tunnel whose interface was
+# still there - the usual case, as WireGuard keeps the interface when the
+# server stops answering - did not count, and a failed connect left no tunnel
+# and no block, saying "No killswitch was in force".
+mapfile -t in_force < <(iptables -S OUTPUT 2>/dev/null | grep -- "--comment $TAG")
+mapfile -t in_force_fwd < <(iptables -S FORWARD 2>/dev/null | grep -- "--comment $TAG")
+mapfile -t in_force_chain < <(iptables -S "$FWD_CHAIN" 2>/dev/null | grep '^-A ')
+
 # 1. Every WireGuard interface still up comes down. Through wg-quick when it has
 # a config (that also takes out its DNS and routes); otherwise just the link.
 for iface in $(wg show interfaces 2>/dev/null); do
@@ -71,12 +82,10 @@ for iface in $(wg show interfaces 2>/dev/null); do
     ip link delete dev "$iface" 2>/dev/null || true
 done
 
-# 2. Every killswitch rule left in OUTPUT, whichever config put it there - saved
-# first, as `iptables -S` prints them, so a failed connect can put back exactly
-# what was in force.
+# 2. Every killswitch rule still left, whichever config put it there: those of
+# a tunnel that died without its PostDown.
 mapfile -t stale < <(iptables -S OUTPUT 2>/dev/null | grep -- "--comment $TAG")
 mapfile -t stale_fwd < <(iptables -S FORWARD 2>/dev/null | grep -- "--comment $TAG")
-mapfile -t fwd_chain < <(iptables -S "$FWD_CHAIN" 2>/dev/null | grep '^-A ')
 if [[ $(( ${#stale[@]} + ${#stale_fwd[@]} )) -gt 0 ]]; then
     echo "Removing $(( ${#stale[@]} + ${#stale_fwd[@]} )) stale killswitch rule(s)..."
     # By line number, highest first, so the numbers below stay valid.
@@ -103,21 +112,23 @@ echo
 if ! wg-quick up "$vpn"; then
     echo
     echo "WireGuard failed to start."
-    if [[ $(( ${#stale[@]} + ${#stale_fwd[@]} )) -gt 0 ]]; then
-        # Fail closed, as the killswitch that was in force would have.
-        for rule in "${stale[@]}"; do
-            read -ra spec <<< "${rule#-A OUTPUT }"
+    if [[ $(( ${#in_force[@]} + ${#in_force_fwd[@]} )) -gt 0 ]]; then
+        # Fail closed, as the killswitch that was in force would have. Last
+        # first, each to the top, so they come back in their old order (the
+        # bar's switch guard keeps its DNS exceptions above its REJECT).
+        for (( i = ${#in_force[@]} - 1; i >= 0; i-- )); do
+            read -ra spec <<< "${in_force[i]#-A OUTPUT }"
             iptables -I OUTPUT "${spec[@]}"
         done
-        if [[ ${#fwd_chain[@]} -gt 0 ]]; then
+        if [[ ${#in_force_chain[@]} -gt 0 ]]; then
             iptables -N "$FWD_CHAIN" 2>/dev/null
-            for rule in "${fwd_chain[@]}"; do
+            for rule in "${in_force_chain[@]}"; do
                 read -ra spec <<< "${rule#-A $FWD_CHAIN }"
                 iptables -A "$FWD_CHAIN" "${spec[@]}"
             done
         fi
-        for rule in "${stale_fwd[@]}"; do
-            read -ra spec <<< "${rule#-A FORWARD }"
+        for (( i = ${#in_force_fwd[@]} - 1; i >= 0; i-- )); do
+            read -ra spec <<< "${in_force_fwd[i]#-A FORWARD }"
             iptables -I FORWARD "${spec[@]}"
         done
         echo "The killswitch that was in force is back: nothing gets out."
