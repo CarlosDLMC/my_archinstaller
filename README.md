@@ -1619,15 +1619,17 @@ matching. Nothing on your machine is wrong.
 **The installer now handles this for allowlisted packages.** When a build fails
 with makepkg's `One or more files did not pass the validity check!`, the
 installer tells that apart from an ordinary build failure and checks the name
-against `install-scripts/checksum-skip.conf`:
+and version against `install-scripts/checksum-skip.conf`:
 
 | in `checksum-skip.conf` | what happens |
 |---|---|
-| yes | rebuilt once with `--skipchecksums`, loudly, and the run continues unattended |
-| no  | left alone; the final check names it and prints the exact command |
+| yes, that version | rebuilt once with `--skipchecksums`, loudly, and the run continues unattended |
+| no, or another version | left alone; the final check names it and prints the exact command |
 
-`wallust` is listed, so the case that actually recurs no longer interrupts an
-unattended install.
+`wallust 3.5.2-1` is listed, so the case that actually recurs no longer
+interrupts an unattended install. An entry covers only the version that was
+checked: when the AUR moves wallust on and its checksum fails again, the run
+stops on it until the new source has been checked and the line updated.
 
 Two details make that reliable. The AUR helper runs under `LC_ALL=C.UTF-8`,
 because makepkg translates that message and on a non-English system the
@@ -1660,7 +1662,8 @@ git -C /tmp/<pkg>-git checkout <the tag the PKGBUILD pins>
 diff -r src/<pkg>-<version> /tmp/<pkg>-git   # identical apart from VCS metadata
 ```
 
-Then add the bare name to `install-scripts/checksum-skip.conf` with a comment
+Then add `<name> <version>` (as makepkg prints it in `==> Making package:`) to
+`install-scripts/checksum-skip.conf` with a comment
 saying what you verified and when. Remove it once the AUR maintainer refreshes
 the checksum - a stale entry keeps integrity checking off for a package that no
 longer needs it.

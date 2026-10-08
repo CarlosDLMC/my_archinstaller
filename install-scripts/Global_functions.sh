@@ -94,10 +94,14 @@ INITRAMFS_FAILED_MANIFEST="Install-Logs/.initramfs-failures"
 # itself for what that means and what to check before adding a name.
 CHECKSUM_SKIP_LIST="install-scripts/checksum-skip.conf"
 
+# checksum_skip_allowed <name> <version>: listed for exactly that version. A
+# bare name used to be enough, so ANY later version whose checksum failed - a
+# tarball regenerated again, or one tampered with - was rebuilt with
+# verification off as well, with nobody checking the new source.
 checksum_skip_allowed() {
-  [ -f "$CHECKSUM_SKIP_LIST" ] || return 1
+  [ -f "$CHECKSUM_SKIP_LIST" ] && [ -n "${2:-}" ] || return 1
   grep -vE '^[[:space:]]*(#|$)' "$CHECKSUM_SKIP_LIST" 2>/dev/null \
-    | tr -d '[:blank:]' | grep -qx "$1"
+    | awk '{ $1 = $1; print }' | grep -qxF "$1 $2"
 }
 
 # Did THIS package's slice of the log show a checksum failure?
@@ -122,7 +126,7 @@ log_shows_checksum_failure() {
     | grep -q 'did not pass the validity check'
 }
 
-# Name(s) of the package(s) whose validity check failed in this slice.
+# "<name> <version>" of the package(s) whose validity check failed in this slice.
 #
 # Not always the package that was asked for: the helper builds AUR dependencies
 # on the way, and a mismatch in one of those used to be blamed on the parent -
@@ -140,7 +144,7 @@ checksum_failed_packages() {
   [ -f "$LOG" ] || return 0
   tail -c "+$((from + 1))" "$LOG" 2>/dev/null \
     | sed 's/\x1b\[[0-9;]*m//g' \
-    | awk '/==> Making package: / { for (i = 1; i <= NF; i++) if ($i == "package:") { name = $(i + 1); break } }
+    | awk '/==> Making package: / { for (i = 1; i <= NF; i++) if ($i == "package:") { name = $(i + 1) " " $(i + 2); break } }
            /did not pass the validity check/ && name != "" { print name; name = "" }' \
     | awk '!seen[$0]++'
 }
@@ -206,7 +210,7 @@ log_mark() {
 # Retry one package with --skipchecksums, but only if it is allowlisted.
 # Returns 0 if the package is installed afterwards.
 retry_without_checksums() {
-  local asked="$1" mark="$2" base targets t allowed=false all_in
+  local asked="$1" mark="$2" base ver targets t allowed=false all_in
 
   log_shows_checksum_failure "$mark" || return 1
 
@@ -214,7 +218,13 @@ retry_without_checksums() {
   # helper was building for it. Fall back to the asked-for name if the log does
   # not say (it always should under AUR_ENV).
   base=$(checksum_failed_packages "$mark" | tail -1)
-  [ -n "$base" ] || base="$asked"
+  ver=""
+  if [ -n "$base" ]; then
+    ver="${base#* }"
+    base="${base%% *}"
+  else
+    base="$asked"
+  fi
   # ...and the installable names behind it, for -S/-Q and for the final
   # screen's advice. A split base's own name is often not installable.
   mapfile -t targets < <(pkgnames_for_base "$base" "$asked" | awk 'NF && !seen[$0]++')
@@ -226,8 +236,8 @@ retry_without_checksums() {
 
   # Either name may be the one on the allowlist: the source belongs to the base,
   # and the conf has always been written in package names.
-  checksum_skip_allowed "$base" && allowed=true
-  for t in "${targets[@]}"; do checksum_skip_allowed "$t" && allowed=true; done
+  checksum_skip_allowed "$base" "$ver" && allowed=true
+  for t in "${targets[@]}"; do checksum_skip_allowed "$t" "$ver" && allowed=true; done
 
   if [ "$allowed" != true ]; then
     echo -e "\n${WARN} ${YELLOW}${base}${RESET} failed its ${YELLOW}source checksum${RESET}, not its build."
@@ -235,7 +245,7 @@ retry_without_checksums() {
     echo -e "${NOTE} upstream tarball that was regenerated - but verify before assuming that."
     echo -e "${NOTE} Check it, then either build it by hand:"
     echo -e "${NOTE}   ${MAGENTA}$(basename "${ISAUR:-yay}") -S ${targets[*]} --mflags --skipchecksums${RESET}"
-    echo -e "${NOTE} or add ${MAGENTA}${base}${RESET} to ${MAGENTA}${CHECKSUM_SKIP_LIST}${RESET} to let re-runs do it."
+    echo -e "${NOTE} or add ${MAGENTA}${base} ${ver:-<version>}${RESET} to ${MAGENTA}${CHECKSUM_SKIP_LIST}${RESET} to let re-runs do it."
     for t in "${targets[@]}"; do record_checksum_failure "$t"; done
     return 1
   fi
