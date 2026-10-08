@@ -366,7 +366,38 @@ Item {
                 parseWeatherJson(output)
             }
             // If no output (offline), cached data remains displayed
+            if (!running)
+                centerInfo.scheduleWeatherRetry(output)
         }
+    }
+
+    // Retry a fetch that failed - no output (no network yet: Wi-Fi still
+    // associating, a captive portal) or a "stale" re-emission (every provider
+    // down) - after 1, 2, 5, then every 10 minutes. Only the hourly timer used
+    // to ask again, so a bar that came up before the network sat blank or out
+    // of date for up to an hour.
+    property int weatherRetryStep: 0
+
+    function scheduleWeatherRetry(output) {
+        var failed = !output
+        if (!failed) {
+            try { failed = JSON.parse(output).stale === true } catch (e) { failed = true }
+        }
+        if (!failed) {
+            centerInfo.weatherRetryStep = 0
+            weatherRetryTimer.stop()
+            return
+        }
+        var minutes = [1, 2, 5, 10][Math.min(centerInfo.weatherRetryStep, 3)]
+        centerInfo.weatherRetryStep++
+        weatherRetryTimer.interval = minutes * 60000
+        weatherRetryTimer.restart()
+    }
+
+    Timer {
+        id: weatherRetryTimer
+        repeat: false
+        onTriggered: centerInfo.requestWeather()
     }
 
     // ------------------------------------------------------------------
@@ -549,11 +580,32 @@ Item {
 
     // A one-second tick, but a free one: it compares two integers and returns.
     // The minute boundary is what actually drives a repaint.
+    //
+    // It also notices a resume. Qt timers run on the monotonic clock, which
+    // stops during suspend, so after a night asleep the hourly fetch was still
+    // up to an hour away and the bar showed last night's weather. A wall-clock
+    // jump of over two minutes between ticks is a resume: fetch again once the
+    // network has had ten seconds to come back.
+    property real lastTickMs: 0
+
     Timer {
         interval: 1000
         running: true
         repeat: true
-        onTriggered: centerInfo.updateClock(false)
+        onTriggered: {
+            var now = Date.now()
+            if (centerInfo.lastTickMs > 0 && now - centerInfo.lastTickMs > 120000)
+                weatherAfterResume.restart()
+            centerInfo.lastTickMs = now
+            centerInfo.updateClock(false)
+        }
+    }
+
+    Timer {
+        id: weatherAfterResume
+        interval: 10000
+        repeat: false
+        onTriggered: centerInfo.requestWeather()
     }
 
     // Weather timer (hourly updates)
