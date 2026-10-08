@@ -15,6 +15,10 @@ CachyOS's watermark splash no longer shows; plymouth stays installed and runs in
 text mode. `plymouth="ON"` works as before, and wins when both are selected. See
 README "Text boot".
 
+Changed (2026-10-08) - `text_boot` also takes the `kms` hook out of the
+initramfs (a drop-in in `/etc/mkinitcpio.conf.d`), so the GPU driver loads after
+the LUKS prompt and its ~2.5 s black screen no longer interrupts the password.
+
 ## September 2026
 
 Changed (2026-09-16) - the sidebar's focused and cursor rows stopped borrowing

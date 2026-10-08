@@ -11,6 +11,10 @@
 # limine.conf nothing generates, /etc/kernel/cmdline (UKIs), systemd-boot entries
 # and sdboot-manage, refind_linux.conf, and GRUB.
 #
+# It also takes the `kms` hook out of the initramfs (a drop-in in
+# /etc/mkinitcpio.conf.d), so the GPU driver's takeover - a few seconds of black
+# screen - comes after the LUKS prompt instead of in the middle of it.
+#
 # Plymouth itself is left installed where the distro put it. Without `splash` it
 # runs in text mode - the LUKS prompt is a plain text prompt - and that is how the
 # machine this repo was built from boots. install.sh does not run this when the
@@ -496,8 +500,42 @@ if [ "$_sources" -eq 0 ]; then
   fi
 fi
 
-# Regenerate what carries the command line: Limine's entries (limine-mkinitcpio)
-# and UKIs. Only when this run changed one of their sources.
+# No `kms` hook in the initramfs. It packs the GPU drivers (amdgpu, i915,
+# nouveau...) into the image, so the driver takes the screen over while the LUKS
+# prompt is up - on an RX 6700 XT that is ~2.5 s of black screen in the middle of
+# typing the password. Without it the prompt stays on the firmware framebuffer
+# and the driver loads from the root filesystem after the unlock; the blackout
+# moves to among the [ OK ] lines. Only the splash needed the early driver.
+# A drop-in, like plymouth.sh's, so deleting it puts the hook back.
+TB_DROPIN=/etc/mkinitcpio.conf.d/zz-my_archinstaller-text-boot.conf
+TB_DROPIN_BODY='# my_archinstaller text_boot (install-scripts/text-boot.sh): no `kms` hook, so
+# the GPU driver loads after the disk is unlocked and its few seconds of black
+# screen do not interrupt the LUKS password prompt. Delete this file and rebuild
+# the initramfs to put it back.
+_tb_hooks=()
+for _tb_h in "${HOOKS[@]}"; do [ "$_tb_h" = kms ] || _tb_hooks+=("$_tb_h"); done
+HOOKS=("${_tb_hooks[@]}")
+unset _tb_hooks _tb_h'
+if ! command -v mkinitcpio &>/dev/null; then
+  : # booster/dracut: no HOOKS to change
+elif mkinitcpio_has_hook kms; then
+  if printf '%s\n' "$TB_DROPIN_BODY" > "$TB_TMP/dropin" \
+     && sudo install -D -m 0644 -o root -g root "$TB_TMP/dropin" "$TB_DROPIN" 2>>"$LOG" \
+     && ! mkinitcpio_has_hook kms; then
+    echo "${OK} The 'kms' hook is out of the initramfs ($TB_DROPIN) - the GPU driver now loads after the disk is unlocked." | tee -a "$LOG"
+    _need_rebuild=true
+  else
+    sudo rm -f -- "$TB_DROPIN" 2>>"$LOG" || true
+    echo "${ERROR} Could not take the 'kms' hook out of the initramfs (see $LOG). The boot still works; the screen just goes black for a moment during the password prompt." | tee -a "$LOG"
+    _failed=true
+  fi
+else
+  echo "${OK} The initramfs has no 'kms' hook." | tee -a "$LOG"
+fi
+
+# Regenerate what carries the command line - Limine's entries
+# (limine-mkinitcpio) and UKIs - and the image without kms. Only when this run
+# changed one of them.
 _rebuild_failed=false
 if [ "$_need_rebuild" = true ]; then
   if ! rebuild_initramfs "$LOG"; then

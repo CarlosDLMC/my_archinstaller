@@ -707,9 +707,16 @@ Plymouth is not removed where the distro installed it: without `splash` it runs
 in text mode, and the LUKS password prompt is a plain text one. Selecting both
 options keeps the splash: install.sh drops `text_boot` from the run.
 
-Expect a couple of seconds of black screen during the boot on AMD graphics:
-that is `amdgpu` taking the display over from the firmware framebuffer (reset
-and monitor resync). The splash used to hide it.
+It also takes the `kms` hook out of the initramfs, through
+`/etc/mkinitcpio.conf.d/zz-my_archinstaller-text-boot.conf`. That hook packs the
+GPU drivers into the image, so the driver took the screen over while the LUKS
+prompt was up - on the RX 6700 XT about 2.5 s of black screen (the card's own
+initialisation; `amdgpu.seamless=1` does not avoid it) in the middle of typing
+the password. Without it the prompt stays on the firmware framebuffer, and the
+driver loads from the root filesystem after the unlock, so the blackout moves
+to among the `[  OK  ]` lines. The image also gets much smaller (no GPU
+firmware). The NVIDIA proprietary driver is not in that hook either way. Delete
+the drop-in and rebuild to put `kms` back.
 
 To go back to a splash, run `./install-scripts/plymouth.sh` (it adds `splash`;
 add `quiet` yourself if you want it), or copy the `.pre-text-boot` files back
