@@ -892,7 +892,7 @@ only uses `PanelWindow`, `PopupWindow`, `Variants`, `ShellRoot`, `Singleton`,
 
 `Hyprland-Dots/wallpapers/` is copied to `~/Pictures/wallpapers/`, which is the
 directory `WallpaperSelect.sh`, `WallpaperRandom.sh` and the rofi picker all read.
-It ships the full set in use on this machine (fourteen files, about 49 MB,
+It ships the full set in use on this machine (51 files, about 138 MB,
 including the `Dynamic-Wallpapers/` light and dark pair) so the picker on a
 fresh install offers the same choices. The copy is additive: wallpapers you add
 locally are never removed by a re-run.

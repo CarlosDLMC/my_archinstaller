@@ -199,7 +199,7 @@ restore_hypr_state() { # backup
 
 # Put a directory's machine state back from its backup RIGHT AFTER the loop
 # below copies it. It used to happen only at the very end, after every other
-# directory and the 49 MB wallpaper copy, from the backup path remembered in
+# directory and the ~140 MB wallpaper copy, from the backup path remembered in
 # that same run: anything that stopped the run in between (Ctrl-C, a closed
 # terminal, a full disk, a failed cp) left the monitor layout, the animation
 # preset, the video wallpaper, the palette and the first-boot marker in a
@@ -828,7 +828,7 @@ fi
 # Copy the wallpaper library
 #
 # The dots hardcode $HOME/Pictures/wallpapers in WallpaperSelect.sh,
-# WallpaperRandom.sh and Startup_Apps.conf, so an empty directory there means
+# WallpaperRandom.sh and Startup_Apps.lua, so an empty directory there means
 # the wallpaper picker opens with nothing in it.
 printf "\n${INFO} Copying wallpapers...\n"
 if [ -d "$SCRIPT_DIR/wallpapers" ]; then
