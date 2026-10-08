@@ -91,6 +91,22 @@ then continue with the [Installation Steps](#installation-steps) below.
 - git installed (`sudo pacman -Syu git`; only `auto-install.sh` installs it for you)
 - **A normal user account that can `sudo`** — see below
 
+With `archinstall`, the choices that matter:
+
+- **Profile: Minimal** - no desktop. Any desktop profile brings its own greeter
+  (SDDM, GDM, ...), and while another login manager is running the installer
+  skips ly.
+- **Network configuration: Use NetworkManager.** Left at its default, the
+  installed system boots with no network manager and no Wi-Fi tools - not even
+  `pacman -Syu git` can work.
+- **User account: mark it as superuser**, which gives it sudo (see below).
+- Audio, power management and bootloader can stay as they are. PulseAudio is
+  swapped for PipeWire by the installer, the bar's power widget works with
+  `tuned` as well as `power-profiles-daemon`, and plymouth.sh puts `splash` on
+  the kernel command line for systemd-boot, GRUB, Limine and rEFInd. With
+  EFISTUB it says what to add to the boot entry by hand.
+- **In a virtual machine**, turn on 3D acceleration: Hyprland needs it.
+
 The sudo requirement is the one that actually bites, because a minimal
 `archinstall` does not guarantee it and the failure is immediate. `install.sh`
 refuses to run as root (it builds AUR packages, and `makepkg` will not run as
