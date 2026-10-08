@@ -1,0 +1,6 @@
+# The terminal that apps marked Terminal=true (nvim, btop, micro) open in from
+# Thunar's "Open With" or any other GTK launcher - read by xdg-terminal-exec.
+# foot.desktop by name: foot ships two more terminal entries, footclient.desktop
+# (needs a running foot server, which nothing here starts) and
+# foot-server.desktop (starts one and opens no window).
+foot.desktop

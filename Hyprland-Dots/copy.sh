@@ -418,12 +418,15 @@ if command -v xdg-user-dirs-update &> /dev/null; then
     xdg-user-dirs-update 2>/dev/null || true
 fi
 
-# Copy mimeapps.list
+# Copy mimeapps.list, and xdg-terminals.list: the terminal xdg-terminal-exec
+# opens Terminal=true apps in (foot, not the foot client or server entries).
 printf "\n${INFO} Copying MIME type associations...\n"
-if [ -f "$SCRIPT_DIR/config/mimeapps.list" ]; then
-    backup_config_file "$SCRIPT_DIR/config/mimeapps.list" "$HOME/.config/mimeapps.list"
-    cp "$SCRIPT_DIR/config/mimeapps.list" "$HOME/.config/" 2>/dev/null && echo "  ${OK} Copied mimeapps.list"
-fi
+for file in mimeapps.list xdg-terminals.list; do
+    if [ -f "$SCRIPT_DIR/config/$file" ]; then
+        backup_config_file "$SCRIPT_DIR/config/$file" "$HOME/.config/$file"
+        cp "$SCRIPT_DIR/config/$file" "$HOME/.config/" 2>/dev/null && echo "  ${OK} Copied $file"
+    fi
+done
 
 # Copy config directories
 printf "\n${INFO} Copying configuration directories...\n"

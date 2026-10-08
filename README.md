@@ -2066,8 +2066,9 @@ anything was installed. Run it on the old machine before you clone on the new on
   (one per run, never overwritten). Single files it replaces get the same
   stamped `<file>.backup-<stamp>` beside them: the shell files in `~`
   (`.zshrc`, `.zprofile`, `pokefetch_perfect`, ...) when they differ from the repo copy, and
-  `~/.config/mimeapps.list` and `user-dirs.dirs` when they hold a line the repo
-  copy lacks (your own "open with" choices, a moved Downloads).
+  `~/.config/mimeapps.list`, `xdg-terminals.list` and `user-dirs.dirs` when they
+  hold a line the repo copy lacks (your own "open with" choices, another
+  terminal, a moved Downloads).
 - Event-based monitoring reduces CPU usage significantly
 - All scripts are logged to `Install-Logs/` (untracked - they are per-run output)
 - First boot runs `initial-boot.sh` to set the wallpaper, run wallust, and apply
