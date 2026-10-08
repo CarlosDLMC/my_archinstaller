@@ -891,23 +891,26 @@ if [ -d "$SCRIPT_DIR/config/herdr" ]; then
     fi
 fi
 
-# Deploy LibreWolf's new-tab setup: 2 rows x 10 pinned sites, wider gaps.
+# Deploy LibreWolf's setup: the new tab (2 rows x 10 pinned sites, wider gaps),
+# which is also the start page, the pre-157 look in its own dark colours, and
+# a dark drop-down of saved logins.
 #
 # NOT in config_dirs: ~/.config/librewolf is where a fresh LibreWolf keeps its
 # profiles, so moving it aside would take the bookmarks, logins and history with
-# it. Two files go in:
+# it. Three files go in:
 #   - librewolf.overrides.cfg into the profile ROOT, read at every start: the
-#     rows and per-row prefs, and the pref that makes userContent.css load.
-#   - chrome/userContent.css into the profile itself, whose directory has a
+#     prefs, including the one that makes the two stylesheets below load.
+#   - chrome/userContent.css (new-tab tile spacing) and chrome/userChrome.css
+#     (the dark login drop-down) into the profile itself, whose directory has a
 #     random name and does not exist until LibreWolf first starts - so on a
 #     fresh install it is started once here, headless, to create it.
 # The root is ~/.librewolf when that holds a profiles.ini (an install that
 # predates LibreWolf's XDG support keeps using it), else the XDG one - and the
 # overrides file is looked for in the same root, so the two always match.
-printf "\n${INFO} Setting up LibreWolf's new tab page...\n"
+printf "\n${INFO} Setting up LibreWolf...\n"
 _lw_src="$SCRIPT_DIR/config/librewolf"
 if [ -d "$_lw_src" ] && ! command -v librewolf >/dev/null 2>&1; then
-    echo "  ${WARN} librewolf is not installed - its new-tab settings were skipped"
+    echo "  ${WARN} librewolf is not installed - its settings were skipped"
 elif [ -d "$_lw_src" ]; then
     if [ -f "$HOME/.librewolf/profiles.ini" ]; then
         _lw_root="$HOME/.librewolf"
@@ -932,7 +935,7 @@ elif [ -d "$_lw_src" ]; then
         cp "$_lw_cfg" "$_lw_cfg.backup-$BACKUP_STAMP" && echo "  ${NOTE} Backed up existing librewolf.overrides.cfg to librewolf.overrides.cfg.backup-$BACKUP_STAMP"
     fi
     if cp "$_lw_src/librewolf.overrides.cfg" "$_lw_cfg"; then
-        echo "  ${OK} Copied librewolf.overrides.cfg (2 rows x 10 pinned sites)"
+        echo "  ${OK} Copied librewolf.overrides.cfg"
     else
         echo "  ${ERROR} Failed to copy librewolf.overrides.cfg"
         copy_failed+=("librewolf")
@@ -948,17 +951,27 @@ elif [ -d "$_lw_src" ]; then
         _lw_dir=$(_lw_profile)
     fi
     if [ -z "$_lw_dir" ]; then
-        echo "  ${WARN} Could not find or create a LibreWolf profile - copy $_lw_src/chrome/userContent.css into its chrome/ folder by hand"
+        echo "  ${WARN} Could not find or create a LibreWolf profile - copy userContent.css and userChrome.css from $_lw_src/chrome/ into its chrome/ folder by hand"
     else
-        _lw_css="$_lw_dir/chrome/userContent.css"
         mkdir -p "$_lw_dir/chrome"
-        if [ -f "$_lw_css" ] && ! cmp -s "$_lw_src/chrome/userContent.css" "$_lw_css"; then
-            cp "$_lw_css" "$_lw_css.backup-$BACKUP_STAMP" && echo "  ${NOTE} Backed up existing userContent.css to userContent.css.backup-$BACKUP_STAMP"
-        fi
-        if cp "$_lw_src/chrome/userContent.css" "$_lw_css"; then
-            echo "  ${OK} Copied userContent.css into $(basename "$_lw_dir") (new-tab tile spacing; restart LibreWolf if it is open)"
-        else
-            echo "  ${ERROR} Failed to copy userContent.css"
+        _lw_css_failed=false
+        for _lw_name in userContent.css userChrome.css; do
+            case "$_lw_name" in
+                userContent.css) _lw_what="new-tab tile spacing" ;;
+                *)               _lw_what="dark login drop-down" ;;
+            esac
+            _lw_css="$_lw_dir/chrome/$_lw_name"
+            if [ -f "$_lw_css" ] && ! cmp -s "$_lw_src/chrome/$_lw_name" "$_lw_css"; then
+                cp "$_lw_css" "$_lw_css.backup-$BACKUP_STAMP" && echo "  ${NOTE} Backed up existing $_lw_name to $_lw_name.backup-$BACKUP_STAMP"
+            fi
+            if cp "$_lw_src/chrome/$_lw_name" "$_lw_css"; then
+                echo "  ${OK} Copied $_lw_name into $(basename "$_lw_dir") ($_lw_what; restart LibreWolf if it is open)"
+            else
+                echo "  ${ERROR} Failed to copy $_lw_name"
+                _lw_css_failed=true
+            fi
+        done
+        if [ "$_lw_css_failed" = true ]; then
             copy_failed+=("librewolf")
         fi
     fi

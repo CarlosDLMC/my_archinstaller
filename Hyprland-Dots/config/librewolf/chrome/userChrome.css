@@ -1,0 +1,11 @@
+/* Keep the drop-down of saved logins / form history under a text field dark.
+   LibreWolf 157 gives it the colour scheme of the page's own input box
+   (AutoCompleteParent sets an inline color-scheme from it), and
+   resistFingerprinting makes every site light - so the list came out white on
+   every login page. It followed the browser's dark theme until 156;
+   !important here outranks that inline style.
+   Requires: about:config -> toolkit.legacyUserProfileCustomizations.stylesheets = true */
+
+#PopupAutoComplete {
+  color-scheme: dark !important;
+}
