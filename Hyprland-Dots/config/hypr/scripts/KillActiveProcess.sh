@@ -3,8 +3,11 @@
 # Copied from Discord post. Thanks to @Zorg
 
 
-# Get id of an active window
-active_pid=$(hyprctl activewindow | grep -o 'pid: [0-9]*' | cut -d' ' -f2)
+# The active window's pid, from the JSON. The plain-text output prints the
+# window's title before its pid, and grepping that for "pid: N" also matched a
+# title containing it (a terminal running a command that mentions a pid, a
+# browser tab) - so process N was killed along with the window.
+active_pid=$(hyprctl -j activewindow | jq -r '.pid // empty')
 
 # Close active window
-kill $active_pid
+[ -n "$active_pid" ] && [ "$active_pid" -gt 0 ] && kill "$active_pid"
