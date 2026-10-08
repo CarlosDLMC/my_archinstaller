@@ -538,14 +538,13 @@ fi
 # systemd-resolved, because 01-hypr-pkgs.sh installs systemd-resolvconf.
 #
 # systemd-resolvconf replaces the classic resolvconf with a shim over
-# resolvectl, and that shim only works while systemd-resolved is running. A
-# stock archinstall + NetworkManager system has no resolvconf and no resolved,
-# so NM writes /etc/resolv.conf itself and DNS works. Add the shim without the
-# daemon and NM switches to the resolvconf path, which then fails: the link
-# comes up, nothing resolves, and nothing says why. wg-quick has the same
-# dependency for the DNS= line every WireGuard config here carries, so the
-# bar's VPN selector was broken too. This machine only worked because resolved
-# had been enabled by hand months before the installer existed.
+# resolvectl, and that shim only works while systemd-resolved is running.
+# Arch's NetworkManager never uses resolvconf - it writes /etc/resolv.conf
+# itself - so ordinary DNS works either way. wg-quick is what needs it: it
+# hands the DNS= line every WireGuard config here carries to resolvconf, and
+# without resolved that fails, so the bar's VPN selector brought tunnels up
+# with no working DNS. This machine only worked because resolved had been
+# enabled by hand months before the installer existed.
 printf "\n${NOTE} Enabling ${SKY_BLUE}systemd-resolved${RESET}...\n" | tee -a "$LOG"
 if ! pacman -Qi systemd-resolvconf &>/dev/null; then
   echo "${INFO} systemd-resolvconf is not installed; leaving DNS to NetworkManager." | tee -a "$LOG"

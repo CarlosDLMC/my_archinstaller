@@ -197,7 +197,7 @@ if [ "$(systemctl is-enabled NetworkManager.service 2>/dev/null)" = enabled ]; t
             exit 0'
 fi
 if pacman -Qi systemd-resolvconf &>/dev/null; then
-    check_outcome "systemd-resolvconf is installed but systemd-resolved is not enabled - DNS will fail (install-scripts/services.sh)" \
+    check_outcome "systemd-resolvconf is installed but systemd-resolved is not enabled - the VPN tunnels' DNS= will fail (install-scripts/services.sh)" \
         systemctl is-enabled systemd-resolved.service
 fi
 

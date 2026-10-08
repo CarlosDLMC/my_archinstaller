@@ -532,12 +532,11 @@ only iwd saved; reconnecting to it once through the bar or nmcli fixes that.
 
 `01-hypr-pkgs.sh` installs `systemd-resolvconf`, which replaces the classic
 `resolvconf` with a shim over `resolvectl` — and that shim only works while
-`systemd-resolved` is running. A stock `archinstall` + NetworkManager system has
-neither, so NetworkManager writes `/etc/resolv.conf` itself and DNS just works.
-Add the shim without the daemon and NetworkManager switches to the resolvconf
-path, which then fails: the link comes up, nothing resolves, and nothing says
-why. `wg-quick` has the same dependency for the `DNS=` line in every WireGuard
-config here, so the bar's VPN selector was broken by it too.
+`systemd-resolved` is running. Arch's NetworkManager never goes through
+resolvconf (it is built to write `/etc/resolv.conf` itself), so ordinary DNS
+keeps working either way. What needs the daemon is `wg-quick`: it hands the
+`DNS=` line of every WireGuard config here to resolvconf, and without resolved
+that fails - the bar's VPN selector brings a tunnel up whose DNS goes nowhere.
 
 `services.sh` therefore enables `systemd-resolved` and points `/etc/resolv.conf`
 at its stub whenever `systemd-resolvconf` is installed. This machine only ever
