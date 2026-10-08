@@ -246,14 +246,16 @@ plymouth="auto"
 text_boot="OFF"
 # "auto": only where a limine.conf exists (Limine is the bootloader).
 limine="auto"
+# "auto": only where limine.conf has a Windows entry and Secure Boot is off.
+hackbgrt="auto"
 
 # Every option name the installer acts on. Kept next to load_preset() because
 # its only job is to catch a preset key that no longer matches one - see below.
 known_options="ly nvidia nouveau input_group gtk_themes bluetooth thunar \
 quickshell xdph zsh pokemon rog dots handy nopasswd_sudo printing plymouth \
-text_boot limine docker herdr neovim hunk"
+text_boot limine hackbgrt docker herdr neovim hunk"
 # The ones that also take "auto" (resolved from the hardware further down).
-auto_options="nvidia nouveau rog bluetooth plymouth limine"
+auto_options="nvidia nouveau rog bluetooth plymouth limine hackbgrt"
 
 # Function to load preset file
 load_preset() {
@@ -640,6 +642,16 @@ if [ -n "$_limine_conf" ]; then
     echo "${NOTE} Limine bootloader detected (${_limine_conf})." | tee -a "$LOG"
 fi
 
+# HackBGRT: a Limine dual boot with Windows, Secure Boot off (hackbgrt.sh skips
+# it otherwise - it would need shim and a key enrolled by hand).
+hackbgrt_detected=false
+if [ -n "$_limine_conf" ] \
+   && sudo grep -qiE '^\s*(image_)?path\s*:.*/EFI/(Microsoft/Boot/bootmgfw|HackBGRT/loader)\.efi\s*$' "$_limine_conf" 2>/dev/null \
+   && [ "$(od -An -t u1 -j4 -N1 /sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c 2>/dev/null | tr -d ' ')" != 1 ]; then
+    hackbgrt_detected=true
+    echo "${NOTE} Windows entry in Limine detected - HackBGRT can put the logo on Windows' boot screen." | tee -a "$LOG"
+fi
+
 # Resolve "auto" into ON/OFF from what was just detected. Only the preset loop
 # reads these - the interactive checklist below ships its own defaults - so an
 # interactive run is unaffected.
@@ -660,6 +672,7 @@ for _hw in $auto_options; do
         bluetooth)      _want="$bluetooth_detected" ;;
         plymouth)       _want="$plymouth_detected" ;;
         limine)         _want="$limine_detected" ;;
+        hackbgrt)       _want="$hackbgrt_detected" ;;
     esac
     if [ "$_want" == "true" ]; then
         printf -v "$_hw" "ON"
@@ -733,6 +746,7 @@ options_command+=(
     "plymouth" "Plymouth boot splash with the repo logo? (wires it into boot if needed)" "OFF"
     "text_boot" "Text boot: show the kernel/systemd messages, no splash? (not with plymouth)" "ON"
     "limine" "Theme the Limine boot menu and disable its countdown? (edits limine.conf, backup kept)" "OFF"
+    "hackbgrt" "Repo logo on Windows' boot screen too? (HackBGRT, Limine dual boot, Secure Boot off)" "OFF"
     "herdr" "Install Herdr terminal workspace manager for AI coding agents?" "OFF"
     "neovim" "Install Neovim with LazyVim? (the file explorer beside the agents)" "OFF"
     "hunk" "Install Hunk diff viewer? (review what the agents wrote)" "OFF"
@@ -747,7 +761,7 @@ if [ "$preset_mode" == "true" ]; then
     selected_options=""
     for _opt in ly nvidia nouveau input_group gtk_themes bluetooth thunar \
                 quickshell xdph zsh pokemon rog dots handy nopasswd_sudo \
-                printing plymouth text_boot limine docker herdr neovim hunk; do
+                printing plymouth text_boot limine hackbgrt docker herdr neovim hunk; do
         [ "${!_opt}" == "ON" ] || continue
 
         # Respect the same conditions the interactive menu applies before it
@@ -1186,6 +1200,10 @@ for option in "${options[@]}"; do
             echo "${INFO} Theming the ${SKY_BLUE}Limine boot menu${RESET}..." | tee -a "$LOG"
             execute_script "limine.sh"
             ;;
+        hackbgrt)
+            echo "${INFO} Putting the logo on ${SKY_BLUE}Windows' boot screen${RESET} (HackBGRT)..." | tee -a "$LOG"
+            execute_script "hackbgrt.sh"
+            ;;
         docker|herdr|neovim|hunk)
             # Handled after this loop, in order, because they depend on the
             # dotfiles already being in place. Listed here so they do not fall
@@ -1352,7 +1370,7 @@ if pacman -Q hyprland &> /dev/null || pacman -Q hyprland-git &> /dev/null; then
         echo "${CAT} Fix what is listed above, then reboot with ${MAGENTA}systemctl reboot${RESET}."
         echo "${NOTE} Most package failures are AUR builds. Retry one with:"
         echo "        ${MAGENTA}yay -S <package>${RESET}"
-        echo "${NOTE} herdr, hunk, lazyvim, plymouth-theme-*, plymouth-hook, plymouth-splash and text-boot are not packages - the list above says what to re-run or fix."
+        echo "${NOTE} herdr, hunk, lazyvim, plymouth-theme-*, plymouth-hook, plymouth-splash, text-boot and hackbgrt are not packages - the list above says what to re-run or fix."
         echo "${NOTE} A failed component can be retried with its script, e.g. ${MAGENTA}install-scripts/dotfiles-main.sh${RESET}"
         echo "${NOTE} The full list is in ${MAGENTA}Install-Logs/00_CHECK-*_installed.log${RESET}"
         printf "\n%.0s" {1..2}

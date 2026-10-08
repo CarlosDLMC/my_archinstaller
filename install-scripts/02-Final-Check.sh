@@ -515,6 +515,7 @@ if [ ${#missing[@]} -ne 0 ]; then
             herdr-config)     _hint=" (not a package - herdr rejects ~/.config/herdr/config.toml and runs on its defaults; see: ~/.local/bin/herdr config check)" ;;
             lazyvim)          _hint=" (not a package - re-run install-scripts/neovim.sh)" ;;
             plymouth-theme-*) _hint=" (not a package - re-run install-scripts/plymouth.sh)" ;;
+            hackbgrt)         _hint=" (not a package - HackBGRT could not be set up for Windows; the hackbgrt log in Install-Logs/ says why, then re-run install-scripts/hackbgrt.sh)" ;;
             text-boot)        _hint=" (not a package - 'quiet'/'splash' could not be taken off the kernel command line; the text-boot log in Install-Logs/ says where, then re-run install-scripts/text-boot.sh)" ;;
             plymouth-splash)  _hint=" (not a package - 'splash' could not be put on the kernel command line; the plymouth log in Install-Logs/ says where to add it, then re-run install-scripts/plymouth.sh)" ;;
             plymouth-hook)    _hint=" (not a package - the plymouth hook could not go into every mkinitcpio config; the plymouth log in Install-Logs/ says which, then re-run install-scripts/plymouth.sh)" ;;

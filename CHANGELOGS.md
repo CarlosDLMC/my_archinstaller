@@ -19,6 +19,11 @@ Changed (2026-10-08) - `text_boot` also takes the `kms` hook out of the
 initramfs (a drop-in in `/etc/mkinitcpio.conf.d`), so the GPU driver loads after
 the LUKS prompt and its ~2.5 s black screen no longer interrupts the password.
 
+Added (2026-10-08) - `hackbgrt` option (`install-scripts/hackbgrt.sh`, `auto`):
+on a Limine dual boot, Windows' boot screen shows the repo logo at its Plymouth
+size and place instead of the Windows logo, through HackBGRT on Windows' EFI
+partition. See README "Windows boot logo (HackBGRT)".
+
 ## September 2026
 
 Changed (2026-09-16) - the sidebar's focused and cursor rows stopped borrowing

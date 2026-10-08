@@ -880,6 +880,42 @@ on CachyOS every entry carries a BLAKE2 hash (`ENABLE_VERIFICATION=yes` in
 `/etc/limine-entry-tool.conf`). After the next kernel or initramfs update those
 hashes are stale, and Limine panics on every entry of the restored file.
 
+### Windows boot logo (HackBGRT)
+
+On a Limine dual boot, Windows showed its own logo at boot instead of the
+firmware's. Windows does not keep a logo of its own choosing: it redraws the
+firmware's (the ACPI BGRT image), but only when the firmware says it is still
+on screen - and started through Limine it is not, since Limine's menu was drawn
+over it. The `hackbgrt` option (`install-scripts/hackbgrt.sh`, `auto` in the
+shipped preset: on wherever `limine.conf` has a Windows entry and Secure Boot is
+off) installs [HackBGRT](https://github.com/Metabolix/HackBGRT) (MIT), a small
+EFI program that runs right before Windows' boot manager and hands it our
+picture. Windows draws it pixel for pixel, with its spinner underneath.
+
+- HackBGRT 2.6.0 is downloaded and checked against a pinned sha256.
+- `splash.bmp` is rendered for the panel: the Plymouth watermark cut that
+  `plymouth.sh` would pick (`icons/gopnik-watermark-*.png`), at the place the
+  soviet Plymouth theme draws it (centred, 5 % from the top), on a black image
+  the size of the panel - so Windows' boot screen looks exactly like the
+  Plymouth splash did. `config.txt` sets that resolution explicitly: with
+  "current" HackBGRT cropped the picture to the lower mode Limine leaves the
+  screen in, and only a corner of it showed.
+- `loader.efi`, `config.txt` and `splash.bmp` go to `EFI/HackBGRT/` on the
+  partition Windows' boot manager is on; `boot=MS` starts
+  `\EFI\Microsoft\Boot\bootmgfw.efi` from there. Windows' own files are not
+  touched.
+- The Windows entry's path in `limine.conf` is pointed at
+  `EFI/HackBGRT/loader.efi` (the original kept as `limine.conf.pre-hackbgrt`;
+  an enrolled config is re-enrolled). Limine's tools never regenerate that
+  entry, so kernel updates leave it alone.
+
+The firmware's own boot menu (F8 on ASUS -> Windows Boot Manager) still starts
+Windows without HackBGRT. To take it out: point the entry back at
+`/EFI/Microsoft/Boot/bootmgfw.efi` and delete `EFI/HackBGRT/` on that partition.
+With Secure Boot on, HackBGRT needs shim and a key enrolled by hand at boot (its
+`shim.md`), so the script skips it. After a monitor change, re-run
+`./install-scripts/hackbgrt.sh` to render the picture for the new panel.
+
 ### Firmware boot logo (the picture before the bootloader)
 
 `bios-logo/` puts `LOGO.JPG` into the motherboard firmware itself, so the vendor logo
@@ -1548,8 +1584,8 @@ Two of them are load-bearing rather than optional, despite the names:
 
 #### Hardware options
 
-Six options take a third value, **`auto`**, resolved from this machine:
-`nvidia`, `nouveau`, `rog`, `bluetooth`, `plymouth` and `limine`. It is their
+Seven options take a third value, **`auto`**, resolved from this machine:
+`nvidia`, `nouveau`, `rog`, `bluetooth`, `plymouth`, `limine` and `hackbgrt`. It is their
 default, and the shipped preset uses it for all but `plymouth` (`OFF`). Values
 are checked when the preset loads: `ON`, `OFF` (yes/no and any case work too)
 and `auto` where allowed - anything else stops the run before it starts,
@@ -1854,7 +1890,7 @@ chmod +x install.sh
 - ✅ zsh (the shell the dotfiles are written for)
 - ✅ thunar (the file manager the binds and bookmarks expect)
 - and the rest as `custom-preset.conf` has them: herdr, neovim, hunk, docker and
-  text_boot `ON`, plymouth `OFF`; nvidia, nouveau, rog, bluetooth and limine are resolved from the
+  text_boot `ON`, plymouth `OFF`; nvidia, nouveau, rog, bluetooth, limine and hackbgrt are resolved from the
   hardware when you pick `auto` in a preset
 
 ## Verification
