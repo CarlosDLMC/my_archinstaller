@@ -139,9 +139,20 @@ if command -v zsh >/dev/null; then
       if [ -f "$HOME/pokefetch_perfect" ]; then chmod +x "$HOME/pokefetch_perfect"; fi
   fi
 
-  # Copy pokefetch-merge python helper to ~/.local/bin/
-  if [ -f 'Hyprland-Dots/.local/bin/pokefetch-merge' ]; then
+  # pokefetch-merge (python helper) into ~/.local/bin. With dots selected that is
+  # copy.sh's, like the files above: it deploys all of .local/bin a few seconds
+  # later and backs up whatever differs. Copied here first, an edited helper was
+  # overwritten before copy.sh could see the difference - gone, no backup.
+  # Without dots this is its only deploy, and it backs up the same way.
+  if [[ " ${INSTALL_SELECTED_OPTIONS:-} " == *" dots "* ]]; then
+      echo "${NOTE} pokefetch-merge comes with the dotfiles (dots selected), not copied here." 2>&1 | tee -a "$LOG"
+  elif [ -f 'Hyprland-Dots/.local/bin/pokefetch-merge' ]; then
       mkdir -p ~/.local/bin
+      if [ -f ~/.local/bin/pokefetch-merge ] && ! cmp -s 'Hyprland-Dots/.local/bin/pokefetch-merge' ~/.local/bin/pokefetch-merge; then
+          _pm_bak="$HOME/.local/bin/pokefetch-merge.backup-$(date +%Y%m%d-%H%M%S)"
+          cp ~/.local/bin/pokefetch-merge "$_pm_bak" && chmod -x "$_pm_bak" &&
+              echo "${NOTE} Backed up your pokefetch-merge to $(basename "$_pm_bak")" | tee -a "$LOG"
+      fi
       cp 'Hyprland-Dots/.local/bin/pokefetch-merge' ~/.local/bin/
       chmod +x ~/.local/bin/pokefetch-merge
   fi
@@ -209,9 +220,20 @@ for _zpkg in "${zsh_pkg2[@]}"; do
   install_package "$_zpkg" "$LOG"
 done
 
-# copy additional oh-my-zsh themes from assets
+# copy additional oh-my-zsh themes from assets. One that differs from the
+# repo's - edited in place, agnoster_modificado say - is backed up first, the
+# way copy.sh treats dotfiles: a re-run used to overwrite it with nothing left
+# of the edit.
 if [ -d "$HOME/.oh-my-zsh/themes" ]; then
-    cp -r assets/add_zsh_theme/* ~/.oh-my-zsh/themes >> "$LOG" 2>&1
+    _theme_stamp="$(date +%Y%m%d-%H%M%S)"
+    for _theme in assets/add_zsh_theme/*; do
+        _theme_dst="$HOME/.oh-my-zsh/themes/${_theme##*/}"
+        if [ -f "$_theme_dst" ] && ! cmp -s "$_theme" "$_theme_dst"; then
+            cp "$_theme_dst" "$_theme_dst.backup-$_theme_stamp" &&
+                echo "${NOTE} Backed up your ${_theme##*/} to ${_theme##*/}.backup-$_theme_stamp" | tee -a "$LOG"
+        fi
+        cp -r "$_theme" "$HOME/.oh-my-zsh/themes/" >> "$LOG" 2>&1
+    done
 fi
 
 printf "\n%.0s" {1..2}
