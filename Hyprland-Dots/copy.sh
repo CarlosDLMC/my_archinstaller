@@ -68,6 +68,59 @@ is_animation_preset() { # file animations-dir
     return 1
 }
 
+# Lists the repo seeds and the desktop adds to - GTK/Thunar bookmarks (Ctrl+D),
+# RofiBeats stations (Add Music): a replaced directory came back with only the
+# seeded entries. This appends the backup's entries that the fresh copy lacks,
+# matched by key, so an entry the repo has since changed is not doubled: "uri"
+# (a bookmark's first field), "name" (a station's text before |). With a 4th
+# argument, $HOME in the fresh copy counts as expanded, the way the bookmarks
+# are written further down. Prints how many it added.
+keep_added_lines() { # backup-file new-file key [expand-home]
+    local _tmp _n
+    if [ ! -f "$1" ] || [ ! -f "$2" ] || ! _tmp=$(mktemp); then
+        echo 0
+        return 0
+    fi
+    if _n=$(EXPAND="${4:-}" awk -v key="$3" -v home="$HOME" -v out="$_tmp" '
+        function k(s,   f) {
+            if (key == "uri") { split(s, f, /[ \t]/); return f[1] }
+            if (key == "name") return substr(s, 1, index(s "|", "|") - 1)
+            return s
+        }
+        FNR == NR {
+            line = $0
+            if (ENVIRON["EXPAND"] != "") gsub(/\$HOME/, home, line)
+            have[k(line)] = 1
+            print > out
+            next
+        }
+        $0 != "" && !(k($0) in have) { have[k($0)] = 1; print > out; n++ }
+        END { print n + 0 }' "$2" "$1") && [ "$_n" -gt 0 ]; then
+        cat "$_tmp" > "$2"
+    fi
+    rm -f "$_tmp"
+    echo "${_n:-0}"
+}
+
+# One setting line of a replaced file back from its backup: the first line
+# matching ^<ERE>, in place of the fresh copy's own. Fails when there is nothing
+# to change.
+keep_line() { # backup-file new-file ERE
+    local _line _tmp
+    [ -f "$1" ] && [ -f "$2" ] || return 1
+    _line=$(grep -m1 -E "^$3" "$1") || return 1
+    grep -qxF -- "$_line" "$2" && return 1
+    grep -qE "^$3" "$2" || return 1
+    _tmp=$(mktemp) || return 1
+    if _line="$_line" awk -v re="^$3" '!done && $0 ~ re { print ENVIRON["_line"]; done = 1; next } { print }' "$2" > "$_tmp" \
+       && cat "$_tmp" > "$2"; then
+        rm -f "$_tmp"
+        return 0
+    fi
+    rm -f "$_tmp"
+    return 1
+}
+
 # Every path below is a `target` in config/wallust/wallust.toml - the palette,
 # regenerated in full on every wallpaper change, so runtime state and
 # gitignored. Defined up here because restore_state (in the config loop) and
@@ -107,6 +160,16 @@ restore_hypr_state() { # backup
     for _state in monitors.lua workspaces.lua; do
         if [ -f "$_bak/$_state" ] && ! cmp -s "$_bak/$_state" "$HOME/.config/hypr/$_state"; then
             cp "$_bak/$_state" "$HOME/.config/hypr/$_state" && echo "  ${OK} Kept your $_state from the previous install"
+        fi
+    done
+
+    # Monitor profiles saved by hand (Monitor_Profiles/README) and
+    # MonitorProfiles.sh's Previous_Profile: the repo ships only default.lua, so
+    # a re-run left nothing else in SUPER+SHIFT+E > Monitor Profiles.
+    for _state in "$_bak"/Monitor_Profiles/*; do
+        if [ -f "$_state" ] && [ ! -e "$HOME/.config/hypr/Monitor_Profiles/${_state##*/}" ]; then
+            mkdir -p "$HOME/.config/hypr/Monitor_Profiles"
+            cp "$_state" "$HOME/.config/hypr/Monitor_Profiles/" && echo "  ${OK} Kept your monitor profile ${_state##*/}"
         fi
     done
 
@@ -157,6 +220,36 @@ restore_state() { # dir backup
         if [ -e "$_bak/.current_wallpaper" ] && [ ! -e "$HOME/.config/rofi/.current_wallpaper" ]; then
             ln -sfn "$(readlink -f "$_bak/.current_wallpaper")" "$HOME/.config/rofi/.current_wallpaper" \
                 && echo "  ${NOTE} Keeping your current rofi background"
+        fi
+        # Stations added with RofiBeats' Add Music.
+        _s=$(keep_added_lines "$_bak/online_music.list" "$HOME/.config/rofi/online_music.list" name)
+        [ "$_s" -gt 0 ] && echo "  ${OK} Kept the $_s radio station(s) you added (RofiBeats)"
+        # The theme picked in SUPER+SHIFT+E > Choose Rofi Themes: the one
+        # @theme line that is not commented out. Only while that theme exists.
+        _t=$(grep -m1 -E '^[[:space:]]*@theme ' "$_bak/config.rasi" 2>/dev/null | sed -E 's/^[[:space:]]*@theme "(.*)".*/\1/')
+        if [ -n "$_t" ] && [ -f "${_t/#\~/$HOME}" ] \
+           && keep_line "$_bak/config.rasi" "$HOME/.config/rofi/config.rasi" '[[:space:]]*@theme '; then
+            echo "  ${OK} Kept your rofi theme (${_t##*/})"
+        fi
+        ;;
+    gtk-3.0)
+        # Sidebar bookmarks added in Thunar or a file chooser (Ctrl+D).
+        _s=$(keep_added_lines "$_bak/bookmarks" "$HOME/.config/gtk-3.0/bookmarks" uri expand-home)
+        [ "$_s" -gt 0 ] && echo "  ${OK} Kept the $_s sidebar bookmark(s) you added"
+        ;;
+    wallust|Kvantum|qt5ct|qt6ct)
+        # Light mode (DarkLight.sh) is a line in each of these, and a re-run put
+        # the repo's dark ones back while GTK stayed light. Its own record of the
+        # mode, ~/.cache/.theme_mode, says which applies; Dark is the repo's.
+        if [ "$(cat "$HOME/.cache/.theme_mode" 2>/dev/null)" = Light ]; then
+            case "$_dir" in
+            wallust) _s=wallust.toml;     _t='palette = ' ;;
+            Kvantum) _s=kvantum.kvconfig; _t='theme=' ;;
+            *)       _s=$_dir.conf;       _t='icon_theme=' ;;
+            esac
+            if keep_line "$_bak/$_s" "$HOME/.config/$_dir/$_s" "$_t"; then
+                echo "  ${OK} Kept Light mode in $_dir/$_s"
+            fi
         fi
         ;;
     nwg-displays)
