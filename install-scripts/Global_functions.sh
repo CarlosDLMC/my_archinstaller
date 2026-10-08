@@ -369,6 +369,14 @@ fi
 AUR_ENV="LC_ALL=C.UTF-8 LANGUAGE="
 # Function to install packages with either yay or paru
 install_package() {
+  # A package from the sync repos goes straight to pacman. The helper fetches
+  # the AUR's package list first even for those, and with the AUR stalled -
+  # accepting connections and never answering, as in its 2025 outages - every
+  # one of the ~145 repo installs waited out a 30 s timeout before installing.
+  if pacman -Si -- "$1" &>/dev/null; then
+    install_package_pacman "$1"
+    return
+  fi
   if $ISAUR -Q "$1" &>> /dev/null ; then
     echo -e "${INFO} ${MAGENTA}$1${RESET} is already installed. Skipping..."
   else
