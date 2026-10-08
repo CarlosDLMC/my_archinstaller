@@ -1296,11 +1296,15 @@ if pacman -Q hyprland &> /dev/null || pacman -Q hyprland-git &> /dev/null; then
     sleep 2
     printf "\n%.0s" {1..2}
 
-    printf "${SKY_BLUE}Installation complete.${RESET} ${YELLOW}Enjoy!${RESET}"
-    printf "\n%.0s" {1..2}
-
-    printf "\n${NOTE} You can start Hyprland by typing ${SKY_BLUE}Hyprland${RESET} (IF SDDM is not installed) (note the capital H!).\n"
-    printf "\n${NOTE} However, it is ${YELLOW}highly recommended to reboot${RESET} your system.\n\n"
+    # Only after a passing check: it used to sit between "the final check found
+    # problems" and "NOT rebooting", and told you to type a bare `Hyprland`
+    # (if SDDM was not installed - this setup uses ly), which Hyprland 0.56
+    # itself warns against.
+    if [ "$install_complete" == "true" ]; then
+        printf "${SKY_BLUE}Installation complete.${RESET} ${YELLOW}Enjoy!${RESET}"
+        printf "\n%.0s" {1..2}
+        printf "\n${NOTE} Reboot to log in through ly. To try it before that, run ${SKY_BLUE}start-hyprland${RESET} from a TTY.\n\n"
+    fi
 
     # Repeated here because the warning from hardware detection is an hour of
     # scrollback away by now, and this is what the screen shows before a reboot
