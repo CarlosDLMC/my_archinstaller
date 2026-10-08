@@ -643,10 +643,13 @@ if [ -n "$_limine_conf" ]; then
 fi
 
 # HackBGRT: a Limine dual boot with Windows, Secure Boot off (hackbgrt.sh skips
-# it otherwise - it would need shim and a key enrolled by hand).
+# it otherwise - it would need shim and a key enrolled by hand). Only a Windows
+# entry whose partition hackbgrt.sh can find - guid(), uuid(), fslabel(),
+# boot() or boot(<n>): one on hdd()/odd(), numbered the firmware's way, used to
+# turn "auto" on, fail in the script and stop the reboot over a boot logo.
 hackbgrt_detected=false
 if [ -n "$_limine_conf" ] \
-   && sudo grep -qiE '^\s*(image_)?path\s*:.*/EFI/(Microsoft/Boot/bootmgfw|HackBGRT/loader)\.efi\s*$' "$_limine_conf" 2>/dev/null \
+   && sudo grep -qiE '^\s*(image_)?path\s*:\s*(guid|uuid|fslabel|boot)\([^)]*\):/EFI/(Microsoft/Boot/bootmgfw|HackBGRT/loader)\.efi\s*$' "$_limine_conf" 2>/dev/null \
    && [ "$(od -An -t u1 -j4 -N1 /sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c 2>/dev/null | tr -d ' ')" != 1 ]; then
     hackbgrt_detected=true
     echo "${NOTE} Windows entry in Limine detected - HackBGRT can put the logo on Windows' boot screen." | tee -a "$LOG"

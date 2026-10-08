@@ -85,7 +85,7 @@ mode, path = sys.argv[1], sys.argv[2]
 raw = open(path, newline='').read()
 nl = '\r\n' if '\r\n' in raw else '\n'
 lines = raw.replace('\r\n', '\n').split('\n')
-PAT = re.compile(r'^(\s*(?:image_path|path)\s*:\s*)(\S+?\):)(/EFI/(?:Microsoft/Boot/bootmgfw|HackBGRT/loader)\.efi)\s*$', re.I)
+PAT = re.compile(r'^(\s*(?:image_path|path)\s*:\s*)(\S+?\):)(/EFI/(?:Microsoft/Boot/bootmgfw|HackBGRT/loader)\.efi)(\s*)$', re.I)
 hits = [(i, PAT.match(l)) for i, l in enumerate(lines)]
 hits = [(i, m) for i, m in hits if m]
 if mode == 'list':
@@ -94,7 +94,7 @@ if mode == 'list':
 elif mode == 'point':
     out = sys.argv[3]
     for i, m in hits:
-        lines[i] = m.group(1) + m.group(2) + '/EFI/HackBGRT/loader.efi'
+        lines[i] = m.group(1) + m.group(2) + '/EFI/HackBGRT/loader.efi' + m.group(4)
     open(out, 'w', newline='').write(nl.join(lines))
 PY
 )
@@ -104,24 +104,47 @@ if [ ${#_entries[@]} -eq 0 ]; then
   echo "${NOTE} $CONF has no Windows entry (a path to \\EFI\\Microsoft\\Boot\\bootmgfw.efi) - nothing to do." | tee -a "$LOG"
   exit 0
 fi
+# 2. The partition the entry boots from: guid(<partition or filesystem GUID>):,
+#    fslabel(<label>):, boot(): (the partition limine.conf is on) or boot(<n>):
+#    (partition n of that drive). hdd()/odd() number drives the way the
+#    firmware does, which Linux cannot see - not resolved, and install.sh's
+#    "auto" does not pick those entries either.
+resolve_part() { # <prefix>, e.g. "guid(673C...):"
+  local _p="$1" _guid _n _disk _part=""
+  case "$_p" in
+    guid\(*\):|uuid\(*\):)
+      _guid=$(sed -E 's/^[a-z]+\(([^)]*)\):$/\1/' <<< "$_p" | tr '[:upper:]' '[:lower:]')
+      _part=$(lsblk -rno PATH,PARTUUID | awk -v g="$_guid" 'tolower($2) == g { print $1; exit }')
+      [ -n "$_part" ] || _part=$(lsblk -rno PATH,UUID | awk -v g="$_guid" 'tolower($2) == g { print $1; exit }')
+      ;;
+    fslabel\(*\):)
+      _part=$(sudo findfs "LABEL=$(sed -E 's/^fslabel\((.*)\):$/\1/' <<< "$_p")" 2>/dev/null)
+      ;;
+    boot\(\):)
+      _part=$(sudo findmnt -no SOURCE -T "$(dirname "$CONF")" 2>/dev/null)
+      ;;
+    boot\([0-9]*\):)
+      _n=$(sed -E 's/^boot\(([0-9]+)\):$/\1/' <<< "$_p")
+      _disk=$(lsblk -no PKNAME "$(sudo findmnt -no SOURCE -T "$(dirname "$CONF")" 2>/dev/null)" 2>/dev/null | head -1)
+      [ -n "$_disk" ] && _part=$(lsblk -rno PATH,PARTN "/dev/$_disk" 2>/dev/null | awk -v n="$_n" '$2 == n { print $1; exit }')
+      ;;
+  esac
+  [ -n "$_part" ] && readlink -f -- "$_part"
+  return 0
+}
+# Every entry has to be on the same partition - compared as partitions, not as
+# text: an entry limine-entry-tool added (boot():) and one the installer wrote
+# (guid(...):) can name the same one.
 _prefixes=$(printf '%s\n' "${_entries[@]}" | cut -f2 | sort -u)
-[ "$(wc -l <<< "$_prefixes")" -eq 1 ] || fail "$CONF has Windows entries on more than one partition ($(paste -sd' ' <<< "$_prefixes")) - not guessing which to change."
-_prefix="$_prefixes"
-
-# 2. The partition the entry boots from: guid(<partition or filesystem GUID>):
-#    or boot(): (the partition limine.conf is on). Anything else is not resolved.
-case "$_prefix" in
-  guid\(*\):|uuid\(*\):)
-    _guid=$(sed -E 's/^[a-z]+\(([^)]*)\):$/\1/' <<< "$_prefix" | tr '[:upper:]' '[:lower:]')
-    WIN_PART=$(lsblk -rno PATH,PARTUUID | awk -v g="$_guid" 'tolower($2) == g { print $1; exit }')
-    [ -n "$WIN_PART" ] || WIN_PART=$(lsblk -rno PATH,UUID | awk -v g="$_guid" 'tolower($2) == g { print $1; exit }')
-    ;;
-  boot\(\):)
-    WIN_PART=$(sudo findmnt -no SOURCE -T "$(dirname "$CONF")" 2>/dev/null)
-    ;;
-  *) WIN_PART="" ;;
-esac
-[ -n "$WIN_PART" ] && [ -b "$WIN_PART" ] || fail "Could not find the partition behind '$_prefix' in $CONF."
+WIN_PART=""
+while IFS= read -r _p; do
+  _part=$(resolve_part "$_p")
+  [ -n "$_part" ] && [ -b "$_part" ] || fail "Could not find the partition behind '$_p' in $CONF."
+  [ -z "$WIN_PART" ] || [ "$_part" = "$WIN_PART" ] \
+    || fail "$CONF has Windows entries on more than one partition ($WIN_PART, $_part) - not guessing which to change."
+  WIN_PART=$_part
+done <<< "$_prefixes"
+_prefix=$(paste -sd' ' <<< "$_prefixes")
 echo "${INFO} Windows' boot manager is on $WIN_PART ($_prefix)." | tee -a "$LOG"
 
 _mp=$(findmnt -no TARGET "$WIN_PART" 2>/dev/null | head -1)
@@ -211,8 +234,13 @@ python3 -c "$HB_PY" point "$HB_TMP/limine.conf" "$HB_TMP/limine.new" 2>>"$LOG" |
 if cmp -s "$HB_TMP/limine.conf" "$HB_TMP/limine.new"; then
   echo "${OK} The Windows entry in $CONF already starts HackBGRT." | tee -a "$LOG"
 else
+  # The entries not on HackBGRT yet - not all of them: with one converted by an
+  # earlier run and a plain one added since (limine-entry-tool's
+  # FIND_BOOTLOADERS can add a "Windows Boot Manager" entry), the count of all
+  # entries never matched and a re-run stopped here instead of converting it.
+  _to_point=$(printf '%s\n' "${_entries[@]}" | cut -f3 | grep -cvxF '/EFI/HackBGRT/loader.efi' || true)
   _changed=$(diff "$HB_TMP/limine.conf" "$HB_TMP/limine.new" | grep -c '^>' || true)
-  [ "$_changed" -eq ${#_entries[@]} ] || fail "The edit of $CONF would change $_changed lines, not the ${#_entries[@]} Windows path lines - not writing it."
+  [ "$_changed" -eq "$_to_point" ] || fail "The edit of $CONF would change $_changed lines, not the $_to_point Windows path line(s) still to point at HackBGRT - not writing it."
   # Enrolled config? Then the new hash has to be enrolled too (see limine.sh).
   _enroll=$(sed -nE 's/^\s*ENABLE_ENROLL_LIMINE_CONFIG\s*=\s*"?([A-Za-z]+)"?.*/\1/p' /etc/default/limine 2>/dev/null | tail -1 | tr '[:upper:]' '[:lower:]')
   if [ "$_enroll" = yes ] && ! command -v limine-enroll-config &>/dev/null; then

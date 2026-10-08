@@ -899,7 +899,9 @@ firmware's. Windows does not keep a logo of its own choosing: it redraws the
 firmware's (the ACPI BGRT image), but only when the firmware says it is still
 on screen - and started through Limine it is not, since Limine's menu was drawn
 over it. The `hackbgrt` option (`install-scripts/hackbgrt.sh`, `auto` in the
-shipped preset: on wherever `limine.conf` has a Windows entry and Secure Boot is
+shipped preset: on wherever `limine.conf` has a Windows entry whose partition
+the script can find - `guid()`, `uuid()`, `fslabel()`, `boot()` or `boot(<n>)`,
+not the firmware-numbered `hdd()` - and Secure Boot is
 off) installs [HackBGRT](https://github.com/Metabolix/HackBGRT) (MIT), a small
 EFI program that runs right before Windows' boot manager and hands it our
 picture. Windows draws it pixel for pixel, with its spinner underneath.
@@ -919,7 +921,9 @@ picture. Windows draws it pixel for pixel, with its spinner underneath.
 - The Windows entry's path in `limine.conf` is pointed at
   `EFI/HackBGRT/loader.efi` (the original kept as `limine.conf.pre-hackbgrt`;
   an enrolled config is re-enrolled). Limine's tools never regenerate that
-  entry, so kernel updates leave it alone.
+  entry, so kernel updates leave it alone. If one ever adds a second, plain
+  Windows entry (limine-entry-tool's `FIND_BOOTLOADERS`), a re-run of the script
+  points that one at HackBGRT too.
 
 The firmware's own boot menu (F8 on ASUS -> Windows Boot Manager) still starts
 Windows without HackBGRT. To take it out: point the entry back at
