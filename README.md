@@ -1599,13 +1599,16 @@ script that hit it, because a rebuild failing (a full ESP, say) leaves the old
 image in place: the NVIDIA driver's own checks still pass, and the machine would
 reboot into an initramfs without its modules or the nouveau blacklist.
 
-In practice these are almost always AUR builds (`awww`, `handy-bin`,
-`pokemon-colorscripts`), which break for reasons that have nothing to do with
-this repo — an upstream tarball moved, a dependency bumped its soname. Retry
-them by hand and read the real error:
+In practice these are almost always AUR builds - on plain Arch `wallust`,
+`wlogout`, `mpvpaper`, `pokemon-colorscripts-git` and `handy-bin`; on CachyOS,
+whose repos carry the others, `wallust` and `handy-bin` - which break for
+reasons that have nothing to do with this repo: an upstream tarball moved, a
+dependency bumped its soname. (`awww` is not one of them: it is in `[extra]`,
+so a failed `awww` means a mirror or repo problem.) Retry them by hand and
+read the real error:
 
 ```bash
-yay -S awww          # replace with whatever was listed
+yay -S wallust       # replace with whatever was listed
 ```
 
 Then reboot yourself:
