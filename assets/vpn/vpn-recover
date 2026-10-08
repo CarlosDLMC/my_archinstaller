@@ -15,6 +15,7 @@
 
 WIREGUARD_DIR="/etc/wireguard"
 TAG="wireguard-killswitch"
+FWD_CHAIN="wireguard-killswitch-fwd"   # the routed (Docker, VM) half, in FORWARD
 
 if [[ $EUID -ne 0 ]]; then
     exec sudo /usr/local/bin/vpn-recover "$@"
@@ -74,12 +75,18 @@ done
 # first, as `iptables -S` prints them, so a failed connect can put back exactly
 # what was in force.
 mapfile -t stale < <(iptables -S OUTPUT 2>/dev/null | grep -- "--comment $TAG")
-if [[ ${#stale[@]} -gt 0 ]]; then
-    echo "Removing ${#stale[@]} stale killswitch rule(s)..."
+mapfile -t stale_fwd < <(iptables -S FORWARD 2>/dev/null | grep -- "--comment $TAG")
+mapfile -t fwd_chain < <(iptables -S "$FWD_CHAIN" 2>/dev/null | grep '^-A ')
+if [[ $(( ${#stale[@]} + ${#stale_fwd[@]} )) -gt 0 ]]; then
+    echo "Removing $(( ${#stale[@]} + ${#stale_fwd[@]} )) stale killswitch rule(s)..."
     # By line number, highest first, so the numbers below stay valid.
-    for n in $(iptables -L OUTPUT -n --line-numbers 2>/dev/null | awk -v tag="$TAG" '$0 ~ tag { print $1 }' | sort -rn); do
-        iptables -D OUTPUT "$n"
+    for chain in OUTPUT FORWARD; do
+        for n in $(iptables -L "$chain" -n --line-numbers 2>/dev/null | awk -v tag="$TAG" '$0 ~ tag { print $1 }' | sort -rn); do
+            iptables -D "$chain" "$n"
+        done
     done
+    iptables -F "$FWD_CHAIN" 2>/dev/null
+    iptables -X "$FWD_CHAIN" 2>/dev/null
 else
     echo "No stale killswitch rules."
 fi
@@ -96,11 +103,22 @@ echo
 if ! wg-quick up "$vpn"; then
     echo
     echo "WireGuard failed to start."
-    if [[ ${#stale[@]} -gt 0 ]]; then
+    if [[ $(( ${#stale[@]} + ${#stale_fwd[@]} )) -gt 0 ]]; then
         # Fail closed, as the killswitch that was in force would have.
         for rule in "${stale[@]}"; do
             read -ra spec <<< "${rule#-A OUTPUT }"
             iptables -I OUTPUT "${spec[@]}"
+        done
+        if [[ ${#fwd_chain[@]} -gt 0 ]]; then
+            iptables -N "$FWD_CHAIN" 2>/dev/null
+            for rule in "${fwd_chain[@]}"; do
+                read -ra spec <<< "${rule#-A $FWD_CHAIN }"
+                iptables -A "$FWD_CHAIN" "${spec[@]}"
+            done
+        fi
+        for rule in "${stale_fwd[@]}"; do
+            read -ra spec <<< "${rule#-A FORWARD }"
+            iptables -I FORWARD "${spec[@]}"
         done
         echo "The killswitch that was in force is back: nothing gets out."
         echo "Try another server (vpn-recover), or unblock with: vpn-recover --off"

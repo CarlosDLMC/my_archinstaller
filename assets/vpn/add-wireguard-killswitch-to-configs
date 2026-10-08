@@ -14,6 +14,15 @@ WG_DIR="/etc/wireguard"
 FW_MARK='FwMark = 51820'
 POST_UP='PostUp = iptables -I OUTPUT ! -o %i -m mark ! --mark 51820 -m addrtype ! --dst-type LOCAL -m comment --comment "wireguard-killswitch" -j REJECT'
 POST_DOWN='PostDown = iptables -D OUTPUT ! -o %i -m mark ! --mark 51820 -m addrtype ! --dst-type LOCAL -m comment --comment "wireguard-killswitch" -j REJECT'
+# Routed traffic - Docker containers, VMs - goes through FORWARD, not OUTPUT.
+# While the tunnel is up the policy routing sends it into the tunnel; once the
+# interface is gone without its PostDown (the state vpn-recover exists for) it
+# fell back to the main table and left through the real uplink while the host
+# itself was blocked. The same rule for it, through a chain that lets private
+# and link-local destinations by, so container-to-container and LAN traffic
+# keeps working. IPv4 only, like the rule above.
+POST_UP_FWD='PostUp = iptables -N wireguard-killswitch-fwd 2>/dev/null; iptables -F wireguard-killswitch-fwd; for net in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 100.64.0.0/10 169.254.0.0/16 224.0.0.0/4; do iptables -A wireguard-killswitch-fwd -d $net -j RETURN; done; iptables -A wireguard-killswitch-fwd -j REJECT; iptables -I FORWARD ! -o %i -m comment --comment "wireguard-killswitch" -j wireguard-killswitch-fwd'
+POST_DOWN_FWD='PostDown = iptables -D FORWARD ! -o %i -m comment --comment "wireguard-killswitch" -j wireguard-killswitch-fwd 2>/dev/null; iptables -F wireguard-killswitch-fwd 2>/dev/null; iptables -X wireguard-killswitch-fwd 2>/dev/null; true'
 
 # Root: /etc/wireguard is root-only. Run as yourself the glob matched nothing,
 # and it still printed "Done. All WireGuard configs now use ... the killswitch".
@@ -72,8 +81,9 @@ for file in "${configs[@]}"; do
     # used to go after the DNS line, so a config without one (self-hosted
     # servers, wg-easy exports) got FwMark alone - no killswitch - and still
     # counted as done.
-    awk -v fwmark="$FW_MARK" -v postup="$POST_UP" -v postdown="$POST_DOWN" '
-        !done && /^\[Interface\][[:space:]]*$/ { print; print fwmark; print postup; print postdown; done = 1; next }
+    awk -v fwmark="$FW_MARK" -v postup="$POST_UP" -v postdown="$POST_DOWN" \
+        -v postupfwd="$POST_UP_FWD" -v postdownfwd="$POST_DOWN_FWD" '
+        !done && /^\[Interface\][[:space:]]*$/ { print; print fwmark; print postup; print postdown; print postupfwd; print postdownfwd; done = 1; next }
         { print }
     ' "$tmp" > "$tmp.2"
     if ! grep -qF -- "$POST_UP" "$tmp.2"; then

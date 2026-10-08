@@ -990,7 +990,9 @@ sudo add-wireguard-killswitch-to-configs
 
 It adds `FwMark = 51820` and a `PostUp`/`PostDown` pair under `[Interface]` of
 every full-tunnel config (`0.0.0.0/0` in `AllowedIPs`), so while such a tunnel
-is up, any traffic that does not leave through it is rejected. A split tunnel
+is up, any traffic that does not leave through it is rejected - the host's own,
+and what Docker containers and VMs route through the host (anything but
+private and LAN addresses, so containers still reach each other). A split tunnel
 (one subnet: a work or home LAN) gets none - it would cut everything else off -
 and the script lists which configs got one. Re-running it is safe: it removes
 its own lines before adding them again. It re-runs itself through `sudo`.
