@@ -140,13 +140,24 @@ if [ -f "$CFG" ]; then
     sed -i "s#__HOME__#$HOME#g" "$CFG"
     echo "${OK} Resolved __HOME__ paths in $CFG" | tee -a "$LOG"
   fi
-  # `herdr --default-config` only prints the built-in defaults and always exits
-  # 0, so it validated nothing. Parse the installed file instead: a TOML error
-  # here is a config herdr will refuse at startup.
-  if python3 -c 'import sys, tomllib; tomllib.load(open(sys.argv[1], "rb"))' "$CFG" 2>>"$LOG"; then
-    echo "${OK} Herdr config in place from the dotfiles (parses as TOML)." | tee -a "$LOG"
+  # Checked by herdr itself (`herdr --default-config` only prints the built-in
+  # defaults). This used to be a TOML parse, and valid TOML is not enough: herdr
+  # is installed unpinned, from latest.json, while config.toml is tracked here,
+  # and on a key a release renamed or a value of another type it drops the
+  # WHOLE config for its defaults - every bind and layout - while this said
+  # [OK]. A config it drops ("using defaults") is recorded, so the final check
+  # stops the reboot; other notes (a sound file it cannot find) are only shown.
+  if _herdr_check=$("$BIN" config check 2>&1); then
+    echo "${OK} Herdr config in place from the dotfiles (herdr config check: ok)." | tee -a "$LOG"
+    clear_package_failure "herdr-config"
+  elif grep -q 'using defaults' <<< "$_herdr_check"; then
+    echo "${ERROR} herdr rejects $CFG and would start with its defaults:" | tee -a "$LOG"
+    printf '%s\n' "$_herdr_check" | tee -a "$LOG"
+    record_package_failure "herdr-config"
   else
-    echo "${ERROR} $CFG is not valid TOML - herdr will refuse to start. See $LOG" | tee -a "$LOG"
+    echo "${WARN} herdr config check has notes; the config is still used:" | tee -a "$LOG"
+    printf '%s\n' "$_herdr_check" | tee -a "$LOG"
+    clear_package_failure "herdr-config"
   fi
 else
   echo "${WARN} $CFG not found - the dotfiles' herdr config did not arrive." | tee -a "$LOG"

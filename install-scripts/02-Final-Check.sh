@@ -512,6 +512,7 @@ if [ ${#missing[@]} -ne 0 ]; then
         # cannot fix them - say what does instead.
         case "$pkg" in
             herdr | hunk)     _hint=" (not a package - re-run install-scripts/$pkg.sh)" ;;
+            herdr-config)     _hint=" (not a package - herdr rejects ~/.config/herdr/config.toml and runs on its defaults; see: ~/.local/bin/herdr config check)" ;;
             lazyvim)          _hint=" (not a package - re-run install-scripts/neovim.sh)" ;;
             plymouth-theme-*) _hint=" (not a package - re-run install-scripts/plymouth.sh)" ;;
             plymouth-splash)  _hint=" (not a package - 'splash' could not be put on the kernel command line; the plymouth log in Install-Logs/ says where to add it, then re-run install-scripts/plymouth.sh)" ;;
