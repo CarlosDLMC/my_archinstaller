@@ -59,7 +59,13 @@ if [[ "${1:-}" == "--preset" ]]; then
         exit 1
     fi
 fi
-cd "$(dirname "$(readlink -f "$0")")" || { echo "${ERROR} Cannot cd to the repo directory"; exit 1; }
+# Resolved once, before the cd: "$0" is relative to the caller's directory, and
+# resolving it again after the cd gave the wrong folder whenever this was started
+# as ../install.sh (from Install-Logs/ or install-scripts/, where the README sends
+# you after a failed run). nvidia_detect.sh was then not found and nvidia="auto"
+# quietly resolved to no NVIDIA at all.
+SCRIPT_PATH=$(readlink -f "$0")
+cd "$(dirname "$SCRIPT_PATH")" || { echo "${ERROR} Cannot cd to the repo directory"; exit 1; }
 
 # A re-run from this setup's zsh inherits .zshrc's CARGO_TARGET_DIR (one shared
 # cargo cache for development). makepkg hands it on to cargo, so an AUR Rust
@@ -471,7 +477,7 @@ fi
 # card got nvidia-open-dkms, which only binds to Turing and newer. A GTX 1060
 # rebooted with that module unloaded AND nouveau blacklisted: no driver at all.
 # nvidia_detect.sh prints none / open / 580xx / unsupported.
-nvidia_tier=$("$(dirname "$(readlink -f "$0")")/install-scripts/nvidia_detect.sh" 2>/dev/null || echo none)
+nvidia_tier=$("$(dirname "$SCRIPT_PATH")/install-scripts/nvidia_detect.sh" 2>/dev/null || echo none)
 nvidia_detected=false
 nvidia_supported=false
 case "$nvidia_tier" in
@@ -1018,7 +1024,7 @@ for option in "${options[@]}"; do
                     continue
                 fi
                 whiptail --title "Error" --msgbox "One of the following login services is running:\n$active_list\n\nPlease stop & disable it or DO not choose ly." 12 60
-                exec "$0"
+                exec "$SCRIPT_PATH"
             else
                 echo "${INFO} Installing and configuring ${SKY_BLUE}ly display manager...${RESET}" | tee -a "$LOG"
                 execute_script "ly.sh"
