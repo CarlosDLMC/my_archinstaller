@@ -25,79 +25,67 @@ fi
 
 all_good=true
 
-# Check critical files
-printf "${INFO} Checking critical files...\n"
-critical_files=(
-    "install.sh"
-    "custom-preset.conf"
-    "diagnose.sh"
-    "Hyprland-Dots/copy.sh"
-    "Hyprland-Dots/.zshrc"
-    "Hyprland-Dots/pokefetch_perfect"
-    "install-scripts/dotfiles-main.sh"
-    "install-scripts/02-Final-Check.sh"
-)
-
-for file in "${critical_files[@]}"; do
-    if [ -f "$file" ]; then
-        printf "  ${OK} $file exists\n"
+# What a run actually reads. A fixed list of 8 files used to pass trees the new
+# machine could not install from: a copy without Hyprland-Dots/wallpapers (the
+# obvious thing to drop) or yay-bin/PKGBUILD got "All critical files and
+# directories are present!", and install.sh then stopped at "No working AUR
+# helper", or the wallpaper check failed. The scripts come from install.sh itself
+# (every execute_script / run_required call), so a new one is covered as well.
+check_file() {
+    if [ -f "$1" ]; then
+        printf "  ${OK} $1\n"
     else
-        printf "  ${ERROR} $file MISSING\n"
+        printf "  ${ERROR} $1 MISSING\n"
         all_good=false
     fi
-done
-
-# Check critical directories
-printf "\n${INFO} Checking critical directories...\n"
-critical_dirs=(
-    "Hyprland-Dots/config/hypr"
-    "Hyprland-Dots/config/quickshell"
-    "Hyprland-Dots/config/wlogout"
-    "Hyprland-Dots/config/wallust"
-    "Hyprland-Dots/config/foot"
-    "Hyprland-Dots/.local/bin"
-    "install-scripts"
-)
-
-for dir in "${critical_dirs[@]}"; do
-    if [ -d "$dir" ]; then
-        printf "  ${OK} $dir/ exists\n"
+}
+check_dir() { # non-empty
+    if [ -d "$1" ] && [ -n "$(ls -A "$1" 2>/dev/null)" ]; then
+        printf "  ${OK} $1/\n"
     else
-        printf "  ${ERROR} $dir/ MISSING\n"
+        printf "  ${ERROR} $1/ MISSING or empty\n"
         all_good=false
     fi
+}
+
+printf "${INFO} Checking the scripts install.sh runs...\n"
+check_file install.sh
+while read -r _script; do
+    check_file "install-scripts/$_script"
+done < <(grep -oE '(execute_script|run_required) "[^"$]+\.sh"' install.sh | sed -E 's/.* "(.*)"/\1/' | sort -u)
+
+printf "\n${INFO} Checking what those scripts read...\n"
+for _file in install-scripts/Global_functions.sh install-scripts/nvidia_detect.sh \
+             install-scripts/checksum-skip.conf custom-preset.conf yay-bin/PKGBUILD \
+             Hyprland-Dots/copy.sh Hyprland-Dots/.zshrc Hyprland-Dots/pokefetch_perfect \
+             Hyprland-Dots/.local/bin/pokefetch-merge diagnose.sh; do
+    check_file "$_file"
+done
+for _dir in assets Hyprland-Dots/wallpapers Hyprland-Dots/.local/bin Hyprland-Dots/config/hypr \
+            Hyprland-Dots/config/quickshell/bar Hyprland-Dots/config/wlogout Hyprland-Dots/config/wallust \
+            Hyprland-Dots/config/foot Hyprland-Dots/config/rofi; do
+    check_dir "$_dir"
 done
 
-# Check VPN widget
-printf "\n${INFO} Checking custom widgets...\n"
-if [ -f "Hyprland-Dots/config/quickshell/bar/components/VpnWidget.qml" ]; then
-    printf "  ${OK} VpnWidget.qml exists\n"
-else
-    printf "  ${ERROR} VpnWidget.qml MISSING\n"
-    all_good=false
-fi
-
-if [ -f "Hyprland-Dots/config/quickshell/bar/components/NightLightWidget.qml" ]; then
-    printf "  ${OK} NightLightWidget.qml exists\n"
-else
-    printf "  ${ERROR} NightLightWidget.qml MISSING\n"
-    all_good=false
-fi
-
-if [ -f "Hyprland-Dots/config/quickshell/bar/components/KeyboardLayoutWidget.qml" ]; then
-    printf "  ${OK} KeyboardLayoutWidget.qml exists\n"
-else
-    printf "  ${ERROR} KeyboardLayoutWidget.qml MISSING\n"
-    all_good=false
-fi
-
-# Check pokefetch helper
-printf "\n${INFO} Checking pokefetch scripts...\n"
-if [ -f "Hyprland-Dots/.local/bin/pokefetch-merge" ]; then
-    printf "  ${OK} pokefetch-merge exists\n"
-else
-    printf "  ${ERROR} pokefetch-merge MISSING\n"
-    all_good=false
+# What a clone gets. A `git clone` on the new machine has only what was
+# committed and pushed; a tarball or rsync of this folder has the working tree.
+# Said, not failed: which one you use is up to you.
+if git -C "$REPO_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+    printf "\n${INFO} Checking what a git clone would get...\n"
+    _dirty=$(git status --porcelain 2>/dev/null | wc -l)
+    if [ "$_dirty" -gt 0 ]; then
+        printf "  ${NOTE} $_dirty changed or untracked file(s) are not committed - a clone will not have them (a tarball or rsync of this folder will):\n"
+        git status --short 2>/dev/null | head -10 | sed 's/^/      /'
+    else
+        printf "  ${OK} Working tree is committed\n"
+    fi
+    if _ahead=$(git rev-list --count '@{u}..HEAD' 2>/dev/null); then
+        if [ "$_ahead" -gt 0 ]; then
+            printf "  ${NOTE} $_ahead commit(s) not pushed - push before cloning on the new machine\n"
+        else
+            printf "  ${OK} Everything committed is pushed\n"
+        fi
+    fi
 fi
 
 # Show directory size
