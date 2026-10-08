@@ -61,7 +61,9 @@ for _file in install-scripts/Global_functions.sh install-scripts/nvidia_detect.s
              Hyprland-Dots/.local/bin/pokefetch-merge diagnose.sh; do
     check_file "$_file"
 done
-for _dir in assets Hyprland-Dots/wallpapers Hyprland-Dots/.local/bin Hyprland-Dots/config/hypr \
+# icons/: the logo cuts plymouth.sh and hackbgrt.sh render from. GTK-themes-icons/:
+# the GTK theme, icons and cursor gtk_themes.sh extracts.
+for _dir in assets icons GTK-themes-icons Hyprland-Dots/wallpapers Hyprland-Dots/.local/bin Hyprland-Dots/config/hypr \
             Hyprland-Dots/config/quickshell/bar Hyprland-Dots/config/wlogout Hyprland-Dots/config/wallust \
             Hyprland-Dots/config/foot Hyprland-Dots/config/rofi; do
     check_dir "$_dir"
