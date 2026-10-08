@@ -487,6 +487,33 @@ def edit_limine_tool(text, var):
     body = text if text == '' or text.endswith('\n') else text + '\n'
     return 'added', body + LT_LINE + '\n'
 
+# rEFInd's refind_linux.conf, next to the kernel: one boot option per line, a
+# quoted label and the quoted command line ("Boot" "root=UUID=... rw"). Each line
+# in that form gets the word at the end of its second field; comments and
+# anything else stay as they are.
+REFIND_LINE = re.compile(r'^(\s*"[^"]*"\s+")([^"]*)("\s*)$')
+
+def refind_options(lines):
+    return [m.group(2) for m in (REFIND_LINE.match(l) for l in lines if not comment(l)) if m]
+
+def edit_refind(text, var):
+    lines = text.split('\n')
+    states = []
+    for i, l in enumerate(lines):
+        m = None if comment(l) else REFIND_LINE.match(l)
+        if not m:
+            continue
+        opts = m.group(2)
+        states.append(state(opts))
+        if states[-1] == 'missing':
+            sep = '' if opts == '' or opts[-1].isspace() else ' '
+            lines[i] = m.group(1) + opts + sep + 'splash' + m.group(3)
+    if not states:
+        return 'none', text
+    if 'missing' in states:
+        return 'added', '\n'.join(lines)
+    return ('verbose' if 'verbose' in states else 'present'), text
+
 # The edited text may differ from the original only by "splash" added to lines
 # that did not have it, or by one line that sets a missing variable to it. A
 # missing final newline on either side does not count as a difference.
@@ -520,6 +547,8 @@ def units(mode, text):
         return [kc_value(text)]
     if mode == 'entry':
         return [entry_value(lines)]
+    if mode == 'refind':
+        return refind_options(lines)
     return [limine_value(lines, cl) for s, body, cl in limine_entries(lines) if cl]
 
 def semantic(mode, old, new):
@@ -570,7 +599,7 @@ if cmd == 'edit':
         status, out = edit_shellvar(text, var, mode == 'shellvar')
     else:
         status, out = {'kcmdline': edit_kcmdline, 'entry': edit_entry, 'limine': edit_limine,
-                       'limine-tool': edit_limine_tool}[mode](text, var)
+                       'limine-tool': edit_limine_tool, 'refind': edit_refind}[mode](text, var)
     if status == 'added':
         with open(dst, 'w', newline='') as f:
             f.write(out.replace('\n', nl))
@@ -642,7 +671,7 @@ ensure_splash() {
     return 0
   fi
   case "$mode" in
-    kcmdline|entry|limine)
+    kcmdline|entry|limine|refind)
       if ! python3 -c "$SPLASH_PY" semantic "$mode" "$PLY_TMP/old" "$PLY_TMP/new" 2>>"$LOG"; then
         echo "${ERROR} Edited, $file would give the kernel more than 'splash' extra - not writing it." | tee -a "$LOG"
         return 0
@@ -860,6 +889,17 @@ if [ -f /etc/sdboot-manage.conf ]; then
   report_splash /etc/sdboot-manage.conf "$_sp"
 fi
 
+# rEFInd: refind_linux.conf, in the directory of the kernel it boots (archinstall
+# writes /boot/refind_linux.conf). It used to be no source this script knew, so a
+# preset run on an archinstall rEFInd machine recorded plymouth-splash below and
+# never rebooted - and a re-run could not change that.
+for _rf in /boot/refind_linux.conf /efi/refind_linux.conf /boot/efi/refind_linux.conf; do
+  if sudo test -f "$_rf"; then
+    ensure_splash refind "$_rf"
+    report_splash "$_rf" "$_sp"
+  fi
+done
+
 # GRUB that boots no kernel of its own - archinstall's UKI setup, where 15_uki
 # hands the images to GRUB's `uki` command and 10_linux is switched off, so
 # grub.cfg has no `linux` line at all. GRUB_CMDLINE_LINUX_DEFAULT reaches no
@@ -970,15 +1010,17 @@ if [ "$_lt_mode" = true ]; then
   done
 fi
 
-# Nothing this script knows how to edit: rEFInd, EFISTUB, a grub.cfg outside
-# /boot/grub, a UKI built from /etc/cmdline.d alone. That is only a problem when
-# this boot's own command line has no splash either.
+# Nothing this script knows how to edit: EFISTUB (the command line is part of
+# the firmware's boot entry), a grub.cfg outside /boot/grub, a UKI built from
+# /etc/cmdline.d alone. Said, not recorded as a failure: the machine boots fine
+# without the word - plymouth shows its text screen instead of the logo - and no
+# re-run can add it, so recording it only stopped the preset's reboot on every
+# such machine, with a suggested re-run that could never clear it.
 if [ "$splash_sources" -eq 0 ]; then
   if cmdline_has_splash "$(cat /proc/cmdline 2>/dev/null)"; then
     echo "${NOTE} This machine's bootloader is not one this script edits, but this boot already has 'splash' on its command line - nothing to do." | tee -a "$LOG"
   else
-    echo "${ERROR} Found no kernel command line to add 'splash' to (no /etc/kernel/cmdline, Limine config, systemd-boot entry of this system or GRUB), and this boot has none. Add it to your bootloader's entry by hand, or plymouth shows text instead of the logo." | tee -a "$LOG"
-    _splash_ok=false
+    echo "${WARN} Found no kernel command line to add 'splash' to (no /etc/kernel/cmdline, Limine config, systemd-boot entry of this system, refind_linux.conf or GRUB), and this boot has none, so plymouth shows text instead of the logo. Add 'splash' to your bootloader's entry by hand (EFISTUB: the options of its efibootmgr entry)." | tee -a "$LOG"
   fi
 fi
 sudo sync 2>/dev/null || true

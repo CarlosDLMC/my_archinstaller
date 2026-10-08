@@ -665,7 +665,8 @@ through every official path.
     with `grub.cfg` backed up first), the `cmdline:` lines of a `limine.conf`
     that nothing generates, a `KERNEL_CMDLINE[default]+="splash"` line in
     `/etc/default/limine` where Limine's entry tool writes the entries
-    (CachyOS), and `/etc/kernel/cmdline` for UKIs. Each edit adds that one word
+    (CachyOS), each boot option of rEFInd's `refind_linux.conf`, and
+    `/etc/kernel/cmdline` for UKIs. Each edit adds that one word
     and nothing else, and that is checked on the command line the boot tool
     actually computes, not only on the file's text: Limine's entry tool is
     asked for every kernel's command line before and after
@@ -679,9 +680,10 @@ through every official path.
   When one of these cannot be done (a form of the file it does not edit, a
   per-kernel `KERNEL_CMDLINE` override), the script says what to add by hand,
   and the final check stops the auto-reboot with `plymouth-splash` or
-  `plymouth-hook`. A bootloader it does not know at all (rEFInd, EFISTUB) only
-  counts as a failure when this boot's own command line has no `splash`
-  either.
+  `plymouth-hook`. A bootloader it does not know at all (EFISTUB) does not
+  stop the reboot: when this boot's own command line has no `splash` either,
+  the script says to add it to the boot entry by hand, and until then
+  plymouth shows its text screen instead of the logo.
 - `plymouth="auto"` acts only where plymouth is already installed **and** in the
   mkinitcpio `HOOKS`, as on CachyOS, and does nothing on plain Arch.
 
