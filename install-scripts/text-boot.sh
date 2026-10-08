@@ -161,7 +161,7 @@ def edit_entry(lines, var):
 CMDLINE = re.compile(r'^(\s*(?:kernel_cmdline|cmdline)\s*:)(.*)$')
 UKI_PATH = re.compile(r'^\s*(?:path|image_path)\s*:.*/EFI/Linux/[^/\s]+\.efi\s*$', re.I)
 
-def limine_entries(lines):
+def limine_linux_entries(lines):
     starts = [i for i, l in enumerate(lines) if re.match(r'\s*/', l)]
     out = []
     for n, s in enumerate(starts):
@@ -172,8 +172,37 @@ def limine_entries(lines):
         if any(re.match(r'\s*protocol\s*:\s*linux\s*$', lines[i], re.I) for i in body) \
            or (any(re.match(r'\s*protocol\s*:\s*efi(?:_chainload)?\s*$', lines[i], re.I) for i in body)
                and any(UKI_PATH.match(lines[i]) for i in body)):
-            out.append(cl)
+            out.append((s, cl))
     return out
+
+def limine_entries(lines):
+    return [cl for s, cl in limine_linux_entries(lines)]
+
+# Snapshot boot entries: limine-snapper-sync's, under its "Snapshots" heading,
+# or any entry that roots the system in a snapper snapshot. Each one boots the
+# system as it was when its snapshot was taken, command line included, and
+# keeps the words it was made with - one taken during the install, before this
+# script ran, has CachyOS's `quiet splash`. They are not what the next boot
+# starts, and nothing here can change them, so the read-back below leaves them
+# out: counted, they failed the check on every run, and stopped the reboot.
+SNAPSHOT_ROOT = re.compile(r'subvol=[^\s"\']*/\.snapshots/')
+
+def snapshot_starts(lines):
+    stack, out = [], set()
+    for i, l in enumerate(lines):
+        m = re.match(r'\s*(/+)\+?(.*)$', l)
+        if not m:
+            continue
+        depth = len(m.group(1))
+        while stack and stack[-1][0] >= depth:
+            stack.pop()
+        stack.append((depth, m.group(2).strip().lower()))
+        if any(title == 'snapshots' for d, title in stack):
+            out.add(i)
+    return out
+
+def is_snapshot(lines, s, cl, snaps):
+    return s in snaps or any(SNAPSHOT_ROOT.search(lines[i]) for i in cl)
 
 def edit_limine(lines, var):
     entries = limine_entries(lines)
@@ -268,13 +297,20 @@ if cmd == 'edit':
     with open(dst, 'w', newline='') as f:
         f.write(body)
     print('removed')
-elif cmd == 'limine-check':
-    # Every Linux entry of a generated limine.conf: no word left. Prints the
-    # offending lines' headings.
+elif cmd in ('limine-check', 'limine-snapshots'):
+    # limine-check: every Linux entry of a generated limine.conf but the
+    # snapshot ones - no word left. Prints the offending cmdline lines.
+    # limine-snapshots: how many snapshot entries still have a word.
     text, nl = load(sys.argv[2])
     lines = lines_of(text or '')
-    bad = [lines[i].strip() for cl in limine_entries(lines) for i in cl
-           if set(words(CMDLINE.match(lines[i]).group(2))) & set(DROP)]
+    snaps = snapshot_starts(lines)
+    def has_word(cl):
+        return any(set(words(CMDLINE.match(lines[i]).group(2))) & set(DROP) for i in cl)
+    if cmd == 'limine-snapshots':
+        print(sum(1 for s, cl in limine_linux_entries(lines) if is_snapshot(lines, s, cl, snaps) and has_word(cl)))
+        sys.exit(0)
+    bad = [lines[i].strip() for s, cl in limine_linux_entries(lines) if not is_snapshot(lines, s, cl, snaps)
+           for i in cl if set(words(CMDLINE.match(lines[i]).group(2))) & set(DROP)]
     print('\n'.join(bad))
     sys.exit(1 if bad else 0)
 PY
@@ -464,9 +500,24 @@ done
 
 # GRUB: GRUB_CMDLINE_LINUX(_DEFAULT) in /etc/default/grub, then grub.cfg rebuilt
 # from it - only when this run changed the file, with grub.cfg backed up first
-# and both put back if grub-mkconfig fails or a 'linux' line still has a word.
+# and both put back if grub-mkconfig fails or a 'linux' line of this system's
+# entries still has a word.
 if command -v grub-mkconfig &>/dev/null && [ -f /etc/default/grub ] && sudo test -f /boot/grub/grub.cfg; then
   _grub_cfg=/boot/grub/grub.cfg
+  # A 'linux' line of this system's own entries that still has a word. Not
+  # 30_os-prober's - another installed system's entries, with that system's own
+  # command line - nor 40_custom's or 41_custom's, written by hand and copied in
+  # as they are: none of them comes from GRUB_CMDLINE_LINUX*, so no edit here
+  # can change them, and counted, a second Linux on the disk failed this check
+  # on every run and put the correct edit back.
+  grub_cfg_has_word() {
+    sudo cat -- "$_grub_cfg" 2>/dev/null | awk '
+      /^### BEGIN \/etc\/grub\.d\// { s = $3; sub(/.*\//, "", s) }
+      /^### END \/etc\/grub\.d\// { s = "" }
+      s == "30_os-prober" || s == "40_custom" || s == "41_custom" { next }
+      /^[[:space:]]*linux[[:space:]].*[[:space:]](quiet|splash)([[:space:]]|$)/ { found = 1 }
+      END { exit !found }'
+  }
   _gv_before="$(shellvar_value GRUB_CMDLINE_LINUX /etc/default/grub /etc/default/grub.d/*.cfg) $(shellvar_value GRUB_CMDLINE_LINUX_DEFAULT /etc/default/grub /etc/default/grub.d/*.cfg)"
   tb_edit assign /etc/default/grub 'GRUB_CMDLINE_LINUX|GRUB_CMDLINE_LINUX_DEFAULT'
   if [ "$_st" = removed ]; then
@@ -477,15 +528,14 @@ if command -v grub-mkconfig &>/dev/null && [ -f /etc/default/grub ] && sudo test
     elif ! sudo cp -- "$_grub_cfg" "$_grub_cfg.pre-text-boot" 2>>"$LOG"; then
       tb_undo /etc/default/grub
       report /etc/default/grub failed "could not back up $_grub_cfg - put back"
-    elif ! sudo grub-mkconfig -o "$_grub_cfg" >> "$LOG" 2>&1 \
-         || sudo grep -qE '^[[:space:]]*linux[[:space:]].*[[:space:]](quiet|splash)([[:space:]]|$)' "$_grub_cfg"; then
+    elif ! sudo grub-mkconfig -o "$_grub_cfg" >> "$LOG" 2>&1 || grub_cfg_has_word; then
       sudo cp -- "$_grub_cfg.pre-text-boot" "$_grub_cfg" 2>>"$LOG" || true
       tb_undo /etc/default/grub
       report /etc/default/grub failed "grub-mkconfig failed, or grub.cfg still has the words on a 'linux' line - both files were put back"
     else
       report /etc/default/grub removed
     fi
-  elif sudo grep -qE '^[[:space:]]*linux[[:space:]].*[[:space:]](quiet|splash)([[:space:]]|$)' "$_grub_cfg" && [ "$_st" = clean ]; then
+  elif grub_cfg_has_word && [ "$_st" = clean ]; then
     report "$_grub_cfg" failed "/etc/default/grub is clean but grub.cfg is older - run: sudo grub-mkconfig -o $_grub_cfg"
   else
     report /etc/default/grub "$_st"
@@ -548,7 +598,12 @@ fi
 if [ -n "$_limine_conf" ] && [ "$_rebuild_failed" = false ] && command -v limine-entry-tool &>/dev/null; then
   if sudo cat -- "$_limine_conf" > "$TB_TMP/limine.conf" 2>>"$LOG" \
      && _left=$(python3 -c "$TB_PY" limine-check "$TB_TMP/limine.conf" 2>>"$LOG"); then
-    echo "${OK} No Limine entry in $_limine_conf has 'quiet' or 'splash'." | tee -a "$LOG"
+    _snaps=$(python3 -c "$TB_PY" limine-snapshots "$TB_TMP/limine.conf" 2>>"$LOG") || _snaps=0
+    if [ "${_snaps:-0}" -gt 0 ] 2>/dev/null; then
+      echo "${OK} No Limine entry in $_limine_conf has 'quiet' or 'splash', apart from $_snaps snapshot entr$([ "$_snaps" -eq 1 ] && echo y || echo ies): a snapshot boots the way the system was when it was taken, and those are left as they are." | tee -a "$LOG"
+    else
+      echo "${OK} No Limine entry in $_limine_conf has 'quiet' or 'splash'." | tee -a "$LOG"
+    fi
   else
     echo "${ERROR} Limine entries in $_limine_conf still have 'quiet' or 'splash':" | tee -a "$LOG"
     printf '%s\n' "${_left:-(could not read it)}" | tee -a "$LOG"

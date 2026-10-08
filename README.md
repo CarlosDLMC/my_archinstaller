@@ -710,6 +710,10 @@ the tool itself computes has to come out as before minus the two words, or the
 file goes back. The original is kept as `<file>.pre-text-boot`. Limine's
 entries (and UKIs) are then regenerated, and the generated `limine.conf` is read
 back. A failure is recorded as `text-boot` and stops the preset's auto-reboot.
+Snapshot boot entries (limine-snapper-sync on btrfs) and GRUB entries of other
+systems (os-prober) or written by hand (40_custom) are left as they are and not
+counted: no edit here reaches them, and a snapshot boots the way the system was
+when it was taken.
 
 Plymouth is not removed where the distro installed it: without `splash` it runs
 in text mode, and the LUKS password prompt is a plain text one. Selecting both
