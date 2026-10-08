@@ -54,7 +54,7 @@ fi
 if grep -qiE 'amd|radeon|advanced micro devices' <<< "$gpu_info"; then
   printf "\n${NOTE} Detected ${SKY_BLUE}AMD${RESET} graphics\n" | tee -a "$LOG"
   # No libva-mesa-driver here: it was merged into mesa, which is installed
-  # above. Asking for the old name now fails the install.
+  # above (and provides the old name, so asking for it only resolves to mesa).
   graphics+=(vulkan-radeon lib32-vulkan-radeon)
 fi
 

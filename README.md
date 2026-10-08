@@ -411,10 +411,12 @@ failure cannot come back silently.
 drivers for whatever GPU it finds — `intel-media-driver` + `vulkan-intel` on
 Intel (plus `libva-intel-driver` for pre-Broadwell chips, which
 `intel-media-driver` does not support; libva picks whichever one fits), `vulkan-radeon` on AMD (VA-API for AMD now comes from `mesa` itself,
-which is why there is no `libva-mesa-driver` here — asking for that name fails
-the install), plus the `lib32-` variants (multilib is enabled by `pacman.sh`,
-which runs first). NVIDIA is not handled here; `nvidia.sh` owns that, and the
-preset's `nvidia` option defaults to `auto` — see [Hardware options](#hardware-options).
+which is why there is no `libva-mesa-driver` here: `mesa` provides that name, so
+asking for it only resolves to `mesa`), plus the `lib32-` variants (multilib is
+enabled by `pacman.sh`, which runs first). The proprietary NVIDIA driver is not
+handled here - `nvidia.sh` owns that, and the preset's `nvidia` option defaults
+to `auto`, see [Hardware options](#hardware-options) - but an NVIDIA card that
+stays on nouveau gets Mesa's Vulkan driver for it (`vulkan-nouveau`).
 
 This is easy to skip because nothing *looks* broken without it: `mesa` alone
 gives a perfectly good desktop. What you lose is hardware video decode, so mpv
