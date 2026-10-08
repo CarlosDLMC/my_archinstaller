@@ -212,8 +212,10 @@ bind(M .. " + down",  hl.dsp.focus({ direction = "down" }),  { description = "fo
 
 -- Special workspace (scratchpad)
 bind(M .. " + SHIFT + U", hl.dsp.window.move({ workspace = "special" }), { description = "move to special workspace" })
--- Freed for gamescope, which hard-binds SUPER + U to toggle FSR upscaling in-game.
--- bind(M .. " + U",         hl.dsp.workspace.toggle_special(),            { description = "toggle special workspace" })
+-- SUPER + U is gamescope's (it hard-binds it to toggle FSR upscaling in-game), so
+-- the toggle sits on SUPER + ALT + U. With it commented out, SUPER + SHIFT + U sent
+-- windows to the special workspace and nothing could ever show them again.
+bind(M .. " + ALT + U",   hl.dsp.workspace.toggle_special(),            { description = "toggle special workspace" })
 
 -- Workspaces 1-10 on the number row. Bound by keysym ("1".."0"), not by
 -- keycode ("code:10".."code:19") as before: binds resolve against the FIRST
