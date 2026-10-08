@@ -18,15 +18,22 @@ select exactly this and nothing else:
 - **CachyOS Packages**: keep `cachyos-settings`, `cachyos-micro-settings` and
   `cachyos-kernel-manager`. Uncheck `cachyos-hello`, `cachyos-packageinstaller`
   and `cachyos-wallpapers` (the dots ship their own wallpapers).
-- **Base-devel + Common packages**: keep only the **Network** and **hardware**
-  sub-groups. Network gives you NetworkManager to get online on first boot;
-  hardware carries `linux-firmware`, which nothing else on the page or in this
-  repo installs. Every other sub-group is duplicated by the install scripts.
-- **Plymouth** (a group of its own since the installer update of 2026-09-23):
-  leave it ticked, as it comes. `plymouth.sh` puts the repo's logo in place of
-  the CachyOS one either way; unticked, there is no Plymouth at all, and the
-  install has to add it and wire it into the boot itself - which works, but is
-  the less-travelled path on CachyOS.
+- **Base-devel + Common packages**: keep the **Network** and **hardware**
+  sub-groups. Network gives you NetworkManager to get online on first boot.
+  (`linux-firmware` itself comes with the installer's base packages whatever
+  is ticked.) The other sub-groups are *not* all put back by the install
+  scripts. The one that matters is **firewall**: CachyOS installs `ufw` and
+  enables it with incoming connections denied, and nothing in this repo adds
+  a firewall - untick it and the machine has none. Keep it ticked if you want
+  one. Also gone for good when unticked: `rsync`, `alsa-utils`, `cpupower`,
+  `upower`, `reflector` and some fonts.
+- **Plymouth** (a group of its own in the installer's source since
+  2026-09-23): leave it ticked, as it comes. `plymouth.sh` puts the repo's logo
+  in place of the CachyOS one either way. The installer release current when
+  this was written still installs plymouth with its base packages even with
+  the group unticked; if a later one does not, the install adds it and wires
+  it into the boot itself - which works, but is the less-travelled path on
+  CachyOS.
 - Uncheck everything else: the shell configuration, every desktop entry
   (especially **Hyprland** - it brings SDDM and its own bar, which would fight
   ly and the Quickshell bar), Firefox, both printing groups and accessibility.
