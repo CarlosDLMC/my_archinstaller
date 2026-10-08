@@ -33,9 +33,19 @@ Singleton {
         : audioMic ? "mic"
         : "none"
 
+    // Same key stops a running recording, so it stays a one-press stop - asked
+    // of ScreenRecord.sh when the key is pressed (statusProc decides). It used
+    // to be polled every 3 s for the whole session: sh, bash, date,
+    // xdg-user-dir and pgrep each time, the largest periodic cost left in the
+    // bar, only to be ready for this one press.
+    property bool openPending: false
+
     function open() {
-        // Same key stops a running recording, so it stays a one-press stop.
-        if (recording) { stop(); return }
+        openPending = true
+        statusProc.running = true
+    }
+
+    function openDialog() {
         Monitors.refresh()
         targetMonitor = Monitors.resolveTarget(targetMonitor)
         dialogOpen = true
@@ -101,13 +111,6 @@ Singleton {
         onTriggered: statusProc.running = true
     }
 
-    Timer {
-        interval: 3000
-        running: true
-        repeat: true
-        onTriggered: statusProc.running = true
-    }
-
     Process {
         id: runProc
         command: ["true"]
@@ -121,8 +124,15 @@ Singleton {
     Process {
         id: statusProc
         command: ["sh", "-c", root.script + " --status"]
-        stdout: SplitParser {
-            onRead: data => root.recording = (data.trim() === "recording")
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.recording = (text.trim() === "recording")
+                if (root.openPending) {
+                    root.openPending = false
+                    if (root.recording) root.stop()
+                    else root.openDialog()
+                }
+            }
         }
     }
 
