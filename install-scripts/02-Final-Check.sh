@@ -225,6 +225,16 @@ if selected dots; then
         test -f "$HOME/.config/hypr/wallpaper_effects/.wallpaper_current"
     check_outcome "dotfiles not deployed: ~/.config/zsh/herdr-layouts.zsh is missing - hdl/hds/hdlm/hsl will not exist (Hyprland-Dots/copy.sh)" \
         test -f "$HOME/.config/zsh/herdr-layouts.zsh"
+    # That the Hyprland this run installed accepts the config, not only that the
+    # file exists. hyprland.sh pins no version and the config is Lua - a key or
+    # hl.* call the new version rejects would otherwise first show at the
+    # graphical login, as an error overlay after the automatic reboot. Works
+    # offline, without a display; it only needs XDG_RUNTIME_DIR, which a TTY or
+    # SSH login has.
+    if command -v Hyprland &>/dev/null; then
+        check_outcome "Hyprland $(pacman -Q hyprland 2>/dev/null | cut -d' ' -f2) rejects the deployed config - see: Hyprland --verify-config -c ~/.config/hypr/hyprland.lua" \
+            bash -c 'export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-$(mktemp -d)}"; Hyprland --verify-config -c "$HOME/.config/hypr/hyprland.lua"'
+    fi
 fi
 
 if selected ly; then
