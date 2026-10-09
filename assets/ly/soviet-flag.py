@@ -1389,6 +1389,55 @@ FORMAT_256.update(OLD_RUSSIA)
 FINE.update(OLD_RUSSIA)
 
 
+# --- the Palaestinalied ----------------------------------------------------------
+# Not a historical flag: a banner for Walther von der Vogelweide's
+# Palaestinalied (c. 1228) - "Nu alrerst lebe ich mir werde, sit min sundic
+# ouge siht daz here lant". Frederick II's crusade won Jerusalem back by
+# treaty and he was crowned its king in 1229, so his two arms side by side:
+# the Empire at the hoist, the Holy Land at the fly.
+
+REICHSADLER = [                       # head to the hoist, wings spread
+    "......NN.......",
+    ".....NNN.......",
+    "....NN.N.......",
+    "......NN.......",
+    "NNNN..NNN..NNNN",
+    "NNNNNNNNNNNNNNN",
+    ".NNNNNNNNNNNNN.",
+    "..NNNNNNNNNNN..",
+    "N.N.N.NNN.N.N.N",
+    "....N.NNN.N....",
+    "...NN.NNN.NN...",
+    ".....NNNNN.....",
+    "....NN.N.NN....",
+    "...N..N.N..N...",
+]
+
+
+def palaestinalied(u, v):
+    x, y = u * ASPECT, v
+    if u < 0.5:
+        return bitmap(x, y, REICHSADLER, ASPECT / 4, 0.5, 0.66) or "O"
+    dx, dy = x - ASPECT * 3 / 4, y - 0.5
+    ax, ay = abs(dx), abs(dy)
+    arm, reach, bar = 0.04, 0.26, 0.11
+    if (ax <= arm and ay <= reach) or (ay <= arm and ax <= reach):
+        return "O"
+    if (reach - 0.05 <= ay <= reach and ax <= bar) or (reach - 0.05 <= ax <= reach and ay <= bar):
+        return "O"
+    for cx in (-0.15, 0.15):
+        for cy in (-0.15, 0.15):
+            ex, ey = abs(dx - cx), abs(dy - cy)
+            if (ex <= 0.02 and ey <= 0.06) or (ey <= 0.02 and ex <= 0.06):
+                return "O"
+    return "W"
+
+
+FLAGS["palaestinalied"] = palaestinalied
+FORMAT_256.add("palaestinalied")
+FINE.add("palaestinalied")
+
+
 
 def paint_cloth(art, pattern, static_max_x, fine=False):
     """Repaint every cloth pixel of art with pattern(u, v).
