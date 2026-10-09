@@ -671,6 +671,9 @@ singleton that the widgets render; only the rendering should be per-screen. See
 - `/usr/local/bin/battery-charge-limit` (installed by `install-scripts/battery_charge_limit.sh`)
   for setting the battery charge threshold. Optional: without it the battery card
   still shows every reading and only hides the limit picker
+- `/usr/local/bin/boot-windows-next` (installed by `install-scripts/boot_windows.sh`) for the power
+  menu's W: sets the one-shot UEFI BootNext to Windows Boot Manager, run through `sudo -n` under a
+  rule for that helper alone. Optional: without it W falls back to `pkexec` and a password prompt
 - `dunstctl` for DND (Do Not Disturb) toggle
 - `wpctl` / `pactl` for volume control and audio sink detection
 - `hyprctl` for workspace/window data

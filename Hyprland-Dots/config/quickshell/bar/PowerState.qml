@@ -51,9 +51,16 @@ Singleton {
     ]
     // The quiet extras, each shown only where the machine can do it.
     readonly property var extras: ({
-        "B": { ru: "И", name: "ПЕРЕЗАГРУЗКА В UEFI", readback: "Вас понял: иду в машинное отделение.", cmd: "systemctl reboot --firmware-setup" },
+        "B": { ru: "И", name: "ПЕРЕЗАГРУЗКА В UEFI", readback: "Вас понял: иду в машинное отделение.",
+               show: "systemctl reboot --firmware-setup", cmd: "systemctl reboot --firmware-setup" },
         "W": { ru: "Ц", name: "ПЕРЕЗАГРУЗКА В WINDOWS", readback: "Вас понял: ухожу на чужую ОС.",
-               cmd: "pkexec efibootmgr --bootnext " + windowsEntry + " >/dev/null && systemctl reboot" }
+               show: "boot-windows-next && systemctl reboot",
+               // BootNext is a UEFI variable, root-only. The root-owned helper
+               // (install-scripts/boot_windows.sh) does exactly that one write
+               // and has a sudoers rule, so W asks for no password; without it,
+               // pkexec and the bar's polkit prompt.
+               cmd: "if [ -x /usr/local/bin/boot-windows-next ]; then sudo -n /usr/local/bin/boot-windows-next;"
+                    + " else pkexec efibootmgr --bootnext " + windowsEntry + " >/dev/null; fi && systemctl reboot" }
     })
 
     readonly property var litany: ["КЛЮЧ НА СТАРТ", "ПРОТЯЖКА-1", "ПРОДУВКА", "КЛЮЧ НА ДРЕНАЖ", "ПУСК"]
@@ -83,7 +90,7 @@ Singleton {
     }
     function armedCommand() {
         var m = modeOf(armedKey)
-        return m ? m.show : (extras[armedKey] ? extras[armedKey].cmd.split(" >")[0] : "")
+        return m ? m.show : (extras[armedKey] ? extras[armedKey].show : "")
     }
     // What the computer does at each second of the litany.
     function stepAction(i) {
