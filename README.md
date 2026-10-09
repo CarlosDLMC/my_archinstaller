@@ -250,9 +250,13 @@ first prompt.
   Delete that line if you ever install uwsm. The login-screen flag is cut per
   console grid (768p, 900p, 1080p, 1440p, 2160p), and the largest cut that fits
   the panel is installed. Which flag waves is the preset's `ly_flag` (or, when
-  ly is ticked, an fzf picker with a live preview of each flag), one of the `<name>-flag-*.dur` sets in `assets/ly` -
-  most of Europe, the Soviet Union and Russian Empire, China, Vietnam, both
-  Koreas and Israel (the full list is `FLAGS` in `assets/ly/soviet-flag.py`).
+  ly is ticked, an fzf picker with a live preview of each flag), one of the
+  `<name>-flag-*.dur` sets in `assets/ly`: every country in Europe, the
+  Caucasus and Central Asia, China, Vietnam, both Koreas, Israel, Iran,
+  Singapore, Malaysia, Mozambique, the United States, Canada, Argentina and
+  Chile, and historical flags and banners - the Soviet Union, the Russian,
+  German, Spanish, Roman and Byzantine empires, the Raven Banner, crusader and
+  cross flags and more (the full list is `FLAGS` in `assets/ly/soviet-flag.py`).
   Colours the console lacks - near-black, gold, light blue, orange - come from
   palette slots set in `assets/ly/start.sh`. All of them are installed;
   `flag-switch.sh <flag>` changes it later and `flag-preview.sh <flag> animated`
