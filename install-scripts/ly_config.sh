@@ -247,7 +247,8 @@ printf "${NOTE} Installing 8-bit flag animations (${_ly_flag} selected)...\n"
 # ly draws a .dur at its native cell size and never scales it, so the art is
 # cut per console grid (assets/ly/soviet-flag.py) and the matching pair is
 # installed under fixed names. Every flag shares the Soviet flag's cuts, so
-# the Soviet files below stand in for all of them when choosing one. The grid is width/16 x height/32 because /etc/ly/start.sh loads
+# the Soviet files below stand in for all of them when choosing one. The
+# grid is width/16 x height/32 because /etc/ly/start.sh loads
 # latarcyrheb-sun32 on ly's own VT whatever vconsole.conf below ends up
 # saying, so the choice follows the panel, not the font.
 #

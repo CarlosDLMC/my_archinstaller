@@ -189,6 +189,29 @@ COLOURS = {
     "Y": (15, None),
 }
 
+# The 16-colour table above has no grey at all, and black is the screen
+# itself, so a black stripe drawn black simply is not there. dur's 256-colour
+# format reaches one more console colour: a grey at or under 0x55 per channel
+# is shown as the console's dark grey (#555555), as a foreground only. Flags
+# that need it are written in that format (ly accepts it with full_color =
+# true, which config.ini sets). Its indices 0-15 go straight to ly's colour
+# table, with no remapping and no +1 on the background.
+#
+#   tag  colour   fg   bg
+#   R    #AA0000    1    1
+#   D    #555555  239    -    stands in for black
+#   A    #FFFF55   11    -
+COLOURS_256 = {
+    "R": (1, 1),
+    "B": (4, 4),
+    "G": (2, 2),
+    "W": (15, None),
+    "A": (11, None),
+    "Y": (11, None),
+    "D": (239, None),
+}
+FORMAT_256 = {"germany"}
+
 
 def bands(t, edges, tags):
     """The tag of the band t falls in; edges are the band widths' running
@@ -249,6 +272,8 @@ FLAGS = {
     "poland": lambda u, v: bands(v, (1 / 2,), "WR"),
     "ukraine": lambda u, v: bands(v, (1 / 2,), "BA"),
     "belarus": lambda u, v: belarus(u, v),
+    # black, red, gold - black drawn dark grey, see COLOURS_256
+    "germany": lambda u, v: bands(v, (1 / 3, 2 / 3), "DRA"),
 }
 
 
@@ -441,19 +466,19 @@ PAIRS = {
 }
 
 
-def pair_cell(top, bottom):
+def pair_cell(top, bottom, colours=COLOURS, filler=GOLD_FG):
     """The cell for two stacked art pixels of the painted flags (None is
     the black outside the cloth). A colour with a background fills the cell
     from behind; the other is drawn as a half or full block over it."""
     if top == bottom:
         if top is None:
-            return (" ", GOLD_FG, VOID_BG)
-        fg, bg = COLOURS[top]
-        return (" ", GOLD_FG, bg) if bg is not None else (BLOCK, fg, VOID_BG)
+            return (" ", filler, VOID_BG)
+        fg, bg = colours[top]
+        return (" ", filler, bg) if bg is not None else (BLOCK, fg, VOID_BG)
     for upper, lower, glyph in ((top, bottom, UPPER), (bottom, top, LOWER)):
-        bg = VOID_BG if lower is None else COLOURS[lower][1]
+        bg = VOID_BG if lower is None else colours[lower][1]
         if upper is not None and bg is not None:
-            return (glyph, COLOURS[upper][0], bg)
+            return (glyph, colours[upper][0], bg)
     raise ValueError(f"no cell can show {top} over {bottom}")
 
 
@@ -462,7 +487,13 @@ def to_dur(grids, px_w, rows, framerate=None, flag="soviet"):
     assert rows % 2 == 0, "art rows must be even to pair into cells"
     cell_rows = rows // 2
     # The Soviet flag keeps its own table, so its files stay byte-identical.
-    cell = PAIRS.__getitem__ if flag == "soviet" else (lambda p: pair_cell(*p))
+    wide = flag in FORMAT_256
+    if flag == "soviet":
+        cell = PAIRS.__getitem__
+    elif wide:
+        cell = lambda p: pair_cell(*p, colours=COLOURS_256, filler=11)
+    else:
+        cell = lambda p: pair_cell(*p)
     frames = []
     for n, g in enumerate(grids, 1):
         contents, cmap = [], []
@@ -476,7 +507,7 @@ def to_dur(grids, px_w, rows, framerate=None, flag="soviet"):
         frames.append({"frameNumber": n, "delay": 0,
                        "contents": contents, "colorMap": cmap})
     return {"DurMovie": {
-        "formatVersion": 7, "colorFormat": "16", "preferredFont": "fixed",
+        "formatVersion": 7, "colorFormat": "256" if wide else "16", "preferredFont": "fixed",
         "encoding": "utf-8", "name": f"{flag}-flag", "artist": "",
         "framerate": FRAMERATE if framerate is None else framerate,
         "sizeX": px_w, "sizeY": cell_rows,
@@ -562,7 +593,7 @@ def write_ppm(grid, px_w, rows, path, px=16):
     """Preview at one screen pixel per art pixel, using the RGBs measured off
     ly's framebuffer."""
     RGB = {"R": (0xAA, 0x00, 0x00), "Y": (0xFF, 0xFF, 0x55), "A": (0xFF, 0xFF, 0x55),
-           "B": (0x00, 0x00, 0xAA), "G": (0x00, 0xAA, 0x00),
+           "B": (0x00, 0x00, 0xAA), "G": (0x00, 0xAA, 0x00), "D": (0x55, 0x55, 0x55),
            "W": (0xFF, 0xFF, 0xFF), None: (20, 20, 20)}
     W, H = px_w * px, rows * px
     out = []

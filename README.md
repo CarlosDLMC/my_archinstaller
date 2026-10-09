@@ -251,7 +251,8 @@ first prompt.
   console grid (768p, 900p, 1080p, 1440p, 2160p), and the largest cut that fits
   the panel is installed. Which flag waves is the preset's `ly_flag` (or a menu
   when ly is ticked): soviet, sweden, norway, denmark, finland, russia, spain,
-  italy, poland, ukraine or belarus. All of them are installed;
+  italy, poland, ukraine, belarus or germany (its black is a near-black grey,
+  set in `assets/ly/start.sh`). All of them are installed;
   `flag-switch.sh <flag>` changes it later and `flag-preview.sh <flag> animated`
   shows one on a spare VT.
 - PipeWire audio

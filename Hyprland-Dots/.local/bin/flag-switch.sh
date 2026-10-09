@@ -9,7 +9,7 @@
 #
 # The flags are whatever /etc/ly/<name>-flag-animated.dur files
 # install-scripts/ly_config.sh installed (soviet sweden norway denmark finland
-# russia spain italy poland ukraine belarus).
+# russia spain italy poland ukraine belarus germany).
 #
 # Both config.ini files are rewritten by default - the repo one as well as the
 # installed one - so the repo stays the source of truth and a reinstall does
