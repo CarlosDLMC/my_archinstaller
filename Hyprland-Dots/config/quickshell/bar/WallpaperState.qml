@@ -54,7 +54,7 @@ Singleton {
     // order the script sorted them (top level first). A folder holding only
     // subfolders gets no tab of its own; its subfolders do, by path.
     readonly property var folders: {
-        var out = [{ dir: null, label: "all", count: items.length }]
+        var out = [{ dir: null, label: "все", count: items.length }]
         var at = {}
         for (var i = 0; i < items.length; i++) {
             var d = items[i].dir
