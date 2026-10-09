@@ -240,12 +240,14 @@ PanelWindow {
                 }
                 // bottom row: key cap + timing, centred as a group
                 Row {
-                    readonly property string timing: btn.hot ? "осталось " + PowerState.secondsLeft + " с"
+                    readonly property string timing: btn.hot ? "через " + PowerState.secondsLeft + " с"
                                                              : (btn.modelData.arm ? "отсчёт 5 с" : "сразу")
-                    x: Math.floor((19 - (5 + timing.length)) / 2) * osd.cw
+                    x: Math.floor((19 - (7 + timing.length)) / 2) * osd.cw
                     y: 10 * osd.ch
                     Cell {
-                        text: " " + btn.modelData.k + " "
+                        // both legends, like a Soviet keyboard: the key is matched by
+                        // position, so it is the same key in either layout
+                        text: " " + btn.modelData.k + "/" + btn.modelData.ru + " "
                         bold: true
                         color: btn.hot ? PowerState.white : (btn.sel ? PowerState.black : PowerState.grey2)
                         fg: btn.hot ? PowerState.red : (btn.sel ? PowerState.white : (btn.off ? PowerState.grey3 : PowerState.ink))
@@ -272,9 +274,9 @@ PanelWindow {
             Row {
                 visible: !osd.armed
                 x: osd.cw
-                Cell { text: "ЗАРЯ"; fg: PowerState.white; bold: true }
+                Cell { text: PowerState.radioWho(); fg: PowerState.white; bold: true }
                 Item { width: 2 * osd.cw; height: 1 }
-                Cell { text: "Кедр, я Заря. Ваше решение?" }
+                Cell { text: PowerState.radioText() }
             }
             Row {
                 visible: !osd.armed
@@ -313,16 +315,25 @@ PanelWindow {
             }
         }
 
+        // armed: Кедр reads the order back, on the free row under the litany
+        Row {
+            visible: osd.armed
+            x: 3 * osd.cw; y: 19 * osd.ch
+            Cell { text: PowerState.radioWho(); fg: PowerState.white; bold: true }
+            Item { width: 2 * osd.cw; height: 1 }
+            Cell { text: PowerState.armed ? PowerState.radioText() : "" }
+        }
+
         // ------------------------------------------------------------ key line, set into the bottom frame
         Row {
             x: 3 * osd.cw; y: 20 * osd.ch
             Cell { text: " "; color: PowerState.black }
             Repeater {
                 model: osd.armed
-                    ? [["S · ENTER", "немедленно"], ["ESC", "отставить"]]
+                    ? [[PowerState.armedKey + "/" + PowerState.armedRu() + " · ENTER", "немедленно"], ["ESC", "отставить"]]
                     : [["← →", "выбор"], ["ENTER", "исполнить"], ["ESC", "вольно"]]
-                        .concat(PowerState.canFirmware ? [["B", "в UEFI"]] : [])
-                        .concat(PowerState.windowsEntry !== "" ? [["W", "в Windows — перебежчик?"]] : [])
+                        .concat(PowerState.canFirmware ? [["B/И", "в UEFI"]] : [])
+                        .concat(PowerState.windowsEntry !== "" ? [["W/Ц", "в Windows — перебежчик?"]] : [])
                 Row {
                     required property var modelData
                     required property int index

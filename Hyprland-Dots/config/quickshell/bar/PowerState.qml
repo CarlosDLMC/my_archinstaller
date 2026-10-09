@@ -33,21 +33,26 @@ Singleton {
     readonly property color shade: "#050505"
 
     readonly property var modes: [
-        { k: "L", name: "БЛОКИРОВКА",   slogan: "ПОСТ СДАН.",      arm: false, glyph: 0xF033E,
+        { k: "L", ru: "Д", name: "БЛОКИРОВКА",   slogan: "ПОСТ СДАН.",      arm: false, glyph: 0xF033E,
+          ask: "Пост сдать, терминал под охрану.", readback: "",
           show: "loginctl lock-session", cmd: home + "/.config/hypr/scripts/LockScreen.sh" },
-        { k: "E", name: "ВЫХОД",        slogan: "СМЕНА ОКОНЧЕНА.", arm: true,  glyph: 0xF0343,
+        { k: "E", ru: "У", name: "ВЫХОД",        slogan: "СМЕНА ОКОНЧЕНА.", arm: true,  glyph: 0xF0343,
+          ask: "Смену закончить, сеанс сдать.", readback: "Вас понял: смену сдаю.",
           show: "hyprctl dispatch 'hl.dsp.exit()'", cmd: "hyprctl dispatch 'hl.dsp.exit()'" },
-        { k: "U", name: "СПЯЩИЙ РЕЖИМ", slogan: "ПЕРЕКУР.",        arm: false, glyph: 0xF04B2,
+        { k: "U", ru: "Г", name: "СПЯЩИЙ РЕЖИМ", slogan: "ПЕРЕКУР.",        arm: false, glyph: 0xF04B2,
+          ask: "Разрешаю перекур.", readback: "",
           show: "systemctl suspend", cmd: "systemctl suspend" },
-        { k: "R", name: "ПЕРЕЗАГРУЗКА", slogan: "ПОЕХАЛИ!",        arm: true,  glyph: 0xF0709,
+        { k: "R", ru: "К", name: "ПЕРЕЗАГРУЗКА", slogan: "ПОЕХАЛИ!",        arm: true,  glyph: 0xF0709,
+          ask: "Повторный старт. Поехали!", readback: "Вас понял: к повторному старту готов.",
           show: "systemctl reboot", cmd: "systemctl reboot" },
-        { k: "S", name: "ВЫКЛЮЧЕНИЕ",   slogan: "ОТБОЙ, ТОВАРИЩ.", arm: true,  glyph: 0xF0425,
+        { k: "S", ru: "Ы", name: "ВЫКЛЮЧЕНИЕ",   slogan: "ОТБОЙ, ТОВАРИЩ.", arm: true,  glyph: 0xF0425,
+          ask: "Приказ на отбой. Как поняли?", readback: "Вас понял: отбой.",
           show: "systemctl poweroff", cmd: "systemctl poweroff" }
     ]
     // The quiet extras, each shown only where the machine can do it.
     readonly property var extras: ({
-        "B": { name: "ПЕРЕЗАГРУЗКА В UEFI", cmd: "systemctl reboot --firmware-setup" },
-        "W": { name: "ПЕРЕЗАГРУЗКА В WINDOWS",
+        "B": { ru: "И", name: "ПЕРЕЗАГРУЗКА В UEFI", readback: "Вас понял: иду в машинное отделение.", cmd: "systemctl reboot --firmware-setup" },
+        "W": { ru: "Ц", name: "ПЕРЕЗАГРУЗКА В WINDOWS", readback: "Вас понял: ухожу на чужую ОС.",
                cmd: "pkexec efibootmgr --bootnext " + windowsEntry + " >/dev/null && systemctl reboot" }
     })
 
@@ -84,6 +89,21 @@ Singleton {
     function stepAction(i) {
         return ["приказ принят", "журнал на ленту", "sync", "проверка блокировок", armedCommand()][i]
     }
+    // The radio: Заря (ground) gives the order for whatever is selected;
+    // once armed, Кедр (the machine) reads it back.
+    function armedRu() {
+        var m = modeOf(armedKey)
+        return m ? m.ru : (extras[armedKey] ? extras[armedKey].ru : "")
+    }
+    function radioWho() { return armed ? "КЕДР" : "ЗАРЯ" }
+    function radioText() {
+        if (armed) {
+            var m = modeOf(armedKey)
+            return "Заря, я Кедр. " + (m ? m.readback : (extras[armedKey] ? extras[armedKey].readback : ""))
+        }
+        return "Кедр, я Заря. " + modes[selected].ask
+    }
+
     function available(k) {
         if (k === "B") return canFirmware
         if (k === "W") return windowsEntry !== ""
