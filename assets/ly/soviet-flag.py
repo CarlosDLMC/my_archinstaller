@@ -887,6 +887,127 @@ FORMAT_256.update(MORE)
 FINE.update(MORE)
 
 
+def in_star_n(x, y, cx, cy, r, ri, n, up=-math.pi / 2):
+    """Like in_star, for n points with inner radius ri (Malaysia's 14)."""
+    dx, dy = x - cx, y - cy
+    rho = math.hypot(dx, dy)
+    if rho > r:
+        return False
+    if rho <= ri:
+        return True
+    a = (math.atan2(dy, dx) - up) % (2 * math.pi / n)
+    b = abs(a - math.pi / n)
+    px, py = rho * math.cos(b), rho * math.sin(b)
+    tx, ty = r * math.cos(math.pi / n), r * math.sin(math.pi / n)
+    return (tx - ri) * py - ty * (px - ri) >= 0
+
+
+def crescent(x, y, cx, cy, r, shift, r2):
+    """A disc of radius r less one of radius r2 moved `shift` to the fly."""
+    return (math.hypot(x - cx, y - cy) <= r
+            and math.hypot(x - cx - shift, y - cy) > r2)
+
+
+IRAN = mirror([                       # the emblem, a tulip of crescents
+    ".....R",
+    "..R..R",
+    ".RR..R",
+    "RR..RR",
+    "R..R.R",
+    "R.RR.R",
+    "R.R..R",
+    "R.R..R",
+    "RR..RR",
+    ".RR..R",
+    "..RRRR",
+    "....RR",
+])
+
+
+def iran(u, v):
+    """Green, white, red; the red emblem in the middle; the takbir - 11
+    times along each edge of the white - as a row of white marks inside the
+    green and the red, its script being far below a pixel."""
+    x, y = u * ASPECT, v
+    e = bitmap(x, y, IRAN, ASPECT / 2, 0.5, 0.26)
+    if e:
+        return e
+    k = (u * 11) % 1
+    if 0.3 < k < 0.7 and (1 / 3 - 0.05 <= v < 1 / 3 - 0.02 or 2 / 3 + 0.02 <= v < 2 / 3 + 0.05):
+        return "W"
+    return bands(v, (1 / 3, 2 / 3), "GWR")
+
+
+def mozambique(u, v):
+    """Green, black, yellow, edged white; a red triangle from the hoist with
+    the yellow star, and on it the book (white) under the rifle and hoe,
+    crossed (black)."""
+    x, y = u * ASPECT, v
+    apex = 0.46 * ASPECT
+    if x < apex * (1 - abs(2 * v - 1)):
+        sx, sy = apex * 0.36, 0.5
+        dx, dy = x - sx, y - sy
+        if in_star(x, y, sx, sy, 0.17):
+            if abs(dy - 0.035) <= 0.025 and abs(dx) <= 0.07:
+                return "W"                       # the book
+            if abs(abs(dx) - (0.02 - dy)) <= 0.012 and abs(dx) <= 0.08 and dy <= 0.02:
+                return "N"                       # rifle and hoe, crossed
+            return "O"
+        return "R"
+    return bands(v, (6 / 20, 7 / 20, 13 / 20, 14 / 20), "GWNWO")
+
+
+def chile(u, v):
+    """White over red; a square blue canton the white's height, its white
+    star half the canton across."""
+    x = u * ASPECT
+    if x < 0.5 and v < 0.5:
+        return "W" if in_star(x, v, 0.25, 0.25, 0.125) else "B"
+    return "W" if v < 0.5 else "R"
+
+
+def singapore(u, v):
+    """Red over white; in the red, a white crescent and five stars in a
+    ring."""
+    x = u * ASPECT
+    if v < 0.5:
+        if crescent(x, v, 0.27, 0.25, 0.155, 0.055, 0.15):
+            return "W"
+        for k in range(5):
+            a = -math.pi / 2 + 2 * math.pi * k / 5
+            # larger than the real stars, which at 0.035 were single dots
+            if in_star(x, v, 0.40 + 0.095 * math.cos(a), 0.25 + 0.095 * math.sin(a), 0.048):
+                return "W"
+        return "R"
+    return "W"
+
+
+def malaysia(u, v):
+    """Fourteen stripes from red; a blue canton eight stripes tall and half
+    the length, with the gold crescent and the 14-pointed star."""
+    x = u * ASPECT
+    if x < ASPECT / 2 and v < 8 / 14:
+        cy = 4 / 14
+        if crescent(x, v, 0.34, cy, 0.21, 0.06, 0.185):
+            return "O"
+        if in_star_n(x, v, 0.68, cy, 0.17, 0.07, 14):
+            return "O"
+        return "B"
+    return "RW"[min(13, int(v * 14)) % 2]
+
+
+MORE2 = {
+    "iran": iran,
+    "mozambique": mozambique,
+    "chile": chile,
+    "singapore": singapore,
+    "malaysia": malaysia,
+}
+FLAGS.update(MORE2)
+FORMAT_256.update(MORE2)
+FINE.update(MORE2)
+
+
 
 def paint_cloth(art, pattern, static_max_x, fine=False):
     """Repaint every cloth pixel of art with pattern(u, v).
