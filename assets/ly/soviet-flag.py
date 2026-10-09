@@ -203,10 +203,14 @@ COLOURS = {
 #   A    #FFFF55   11    -
 #   O    #AA5500    3    3    gold: dim yellow, the one yellow with a background
 #   N    #AA00AA    5    5    black with a background (South Korea's trigrams)
+#   L    #00AAAA    6    6    light blue (Estonia, Greece, Luxembourg, San Marino)
+#   Q    #FF55FF   13    -    orange (Ireland, Cyprus)
+#   S    #AAAAAA    7    7    silver - the console's own light grey, unchanged
 #
-# start.sh redefines three console palette slots on ly's VT, which is what
+# start.sh redefines five console palette slots on ly's VT, which is what
 # these become on screen: slot 8 (D) and slot 5 (N) to near-black #141414,
-# slot 3 (O) to gold #FFD700. Nothing else on the login screen uses them. O exists for
+# slot 3 (O) to gold #FFD700, slot 6 (L) to light blue #2F80D0, slot 13 (Q)
+# to orange #FF8C2A. Nothing else on the login screen uses them. O exists for
 # the Russian Empire's black-gold-white, where every pair of neighbours
 # would otherwise be two foreground-only colours that no cell can hold.
 COLOURS_256 = {
@@ -219,6 +223,9 @@ COLOURS_256 = {
     "D": (239, None),
     "O": (3, 3),
     "N": (5, 5),
+    "L": (6, 6),
+    "Q": (13, None),
+    "S": (7, 7),
 }
 FORMAT_256 = {"germany", "russianempire", "southkorea"}
 
@@ -420,6 +427,381 @@ FLAGS = {
     "israel": lambda u, v: israel(u, v),
 }
 
+# --- Europe ----------------------------------------------------------------
+# The rest of Europe: the UN's list, plus Kosovo and Cyprus. All of these are
+# written in the 256-colour format, for the extra colours below. Andorra,
+# Serbia and San Marino are their civil flags, without arms (as Spain is);
+# every other coat of arms is a small hand-drawn emblem, which at 15-25 art
+# pixels can only be a likeness.
+
+def mirror(left):
+    """A symmetric bitmap from its left half, centre column included."""
+    return [row + row[-2::-1] for row in left]
+
+
+def bitmap(x, y, rows, cx, cy, h, recolour=None):
+    """The tag of bitmap `rows` drawn h tall, centred on (cx, cy) in height
+    units, at (x, y) - or None outside it or on a '.'."""
+    bh, bw = len(rows), len(rows[0])
+    w = h * bw / bh
+    lx, ly = (x - cx) / w + 0.5, (y - cy) / h + 0.5
+    if not (0 <= lx < 1 and 0 <= ly < 1):
+        return None
+    ch = rows[int(ly * bh)][int(lx * bw)]
+    if ch == ".":
+        return None
+    return recolour.get(ch, ch) if recolour else ch
+
+
+def with_emblem(field, *emblems):
+    """A flag: emblems (functions of x, y returning a tag or None) over a
+    field (a function of u, v)."""
+    def paint(u, v):
+        x, y = u * ASPECT, v
+        for e in emblems:
+            tag = e(x, y)
+            if tag:
+                return tag
+        return field(u, v)
+    return paint
+
+
+def stripes_h(tags, widths=None):
+    widths = widths or [1] * len(tags)
+    total = sum(widths)
+    edges = [sum(widths[:i + 1]) / total for i in range(len(widths))]
+    return lambda u, v: bands(v, edges, tags)
+
+
+def stripes_v(tags, widths=None):
+    widths = widths or [1] * len(tags)
+    total = sum(widths)
+    edges = [sum(widths[:i + 1]) / total for i in range(len(widths))]
+    return lambda u, v: bands(u, edges, tags)
+
+
+EAGLE = mirror([                      # double-headed: Albania, Montenegro
+    ".....NN....",
+    "....NNNN...",
+    "...NN.NNN..",
+    "N.......NN.",
+    "NN.......NN",
+    "NNN.....NNN",
+    "NNNN...NNNN",
+    ".NNNN.NNNNN",
+    "..NNNNNNNNN",
+    "...NNNNNNNN",
+    ".....NNNNNN",
+    ".......NNNN",
+    "......NN.NN",
+    ".....NN..N.",
+    "........NNN",
+    ".......NN.N",
+])
+
+MOLDOVA = mirror([                    # eagle with cross, shield on its chest
+    "......R",
+    ".....RR",
+    "......R",
+    "R...RRR",
+    "RR.RRRR",
+    "RRRRBBB",
+    ".RRRBBB",
+    "..RRBBB",
+    "...RRBB",
+    "....RRR",
+    ".....RR",
+    "....R.R",
+])
+
+SLOVAKIA = [                          # double cross on three hills
+    "WWWWWWWWWWW",
+    "WRRRRWRRRRW",
+    "WRRWWWWWRRW",
+    "WRRRRWRRRRW",
+    "WRWWWWWWWRW",
+    "WRRRRWRRRRW",
+    "WRRRRWRRRRW",
+    "WRRRBBBRRRW",
+    "WRBBBBBBBRW",
+    "WBBBBBBBBBW",
+    ".WBBBBBBBW.",
+    "..WBBBBBW..",
+    "....WWW....",
+]
+
+SLOVENIA = [                          # Triglav, two waves, three stars
+    "RRRRRRRRRRR",
+    "RBBOBBBOBBR",
+    "RBBBBOBBBBR",
+    "RBBBBBBBBBR",
+    "RBBBBWBBBBR",
+    "RBBBWWWBBBR",
+    "RBWBWWWBWBR",
+    "RBWWWWWWWBR",
+    "RWBWBWBWBWR",
+    "RBWBWBWBWBR",
+    ".RBBBBBBBR.",
+    "..RRBBBRR..",
+    "....RRR....",
+]
+
+CROWN = mirror([                      # Liechtenstein
+    ".....O",
+    "....OO",
+    ".....O",
+    "..OOOO",
+    ".OO.OO",
+    "OO.OOO",
+    "O.OOOO",
+    "OOOOOO",
+])
+
+
+KOSOVO = [
+    "...OOOO.....",
+    "..OOOOOOO...",
+    ".OOOOOOOOO..",
+    "OOOOOOOOOOO.",
+    "OOOOOOOOOOOO",
+    ".OOOOOOOOOOO",
+    "..OOOOOOOOO.",
+    "...OOOOOOO..",
+    "....OOOOO...",
+    ".....OO.....",
+]
+
+CYPRUS = [                            # the island over two olive branches
+    "..................QQ",
+    "...............QQQQ.",
+    "....QQQQQQQQQQQQQ...",
+    ".QQQQQQQQQQQQQQQ....",
+    "QQQQQQQQQQQQQQ......",
+    ".QQQQQQQQQQQQ.......",
+    "...QQQQQQQQ.........",
+    ".....QQQQ...........",
+    "....................",
+    "..GG............GG..",
+    "...GGG........GGG...",
+    ".....GGGGGGGGGG.....",
+]
+
+GEORGE_CROSS = [                      # Malta
+    "..RRRRR..",
+    "..RSSSR..",
+    "RRRSSSRRR",
+    "RSSSSSSSR",
+    "RSSSSSSSR",
+    "RSSSSSSSR",
+    "RRRSSSRRR",
+    "..RSSSR..",
+    "..RRRRR..",
+]
+
+
+def croatia_shield(x, y):
+    """Red-and-white chequy, 5x5 from red, round at the foot, under a crown
+    of five small blue shields."""
+    cx, top, w, h = ASPECT / 2, 0.3, 0.3, 0.38
+    lx, ly = (x - cx) / (w / 2), (y - top) / h      # -1..1 across, 0..1 down
+    if -1 <= lx <= 1 and -0.22 <= ly < 0:
+        return "L" if int((lx + 1) / 2 * 5) % 2 == 0 else "B"
+    if not (-1 <= lx <= 1 and 0 <= ly <= 1):
+        return None
+    if ly > 0.6 and lx * lx + ((ly - 0.6) / 0.4) ** 2 > 1:
+        return None
+    i, j = int((lx + 1) / 2 * 5), int(ly * 5)
+    return "R" if (i + j) % 2 == 0 else "W"
+
+
+def portugal_arms(x, y):
+    """The armillary sphere as a gold ring, with the shield - red border,
+    white inside, five blue escutcheons - over it, on the green-red line."""
+    cx, cy = ASPECT * 2 / 5, 0.5
+    dx, dy = x - cx, y - cy
+    if abs(dx) <= 0.11 and -0.13 <= dy <= 0.11 and dx * dx + max(0, dy) ** 2 * 1.5 <= 0.11 ** 2 * 1.6:
+        inner = abs(dx) <= 0.075 and -0.095 <= dy <= 0.08
+        if not inner:
+            return "R"
+        for qx, qy in ((0, -0.05), (-0.04, 0), (0, 0), (0.04, 0), (0, 0.05)):
+            if abs(dx - qx) <= 0.013 and abs(dy - qy) <= 0.017:
+                return "B"
+        return "W"
+    if 0.17 <= math.hypot(dx, dy) <= 0.21:
+        return "O"
+    return None
+
+
+def north_macedonia(u, v):
+    """Red; a gold sun, ringed red, with eight rays widening to the edges
+    and corners."""
+    x, y = u * ASPECT - ASPECT / 2, v - 0.5
+    r = math.hypot(x, y)
+    if r < 0.12:
+        return "O"
+    if r < 0.145:
+        return "R"
+    if r < 0.17:
+        return "O"
+    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1),
+                   (ASPECT / 2, 0.5), (-ASPECT / 2, 0.5), (ASPECT / 2, -0.5), (-ASPECT / 2, -0.5)):
+        n = math.hypot(dx, dy)
+        s = (x * dx + y * dy) / n                # along the ray
+        t = abs(x * dy - y * dx) / n             # off it
+        if s > 0 and t < 0.012 + 0.11 * s:
+            return "O"
+    return "R"
+
+
+def union_jack(u, v):
+    """Blue; white saltire with the red one counterchanged (offset to the
+    same side of each arm, turning round the centre); red cross on white.
+    Widths in 30ths of the height, as in the official 30x60."""
+    x, y = u * ASPECT - ASPECT / 2, v - 0.5
+    if abs(x) < 3 / 30 or abs(y) < 3 / 30:
+        return "R"
+    if abs(x) < 5 / 30 or abs(y) < 5 / 30:
+        return "W"
+    dx, dy = math.copysign(ASPECT / 2, x), math.copysign(0.5, y)
+    n = math.hypot(dx, dy)
+    # Signed distance off the arm. The same formula on all four arms turns
+    # the red round the centre: below the white in the hoist's top quarter,
+    # above it in the fly's - the "broad white uppermost at the hoist" rule.
+    t = (x * dy - y * dx) / n
+    if 0 < t < 2 / 30:
+        return "R"
+    if abs(t) < 3 / 30:
+        return "W"
+    return "B"
+
+
+def greece(u, v):
+    """Nine blue and white stripes; a blue canton five stripes square with
+    a white cross one stripe wide."""
+    x = u * ASPECT
+    s = 1 / 9
+    if x < 5 * s and v < 5 * s:
+        return "W" if (2 * s <= x < 3 * s or 2 * s <= v < 3 * s) else "L"
+    return "LWLWLWLWL"[min(8, int(v * 9))]
+
+
+def switzerland(u, v):
+    """Red; the white cross, arms 6/32 wide and 20/32 across, centred."""
+    x, y = u * ASPECT - ASPECT / 2, v - 0.5
+    a, b = 3 / 32, 10 / 32
+    return "W" if (abs(x) < a and abs(y) < b) or (abs(y) < a and abs(x) < b) else "R"
+
+
+def bosnia(u, v):
+    """Blue; a gold right triangle, legs as long as the flag is tall, and
+    white stars down its long side."""
+    x, y = u * ASPECT, v
+    x1 = (ASPECT - 1) / 2 + 0.05
+    for k in range(9):
+        s = k / 8
+        if in_star(x, y, x1 + s - 0.085, s + 0.085, 0.055):
+            return "W"
+    if x <= x1 + 1 and x - x1 >= y:
+        return "O"
+    return "B"
+
+
+def vatican_arms(x, y):
+    """The tiara - gold, two silver bands, a small cross - over the crossed
+    keys, gold and silver, drawn as shapes: as a 1-pixel bitmap they fell
+    apart once the cloth waved."""
+    cx, cy = ASPECT * 3 / 4, 0.5
+    dx, dy = x - cx, y - (cy - 0.15)             # tiara origin: its base
+    if abs(dx) <= 0.012 and -0.2 <= dy < -0.15:
+        return "O"
+    if (dy < 0 and (dx / 0.08) ** 2 + (dy / 0.15) ** 2 <= 1) or (0 <= dy <= 0.04 and abs(dx) <= 0.08):
+        return "S" if -0.07 <= dy < -0.045 or 0 <= dy < 0.025 else "O"
+    kx, ky = x - cx, y - (cy + 0.12)             # keys: crossing point
+    for sign, tag in ((1, "O"), (-1, "S")):
+        # shaft from the bow (lower) to the bit (upper), crossing at 0,0
+        ax, ay = -0.14 * sign, 0.14              # bow end
+        bx, by = 0.14 * sign, -0.14              # bit end
+        if math.hypot(kx - ax, ky - ay) <= 0.045 and math.hypot(kx - ax, ky - ay) >= 0.02:
+            return tag                           # the bow, a ring
+        t = max(0, min(1, ((kx - ax) * (bx - ax) + (ky - ay) * (by - ay)) / ((bx - ax) ** 2 + (by - ay) ** 2)))
+        if math.hypot(kx - (ax + t * (bx - ax)), ky - (ay + t * (by - ay))) <= 0.02:
+            return tag                           # the shaft
+        if abs(kx - (bx - 0.03 * sign)) <= 0.03 and abs(ky - (by + 0.05)) <= 0.025:
+            return tag                           # the bit
+    return None
+
+
+def czechia(u, v):
+    return "B" if u < 0.5 * (1 - abs(2 * v - 1)) else ("W" if v < 0.5 else "R")
+
+
+def montenegro(u, v):
+    x = u * ASPECT
+    if x < 0.05 or x > ASPECT - 0.05 or v < 0.05 or v > 0.95:
+        return "O"
+    return bitmap(x, v, EAGLE, ASPECT / 2, 0.5, 0.6, {"N": "O"}) or "R"
+
+
+def kosovo_stars(x, y):
+    for k in range(6):
+        a = math.radians(205 + 26 * k)
+        if in_star(x, y, ASPECT / 2 + 0.42 * math.cos(a), 0.68 + 0.42 * math.sin(a), 0.04):
+            return "W"
+    return None
+
+
+EUROPE = {
+    "albania": with_emblem(lambda u, v: "R",
+                           lambda x, y: bitmap(x, y, EAGLE, ASPECT / 2, 0.5, 0.7)),
+    "andorra": stripes_v("BOR", (8, 9, 8)),
+    "austria": stripes_h("RWR"),
+    "belgium": stripes_v("NOR"),
+    "bosnia": bosnia,
+    "bulgaria": stripes_h("WGR"),
+    "croatia": with_emblem(stripes_h("RWB"), croatia_shield),
+    "cyprus": with_emblem(lambda u, v: "W",
+                          lambda x, y: bitmap(x, y, CYPRUS, ASPECT / 2, 0.5, 0.5)),
+    "czechia": czechia,
+    "estonia": stripes_h("LNW"),
+    "france": stripes_v("BWR"),
+    "greece": greece,
+    "hungary": stripes_h("RWG"),
+    # 7+1+2+1+14 by 7+1+2+1+7, as Norway
+    "iceland": nordic("B", "R", (8 / 25, 2 / 25), (8 / 18, 2 / 18),
+                      "W", (7 / 25, 4 / 25), (7 / 18, 4 / 18)),
+    "ireland": stripes_v("GWQ"),
+    "kosovo": with_emblem(lambda u, v: "B", kosovo_stars,
+                          lambda x, y: bitmap(x, y, KOSOVO, ASPECT / 2, 0.6, 0.42)),
+    "latvia": stripes_h("RWR", (2, 1, 2)),
+    "liechtenstein": with_emblem(stripes_h("BR"),
+                                 lambda x, y: bitmap(x, y, CROWN, 0.38, 0.25, 0.3)),
+    "lithuania": stripes_h("OGR"),
+    "luxembourg": stripes_h("RWL"),
+    "malta": with_emblem(stripes_v("WR"),
+                         lambda x, y: bitmap(x, y, GEORGE_CROSS, 0.25, 0.22, 0.26)),
+    "moldova": with_emblem(stripes_v("BOR"),
+                           lambda x, y: bitmap(x, y, MOLDOVA, ASPECT / 2, 0.5, 0.5)),
+    "monaco": stripes_h("RW"),
+    "montenegro": montenegro,
+    "netherlands": stripes_h("RWB"),
+    "northmacedonia": north_macedonia,
+    "portugal": with_emblem(stripes_v("GR", (2, 3)), portugal_arms),
+    "romania": stripes_v("BOR"),
+    "sanmarino": stripes_h("WL"),
+    "serbia": stripes_h("RBW"),
+    "slovakia": with_emblem(stripes_h("WBR"),
+                            lambda x, y: bitmap(x, y, SLOVAKIA, 0.55, 0.5, 0.52)),
+    "slovenia": with_emblem(stripes_h("WBR"),
+                            lambda x, y: bitmap(x, y, SLOVENIA, 0.45, 0.36, 0.42)),
+    "switzerland": switzerland,
+    "unitedkingdom": union_jack,
+    "vatican": with_emblem(stripes_v("OW"), vatican_arms),
+}
+FLAGS.update(EUROPE)
+FORMAT_256.update(EUROPE)
+FINE.update(EUROPE)
+
+
 
 def paint_cloth(art, pattern, static_max_x, fine=False):
     """Repaint every cloth pixel of art with pattern(u, v).
@@ -436,9 +818,12 @@ def paint_cloth(art, pattern, static_max_x, fine=False):
         ys = [y for y in range(h) if cloth(x, art[y][x])]
         y0, y1 = ys[0], ys[-1]
         du, dv = 1 / (x1 - x0 + 1), 1 / (y1 - y0 + 1)
-        u = (x - x0 + 0.5) * du
+        # Divided, not multiplied by du/dv: the two differ in the last bit,
+        # and stripe and cross edges that land exactly on a pixel centre
+        # (Finland's, at 1440p) would flip with it.
+        u = (x - x0 + 0.5) / (x1 - x0 + 1)
         for y in ys:
-            v = (y - y0 + 0.5) * dv
+            v = (y - y0 + 0.5) / (y1 - y0 + 1)
             if not fine:
                 out[y][x] = pattern(u, v)
                 continue
@@ -634,7 +1019,10 @@ def pair_cell(top, bottom, colours=COLOURS, filler=GOLD_FG):
         bg = VOID_BG if lower is None else colours[lower][1]
         if upper is not None and bg is not None:
             return (glyph, colours[upper][0], bg)
-    raise ValueError(f"no cell can show {top} over {bottom}")
+    # Two foreground-only colours (white and orange, say): no cell holds
+    # both, so it takes one whole, the one that is not white - an emblem
+    # edge is a cell coarser there rather than missing.
+    return (BLOCK, colours[bottom if top == "W" else top][0], VOID_BG)
 
 
 def to_dur(grids, px_w, rows, framerate=None, flag="soviet"):
@@ -750,6 +1138,7 @@ def write_ppm(grid, px_w, rows, path, px=16):
     RGB = {"R": (0xAA, 0x00, 0x00), "Y": (0xFF, 0xFF, 0x55), "A": (0xFF, 0xFF, 0x55),
            "B": (0x00, 0x00, 0xAA), "G": (0x00, 0xAA, 0x00), "D": (0x14, 0x14, 0x14),
            "O": (0xFF, 0xD7, 0x00), "N": (0x14, 0x14, 0x14),
+           "L": (0x2F, 0x80, 0xD0), "Q": (0xFF, 0x8C, 0x2A), "S": (0xAA, 0xAA, 0xAA),
            "W": (0xFF, 0xFF, 0xFF), None: (20, 20, 20)}
     W, H = px_w * px, rows * px
     out = []

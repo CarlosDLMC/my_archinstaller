@@ -8,9 +8,7 @@
 #   ./flag-switch.sh static --live-only    # change /etc/ly, leave the repo alone
 #
 # The flags are whatever /etc/ly/<name>-flag-animated.dur files
-# install-scripts/ly_config.sh installed (soviet sweden norway denmark finland
-# russia spain italy poland ukraine belarus germany russianempire china
-# vietnam northkorea southkorea israel).
+# install-scripts/ly_config.sh installed; run with no arguments to list them.
 #
 # Both config.ini files are rewritten by default - the repo one as well as the
 # installed one - so the repo stays the source of truth and a reinstall does

@@ -227,10 +227,8 @@ nouveau="auto"
 handy="OFF"
 ly="OFF"
 # Which flag ly waves on the login screen: one of the <name>-flag-*.dur sets in
-# assets/ly (soviet sweden norway denmark finland russia spain italy poland
-# ukraine belarus germany russianempire china vietnam northkorea southkorea
-# israel).
-# Not ON/OFF - see ly_flag_names below.
+# assets/ly (the names are FLAGS in assets/ly/soviet-flag.py). Not ON/OFF -
+# see ly_flag_names below.
 ly_flag="soviet"
 nopasswd_sudo="OFF"
 printing="OFF"
@@ -908,6 +906,11 @@ while true; do
                 russianempire) _label="Russian Empire" ;;
                 northkorea)    _label="North Korea" ;;
                 southkorea)    _label="South Korea" ;;
+                bosnia)        _label="Bosnia and Herzegovina" ;;
+                northmacedonia) _label="North Macedonia" ;;
+                sanmarino)     _label="San Marino" ;;
+                unitedkingdom) _label="United Kingdom" ;;
+                vatican)       _label="Vatican City" ;;
                 *)       _label="${_name^}" ;;
             esac
             _flag_menu+=("$_name" "$_label" "$([ "$_name" = "$ly_flag" ] && echo ON || echo OFF)")

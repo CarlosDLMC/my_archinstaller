@@ -10,6 +10,11 @@
 #     (Russian Empire, whose gold sits between black and white).
 #   5 magenta #AA00AA -> near-black #141414: black as a background (South
 #     Korea's trigrams sit directly on white).
+#   6 cyan #00AAAA -> light blue #2F80D0 (Estonia, Greece, Luxembourg, San
+#     Marino), as foreground and background.
+#   13 bright magenta #FF55FF -> orange #FF8C2A (Ireland, Cyprus), foreground.
 printf '\033]P8141414'
 printf '\033]P3ffd700'
 printf '\033]P5141414'
+printf '\033]P62f80d0'
+printf '\033]Pdff8c2a'
