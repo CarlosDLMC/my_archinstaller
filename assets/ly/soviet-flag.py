@@ -201,6 +201,14 @@ COLOURS = {
 #   R    #AA0000    1    1
 #   D    #555555  239    -    stands in for black
 #   A    #FFFF55   11    -
+#   O    #AA5500    3    3    gold: dim yellow, the one yellow with a background
+#   N    #AA00AA    5    5    black with a background (South Korea's trigrams)
+#
+# start.sh redefines three console palette slots on ly's VT, which is what
+# these become on screen: slot 8 (D) and slot 5 (N) to near-black #141414,
+# slot 3 (O) to gold #FFD700. Nothing else on the login screen uses them. O exists for
+# the Russian Empire's black-gold-white, where every pair of neighbours
+# would otherwise be two foreground-only colours that no cell can hold.
 COLOURS_256 = {
     "R": (1, 1),
     "B": (4, 4),
@@ -209,8 +217,19 @@ COLOURS_256 = {
     "A": (11, None),
     "Y": (11, None),
     "D": (239, None),
+    "O": (3, 3),
+    "N": (5, 5),
 }
-FORMAT_256 = {"germany"}
+FORMAT_256 = {"germany", "russianempire", "southkorea"}
+
+# Flags with small emblems (stars, trigrams) are sampled 4x4 per pixel and
+# take the majority, so a 4-pixel star is a star and not whichever colour
+# one point in the middle of each pixel happened to land on.
+FINE = {"china", "vietnam", "northkorea", "southkorea"}
+
+# The cloth is 67x40 art pixels; emblems are laid out in units of its height
+# with x stretched by this, so circles and stars come out round, not wide.
+ASPECT = 67 / 40
 
 
 def bands(t, edges, tags):
@@ -249,6 +268,104 @@ def belarus(u, v):
     return "R" if x + y < 0.75 else "W"
 
 
+def in_star(x, y, cx, cy, r, toward=None):
+    """Is (x, y) inside a five-pointed star of outer radius r at (cx, cy)?
+    One point faces up, or towards `toward` (a point) when given. All in
+    height units, x already stretched by ASPECT."""
+    dx, dy = x - cx, y - cy
+    if dx * dx + dy * dy > r * r:
+        return False
+    up = -math.pi / 2
+    if toward:
+        up = math.atan2(toward[1] - cy, toward[0] - cx)
+    # Fold into one point's wedge: b is 0 on a valley's ray, pi/5 on a tip's.
+    a = (math.atan2(dy, dx) - up) % (2 * math.pi / 5)
+    b = abs(a - math.pi / 5)
+    rho = math.hypot(dx, dy)
+    px, py = rho * math.cos(b), rho * math.sin(b)
+    # Inside if on the centre's side of the edge from the valley (inner
+    # radius 0.382 r, the regular star's) to the tip.
+    vx, vy = r * 0.382, 0.0
+    tx, ty = r * math.cos(math.pi / 5), r * math.sin(math.pi / 5)
+    return (tx - vx) * (py - vy) - (ty - vy) * (px - vx) >= 0 or rho <= vx
+
+
+def china(u, v):
+    """Red, the big star and four small ones in the canton, on the official
+    30x20 grid (units of 1/20 of the height); each small star points at the
+    big one."""
+    x, y = u * ASPECT * 20, v * 20
+    big = (5, 5)
+    if in_star(x, y, *big, 3):
+        return "A"
+    for c in ((10, 2), (12, 4), (12, 7), (10, 9)):
+        if in_star(x, y, *c, 1, toward=big):
+            return "A"
+    return "R"
+
+
+def vietnam(u, v):
+    """Red, one yellow star in the middle reaching 3/10 of the height."""
+    x, y = u * ASPECT, v
+    return "A" if in_star(x, y, ASPECT / 2, 0.5, 0.3) else "R"
+
+
+def northkorea(u, v):
+    """Blue, white, red, white, blue at 6+1+15+1+6, and a white disc with a
+    red star on the red, towards the hoist."""
+    x, y = u * ASPECT, v
+    cx, cy, r = 0.55, 0.5, 0.2
+    if (x - cx) ** 2 + (y - cy) ** 2 <= r * r:
+        return "R" if in_star(x, y, cx, cy, r * 0.95) else "W"
+    return bands(v, (6 / 29, 7 / 29, 22 / 29, 23 / 29), "BWRWB")
+
+
+# South Korea's trigrams, from the hoist-top corner round: bars listed from
+# the one nearest the centre outwards, True for a solid bar, False for broken.
+TRIGRAMS = (
+    ((-1, -1), (True, True, True)),         # geon, top left
+    ((1, -1), (False, True, False)),        # gam, top right
+    ((1, 1), (False, False, False)),        # gon, bottom right
+    ((-1, 1), (True, False, True)),         # ri, bottom left
+)
+
+
+def southkorea(u, v):
+    """White; the red-over-blue taegeuk, half the height across, its axis on
+    the cloth's diagonal; a trigram in each corner on the same diagonals.
+
+    The official bars are 1/24 of the height with gaps half that - under a
+    pixel at this size - so they are drawn at 1/16 with 1/32 gaps, enough
+    to stay three bars and not one black block."""
+    x, y = (u - 0.5) * ASPECT, v - 0.5           # centre origin, height units
+    R = 0.25
+    dlen = math.hypot(ASPECT, 1)
+    if x * x + y * y <= R * R:
+        # axis along the top-left to bottom-right diagonal
+        ax, ay = ASPECT / dlen, 1 / dlen
+        s = x * ax + y * ay                      # along the axis
+        t = x * ay - y * ax                      # positive = up and right
+        if (s + R / 2) ** 2 + t * t <= (R / 2) ** 2:
+            return "R"                           # red head, hoist side
+        if (s - R / 2) ** 2 + t * t <= (R / 2) ** 2:
+            return "B"                           # blue head, fly side
+        return "R" if t > 0 else "B"
+    bar, gap = 1 / 16, 1 / 32
+    length = R                                   # bar length: half the disc
+    for (sx, sy), bars in TRIGRAMS:
+        # unit vector from the centre towards this corner
+        cx, cy = sx * ASPECT / dlen, sy * 1 / dlen
+        s = x * cx + y * cy                      # distance out along it
+        t = x * cy - y * cx                      # across it, along the bars
+        start = R + R / 2                        # a quarter-disc of white first
+        for i, solid in enumerate(bars):
+            lo = start + i * (bar + gap)
+            if lo <= s < lo + bar and abs(t) <= length / 2:
+                if solid or abs(t) >= gap:
+                    return "N"
+    return "W"
+
+
 # Proportions are each flag's official ones, stretched onto the one cloth.
 FLAGS = {
     "soviet": None,                                    # the traced art as is
@@ -274,10 +391,16 @@ FLAGS = {
     "belarus": lambda u, v: belarus(u, v),
     # black, red, gold - black drawn dark grey, see COLOURS_256
     "germany": lambda u, v: bands(v, (1 / 3, 2 / 3), "DRA"),
+    # the 1858 black-gold-white; black and gold through start.sh's palette
+    "russianempire": lambda u, v: bands(v, (1 / 3, 2 / 3), "DOW"),
+    "china": lambda u, v: china(u, v),
+    "vietnam": lambda u, v: vietnam(u, v),
+    "northkorea": lambda u, v: northkorea(u, v),
+    "southkorea": lambda u, v: southkorea(u, v),
 }
 
 
-def paint_cloth(art, pattern, static_max_x):
+def paint_cloth(art, pattern, static_max_x, fine=False):
     """Repaint every cloth pixel of art with pattern(u, v).
 
     Cloth is the red field plus the emblem - anything R, or Y right of the
@@ -291,9 +414,19 @@ def paint_cloth(art, pattern, static_max_x):
     for x in cols:
         ys = [y for y in range(h) if cloth(x, art[y][x])]
         y0, y1 = ys[0], ys[-1]
-        u = (x - x0 + 0.5) / (x1 - x0 + 1)
+        du, dv = 1 / (x1 - x0 + 1), 1 / (y1 - y0 + 1)
+        u = (x - x0 + 0.5) * du
         for y in ys:
-            out[y][x] = pattern(u, (y - y0 + 0.5) / (y1 - y0 + 1))
+            v = (y - y0 + 0.5) * dv
+            if not fine:
+                out[y][x] = pattern(u, v)
+                continue
+            votes = {}
+            for i in range(4):
+                for j in range(4):
+                    tag = pattern(u + (i - 1.5) / 4 * du, v + (j - 1.5) / 4 * dv)
+                    votes[tag] = votes.get(tag, 0) + 1
+            out[y][x] = max(votes, key=votes.get)
     return ["".join(row) for row in out]
 
 
@@ -418,7 +551,8 @@ def build(px_w=120, px_h=66, frames=8, amp=2.0, flag="soviet"):
     # yellow lines is for the pole and emblem, and would fatten a yellow
     # band or cross that was already wide.
     if FLAGS[flag]:
-        art = paint_cloth(art, FLAGS[flag], STATIC_MAX_X * scale)
+        art = paint_cloth(art, FLAGS[flag], STATIC_MAX_X * scale,
+                          fine=flag in FINE)
     art_w, art_h = len(art[0]), len(art)
     # Never negative. The 768p canvas is exactly wide enough for the full
     # X_SHIFT (this comes out at 0 there); one cell narrower and a negative
@@ -593,7 +727,8 @@ def write_ppm(grid, px_w, rows, path, px=16):
     """Preview at one screen pixel per art pixel, using the RGBs measured off
     ly's framebuffer."""
     RGB = {"R": (0xAA, 0x00, 0x00), "Y": (0xFF, 0xFF, 0x55), "A": (0xFF, 0xFF, 0x55),
-           "B": (0x00, 0x00, 0xAA), "G": (0x00, 0xAA, 0x00), "D": (0x55, 0x55, 0x55),
+           "B": (0x00, 0x00, 0xAA), "G": (0x00, 0xAA, 0x00), "D": (0x14, 0x14, 0x14),
+           "O": (0xFF, 0xD7, 0x00), "N": (0x14, 0x14, 0x14),
            "W": (0xFF, 0xFF, 0xFF), None: (20, 20, 20)}
     W, H = px_w * px, rows * px
     out = []

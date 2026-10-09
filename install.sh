@@ -228,7 +228,7 @@ handy="OFF"
 ly="OFF"
 # Which flag ly waves on the login screen: one of the <name>-flag-*.dur sets in
 # assets/ly (soviet sweden norway denmark finland russia spain italy poland
-# ukraine belarus germany).
+# ukraine belarus germany russianempire china vietnam northkorea southkorea).
 # Not ON/OFF - see ly_flag_names below.
 ly_flag="soviet"
 nopasswd_sudo="OFF"
@@ -902,15 +902,18 @@ while true; do
         _flag_menu=()
         while IFS= read -r _name; do
             case "$_name" in
-                soviet)  _label="Soviet Union" ;;
-                russia)  _label="Russian Federation" ;;
+                soviet)        _label="Soviet Union" ;;
+                russia)        _label="Russian Federation" ;;
+                russianempire) _label="Russian Empire" ;;
+                northkorea)    _label="North Korea" ;;
+                southkorea)    _label="South Korea" ;;
                 *)       _label="${_name^}" ;;
             esac
             _flag_menu+=("$_name" "$_label" "$([ "$_name" = "$ly_flag" ] && echo ON || echo OFF)")
         done < <(ly_flag_names)
         if ! _picked=$(whiptail --title "Login Screen Flag" --radiolist \
             "Which flag should wave on the ly login screen?\n(Change it later with flag-switch.sh.)" \
-            20 60 10 "${_flag_menu[@]}" 3>&1 1>&2 2>&3); then
+            24 60 16 "${_flag_menu[@]}" 3>&1 1>&2 2>&3); then
             echo "🔙 Returning to options..." | tee -a "$LOG"
             continue
         fi
