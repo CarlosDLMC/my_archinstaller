@@ -802,6 +802,91 @@ FORMAT_256.update(EUROPE)
 FINE.update(EUROPE)
 
 
+# --- beyond Europe ---------------------------------------------------------
+
+MAPLE = mirror([                      # Canada
+    ".......R",
+    "......RR",
+    "...R..RR",
+    "...RR.RR",
+    "R..RRRRR",
+    "RR.RRRRR",
+    "RRRRRRRR",
+    ".RRRRRRR",
+    "..RRRRRR",
+    "RRRRRRRR",
+    ".RRRRRRR",
+    "..RRRRRR",
+    "....RRRR",
+    ".......R",
+    ".......R",
+    ".......R",
+])
+
+
+def usa(u, v):
+    """Thirteen stripes from red; a blue canton seven stripes tall and 0.76
+    of the height wide, with the 50 stars on their 6/5 rows. A star is a
+    dot here - each is barely a pixel across."""
+    x, y = u * ASPECT, v
+    ch, cw = 7 / 13, 0.76
+    if x < cw and y < ch:
+        for r in range(9):
+            sy = ch * (r + 1) / 10
+            for c in range(6 if r % 2 == 0 else 5):
+                sx = cw * (2 * c + (1 if r % 2 == 0 else 2)) / 12
+                if (x - sx) ** 2 + (y - sy) ** 2 <= 0.021 ** 2:
+                    return "W"
+        return "B"
+    return "RW"[min(12, int(v * 13)) % 2]
+
+
+def argentina_sun(x, y):
+    """The Sun of May: a gold disc and sixteen rays. The rays are wider
+    than the real ones: thin, they lost the 4x4 vote at 768p and the sun
+    shrank to a sliver."""
+    dx, dy = x - ASPECT / 2, y - 0.5
+    r = math.hypot(dx, dy)
+    if r < 0.08:
+        return "O"
+    if r < 0.145 and math.cos(16 * math.atan2(dy, dx)) > -0.3:
+        return "O"
+    return None
+
+
+def burgundy(u, v):
+    """The Cross of Burgundy: a red saltire of two ragged branches, knots
+    standing off each side in turn, on white."""
+    x, y = u * ASPECT - ASPECT / 2, v - 0.5
+    half = 0.045                                 # half the branch width
+    for dx, dy in ((ASPECT / 2, 0.5), (ASPECT / 2, -0.5)):
+        n = math.hypot(dx, dy)
+        s = (x * dx + y * dy) / n                # along the branch
+        t = (x * dy - y * dx) / n                # across it
+        if abs(s) > 0.82 * n:
+            continue
+        if abs(t) <= half:
+            return "R"
+        k = round(s / 0.09)                      # nearest knot
+        side = 1 if k % 2 == 0 else -1
+        if abs(s - k * 0.09) <= 0.018 and 0 < t * side <= half + 0.04:
+            return "R"
+    return "W"
+
+
+MORE = {
+    "usa": usa,
+    "canada": with_emblem(stripes_v("RWR", (1, 2, 1)),
+                          lambda x, y: bitmap(x, y, MAPLE, ASPECT / 2, 0.5, 0.6)),
+    "argentina": with_emblem(stripes_h("LWL"), argentina_sun),
+    "spanishempire": burgundy,
+    "germanempire": stripes_h("NWR"),
+}
+FLAGS.update(MORE)
+FORMAT_256.update(MORE)
+FINE.update(MORE)
+
+
 
 def paint_cloth(art, pattern, static_max_x, fine=False):
     """Repaint every cloth pixel of art with pattern(u, v).

@@ -911,6 +911,9 @@ while true; do
                 sanmarino)     _label="San Marino" ;;
                 unitedkingdom) _label="United Kingdom" ;;
                 vatican)       _label="Vatican City" ;;
+                usa)           _label="United States" ;;
+                spanishempire) _label="Spanish Empire" ;;
+                germanempire)  _label="German Empire" ;;
                 *)       _label="${_name^}" ;;
             esac
             _flag_menu+=("$_name" "$_label" "$([ "$_name" = "$ly_flag" ] && echo ON || echo OFF)")
