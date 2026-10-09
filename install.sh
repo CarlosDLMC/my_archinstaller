@@ -897,8 +897,15 @@ while true; do
 
     # ly selected: which flag it waves on the login screen. Cancel goes back to
     # the options, like the dotfiles question above.
+    #
+    # fzf, not whiptail, so the flag can be seen while choosing: the list on
+    # the left, and on the right the flag itself from assets/ly/preview
+    # (written by soviet-flag.py), changing as the cursor moves. whiptail
+    # cannot react to the cursor at all. fzf is installed here when missing;
+    # if that fails the plain whiptail list below is used instead.
     if [[ " ${options[*]} " == *" ly "* ]]; then
         _flag_menu=()
+        _flag_lines=()
         while IFS= read -r _name; do
             case "$_name" in
                 soviet)        _label="Soviet Union" ;;
@@ -930,8 +937,44 @@ while true; do
                 *)       _label="${_name^}" ;;
             esac
             _flag_menu+=("$_name" "$_label" "$([ "$_name" = "$ly_flag" ] && echo ON || echo OFF)")
+            # The current choice first, so the cursor starts on it.
+            if [ "$_name" = "$ly_flag" ]; then
+                _flag_lines=("$_name"$'\t'"$_label  (current)" "${_flag_lines[@]}")
+            else
+                _flag_lines+=("$_name"$'\t'"$_label")
+            fi
         done < <(ly_flag_names)
-        if ! _picked=$(whiptail --title "Login Screen Flag" --radiolist \
+        command -v fzf >/dev/null || early_install fzf >> "$LOG" 2>&1 || true
+        if command -v fzf >/dev/null; then
+            # On the bare console (TERM=linux) the truecolour previews break:
+            # backgrounds there are 8 dark colours. preview/tty has the login
+            # screen's own cells instead, and the palette slots start.sh sets
+            # on ly's VT are set here too while the picker is open (and reset
+            # with ESC ] R after), so it shows what the login screen will.
+            _preview_dir="$PWD/assets/ly/preview"
+            if [ "${TERM:-}" = linux ]; then
+                _preview_dir="$_preview_dir/tty"
+                while IFS= read -r _line; do
+                    eval "$_line"
+                done < <(grep "^printf '\\\\033\]P" assets/ly/start.sh)
+            fi
+            # By the name shown, not the file name ("Knights Hospitaller" is
+            # hospitaller); the current one stays on top.
+            _picked=$({ printf '%s\n' "${_flag_lines[0]}"
+                        printf '%s\n' "${_flag_lines[@]:1}" | sort -t$'\t' -k2,2; } | fzf \
+                --delimiter=$'\t' --with-nth=2 --no-sort --layout=reverse \
+                --border=rounded --border-label=" Login Screen Flag " \
+                --header=$'Which flag should wave on the login screen?\nType to search - Enter picks - Esc goes back\nChange it later with flag-switch.sh' \
+                --prompt="flag> " \
+                --preview="cat \"$_preview_dir/\"{1}.ans" \
+                --preview-window=right,62%,border-left) || _picked=""
+            [ "${TERM:-}" = linux ] && printf '\033]R'
+            if [ -z "$_picked" ]; then
+                echo "🔙 Returning to options..." | tee -a "$LOG"
+                continue
+            fi
+            _picked="${_picked%%$'\t'*}"
+        elif ! _picked=$(whiptail --title "Login Screen Flag" --radiolist \
             "Which flag should wave on the ly login screen?\n(Change it later with flag-switch.sh.)" \
             24 60 16 "${_flag_menu[@]}" 3>&1 1>&2 2>&3); then
             echo "🔙 Returning to options..." | tee -a "$LOG"

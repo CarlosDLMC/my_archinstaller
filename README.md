@@ -249,8 +249,8 @@ first prompt.
   `/etc/pacman.conf`, and `ly_config.sh` removes any copy already on disk.
   Delete that line if you ever install uwsm. The login-screen flag is cut per
   console grid (768p, 900p, 1080p, 1440p, 2160p), and the largest cut that fits
-  the panel is installed. Which flag waves is the preset's `ly_flag` (or a menu
-  when ly is ticked), one of the `<name>-flag-*.dur` sets in `assets/ly` -
+  the panel is installed. Which flag waves is the preset's `ly_flag` (or, when
+  ly is ticked, an fzf picker with a live preview of each flag), one of the `<name>-flag-*.dur` sets in `assets/ly` -
   most of Europe, the Soviet Union and Russian Empire, China, Vietnam, both
   Koreas and Israel (the full list is `FLAGS` in `assets/ly/soviet-flag.py`).
   Colours the console lacks - near-black, gold, light blue, orange - come from

@@ -1781,6 +1781,119 @@ def write_dur(out, px_w, px_h, frames, amp, framerate, flag="soviet"):
           f"({w}x{rows} art pixels), {len(d['frames'])} frames")
 
 
+# --- installer preview -------------------------------------------------------
+# preview/<flag>.ans: one still frame as coloured text, which the installer's
+# flag picker (fzf) shows beside the list. A terminal window is not the
+# console, so it gets each colour as intended - gold, light blue, orange,
+# near-black - in truecolour, rather than the palette slots start.sh sets on
+# ly's VT. It is the 768p canvas (85x24 cells): the smallest cut, every flag
+# was checked at it, and it fits a preview pane beside the list.
+PREVIEW_RGB = {
+    "R": (0xAA, 0x00, 0x00), "B": (0x00, 0x00, 0xAA), "G": (0x00, 0xAA, 0x00),
+    "W": (0xFF, 0xFF, 0xFF), "A": (0xFF, 0xFF, 0x55), "Y": (0xFF, 0xFF, 0x55),
+    "D": (0x14, 0x14, 0x14), "N": (0x14, 0x14, 0x14), "O": (0xFF, 0xD7, 0x00),
+    "L": (0x2F, 0x80, 0xD0), "Q": (0xFF, 0x8C, 0x2A), "S": (0xAA, 0xAA, 0xAA),
+}
+PREVIEW_SIZE = PANELS["768p"]
+
+
+def write_ansi(out, flag):
+    (grid,), w, h = build(*PREVIEW_SIZE, frames=1, amp=0.0, flag=flag)
+    lines = []
+    for cy in range(h // 2):
+        cells = []
+        for x in range(w):
+            top = PREVIEW_RGB.get(grid[2 * cy][x])
+            bottom = PREVIEW_RGB.get(grid[2 * cy + 1][x])
+            # Outside the cloth is the terminal's own background (None).
+            if top and bottom:
+                cells.append((UPPER, top, bottom) if top != bottom else (BLOCK, top, None))
+            elif top or bottom:
+                cells.append((UPPER if top else LOWER, top or bottom, None))
+            else:
+                cells.append((" ", None, None))
+        while cells and cells[-1][0] == " ":
+            cells.pop()                          # no trailing blanks
+        line, state = "", (None, None)
+        for glyph, fg, bg in cells:
+            if (fg, bg) != state:
+                line += "\033[38;2;%d;%d;%dm" % fg if fg else "\033[39m"
+                line += "\033[48;2;%d;%d;%dm" % bg if bg else "\033[49m"
+                state = (fg, bg)
+            line += glyph
+        lines.append(line + "\033[0m")
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    with open(out, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines) + "\n")
+
+
+# The bare console cannot show those: it rounds a foreground to 16 colours
+# and a background to 8 dark ones, so white or yellow in the lower half of a
+# cell came out grey or brown. preview/tty/<flag>.ans is for it instead: the
+# very cells of the login-screen .dur, run through ly's colour tables and the
+# kernel's rounding, written as plain 16-colour codes. The installer sets
+# start.sh's palette slots around the picker, so it matches the login screen.
+LY_RGB16 = [None, 0x800000, 0x008000, 0x808000, 0x000080, 0x800080, 0x008080,
+            0xC0C0C0, None, 0xFF0000, 0x00FF00, 0xFFFF00, 0x0000FF, 0xFF00FF,
+            0x00FFFF, 0xFFFFFF]
+LY_DUR16 = [0, 0, 4, 2, 6, 1, 5, 3, 7, 8, 12, 10, 14, 9, 13, 11, 15]
+
+
+def ly_rgb(index, fmt, background):
+    """The truecolour ly sends for a dur colour index (None: the default)."""
+    index = max(0, index)
+    if fmt == "16":
+        return LY_RGB16[LY_DUR16[index + 1 if background else index]]
+    if index < 16:
+        return LY_RGB16[index]
+    if index < 232:
+        ch = lambda n: n * 40 + 55 if n else 0
+        i = index - 16
+        return (ch(i // 36 % 6) << 16) | (ch(i // 6 % 6) << 8) | ch(i % 6)
+    g = 8 + 10 * (index - 232)
+    return (g << 16) | (g << 8) | g
+
+
+def console_sgr(rgb, background):
+    """The kernel's rounding of a truecolour (vt.c rgb_foreground and
+    rgb_background), as the 16-colour SGR code that lands on the same slot."""
+    if rgb is None:
+        return 49 if background else 39
+    r, g, b = rgb >> 16, (rgb >> 8) & 0xFF, rgb & 0xFF
+    if background:
+        return 40 + (r >> 7) + ((g >> 7) << 1) + ((b >> 7) << 2)
+    top = max(r, g, b)
+    hue = (r > top // 2) + ((g > top // 2) << 1) + ((b > top // 2) << 2)
+    if hue == 7 and top <= 0x55:
+        return 90
+    return (90 if top > 0xAA else 30) + hue
+
+
+def write_tty(out, flag):
+    grids, w, h = build(*PREVIEW_SIZE, frames=1, amp=0.0, flag=flag)
+    movie = to_dur(grids, w, h, flag=flag)["DurMovie"]
+    fmt, frame = movie["colorFormat"], movie["frames"][0]
+    lines = []
+    for cy, text in enumerate(frame["contents"]):
+        cells = []
+        for cx, ch in enumerate(text):
+            fg, bg = frame["colorMap"][cx][cy]
+            fgc, bgc = console_sgr(ly_rgb(fg, fmt, False), False), console_sgr(ly_rgb(bg, fmt, True), True)
+            cells.append((ch, 39 if ch == " " else fgc, bgc))
+        while cells and cells[-1][0] == " " and cells[-1][2] == 49:
+            cells.pop()
+        line, state = "", None
+        for ch, fgc, bgc in cells:
+            if (fgc, bgc) != state:
+                line += "\033[%d;%dm" % (fgc, bgc)
+                state = (fgc, bgc)
+            line += ch
+        lines.append(line + "\033[0m")
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    with open(out, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines) + "\n")
+
+
 if __name__ == "__main__":
     # Written next to this script, not into the cwd, so the paths ly_config.sh
     # installs from are the same whatever directory this is run from.
@@ -1797,6 +1910,8 @@ if __name__ == "__main__":
             for variant, opts in VARIANTS.items():
                 write_dur(os.path.join(here, f"{flag}-flag-{variant}-{panel}.dur"),
                           px_w, px_h, flag=flag, **opts)
+        write_ansi(os.path.join(here, "preview", f"{flag}.ans"), flag)
+        write_tty(os.path.join(here, "preview", "tty", f"{flag}.ans"), flag)
 
 
 # --- preview ---------------------------------------------------------------
