@@ -9,12 +9,13 @@ interfaces are in English and only dates and times are localised. See
 [Locales](#locales) to change it.
 
 For the best results, you may want to:
--Install windows first (in case yo want to double boot), and limine as boot loader.
--Make sure Secure Boot is OFF!!
--Set on the BIOS Resizable Bar -> ON
--Set on the BIOS Memory Context restore (or DRAM Timing Control) to enabled.
-This allows the computer not to check fully the RAM while booting which saves 50 seconds
--Set Power Down Enable to enabled
+
+- Install windows first (in case you want to dual boot), and limine as boot loader.
+- Make sure Secure Boot is OFF!!
+- Set on the BIOS Resizable Bar -> ON
+- Set on the BIOS Memory Context restore (or DRAM Timing Control) to enabled.
+  This allows the computer not to check fully the RAM while booting which saves 50 seconds
+- Set Power Down Enable to enabled
 
 ## Also works on CachyOS
 
