@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-# Generate the 8-bit Soviet flag that ly draws behind its login screen.
+# Generate the 8-bit flags that ly draws behind its login screen.
 # Writes durdraw .dur files (gzipped JSON) from one traced art table: a waving
 # version and a single still frame of it, cut for each panel the repo supports
-# (soviet-flag-{animated,static}-{768p,900p,1080p,1440p,2160p}.dur). Run with
-# no arguments to write all of them, or name panels to write just those.
+# (<flag>-flag-{animated,static}-{768p,900p,1080p,1440p,2160p}.dur). The
+# Soviet flag is the traced art itself; the others in FLAGS repaint its cloth
+# and keep its pole, outline and wave. Run with no arguments to write all of
+# them, or name panels and/or flags to write just those.
 #
 # There is a cut per panel because ly draws a .dur at its native cell size and
 # never scales it: a canvas smaller than the console grid leaves a black
@@ -157,6 +159,118 @@ LOWER = "\u2584"       # lower half
 # 8 frames make one full wave, so this is also the cycle time.
 FRAMERATE = 4.0
 
+# --- the other flags -------------------------------------------------------
+# Same cloth, same pole, same wave - only the colours change. Each flag is a
+# pattern over the cloth: u runs 0..1 from the hoist to the fly, v 0..1 from
+# the cloth's top edge to its bottom edge IN THAT COLUMN, so stripes and
+# crosses follow the traced curve of the cloth instead of cutting across it.
+#
+# The palette is the Linux console's: ly sends truecolour, and the kernel
+# rounds a foreground to the 16 VGA colours and a background to the 8 dim
+# ones (read back from /dev/vcsa on a spare VT). So white and yellow exist
+# only as foregrounds, while red, blue and green have a dim foreground that is
+# exactly their background. Every flag below only ever stacks two colours in
+# a cell where at least one can be the background, which is what makes them
+# drawable at all. The indices are dur's, run through ly's own tables.
+# Background indices avoid the bold entries the Soviet flag's red (12) uses.
+#
+#   tag  colour   fg  bg
+#   R    #AA0000   5   4
+#   B    #0000AA   2   1
+#   G    #00AA00   3   2
+#   W    #FFFFFF  16   -
+#   A    #FFFF55  15   -    yellow cloth; 'Y' stays the pole, which never waves
+COLOURS = {
+    "R": (5, 4),
+    "B": (2, 1),
+    "G": (3, 2),
+    "W": (16, None),
+    "A": (15, None),
+    "Y": (15, None),
+}
+
+
+def bands(t, edges, tags):
+    """The tag of the band t falls in; edges are the band widths' running
+    totals, as fractions."""
+    for edge, tag in zip(edges, tags):
+        if t < edge:
+            return tag
+    return tags[-1]
+
+
+def nordic(field, cross, h, v, border=None, bh=None, bv=None):
+    """A Nordic cross. h and v are (before, width) of the vertical and
+    horizontal arms as fractions of the flag; border likewise, for Norway's
+    white fimbriation around its blue cross."""
+    def paint(u, w):
+        if h[0] <= u < h[0] + h[1] or v[0] <= w < v[0] + v[1]:
+            return cross
+        if border and (bh[0] <= u < bh[0] + bh[1] or bv[0] <= w < bv[0] + bv[1]):
+            return border
+        return field
+    return paint
+
+
+def belarus(u, v):
+    """Red over green, 2+1, with the white hoist band (1/9 of the length)
+    carrying the red ornament. The real ornament is far finer than this
+    cloth, so it is drawn as a column of red diamonds, each as tall as the
+    band is wide (67x40 cloth: 1/9 of 67 px is 7.4 px, 0.19 of 40)."""
+    band = 1 / 9
+    if u >= band:
+        return bands(v, (2 / 3,), "RG")
+    period = band * 67 / 40
+    x = abs(u / band * 2 - 1)                     # 0 at the band's centre
+    y = abs((v / period) % 1 * 2 - 1)             # 0 at a diamond's centre
+    return "R" if x + y < 0.75 else "W"
+
+
+# Proportions are each flag's official ones, stretched onto the one cloth.
+FLAGS = {
+    "soviet": None,                                    # the traced art as is
+    # 5+2+9 by 4+2+4
+    "sweden": nordic("B", "A", (5 / 16, 2 / 16), (4 / 10, 2 / 10)),
+    # 6+1+2+1+12 by 6+1+2+1+6
+    "norway": nordic("R", "B", (7 / 22, 2 / 22), (7 / 16, 2 / 16),
+                     "W", (6 / 22, 4 / 22), (6 / 16, 4 / 16)),
+    # 12+4+21 long, but the arms are the same width in PIXELS: the cloth is
+    # 67x40, not 37x28, so 4/28 of its height drew the horizontal arm a
+    # quarter thinner than the vertical one. Both are 4/37 of 67 = 7.2 px.
+    "denmark": nordic("R", "W", (12 / 37, 4 / 37),
+                      (0.5 - 4 / 37 * 67 / 40 / 2, 4 / 37 * 67 / 40)),
+    # Placed at 5+3+10 by 4+3+4, but the official arms (3/11 of the height)
+    # looked too heavy at this size; 2 units each instead, ~7 px like Denmark.
+    "finland": nordic("W", "B", (5.5 / 18, 2 / 18), (4.5 / 11, 2 / 11)),
+    "russia": lambda u, v: bands(v, (1 / 3, 2 / 3), "WBR"),
+    # the civil flag: 1+2+1, no coat of arms
+    "spain": lambda u, v: bands(v, (1 / 4, 3 / 4), "RAR"),
+    "italy": lambda u, v: bands(u, (1 / 3, 2 / 3), "GWR"),
+    "poland": lambda u, v: bands(v, (1 / 2,), "WR"),
+    "ukraine": lambda u, v: bands(v, (1 / 2,), "BA"),
+    "belarus": lambda u, v: belarus(u, v),
+}
+
+
+def paint_cloth(art, pattern, static_max_x):
+    """Repaint every cloth pixel of art with pattern(u, v).
+
+    Cloth is the red field plus the emblem - anything R, or Y right of the
+    pole. The black outline and the pole/finial are left exactly as traced."""
+    def cloth(x, tag):
+        return tag == "R" or (tag == "Y" and x > static_max_x)
+    h, w = len(art), len(art[0])
+    cols = [x for x in range(w) if any(cloth(x, art[y][x]) for y in range(h))]
+    x0, x1 = cols[0], cols[-1]
+    out = [list(row) for row in art]
+    for x in cols:
+        ys = [y for y in range(h) if cloth(x, art[y][x])]
+        y0, y1 = ys[0], ys[-1]
+        u = (x - x0 + 0.5) / (x1 - x0 + 1)
+        for y in ys:
+            out[y][x] = pattern(u, (y - y0 + 0.5) / (y1 - y0 + 1))
+    return ["".join(row) for row in out]
+
 
 def shrink(rows, nw, thr=0.38):
     """Area-coverage downsample of a '#'/'.' bitmap to nw wide, keeping aspect."""
@@ -254,7 +368,7 @@ def emblem_mask():
     return m, w, h
 
 
-def build(px_w=120, px_h=66, frames=8, amp=2.0):
+def build(px_w=120, px_h=66, frames=8, amp=2.0, flag="soviet"):
     """Frames of a px_w x px_h grid of colour tags.
 
     The art is the traced flag, 72x66, scaled to stand the full height of the
@@ -275,6 +389,11 @@ def build(px_w=120, px_h=66, frames=8, amp=2.0):
     if scale >= 1 and scale - int(scale) < 0.1:
         scale = int(scale)
     art = scale_art(FLAG_ART, scale)
+    # Painted after scaling, not before: scale_art's rule for keeping thin
+    # yellow lines is for the pole and emblem, and would fatten a yellow
+    # band or cross that was already wide.
+    if FLAGS[flag]:
+        art = paint_cloth(art, FLAGS[flag], STATIC_MAX_X * scale)
     art_w, art_h = len(art[0]), len(art)
     # Never negative. The 768p canvas is exactly wide enough for the full
     # X_SHIFT (this comes out at 0 there); one cell narrower and a negative
@@ -322,16 +441,34 @@ PAIRS = {
 }
 
 
-def to_dur(grids, px_w, rows, framerate=None):
+def pair_cell(top, bottom):
+    """The cell for two stacked art pixels of the painted flags (None is
+    the black outside the cloth). A colour with a background fills the cell
+    from behind; the other is drawn as a half or full block over it."""
+    if top == bottom:
+        if top is None:
+            return (" ", GOLD_FG, VOID_BG)
+        fg, bg = COLOURS[top]
+        return (" ", GOLD_FG, bg) if bg is not None else (BLOCK, fg, VOID_BG)
+    for upper, lower, glyph in ((top, bottom, UPPER), (bottom, top, LOWER)):
+        bg = VOID_BG if lower is None else COLOURS[lower][1]
+        if upper is not None and bg is not None:
+            return (glyph, COLOURS[upper][0], bg)
+    raise ValueError(f"no cell can show {top} over {bottom}")
+
+
+def to_dur(grids, px_w, rows, framerate=None, flag="soviet"):
     """Pack each vertical pair of art rows into one console cell."""
     assert rows % 2 == 0, "art rows must be even to pair into cells"
     cell_rows = rows // 2
+    # The Soviet flag keeps its own table, so its files stay byte-identical.
+    cell = PAIRS.__getitem__ if flag == "soviet" else (lambda p: pair_cell(*p))
     frames = []
     for n, g in enumerate(grids, 1):
         contents, cmap = [], []
         cells = []
         for cy in range(cell_rows):
-            row = [PAIRS[(g[2 * cy][cx], g[2 * cy + 1][cx])] for cx in range(px_w)]
+            row = [cell((g[2 * cy][cx], g[2 * cy + 1][cx])) for cx in range(px_w)]
             cells.append(row)
         contents = ["".join(c[0] for c in row) for row in cells]
         cmap = [[[cells[cy][cx][1], cells[cy][cx][2]] for cy in range(cell_rows)]
@@ -340,7 +477,7 @@ def to_dur(grids, px_w, rows, framerate=None):
                        "contents": contents, "colorMap": cmap})
     return {"DurMovie": {
         "formatVersion": 7, "colorFormat": "16", "preferredFont": "fixed",
-        "encoding": "utf-8", "name": "soviet-flag", "artist": "",
+        "encoding": "utf-8", "name": f"{flag}-flag", "artist": "",
         "framerate": FRAMERATE if framerate is None else framerate,
         "sizeX": px_w, "sizeY": cell_rows,
         "extra": None, "frames": frames}}
@@ -384,9 +521,10 @@ PANELS = {
 }
 
 
-def write_dur(out, px_w, px_h, frames, amp, framerate):
-    grids, w, rows = build(px_w=px_w, px_h=px_h, frames=frames, amp=amp)
-    dur = to_dur(grids, w, rows, framerate=framerate)
+def write_dur(out, px_w, px_h, frames, amp, framerate, flag="soviet"):
+    grids, w, rows = build(px_w=px_w, px_h=px_h, frames=frames, amp=amp,
+                           flag=flag)
+    dur = to_dur(grids, w, rows, framerate=framerate, flag=flag)
     # Reproducible output: identical art must give a byte-identical file, or
     # every regeneration shows up as a phantom git diff. mtime=0 kills the
     # timestamp, and filename="" is required too - GzipFile infers the gzip
@@ -405,21 +543,27 @@ if __name__ == "__main__":
     # Written next to this script, not into the cwd, so the paths ly_config.sh
     # installs from are the same whatever directory this is run from.
     here = os.path.dirname(os.path.abspath(__file__))
-    wanted = sys.argv[1:] or list(PANELS)
-    for panel in wanted:
-        if panel not in PANELS:
-            sys.exit(f"unknown panel {panel!r}; choose from {', '.join(PANELS)}")
-        px_w, px_h = PANELS[panel]
-        for variant, opts in VARIANTS.items():
-            write_dur(os.path.join(here, f"soviet-flag-{variant}-{panel}.dur"),
-                      px_w, px_h, **opts)
+    for arg in sys.argv[1:]:
+        if arg not in PANELS and arg not in FLAGS:
+            sys.exit(f"unknown panel or flag {arg!r}; panels: {', '.join(PANELS)}"
+                     f"; flags: {', '.join(FLAGS)}")
+    panels = [a for a in sys.argv[1:] if a in PANELS] or list(PANELS)
+    flags = [a for a in sys.argv[1:] if a in FLAGS] or list(FLAGS)
+    for flag in flags:
+        for panel in panels:
+            px_w, px_h = PANELS[panel]
+            for variant, opts in VARIANTS.items():
+                write_dur(os.path.join(here, f"{flag}-flag-{variant}-{panel}.dur"),
+                          px_w, px_h, flag=flag, **opts)
 
 
 # --- preview ---------------------------------------------------------------
 def write_ppm(grid, px_w, rows, path, px=16):
     """Preview at one screen pixel per art pixel, using the RGBs measured off
     ly's framebuffer."""
-    RGB = {"R": (0xAA, 0x00, 0x00), "Y": (0xFF, 0xFF, 0x55), None: (20, 20, 20)}
+    RGB = {"R": (0xAA, 0x00, 0x00), "Y": (0xFF, 0xFF, 0x55), "A": (0xFF, 0xFF, 0x55),
+           "B": (0x00, 0x00, 0xAA), "G": (0x00, 0xAA, 0x00),
+           "W": (0xFF, 0xFF, 0xFF), None: (20, 20, 20)}
     W, H = px_w * px, rows * px
     out = []
     for y in range(rows):

@@ -226,6 +226,11 @@ nvidia="auto"
 nouveau="auto"
 handy="OFF"
 ly="OFF"
+# Which flag ly waves on the login screen: one of the <name>-flag-*.dur sets in
+# assets/ly (soviet sweden norway denmark finland russia spain italy poland
+# ukraine belarus).
+# Not ON/OFF - see ly_flag_names below.
+ly_flag="soviet"
 nopasswd_sudo="OFF"
 printing="OFF"
 # Docker, with socket activation. "ON" because the call site below used to be
@@ -253,9 +258,22 @@ hackbgrt="auto"
 # its only job is to catch a preset key that no longer matches one - see below.
 known_options="ly nvidia nouveau input_group gtk_themes bluetooth thunar \
 quickshell xdph zsh pokemon rog dots handy nopasswd_sudo printing plymouth \
-text_boot limine hackbgrt docker herdr neovim hunk"
+text_boot limine hackbgrt docker herdr neovim hunk ly_flag"
 # The ones that also take "auto" (resolved from the hardware further down).
 auto_options="nvidia nouveau rog bluetooth plymouth limine hackbgrt"
+# The ones that take a name instead of ON/OFF, checked on their own below.
+value_options="ly_flag"
+
+# The login-screen flags, read off the files so a flag added to
+# assets/ly/soviet-flag.py needs no list kept in step here.
+ly_flag_names() {
+    local _f
+    for _f in assets/ly/*-flag-animated-1080p.dur; do
+        [ -r "$_f" ] || continue
+        _f="${_f##*/}"
+        printf '%s\n' "${_f%%-flag-*}"
+    done
+}
 
 # Function to load preset file
 load_preset() {
@@ -296,6 +314,7 @@ load_preset() {
         local _opt _v _bad=()
         for _opt in $known_options; do
             [ -n "${!_opt+x}" ] || continue
+            [[ " $value_options " == *" $_opt "* ]] && continue
             _v=$(printf '%s' "${!_opt}" | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
             case "${_v,,}" in
                 on|yes|true|1)  _v=ON ;;
@@ -312,6 +331,11 @@ load_preset() {
             esac
             printf -v "$_opt" '%s' "$_v"
         done
+        # ly_flag takes a flag name; the same leniency on case and spaces.
+        ly_flag=$(printf '%s' "$ly_flag" | tr -d '\r[:space:]' | tr '[:upper:]' '[:lower:]')
+        if ! ly_flag_names | grep -qx -- "$ly_flag"; then
+            _bad+=("ly_flag=\"$ly_flag\" - choose one of: $(ly_flag_names | paste -sd' ' -)")
+        fi
         if [ ${#_bad[@]} -gt 0 ]; then
             echo "❌ $1 has values this installer does not understand:"
             printf '   %s\n' "${_bad[@]}"
@@ -816,7 +840,9 @@ if [ "$preset_mode" == "true" ]; then
     fi
 
     echo "${INFO} Preset mode - installing:" | tee -a "$LOG"
-    for _opt in $selected_options; do echo "   - $_opt" | tee -a "$LOG"; done
+    for _opt in $selected_options; do
+        if [ "$_opt" = "ly" ]; then echo "   - ly (flag: $ly_flag)" | tee -a "$LOG"; else echo "   - $_opt" | tee -a "$LOG"; fi
+    done
     if [[ " $selected_options " != *" dots "* ]]; then
         echo "${WARN} 'dots' is not enabled, so none of the configs in Hyprland-Dots will be installed." | tee -a "$LOG"
     fi
@@ -870,10 +896,35 @@ while true; do
         fi
     fi
 
+    # ly selected: which flag it waves on the login screen. Cancel goes back to
+    # the options, like the dotfiles question above.
+    if [[ " ${options[*]} " == *" ly "* ]]; then
+        _flag_menu=()
+        while IFS= read -r _name; do
+            case "$_name" in
+                soviet)  _label="Soviet Union" ;;
+                russia)  _label="Russian Federation" ;;
+                *)       _label="${_name^}" ;;
+            esac
+            _flag_menu+=("$_name" "$_label" "$([ "$_name" = "$ly_flag" ] && echo ON || echo OFF)")
+        done < <(ly_flag_names)
+        if ! _picked=$(whiptail --title "Login Screen Flag" --radiolist \
+            "Which flag should wave on the ly login screen?\n(Change it later with flag-switch.sh.)" \
+            20 60 10 "${_flag_menu[@]}" 3>&1 1>&2 2>&3); then
+            echo "🔙 Returning to options..." | tee -a "$LOG"
+            continue
+        fi
+        ly_flag="${_picked:-$ly_flag}"
+    fi
+
     # Prepare the confirmation message
     confirm_message="You have selected the following options:\n\n"
     for option in "${options[@]}"; do
-        confirm_message+=" - $option\n"
+        if [ "$option" = "ly" ]; then
+            confirm_message+=" - ly (flag: $ly_flag)\n"
+        else
+            confirm_message+=" - $option\n"
+        fi
     done
     confirm_message+="\nAre you happy with these choices?"
 
@@ -903,6 +954,8 @@ fi
 # each selected component (dots copied, ly enabled, zsh the login shell, ...)
 # and not only whether packages landed - see the outcome checks in that file.
 export INSTALL_SELECTED_OPTIONS="$selected_options"
+# For ly_config.sh: the flag the preset or the menu chose.
+export LY_FLAG="$ly_flag"
 # Also saved, for re-running the final check by hand: "auto" options resolve per
 # machine (no plymouth on plain Arch, no bluetooth on a desktop without a
 # controller, nvidia only where there is one), so a selection copied from the

@@ -75,6 +75,20 @@ ly_sessions() { # config.ini
 _old_sessions=""
 [ -r /etc/ly/config.ini ] && _old_sessions=$(ly_sessions /etc/ly/config.ini)
 
+# Which flag ly draws. install.sh exports LY_FLAG (the preset's ly_flag, or the
+# menu's pick). Run on its own, this script keeps whatever flag the installed
+# config.ini already points at, so a re-run does not quietly swap your flag
+# back to the Soviet one the repo config.ini names.
+_ly_flag="${LY_FLAG:-}"
+if [ -z "$_ly_flag" ] && [ -r /etc/ly/config.ini ]; then
+  _ly_flag=$(sed -n 's#^dur_file_path *=.*/\([a-z]*\)-flag-[a-z]*\.dur.*#\1#p' /etc/ly/config.ini | head -1)
+fi
+_ly_flag="${_ly_flag:-soviet}"
+if [ ! -r "$PARENT_DIR/assets/ly/$_ly_flag-flag-animated-1080p.dur" ]; then
+  echo "${WARN} No login-screen flag called '$_ly_flag' in assets/ly - using the Soviet flag." | tee -a "$LOG"
+  _ly_flag="soviet"
+fi
+
 ly_install 644 "$PARENT_DIR/assets/ly/config.ini" /etc/ly/config.ini
 
 printf "${NOTE} Installing ly start script...\n"
@@ -223,16 +237,17 @@ if [ -z "$_min_h" ] && [ -r /sys/class/graphics/fb0/virtual_size ]; then
   _min_h=$(cut -d, -f2 /sys/class/graphics/fb0/virtual_size 2>/dev/null | tr -cd '0-9')
 fi
 
-printf "${NOTE} Installing 8-bit soviet flag animation...\n"
+printf "${NOTE} Installing 8-bit flag animations (${_ly_flag} selected)...\n"
 # config.ini sets animation = dur_file and points dur_file_path here, so the
-# flag has to land in /etc/ly or ly draws nothing at all. Both the waving and
-# the still version are installed, so switching is a one-line config edit
-# rather than a re-run of this script.
+# flag has to land in /etc/ly or ly draws nothing at all. Every flag is
+# installed, waving and still, as /etc/ly/<flag>-flag-{animated,static}.dur,
+# so switching flag or variant later is a one-line config edit
+# (flag-switch.sh) rather than a re-run of this script.
 #
 # ly draws a .dur at its native cell size and never scales it, so the art is
 # cut per console grid (assets/ly/soviet-flag.py) and the matching pair is
-# installed under the fixed names config.ini points at - config.ini never has
-# to change. The grid is width/16 x height/32 because /etc/ly/start.sh loads
+# installed under fixed names. Every flag shares the Soviet flag's cuts, so
+# the Soviet files below stand in for all of them when choosing one. The grid is width/16 x height/32 because /etc/ly/start.sh loads
 # latarcyrheb-sun32 on ly's own VT whatever vconsole.conf below ends up
 # saying, so the choice follows the panel, not the font.
 #
@@ -280,17 +295,30 @@ if [ -z "$_cols" ] || [ -z "$_small" ]; then
   # 1080p-or-larger panel it most likely has, the 768p cut would come out a
   # third smaller than it needs to be.
   _flag="1080p"
-  echo "${NOTE} Could not measure the console grid -> ${SKY_BLUE}soviet-flag-*-${_flag}.dur${RESET}" | tee -a "$LOG"
+  echo "${NOTE} Could not measure the console grid -> ${SKY_BLUE}*-flag-*-${_flag}.dur${RESET}" | tee -a "$LOG"
 elif [ -n "$_flag" ]; then
-  echo "${NOTE} Console grid is ${_cols}x${_rows} cells (${_min_w}x${_min_h} px) -> ${SKY_BLUE}soviet-flag-*-${_flag}.dur${RESET} (${_flag_size} cells)" | tee -a "$LOG"
+  echo "${NOTE} Console grid is ${_cols}x${_rows} cells (${_min_w}x${_min_h} px) -> ${SKY_BLUE}*-flag-*-${_flag}.dur${RESET} (${_flag_size} cells)" | tee -a "$LOG"
 else
   # Smaller than every cut (1280x720 is 80x22, 1024x768 is 64x24): the
   # smallest one clips least. Say so rather than leave it unexplained.
   _flag="$_small"
   echo "${WARN} Console grid is ${_cols}x${_rows} cells (${_min_w}x${_min_h} px), smaller than every flag cut: installing the smallest (${_small_size} cells), which ly will clip. Set 'animation = none' in /etc/ly/config.ini if that bothers you." | tee -a "$LOG"
 fi
-ly_install 644 "$PARENT_DIR/assets/ly/soviet-flag-animated-$_flag.dur" /etc/ly/soviet-flag-animated.dur
-ly_install 644 "$PARENT_DIR/assets/ly/soviet-flag-static-$_flag.dur" /etc/ly/soviet-flag-static.dur
+for _dur in "$PARENT_DIR"/assets/ly/*-flag-animated-"$_flag".dur; do
+  _name="${_dur##*/}"
+  _name="${_name%%-flag-*}"
+  ly_install 644 "$_dur" "/etc/ly/$_name-flag-animated.dur"
+  ly_install 644 "$PARENT_DIR/assets/ly/$_name-flag-static-$_flag.dur" "/etc/ly/$_name-flag-static.dur"
+done
+# Point both dur_file_path lines (the live one and the commented-out
+# alternative) at the chosen flag. Whatever flag the repo config.ini names is
+# replaced, not just the Soviet one: flag-switch.sh rewrites that file too.
+sudo sed -i "s#^\([# ]*dur_file_path *= */etc/ly/\)[a-z]*-flag-#\1${_ly_flag}-flag-#" /etc/ly/config.ini
+if grep -q "^dur_file_path *= */etc/ly/${_ly_flag}-flag-" /etc/ly/config.ini; then
+  echo "${OK} ly will draw the ${SKY_BLUE}${_ly_flag}${RESET} flag. Switch later with flag-switch.sh." | tee -a "$LOG"
+else
+  echo "${WARN} Could not point /etc/ly/config.ini at the ${_ly_flag} flag - ly keeps the one config.ini names." | tee -a "$LOG"
+fi
 
 printf "${NOTE} Installing custom soviet language...\n"
 ly_install 644 "$PARENT_DIR/assets/ly/lang/soviet.ini" /etc/ly/lang/soviet.ini

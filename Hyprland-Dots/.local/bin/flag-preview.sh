@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Show one of the two soviet flags on a spare TTY, WITHOUT touching /etc/ly.
+# Show one of ly's flags on a spare TTY, WITHOUT touching /etc/ly.
 #
 # Use this to compare them before committing to one. It copies the live ly
 # config, points dur_file_path at the variant you asked for, and runs a second
 # ly on a free VT. Your real login manager is never signalled: every kill here
 # matches only processes started with this preview config path.
 #
-#   flag-preview.sh static      # or: animated
-#   flag-preview.sh animated 9  # on VT 9 instead of 8
-#   flag-preview.sh --stop      # kill the preview and free the VT
+#   flag-preview.sh static            # the active flag, still (or: animated)
+#   flag-preview.sh sweden animated   # any installed flag, either variant
+#   flag-preview.sh animated 9        # on VT 9 instead of 8
+#   flag-preview.sh --stop            # kill the preview and free the VT
 #
 # F1/F2/F3 are stubbed to /bin/true in the preview, so pressing them cannot
 # power off or reboot the machine. Do not type a password: it is a real
@@ -16,8 +17,27 @@
 
 set -euo pipefail
 
-VARIANT="${1:-static}"
-VT="${2:-8}"
+VARIANT=static
+VT=8
+# The flag ly is set to draw now, unless one is named below.
+FLAG=$(sed -n 's#^dur_file_path *=.*/\([a-z]*\)-flag-[a-z]*\.dur.*#\1#p' /etc/ly/config.ini | head -1)
+FLAG="${FLAG:-soviet}"
+STOP=false
+for arg in "$@"; do
+    case "$arg" in
+        --stop) STOP=true ;;
+        static|animated) VARIANT="$arg" ;;
+        *[!0-9]*|"")
+            if [ -r "/etc/ly/$arg-flag-animated.dur" ]; then
+                FLAG="$arg"
+            else
+                echo "usage: $0 [flag] [static|animated] [vt]   |   $0 --stop" >&2
+                exit 2
+            fi
+            ;;
+        *) VT="$arg" ;;
+    esac
+done
 # /run, not /tmp. ly-dm is started as root below and reads config.ini from this
 # directory - and config.ini names commands ly executes (login_cmd, setup_cmd,
 # shutdown_cmd...). A fixed path in world-writable /tmp meant anything that could
@@ -28,7 +48,7 @@ VT="${2:-8}"
 PREVIEW_DIR=/run/ly-flag-preview
 PATTERN="ly-dm -c $PREVIEW_DIR"
 
-if [ "$VARIANT" = "--stop" ]; then
+if $STOP; then
     stopped=0
     for pid in $(pgrep -f "$PATTERN" 2>/dev/null || true); do
         sudo kill -9 "$pid" 2>/dev/null && stopped=$((stopped + 1)) || true
@@ -38,12 +58,7 @@ if [ "$VARIANT" = "--stop" ]; then
     exit 0
 fi
 
-case "$VARIANT" in
-    static|animated) ;;
-    *) echo "usage: $0 [static|animated] [vt]   |   $0 --stop" >&2; exit 2 ;;
-esac
-
-DUR="/etc/ly/soviet-flag-$VARIANT.dur"
+DUR="/etc/ly/$FLAG-flag-$VARIANT.dur"
 [ -r "$DUR" ] || { echo "missing $DUR - run install-scripts/ly_config.sh" >&2; exit 1; }
 
 # Where to return to afterwards: whichever VT is in front right now.
@@ -88,7 +103,7 @@ fi
 # Printed BEFORE the switch: chvt takes the terminal away with it, so
 # anything echoed afterwards is never seen.
 cat <<MSG
-showing: $VARIANT  ($DUR)
+showing: $FLAG $VARIANT  ($DUR)
   return: Ctrl+Alt+F$HOME_VT
   look again: Ctrl+Alt+F$VT
   stop:   $0 --stop

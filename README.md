@@ -249,7 +249,11 @@ first prompt.
   `/etc/pacman.conf`, and `ly_config.sh` removes any copy already on disk.
   Delete that line if you ever install uwsm. The login-screen flag is cut per
   console grid (768p, 900p, 1080p, 1440p, 2160p), and the largest cut that fits
-  the panel is installed.
+  the panel is installed. Which flag waves is the preset's `ly_flag` (or a menu
+  when ly is ticked): soviet, sweden, norway, denmark, finland, russia, spain,
+  italy, poland, ukraine or belarus. All of them are installed;
+  `flag-switch.sh <flag>` changes it later and `flag-preview.sh <flag> animated`
+  shows one on a spare VT.
 - PipeWire audio
 - NetworkManager, as the only network manager (see [Network](#network)), plus
   `nss-mdns`, wired into `nsswitch.conf` for `.local` names, and
