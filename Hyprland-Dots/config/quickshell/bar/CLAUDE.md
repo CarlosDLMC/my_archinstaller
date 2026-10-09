@@ -32,6 +32,7 @@ BatteryState.qml    # Singleton: every battery reading, read from /sys via FileV
 AgentUsage.qml      # Singleton: Claude Code allowance + token stats
 ClipboardState.qml  # Singleton: clipboard history state + the clipMenu shortcut
 PolkitState.qml     # Singleton: the polkit agent (replaces hyprpolkitagent) + wrong-password/checking state
+WallpaperState.qml  # Singleton: wallpaper carousel - the tree, thumbnails, folders + the wallMenu shortcut
 NightLight.qml      # Singleton: night-light state, watched off Hyprsunset.sh's state file
 components/         # Modular widget components
   ├── DropdownWidget.qml   # Base component for click-to-open dropdown widgets (notch design)
@@ -39,6 +40,7 @@ components/         # Modular widget components
   ├── NetworkPanel.qml     # Network card body: link, connection, traffic, DNS, speed test, share QR
   ├── ClipboardOsd.qml     # Clipboard picker (centred overlay, list + preview)
   ├── PolkitOsd.qml        # Polkit password prompt (centred overlay; Enter authenticates, Esc cancels)
+  ├── WallpaperOsd.qml     # Wallpaper carousel (slanted cards, folder tabs, type to search)
   ├── AgentWidget.qml      # Claude Code usage: session % in the bar, card on click
   ├── AgentPanel.qml       # Agents card body: plan, allowance meters, tokens by day/model
   ├── VolumeSlider.qml     # Draggable level track, shared by every row of the audio card
@@ -217,6 +219,59 @@ components/         # Modular widget components
      refresh only swaps the model when the history actually moved (head id or
      count differs); reassigning it unconditionally rebuilt the ListView and
      reset the scroll under the cursor a beat after opening.
+- **WallpaperOsd.qml / WallpaperState.qml**: the wallpaper picker on `SUPER + W`
+  (global shortcut `quickshell:wallMenu`), replacing the rofi menu of
+  `hypr/UserScripts/WallpaperSelect.sh`. A strip of slanted cards across the
+  focused monitor - the centred one large and framed, the rest shrinking and
+  fading with distance - folder tabs above it and a caption below. Keys: ←/→
+  browse, ↑/↓ or Tab change folder, Enter applies, `Ctrl+R` a random card,
+  typing searches every folder (folder and file names), Esc clears the search
+  and then closes. Mouse: the wheel browses (over the tabs it changes folder),
+  a side card scrolls to the centre, the centred card applies. IPC:
+  `qs -c bar ipc call wallpaper toggle|open|close|next|prev|nextFolder|prevFolder`.
+
+  The behaviour is motor-dev/wallpaperCarousel's (itself after ilyamiro's
+  picker); the code is this bar's own. That repo ships no LICENSE file and
+  descends from AGPL-3.0 code, so nothing was copied from it. Upstream shows
+  one directory and nothing under it; the tabs are new - ALL first, then every
+  folder that holds wallpapers itself, nested ones by path.
+
+  **Applying stays in `WallpaperSelect.sh`**, which gained a direct mode,
+  `WallpaperSelect.sh FILE`: awww, mpvpaper for videos, the `Startup_Apps.lua`
+  rewrite, wallust and the refresh are what they were. With no argument it is
+  still the rofi menu, as a fallback. The awww transition is `center` - a circle
+  growing from the middle of the screen out to the edges - which replaced `any`
+  (the same circle from a random point) on request.
+
+  **The path never travels through QML.** `scripts/wallpapers.py` gives every
+  wallpaper an id (md5 of its path *bytes*); the carousel hands the id back to
+  `wallpapers.py apply`, which walks the tree again and execs the script with
+  the exact bytes. A name that is not valid UTF-8 turns into U+FFFD as a QString
+  and could never be opened again - the rofi menu solved the same problem by
+  returning the index of the pick instead of its text.
+
+  **Thumbnails, not a memory pre-cache.** Upstream decodes every wallpaper into
+  RAM when the shell starts. Measured on this machine's 54: 1.9s, and a
+  quickshell grew from 144MB to 337MB for the whole session. `wallpapers.py
+  scan` instead keeps 720px-tall JPEGs in `~/.cache/quickshell/wall-thumbs`
+  (54 in 2.3s once, ~8MB; niced; one generator at a time via a lock; thumbnails
+  of deleted or edited files removed), and a warm rescan is ~36ms. Until a
+  thumbnail exists the card decodes the original at card size. The cards live
+  in a Loader that exists only while the overlay is on screen: the bar measured
+  349MB shut, ~365MB open, ~355MB after closing, and reopening does not grow it.
+
+  **Rescans** run at startup, on every open, and when `wallust-colors.json`
+  changes - every wallpaper change ends with wallust - so "on screen" is right
+  after `CTRL ALT W` or the auto-changer, without polling. Until the first key
+  or click, a rescan that finds a different wallpaper re-centres on it.
+
+  **The slant.** Each card is sheared about its own middle (`Matrix4x4`) and its
+  picture sheared back, so the frame slants and the image does not. A clip
+  draws whole pixels - a stair down every slanted edge - so the strip renders
+  into a 4x multisampled layer (`layer.samples: 4`, ~28MB of GPU memory while
+  open). The blur behind it is a layer rule on the `quickshell:wallpaper`
+  namespace in `hypr/UserConfigs/WindowRules.lua`; the dim alone left the
+  windows underneath readable through it.
 - **CenterInfo.qml**: DND toggle + date + weather. Click shows popup with notch design connecting to bar. Displays location, temperature, condition, feels-like, min/max, and hourly rain forecast bars. Weather icon/temp colored by temperature. Caches weather data for offline use.
 - **CpuWidget.qml / MemoryWidget.qml / DiskWidget.qml**: Simple percentage displays with themed colors
 - **VolumeWidget.qml**: Volume with mute detection and audio sink icons
@@ -616,6 +671,9 @@ singleton that the widgets render; only the rendering should be per-screen. See
 - `scripts/network-qr.sh` emits `meta` + a 0/1 matrix for a Wi-Fi join QR, drawn by the card
   as plain rectangles. Needs `qrencode` (now in `01-hypr-pkgs.sh`); without it, it prints one
   `error` line the card shows instead of failing silently
+- `scripts/wallpapers.py` (python3) for the wallpaper carousel's list, thumbnails and apply.
+  Thumbnails need `magick` (imagemagick) and, for video wallpapers, `ffmpeg`; applying needs
+  `hypr/UserScripts/WallpaperSelect.sh`
 - `scripts/network-status.sh` for the network card's status (tab-separated key/value lines).
   Uses `nmcli` for the radio details rather than `iw`, which is **not** a dependency of this
   repo and is not installed - the upstream version read the radio through `iw` and so produced

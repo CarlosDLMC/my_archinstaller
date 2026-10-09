@@ -286,4 +286,11 @@ ShellRoot {
         model: Quickshell.screens
         PolkitOsd {}
     }
+
+    // Wallpaper carousel, same deal. Driven by the wallMenu global shortcut
+    // (SUPER W); WallpaperState holds the list and the thumbnails.
+    Variants {
+        model: Quickshell.screens
+        WallpaperOsd {}
+    }
 }

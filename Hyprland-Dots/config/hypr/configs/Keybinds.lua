@@ -77,7 +77,9 @@ bind(M .. " + CTRL + ALT + B", exec(S .. "/ToggleQuickshellBar.sh"), { descripti
 
 -- FEATURES / EXTRAS (UserScripts)
 bind(M .. " + SHIFT + M", exec(U .. "/RofiBeats.sh"),         { description = "online music" })
-bind(M .. " + W",         exec(U .. "/WallpaperSelect.sh"),   { description = "select wallpaper" })
+-- The wallpaper carousel in the quickshell bar (WallpaperOsd.qml). It applies
+-- through WallpaperSelect.sh, which run with no file is still the rofi menu.
+bind(M .. " + W",         hl.dsp.global("quickshell:wallMenu"), { description = "select wallpaper", locked = true })
 bind(M .. " + SHIFT + W", exec(U .. "/WallpaperEffects.sh"),  { description = "wallpaper effects" })
 bind("CTRL + ALT + W",    exec(U .. "/WallpaperRandom.sh"),   { description = "random wallpaper" })
 bind(M .. " + CTRL + O",  hl.dsp.window.set_prop({ prop = "opaque", value = "toggle" }), { description = "toggle opaque (no transparency) for active window" })

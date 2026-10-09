@@ -15,6 +15,12 @@ rule({ match = { class = "(jetbrains-.+)", title = "(.*\\[~/.*)" }, tile = true 
 -- namespace set in ~/.config/quickshell/bar/shell.qml.
 hl.layer_rule({ match = { namespace = "quickshell:bar" }, blur = true })
 
+-- Same for the wallpaper carousel (SUPER W): it covers the screen, so this
+-- blurs everything behind its dim and the windows under it read as colour
+-- rather than as text competing with the cards. Namespace set in
+-- ~/.config/quickshell/bar/components/WallpaperOsd.qml.
+hl.layer_rule({ match = { namespace = "quickshell:wallpaper" }, blur = true })
+
 -- Thunar's rename, properties, bulk-rename and file-transfer dialogs are separate
 -- toplevels carrying the same class as the browser window, so they tile and take
 -- half the screen. Thunar has no in-view rename - the dialog is the only way it

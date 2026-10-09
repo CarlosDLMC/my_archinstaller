@@ -10,3 +10,4 @@ singleton NightLight 1.0 NightLight.qml
 singleton AgentUsage 1.0 AgentUsage.qml
 singleton ClipboardState 1.0 ClipboardState.qml
 singleton PolkitState 1.0 PolkitState.qml
+singleton WallpaperState 1.0 WallpaperState.qml

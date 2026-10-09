@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
-# This script for selecting wallpapers (SUPER W)
+# This script applies wallpapers.
+#
+#   WallpaperSelect.sh FILE   apply FILE. SUPER W opens the quickshell wallpaper
+#                             carousel (bar/components/WallpaperOsd.qml), and a
+#                             pick there lands here through this mode.
+#   WallpaperSelect.sh        the old rofi menu, kept as a fallback.
 
 # WALLPAPERS PATH
 terminal=foot
@@ -11,36 +16,13 @@ wallpaper_current="$HOME/.config/hypr/wallpaper_effects/.wallpaper_current"
 iDIR="$HOME/.config/swaync/images"
 iDIRi="$HOME/.config/swaync/icons"
 
-# awww transition config
+# awww transition config. "center" grows the new wallpaper as a circle from
+# the middle of the screen out to the edges; "any" grew it from a random point.
 FPS=60
-TYPE="any"
+TYPE="center"
 DURATION=2
 BEZIER=".43,1.19,1,.4"
 SWWW_PARAMS="--transition-fps $FPS --transition-type $TYPE --transition-duration $DURATION --transition-bezier $BEZIER"
-
-# Check if package bc exists
-if ! command -v bc &>/dev/null; then
-  notify-send -i "$iDIR/error.png" "bc missing" "Install package bc first"
-  exit 1
-fi
-
-# Variables
-rofi_theme="$HOME/.config/rofi/config-wallpaper.rasi"
-focused_monitor=$(hyprctl monitors -j | jq -r '.[] | select(.focused) | .name')
-
-# Ensure focused_monitor is detected
-if [[ -z "$focused_monitor" ]]; then
-  notify-send -i "$iDIR/error.png" "E-R-R-O-R" "Could not detect focused monitor"
-  exit 1
-fi
-
-# Monitor details
-scale_factor=$(hyprctl monitors -j | jq -r --arg mon "$focused_monitor" '.[] | select(.name == $mon) | .scale')
-monitor_height=$(hyprctl monitors -j | jq -r --arg mon "$focused_monitor" '.[] | select(.name == $mon) | .height')
-
-icon_size=$(echo "scale=1; ($monitor_height * 3) / ($scale_factor * 150)" | bc)
-adjusted_icon_size=$(echo "$icon_size" | awk '{if ($1 < 15) $1 = 20; if ($1 > 25) $1 = 25; print $1}')
-rofi_override="element-icon{size:${adjusted_icon_size}%;}"
 
 # Kill existing wallpaper daemons for video
 kill_wallpaper_for_video() {
@@ -66,18 +48,47 @@ WALL_FIND_TYPES=(
   -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.mov" -o -iname "*.webm"
 )
 
-# Retrieve every wallpaper in the tree - used ONLY to pick the ". random" entry.
-# The menu itself is now browsed one directory at a time (see build_menu() below).
-mapfile -d '' PICS < <(find -L "${wallDIR}" -type f \( "${WALL_FIND_TYPES[@]}" \) -print0)
+# Everything only the rofi menu needs: bc and the focused monitor for the icon
+# size, and the ". random" pick from the whole tree. Applying a FILE needs none
+# of it, so it must not be able to fail on any of it.
+prepare_menu() {
+  # Check if package bc exists
+  if ! command -v bc &>/dev/null; then
+    notify-send -i "$iDIR/error.png" "bc missing" "Install package bc first"
+    exit 1
+  fi
 
-RANDOM_PIC=""
-if (( ${#PICS[@]} > 0 )); then
-  RANDOM_PIC="${PICS[$((RANDOM % ${#PICS[@]}))]}"
-fi
-RANDOM_PIC_NAME=". random"
+  # Variables
+  rofi_theme="$HOME/.config/rofi/config-wallpaper.rasi"
+  focused_monitor=$(hyprctl monitors -j | jq -r '.[] | select(.focused) | .name')
 
-# Rofi command
-rofi_command="rofi -i -show -dmenu -config $rofi_theme -theme-str $rofi_override"
+  # Ensure focused_monitor is detected
+  if [[ -z "$focused_monitor" ]]; then
+    notify-send -i "$iDIR/error.png" "E-R-R-O-R" "Could not detect focused monitor"
+    exit 1
+  fi
+
+  # Monitor details
+  scale_factor=$(hyprctl monitors -j | jq -r --arg mon "$focused_monitor" '.[] | select(.name == $mon) | .scale')
+  monitor_height=$(hyprctl monitors -j | jq -r --arg mon "$focused_monitor" '.[] | select(.name == $mon) | .height')
+
+  icon_size=$(echo "scale=1; ($monitor_height * 3) / ($scale_factor * 150)" | bc)
+  adjusted_icon_size=$(echo "$icon_size" | awk '{if ($1 < 15) $1 = 20; if ($1 > 25) $1 = 25; print $1}')
+  rofi_override="element-icon{size:${adjusted_icon_size}%;}"
+
+  # Retrieve every wallpaper in the tree - used ONLY to pick the ". random" entry.
+  # The menu itself is now browsed one directory at a time (see build_menu() below).
+  mapfile -d '' PICS < <(find -L "${wallDIR}" -type f \( "${WALL_FIND_TYPES[@]}" \) -print0)
+
+  RANDOM_PIC=""
+  if (( ${#PICS[@]} > 0 )); then
+    RANDOM_PIC="${PICS[$((RANDOM % ${#PICS[@]}))]}"
+  fi
+  RANDOM_PIC_NAME=". random"
+
+  # Rofi command
+  rofi_command="rofi -i -show -dmenu -config $rofi_theme -theme-str $rofi_override"
+}
 
 # The menu for one directory: sub-folders first (navigable), then the
 # wallpapers that live directly in it; nothing is listed recursively -
@@ -383,6 +394,11 @@ main() {
     break
   done
 
+  apply_selected
+}
+
+# Apply selected_file, picked in the menu above or given on the command line.
+apply_selected() {
   # A video selection needs mpvpaper, and that is checked HERE rather than only
   # inside apply_video_wallpaper below.
   #
@@ -413,9 +429,26 @@ main() {
   fi
 }
 
+# Direct mode: apply the file given on the command line, no menu.
+if (( $# > 0 )); then
+  selected_file="$1"
+  # Absolute, as a menu pick always is: WallustSwww.sh points
+  # ~/.config/rofi/.current_wallpaper at this path, and a relative link would
+  # point nowhere.
+  [[ "$selected_file" == /* ]] || selected_file="$PWD/$selected_file"
+  if [[ ! -f "$selected_file" ]]; then
+    notify-send -i "$iDIR/error.png" "Wallpaper not found" "$selected_file" 2>/dev/null
+    echo "File not found: $selected_file"
+    exit 1
+  fi
+  apply_selected
+  exit
+fi
+
 # Check if rofi is already running
 if pidof rofi >/dev/null; then
   pkill rofi
 fi
 
+prepare_menu
 main
