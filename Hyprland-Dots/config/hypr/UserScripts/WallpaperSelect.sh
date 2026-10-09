@@ -18,8 +18,11 @@ iDIRi="$HOME/.config/swaync/icons"
 
 # awww transition config. "center" grows the new wallpaper as a circle from
 # the middle of the screen out to the edges; "any" grew it from a random point.
+# WALLPAPER_TRANSITION overrides it: the quickshell carousel draws its own
+# reveal (two slanted edges opening from the centre) and then asks for "none",
+# so awww swaps the image instantly under the finished reveal.
 FPS=60
-TYPE="center"
+TYPE="${WALLPAPER_TRANSITION:-center}"
 DURATION=2
 BEZIER=".43,1.19,1,.4"
 SWWW_PARAMS="--transition-fps $FPS --transition-type $TYPE --transition-duration $DURATION --transition-bezier $BEZIER"

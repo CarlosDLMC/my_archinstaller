@@ -43,6 +43,7 @@ components/         # Modular widget components
   ├── PolkitOsd.qml        # Polkit password prompt (centred overlay; Enter authenticates, Esc cancels)
   ├── PowerOsd.qml         # Power menu «ПУСК · ПУЛЬТ» (centred cell-grid window, five buttons; replaces wlogout)
   ├── WallpaperOsd.qml     # Wallpaper carousel (slanted cards, folder tabs, type to search)
+  ├── WallpaperReveal.qml  # Its transition: slanted edges opening from the centre, under the windows
   ├── AgentWidget.qml      # Claude Code usage: session % in the bar, card on click
   ├── AgentPanel.qml       # Agents card body: plan, allowance meters, tokens by day/model
   ├── VolumeSlider.qml     # Draggable level track, shared by every row of the audio card
@@ -244,6 +245,17 @@ components/         # Modular widget components
   still the rofi menu, as a fallback. The awww transition is `center` - a circle
   growing from the middle of the screen out to the edges - which replaced `any`
   (the same circle from a random point) on request.
+
+  **The transition after a pick is drawn by the bar** (`WallpaperReveal.qml`,
+  one per screen): two edges at the cards' slant open from the centre line to
+  the borders over 1.1s with the new wallpaper between them. awww has no such
+  transition. The reveal sits on the Bottom layer - above awww's Background
+  surface, below every window, click-through (`mask: Region {}`) - and the
+  state runs it: decode the full image on every screen, animate, then apply
+  with `WALLPAPER_TRANSITION=none` so awww swaps instantly underneath, and
+  step aside 250ms after wallust rewrites the palette (it runs after `awww img`
+  returns), with a 6s fallback. Videos skip it. CTRL ALT W and the
+  auto-changer keep awww's own transitions.
 
   **The path never travels through QML.** `scripts/wallpapers.py` gives every
   wallpaper an id (md5 of its path *bytes*); the carousel hands the id back to

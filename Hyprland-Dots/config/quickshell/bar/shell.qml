@@ -300,4 +300,11 @@ ShellRoot {
         model: Quickshell.screens
         WallpaperOsd {}
     }
+
+    // ...and its transition after a pick: two slanted edges opening from the
+    // centre, on the layer just above awww's.
+    Variants {
+        model: Quickshell.screens
+        WallpaperReveal {}
+    }
 }

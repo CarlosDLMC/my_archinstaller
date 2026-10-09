@@ -201,7 +201,17 @@ Singleton {
         onFileChanged: {
             reload()
             paletteSettle.restart()
+            // awww has the new image up by now (WallustSwww.sh runs after
+            // `awww img` returns), so the reveal can step aside.
+            if (root.revealPhase === "holding") revealDrop.restart()
         }
+    }
+
+    // A beat after wallust, so awww's frame is surely on screen.
+    Timer {
+        id: revealDrop
+        interval: 250
+        onTriggered: root.endReveal()
     }
 
     Timer {
@@ -240,8 +250,93 @@ Singleton {
         if (!it || pickedId !== "") return
         pickedId = it.id
         currentId = it.id
-        Quickshell.execDetached([script, "apply", wallDir, it.id])
         pickClose.restart()
+        // A video has no still to reveal; awww is not involved either.
+        if (it.kind === "video") apply(it, "")
+        else startReveal(it)
+    }
+
+    function apply(it, transition) {
+        var cmd = [script, "apply", wallDir, it.id]
+        if (transition !== "") cmd = ["env", "WALLPAPER_TRANSITION=" + transition].concat(cmd)
+        Quickshell.execDetached(cmd)
+    }
+
+    // ------------------------------------------------------------------
+    //  The reveal (WallpaperReveal.qml)
+    // ------------------------------------------------------------------
+    // Two slanted edges - the cards' slant - open from the centre line to
+    // the borders with the new wallpaper between them, on a layer just above
+    // awww's. awww has no such transition, so it is drawn here; when it has
+    // covered the screen, awww swaps instantly ("none") underneath, and the
+    // reveal leaves once wallust has rewritten the palette - which happens
+    // only after awww has the new image up.
+    //
+    // revealPhase: "" idle, "loading" decoding the full image on every
+    // screen, "opening" animating, "holding" waiting for awww underneath.
+
+    property var revealItem: null
+    property string revealPhase: ""
+    property real revealProgress: 0
+    property int revealReady: 0
+    readonly property int revealMs: 1100
+
+    function startReveal(it) {
+        revealProgress = 0
+        revealReady = 0
+        revealItem = it
+        revealPhase = "loading"
+        revealLoadTimeout.restart()
+    }
+
+    // Each screen's reveal calls this when its picture is decoded.
+    function revealLoaded() {
+        revealReady++
+        if (revealPhase === "loading" && revealReady >= Quickshell.screens.length) openReveal()
+    }
+
+    function openReveal() {
+        if (revealPhase !== "loading") return
+        revealLoadTimeout.stop()
+        revealPhase = "opening"
+        revealAnim.restart()
+    }
+
+    function endReveal() {
+        revealHoldTimeout.stop()
+        revealPhase = ""
+        revealItem = null
+        revealProgress = 0
+    }
+
+    // A wallpaper that will not decode: open anyway after this long; the
+    // card shows the original or nothing, and awww still applies.
+    Timer {
+        id: revealLoadTimeout
+        interval: 1500
+        onTriggered: root.openReveal()
+    }
+
+    NumberAnimation {
+        id: revealAnim
+        target: root
+        property: "revealProgress"
+        from: 0
+        to: 1
+        duration: root.revealMs
+        easing.type: Easing.InOutCubic
+        onFinished: {
+            root.revealPhase = "holding"
+            root.apply(root.revealItem, "none")
+            revealHoldTimeout.restart()
+        }
+    }
+
+    // wallust never ran (or wrote nothing new): do not leave the reveal up.
+    Timer {
+        id: revealHoldTimeout
+        interval: 6000
+        onTriggered: root.endReveal()
     }
 
     Timer {
