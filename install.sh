@@ -228,7 +228,8 @@ handy="OFF"
 ly="OFF"
 # Which flag ly waves on the login screen: one of the <name>-flag-*.dur sets in
 # assets/ly (soviet sweden norway denmark finland russia spain italy poland
-# ukraine belarus germany russianempire china vietnam northkorea southkorea).
+# ukraine belarus germany russianempire china vietnam northkorea southkorea
+# israel).
 # Not ON/OFF - see ly_flag_names below.
 ly_flag="soviet"
 nopasswd_sudo="OFF"

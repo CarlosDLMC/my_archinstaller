@@ -252,7 +252,7 @@ first prompt.
   the panel is installed. Which flag waves is the preset's `ly_flag` (or a menu
   when ly is ticked): soviet, sweden, norway, denmark, finland, russia, spain,
   italy, poland, ukraine, belarus, germany, russianempire, china, vietnam,
-  northkorea or southkorea (black and the Russian Empire's gold come from
+  northkorea, southkorea or israel (black and the Russian Empire's gold come from
   console palette slots set in `assets/ly/start.sh`). All of them are installed;
   `flag-switch.sh <flag>` changes it later and `flag-preview.sh <flag> animated`
   shows one on a spare VT.

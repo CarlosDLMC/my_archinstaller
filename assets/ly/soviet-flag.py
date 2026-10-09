@@ -225,7 +225,7 @@ FORMAT_256 = {"germany", "russianempire", "southkorea"}
 # Flags with small emblems (stars, trigrams) are sampled 4x4 per pixel and
 # take the majority, so a 4-pixel star is a star and not whichever colour
 # one point in the middle of each pixel happened to land on.
-FINE = {"china", "vietnam", "northkorea", "southkorea"}
+FINE = {"china", "vietnam", "northkorea", "southkorea", "israel"}
 
 # The cloth is 67x40 art pixels; emblems are laid out in units of its height
 # with x stretched by this, so circles and stars come out round, not wide.
@@ -366,6 +366,26 @@ def southkorea(u, v):
     return "W"
 
 
+def israel(u, v):
+    """White, two blue stripes (15+25 in from each edge, of 160), and the
+    Star of David between them: two triangle outlines, outer vertices at
+    0.24 of the height from the centre, so it nearly fills the white band
+    (0.25 each way) as on the real flag. The official line is 5.5/160 of the
+    height, about a pixel and a half here, so it is drawn a little heavier,
+    at 1/25 - any heavier and the star fills in."""
+    x, y = (u - 0.5) * ASPECT, v - 0.5
+    line = 1 / 25
+    ri = 0.24 / 2                                # inradius = half the circumradius
+
+    def inside(normals, d):
+        return all(x * math.cos(a) + y * math.sin(a) <= d for a in normals)
+    for normals in ((90, 210, 330), (270, 30, 150)):   # pointing up, down
+        n = [math.radians(a) for a in normals]
+        if inside(n, ri) and not inside(n, ri - line):
+            return "B"
+    return bands(v, (15 / 160, 40 / 160, 120 / 160, 145 / 160), "WBWBW")
+
+
 # Proportions are each flag's official ones, stretched onto the one cloth.
 FLAGS = {
     "soviet": None,                                    # the traced art as is
@@ -397,6 +417,7 @@ FLAGS = {
     "vietnam": lambda u, v: vietnam(u, v),
     "northkorea": lambda u, v: northkorea(u, v),
     "southkorea": lambda u, v: southkorea(u, v),
+    "israel": lambda u, v: israel(u, v),
 }
 
 
