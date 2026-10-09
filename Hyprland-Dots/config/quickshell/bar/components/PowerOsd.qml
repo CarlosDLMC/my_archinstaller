@@ -272,9 +272,9 @@ PanelWindow {
             Row {
                 visible: !osd.armed
                 x: osd.cw
-                Cell { text: "КЕДР"; fg: PowerState.white; bold: true }
+                Cell { text: "ЗАРЯ"; fg: PowerState.white; bold: true }
                 Item { width: 2 * osd.cw; height: 1 }
-                Cell { text: "Самочувствие отличное, к старту готов." }
+                Cell { text: "Кедр, я Заря. Ваше решение?" }
             }
             Row {
                 visible: !osd.armed
