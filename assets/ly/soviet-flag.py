@@ -1155,6 +1155,181 @@ FORMAT_256.update(POST_SOVIET)
 FINE.update(POST_SOVIET)
 
 
+# --- Vikings and Crusaders ---------------------------------------------------
+
+RAVEN = [                             # wings up, head and beak to the fly
+    "..N.........N....",
+    "..NN.......NN....",
+    "...NN.....NNN....",
+    "...NNN...NNNN....",
+    "....NNN.NNNN.....",
+    "....NNNNNNNN.....",
+    ".....NNNNNNN..NN.",
+    ".....NNNNNNNNNNNN",
+    "....NNNNNNNNNNN..",
+    "..NNNNNNNNNNN....",
+    "NNNN.NNNNNNN.....",
+    "N....NN..NN......",
+    ".....N....N......",
+    "....NN...NN......",
+]
+
+
+def raven(u, v):
+    """The Raven Banner as a pennant: a white quarter-round from the hoist,
+    fringed red along its curve, with the black raven. Outside the quarter
+    is 'K', which is left as screen black - the cloth still waves, only the
+    pennant shows."""
+    r = math.hypot(u, v)
+    if r > 1:
+        return "K"
+    if r > 0.9:
+        return "R" if math.cos(30 * math.atan2(v, u)) > 0 else "K"
+    return bitmap(u * ASPECT, v, RAVEN, 0.6, 0.37, 0.52) or "W"
+
+
+def jerusalem(u, v):
+    """Gold on white: a cross potent - each arm ending in a crossbar - and a
+    small cross in each quarter."""
+    x, y = u * ASPECT - ASPECT / 2, v - 0.5
+    ax, ay = abs(x), abs(y)
+    arm, reach = 0.055, 0.34
+    if (ax <= arm and ay <= reach) or (ay <= arm and ax <= reach):
+        return "O"
+    if (reach - 0.065 <= ay <= reach and ax <= 0.15) or (reach - 0.065 <= ax <= reach and ay <= 0.15):
+        return "O"
+    for cx in (-0.2, 0.2):
+        for cy in (-0.2, 0.2):
+            dx, dy = abs(x - cx), abs(y - cy)
+            if (dx <= 0.022 and dy <= 0.075) or (dy <= 0.022 and dx <= 0.075):
+                return "O"
+    return "W"
+
+
+def templar(u, v):
+    """White; a red cross pattée, arms flaring from narrow at the centre."""
+    x, y = u * ASPECT - ASPECT / 2, v - 0.5
+    ax, ay = abs(x), abs(y)
+    if ax >= ay:
+        return "R" if ax <= 0.42 and ay <= 0.04 + 0.4 * ax else "W"
+    return "R" if ay <= 0.42 and ax <= 0.04 + 0.4 * ay else "W"
+
+
+def hospitaller(u, v):
+    """Red; a plain white cross to the edges."""
+    x, y = u * ASPECT - ASPECT / 2, v - 0.5
+    return "W" if abs(x) <= 0.1 or abs(y) <= 0.1 else "R"
+
+
+HISTORIC = {
+    "raven": raven,
+    "jerusalem": jerusalem,
+    "templar": templar,
+    "hospitaller": hospitaller,
+}
+FLAGS.update(HISTORIC)
+FORMAT_256.update(HISTORIC)
+FINE.update(HISTORIC)
+
+
+# --- crosses ---------------------------------------------------------------
+
+ALPHA = [
+    "..O..",
+    ".O.O.",
+    ".OOO.",
+    "O...O",
+    "O...O",
+]
+
+OMEGA = [
+    ".OOO.",
+    "O...O",
+    "O...O",
+    ".O.O.",
+    "OO.OO",
+]
+
+FIRESTEEL = [                         # the Byzantine "B", facing the fly
+    "OOO.",
+    "O..O",
+    "OOO.",
+    "O..O",
+    "OOO.",
+]
+
+SANTIAGO = [                          # the sword-cross of St James
+    "....RRR....",
+    "...R.R.R...",
+    "....RRR....",
+    ".....R.....",
+    ".R...R...R.",
+    "R.R.RRR.R.R",
+    "RRRRRRRRRRR",
+    "R.R.RRR.R.R",
+    ".R...R...R.",
+    ".....R.....",
+    "....RRR....",
+    "....RRR....",
+    "....RRR....",
+    "....RRR....",
+    "....RRR....",
+    ".....R.....",
+    ".....R.....",
+]
+
+
+def asturias(u, v):
+    """Blue; the gold Victory Cross, a Latin cross with flared ends, with
+    Alpha and Omega hanging from its arms."""
+    x, y = u * ASPECT - ASPECT / 2, v
+    ax = abs(x)
+    vert = ax <= (0.05 if 0.17 < y < 0.84 else 0.08) and 0.1 <= y <= 0.9
+    horiz = abs(y - 0.33) <= (0.05 if ax < 0.22 else 0.08) and ax <= 0.28
+    if vert or horiz:
+        return "O"
+    return (bitmap(x, y, ALPHA, -0.2, 0.5, 0.12)
+            or bitmap(x, y, OMEGA, 0.2, 0.5, 0.12) or "L")
+
+
+def christian(u, v):
+    """White; a blue canton, half the height tall, with the red Latin
+    cross."""
+    x, y = u * ASPECT, v
+    if x < 0.7 and y < 0.5:
+        if (abs(x - 0.35) <= 0.035 and 0.07 <= y <= 0.44) or (abs(y - 0.2) <= 0.035 and abs(x - 0.35) <= 0.16):
+            return "R"
+        return "B"
+    return "W"
+
+
+def byzantine(u, v):
+    """Red; a gold cross to the edges and a gold firesteel in each quarter,
+    the two at the hoist turned to face away from the cross."""
+    x, y = u * ASPECT - ASPECT / 2, v - 0.5
+    if abs(x) <= 0.05 or abs(y) <= 0.05:
+        return "O"
+    fly = [row for row in FIRESTEEL]
+    hoist = [row[::-1] for row in FIRESTEEL]
+    for cx, rows in ((-ASPECT / 4, hoist), (ASPECT / 4, fly)):
+        for cy in (-0.25, 0.25):
+            if bitmap(x, y, rows, cx, cy, 0.28):
+                return "O"
+    return "R"
+
+
+CROSSES = {
+    "asturias": asturias,
+    "christian": christian,
+    "byzantine": byzantine,
+    "santiago": with_emblem(lambda u, v: "W",
+                            lambda x, y: bitmap(x, y, SANTIAGO, ASPECT / 2, 0.5, 0.78)),
+}
+FLAGS.update(CROSSES)
+FORMAT_256.update(CROSSES)
+FINE.update(CROSSES)
+
+
 
 def paint_cloth(art, pattern, static_max_x, fine=False):
     """Repaint every cloth pixel of art with pattern(u, v).

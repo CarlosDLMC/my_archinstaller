@@ -914,6 +914,13 @@ while true; do
                 usa)           _label="United States" ;;
                 spanishempire) _label="Spanish Empire" ;;
                 germanempire)  _label="German Empire" ;;
+                raven)         _label="Raven Banner" ;;
+                jerusalem)     _label="Kingdom of Jerusalem" ;;
+                templar)       _label="Knights Templar" ;;
+                hospitaller)   _label="Knights Hospitaller" ;;
+                christian)     _label="Christian Flag" ;;
+                byzantine)     _label="Byzantine Empire" ;;
+                santiago)      _label="Order of Santiago" ;;
                 *)       _label="${_name^}" ;;
             esac
             _flag_menu+=("$_name" "$_label" "$([ "$_name" = "$ly_flag" ] && echo ON || echo OFF)")
