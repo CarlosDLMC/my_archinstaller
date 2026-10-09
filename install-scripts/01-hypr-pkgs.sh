@@ -93,7 +93,6 @@ hypr_package=(
   wf-recorder
   wireguard-tools
   wl-clipboard
-  wlogout
   xdg-user-dirs
   xdg-utils
   yad

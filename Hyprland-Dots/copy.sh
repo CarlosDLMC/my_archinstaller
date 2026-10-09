@@ -440,7 +440,6 @@ config_dirs=(
     # moving it aside wholesale took the saved session and the live sockets with
     # it on every re-run. It is deployed file by file further down.
     "quickshell"
-    "wlogout"
     "wallust"
     "foot"
     "rofi"
@@ -730,7 +729,6 @@ fi
 #   - UserConfigs/UserDecorations.lua requires wallust/wallust-hyprland.lua
 #     (it falls back to a built-in palette, but seeding keeps colours consistent)
 #   - twelve rofi themes `@theme` colors-rofi.rasi
-#   - wlogout/style.css `@import`s colors-waybar.css
 #
 # A missing file at any of those is a config error on first launch, not a
 # silent fallback, and first launch happens before initial-boot.sh has had a

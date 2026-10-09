@@ -40,9 +40,8 @@ GTK-themes-icons/*.log
 # its way to blocking updates.
 #
 # They still have to EXIST on a fresh machine: UserDecorations.lua requires
-# wallust-hyprland.lua, twelve rofi themes @theme colors-rofi.rasi, and
-# wlogout's style.css @imports colors-waybar.css - a missing file there is a
-# config error, not a fallback. So a rendered snapshot of each lives in
+# wallust-hyprland.lua and twelve rofi themes @theme colors-rofi.rasi - a
+# missing file there is a config error, not a fallback. So a rendered snapshot of each lives in
 # Hyprland-Dots/defaults/ and copy.sh seeds it when the real file is absent.
 # initial-boot.sh then runs wallust on first login and overwrites all of them.
 Hyprland-Dots/config/cava/config

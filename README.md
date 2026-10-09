@@ -278,7 +278,7 @@ first prompt.
 - Quickshell (custom bar)
 - foot (terminal)
 - rofi (launcher)
-- wlogout (power menu)
+- «ПУСК · ПУЛЬТ» power menu (in the Quickshell bar, CTRL + ALT + P)
 - dunst (notifications — swaync is removed if present)
 - awww (wallpaper daemon)
 - wallust (color scheme generator)
@@ -1179,8 +1179,7 @@ These are machine-specific, so a fresh install starts without them:
   `auto-install.sh` then refuses to pull over.
 
   Most of them still have to *exist*: twelve rofi themes `@theme`
-  `colors-rofi.rasi` and wlogout's `style.css` `@import`s `colors-waybar.css` —
-  a missing file there is an error on first launch, not a silent fallback.
+  `colors-rofi.rasi` — a missing file there is an error on first launch, not a silent fallback.
   (`UserDecorations.lua` is the exception: it loads `wallust-hyprland.lua`
   through `pcall` and falls back to a built-in palette.) So a rendered snapshot
   of each lives in **`Hyprland-Dots/defaults/`**, mirroring its path under
@@ -1883,7 +1882,7 @@ image in place: the NVIDIA driver's own checks still pass, and the machine would
 reboot into an initramfs without its modules or the nouveau blacklist.
 
 In practice these are almost always AUR builds - on plain Arch `wallust`,
-`wlogout`, `mpvpaper`, `pokemon-colorscripts-git` and `handy-bin`; on CachyOS,
+`mpvpaper`, `pokemon-colorscripts-git` and `handy-bin`; on CachyOS,
 whose repos carry the others, `wallust` and `handy-bin` - which break for
 reasons that have nothing to do with this repo: an upstream tarball moved, a
 dependency bumped its soname. (`awww` is not one of them: it is in `[extra]`,
@@ -2092,7 +2091,7 @@ anything was installed. Run it on the old machine before you clone on the new on
   if it is ever committed, copy.sh deploys it to the new machine and the whole
   first-boot setup silently skips itself.
 - Several packages the scripts name have moved from the official repos to the
-  AUR since they were written (`wlogout`, `wallust`). They still install, through `yay`, but they are now
+  AUR since they were written (`wallust`). They still install, through `yay`, but they are now
   source builds and the most likely thing to fail on a given day — see
   [When the installer stops without rebooting](#when-the-installer-stops-without-rebooting).
   `gtk-engine-murrine` used to be on this list; it is no longer installed at all,

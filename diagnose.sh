@@ -77,12 +77,6 @@ else
     problems=$((problems + 1)); printf "  ${ERROR} ~/.config/quickshell MISSING (custom bar not installed)\n"
 fi
 
-if [ -d ~/.config/wlogout ]; then
-    printf "  ${OK} ~/.config/wlogout exists\n"
-else
-    problems=$((problems + 1)); printf "  ${ERROR} ~/.config/wlogout MISSING\n"
-fi
-
 if [ -d ~/.config/wallust ]; then
     printf "  ${OK} ~/.config/wallust exists\n"
 else

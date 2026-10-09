@@ -26,7 +26,6 @@ packages=(
   awww
   wallust
   wl-clipboard
-  wlogout
   foot
   hypridle
   hyprlock
