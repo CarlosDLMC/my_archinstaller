@@ -1330,6 +1330,65 @@ FORMAT_256.update(CROSSES)
 FINE.update(CROSSES)
 
 
+# --- Rome, and Russia before 1858 ----------------------------------------------
+
+AQUILA = [                            # the legionary eagle
+    "O.............O",
+    "OO...........OO",
+    "OOO....O....OOO",
+    ".OOO..OOO..OOO.",
+    "..OOOOOOOOOOO..",
+    "...OOOOOOOOO...",
+    ".....OOOOO.....",
+    "......OOO......",
+    ".....O.O.O.....",
+    "....OOOOOOO....",
+]
+
+SPQR = [
+    "OOO.OOO.OOO.OO.",
+    "O...O.O.O.O.O.O",
+    "OOO.OOO.O.O.OO.",
+    "..O.O...OOO.O.O",
+    "OOO.O.....O.O.O",
+]
+
+
+def roman(u, v):
+    """A red vexillum: the gold eagle over SPQR, and a gold fringe along the
+    foot."""
+    x, y = u * ASPECT, v
+    if y > 0.93:
+        return "O" if math.cos(60 * u) > 0 else "K"
+    return (bitmap(x, y, AQUILA, ASPECT / 2, 0.33, 0.36)
+            or bitmap(x, y, SPQR, ASPECT / 2, 0.72, 0.18) or "R")
+
+
+def standrew(u, v):
+    """White; the blue saltire of St Andrew, corner to corner - the Russian
+    Navy's ensign from 1712."""
+    x, y = u * ASPECT - ASPECT / 2, v - 0.5
+    for dx, dy in ((ASPECT / 2, 0.5), (ASPECT / 2, -0.5)):
+        if abs(x * dy - y * dx) / math.hypot(dx, dy) <= 0.07:
+            return "B"
+    return "W"
+
+
+OLD_RUSSIA = {
+    "roman": roman,
+    # 1693, Peter the Great: the first tricolour, the double eagle in gold
+    "tsarofmoscow": with_emblem(stripes_h("WBR"),
+                                lambda x, y: bitmap(x, y, EAGLE, ASPECT / 2, 0.5, 0.62, {"N": "O"})),
+    "standrew": standrew,
+    # 1742: the Tsar's standard, a black double eagle on gold
+    "tsarstandard": with_emblem(lambda u, v: "O",
+                                lambda x, y: bitmap(x, y, EAGLE, ASPECT / 2, 0.5, 0.72)),
+}
+FLAGS.update(OLD_RUSSIA)
+FORMAT_256.update(OLD_RUSSIA)
+FINE.update(OLD_RUSSIA)
+
+
 
 def paint_cloth(art, pattern, static_max_x, fine=False):
     """Repaint every cloth pixel of art with pattern(u, v).

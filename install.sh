@@ -921,6 +921,10 @@ while true; do
                 christian)     _label="Christian Flag" ;;
                 byzantine)     _label="Byzantine Empire" ;;
                 santiago)      _label="Order of Santiago" ;;
+                roman)         _label="Roman Empire" ;;
+                tsarofmoscow)  _label="Tsar of Moscow (1693)" ;;
+                standrew)      _label="St Andrew's Flag (1712)" ;;
+                tsarstandard)  _label="Tsar's Standard (1742)" ;;
                 *)       _label="${_name^}" ;;
             esac
             _flag_menu+=("$_name" "$_label" "$([ "$_name" = "$ly_flag" ] && echo ON || echo OFF)")
