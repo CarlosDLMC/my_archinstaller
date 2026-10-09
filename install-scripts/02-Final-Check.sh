@@ -240,8 +240,15 @@ fi
 if selected ly; then
     check_outcome "ly@tty2.service is not enabled (install-scripts/ly.sh)" \
         systemctl is-enabled ly@tty2.service
-    check_outcome "/etc/ly/config.ini does not match assets/ly/config.ini (install-scripts/ly_config.sh)" \
-        cmp -s /etc/ly/config.ini "assets/ly/config.ini"
+    # The repo's config.ini with ly_config.sh's one edit made: both
+    # dur_file_path lines pointed at the flag the preset's ly_flag or the menu
+    # chose (LY_FLAG, which install.sh exports; run by hand, the flag the
+    # installed file names). A plain cmp failed on every run with any flag but
+    # the one the repo copy names, and stopped the preset's reboot. The sed is
+    # ly_config.sh's own, so the two stay in step.
+    check_outcome "/etc/ly/config.ini does not match assets/ly/config.ini with the ${LY_FLAG:-installed} flag (install-scripts/ly_config.sh)" \
+        bash -c 'flag=${LY_FLAG:-$(sed -n "s#^dur_file_path *=.*/\([a-z]*\)-flag-[a-z]*\.dur.*#\1#p" /etc/ly/config.ini | head -1)}
+                 cmp -s /etc/ly/config.ini <(sed "s#^\([# ]*dur_file_path *= */etc/ly/\)[a-z]*-flag-#\1${flag}-flag-#" assets/ly/config.ini)'
     # config.ini hides the shell, xinitrc and xsessions entries, so
     # /usr/share/wayland-sessions is ly's only source of sessions - and ly 1.4.1
     # does not guard an empty list (it indexes items[len - 1]), so a login
