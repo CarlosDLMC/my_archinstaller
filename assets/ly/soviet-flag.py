@@ -1008,6 +1008,153 @@ FORMAT_256.update(MORE2)
 FINE.update(MORE2)
 
 
+# --- the rest of the post-Soviet states --------------------------------------
+
+KZ_EAGLE = mirror([                   # Kazakhstan's steppe eagle
+    "O......",
+    "OO.....",
+    ".OOO...",
+    "..OOOO.",
+    "...OOOO",
+    ".....OO",
+])
+
+KZ_ORNAMENT = [                       # one repeat of the hoist ornament
+    "O...O",
+    ".O.O.",
+    "..O..",
+    ".O.O.",
+    "O...O",
+    "OO.OO",
+]
+
+TJ_CROWN = [
+    "....O....",
+    ".O..O..O.",
+    ".OOOOOOO.",
+    "OOOOOOOOO",
+]
+
+
+def georgia(u, v):
+    """White; the red St George's cross, a fifth of the height wide; a red
+    Bolnisi cross in each quarter, drawn as a plain cross at this size."""
+    x, y = u * ASPECT, v
+    if abs(x - ASPECT / 2) < 0.1 or abs(y - 0.5) < 0.1:
+        return "R"
+    for cx in (ASPECT / 4 - 0.02, ASPECT * 3 / 4 + 0.02):
+        for cy in (0.22, 0.78):
+            dx, dy = abs(x - cx), abs(y - cy)
+            if (dx < 0.028 and dy < 0.085) or (dy < 0.028 and dx < 0.085):
+                return "R"
+    return "W"
+
+
+def azerbaijan(u, v):
+    """Light blue, red, green; in the red, a white crescent and 8-pointed
+    star."""
+    x = u * ASPECT
+    if 1 / 3 <= v < 2 / 3:
+        if crescent(x, v, ASPECT / 2 - 0.04, 0.5, 0.12, 0.035, 0.1):
+            return "W"
+        if in_star_n(x, v, ASPECT / 2 + 0.105, 0.5, 0.08, 0.045, 8):
+            return "W"
+    return bands(v, (1 / 3, 2 / 3), "LRG")
+
+
+def kazakhstan(u, v):
+    """Sky blue; a gold sun and the steppe eagle under it; the gold
+    ornament down the hoist."""
+    x, y = u * ASPECT, v
+    if 0.06 <= x < 0.15:
+        tag = bitmap(x, ((y * 6) % 1) * 0.15 + 0.5, KZ_ORNAMENT, 0.105, 0.575, 0.15)
+        return tag or "L"
+    dx, dy = x - ASPECT / 2, y - 0.4
+    r = math.hypot(dx, dy)
+    if r < 0.1 or (r < 0.165 and math.cos(32 * math.atan2(dy, dx)) > -0.3):
+        return "O"
+    return bitmap(x, y, KZ_EAGLE, ASPECT / 2, 0.66, 0.13) or "L"
+
+
+def kyrgyzstan(u, v):
+    """Red; a gold sun of 40 rays with the tunduk - the yurt's crown - in
+    red on it, as a ring crossed by a plus."""
+    x, y = u * ASPECT - ASPECT / 2, v - 0.5
+    r = math.hypot(x, y)
+    if r < 0.13:
+        if 0.07 <= r < 0.092 or (r < 0.07 and (abs(x) < 0.016 or abs(y) < 0.016)):
+            return "R"
+        return "O"
+    if r < 0.26 and math.cos(40 * math.atan2(y, x)) > -0.3:
+        return "O"
+    return "R"
+
+
+def tajikistan(u, v):
+    """Red, white, green at 2+3+2; in the white, the gold crown under an
+    arc of seven stars."""
+    x, y = u * ASPECT, v
+    tag = bitmap(x, y, TJ_CROWN, ASPECT / 2, 0.55, 0.12)
+    if tag:
+        return tag
+    for k in range(7):
+        a = math.radians(200 + 140 * k / 6)
+        if in_star(x, y, ASPECT / 2 + 0.2 * math.cos(a), 0.62 + 0.2 * math.sin(a), 0.042):
+            return "O"
+    return bands(v, (2 / 7, 5 / 7), "RWG")
+
+
+def turkmenistan(u, v):
+    """Green; the red carpet band near the hoist with five guls stacked in
+    it; a white crescent and five stars beside it."""
+    x, y = u * ASPECT, v
+    if 0.16 <= x < 0.38:
+        cx = 0.27
+        for k in range(5):
+            cy = 0.1 + 0.2 * k
+            d = abs(x - cx) / 0.09 + abs(y - cy) / 0.085
+            if d <= 1:
+                return "O" if d > 0.62 else ("W" if d < 0.3 else "N")
+        return "R"
+    if crescent(x, y, 0.6, 0.22, 0.11, 0.04, 0.1):
+        return "W"
+    for k in range(5):
+        a = math.radians(-60 + 30 * k)
+        if in_star(x, y, 0.6 + 0.16 * math.cos(a), 0.22 + 0.16 * math.sin(a), 0.042):
+            return "W"
+    return "G"
+
+
+def uzbekistan(u, v):
+    """Light blue, white, green, edged red; in the blue, a white crescent
+    and twelve stars in rows of 3, 4 and 5."""
+    x, y = u * ASPECT, v
+    if v < 10 / 32:
+        if crescent(x, y, 0.25, 0.155, 0.1, 0.04, 0.09):
+            return "W"
+        for row, n in enumerate((3, 4, 5)):
+            for k in range(n):
+                sx, sy = 0.78 - 0.075 * k, 0.065 + 0.08 * row
+                if (x - sx) ** 2 + (y - sy) ** 2 <= 0.022 ** 2:
+                    return "W"
+    return bands(v, (10 / 32, 11 / 32, 21 / 32, 22 / 32), "LRWRG")
+
+
+POST_SOVIET = {
+    "armenia": stripes_h("RBO"),
+    "azerbaijan": azerbaijan,
+    "georgia": georgia,
+    "kazakhstan": kazakhstan,
+    "kyrgyzstan": kyrgyzstan,
+    "tajikistan": tajikistan,
+    "turkmenistan": turkmenistan,
+    "uzbekistan": uzbekistan,
+}
+FLAGS.update(POST_SOVIET)
+FORMAT_256.update(POST_SOVIET)
+FINE.update(POST_SOVIET)
+
+
 
 def paint_cloth(art, pattern, static_max_x, fine=False):
     """Repaint every cloth pixel of art with pattern(u, v).
