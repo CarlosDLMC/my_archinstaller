@@ -1438,6 +1438,38 @@ FORMAT_256.add("palaestinalied")
 FINE.add("palaestinalied")
 
 
+# --- the Orthodox cross --------------------------------------------------------
+
+IC = ["OOO.OOO", ".O..O..", ".O..O..", ".O..O..", "OOO.OOO"]
+XC = ["O.O.OOO", "O.O.O..", ".O..O..", "O.O.O..", "O.O.OOO"]
+NI = ["O..O.OOO", "OO.O..O.", "O.OO..O.", "O..O..O.", "O..O.OOO"]
+KA = ["O..O..O.", "O.O..O.O", "OO...OOO", "O.O..O.O", "O..O.O.O"]
+
+
+def orthodox(u, v):
+    """Crimson; the gold three-bar Orthodox cross - the titulus, the
+    crossbar, and the footrest raised on Christ's right (the viewer's
+    left) - with IC XC NIKA in its quarters."""
+    x, y = u * ASPECT - ASPECT / 2, v - 0.5
+    if abs(x) <= 0.035 and abs(y) <= 0.42:
+        return "O"
+    if abs(y + 0.27) <= 0.03 and abs(x) <= 0.09:
+        return "O"
+    if abs(y + 0.12) <= 0.035 and abs(x) <= 0.22:
+        return "O"
+    if abs(y - (0.22 + 0.35 * x)) <= 0.03 and abs(x) <= 0.12:
+        return "O"
+    for rows, cx, cy in ((IC, -0.25, -0.3), (XC, 0.25, -0.3), (NI, -0.25, 0.06), (KA, 0.25, 0.06)):
+        if bitmap(x, y, rows, cx, cy, 0.16):
+            return "O"
+    return "R"
+
+
+FLAGS["orthodox"] = orthodox
+FORMAT_256.add("orthodox")
+FINE.add("orthodox")
+
+
 
 def paint_cloth(art, pattern, static_max_x, fine=False):
     """Repaint every cloth pixel of art with pattern(u, v).

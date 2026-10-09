@@ -926,6 +926,7 @@ while true; do
                 standrew)      _label="St Andrew's Flag (1712)" ;;
                 tsarstandard)  _label="Tsar's Standard (1742)" ;;
                 palaestinalied) _label="Palästinalied (1228)" ;;
+                orthodox)      _label="Orthodox Cross" ;;
                 *)       _label="${_name^}" ;;
             esac
             _flag_menu+=("$_name" "$_label" "$([ "$_name" = "$ly_flag" ] && echo ON || echo OFF)")
