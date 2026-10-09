@@ -848,6 +848,16 @@ if [ "$preset_mode" == "true" ]; then
     printf "\n%.0s" {1..1}
 else
 
+# The flag picker starts from the flag this machine already draws, not the
+# Soviet default: a re-run where Enter just confirms the picker would
+# otherwise hand ly_config.sh "soviet" and quietly swap the flag back.
+if [ -r /etc/ly/config.ini ]; then
+    _installed_flag=$(sed -n 's#^dur_file_path *=.*/\([a-z]*\)-flag-[a-z]*\.dur.*#\1#p' /etc/ly/config.ini | head -1)
+    if [ -n "$_installed_flag" ] && ly_flag_names | grep -x -- "$_installed_flag" >/dev/null; then
+        ly_flag="$_installed_flag"
+    fi
+fi
+
 # Capture the selected options before the while loop starts
 while true; do
     selected_options=$("${options_command[@]}" 3>&1 1>&2 2>&3)

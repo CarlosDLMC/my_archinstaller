@@ -63,7 +63,9 @@ for arg in "$@"; do
         static|animated) TARGET="$arg" ;;
         --live-only) LIVE_ONLY=true ;;
         *)
-            if flags | grep -qx -- "$arg"; then
+            # Not grep -q: it quits at the first match, which under pipefail
+            # kills flags() mid-write and fails the whole test (SIGPIPE).
+            if flags | grep -x -- "$arg" >/dev/null; then
                 FLAG="$arg"
             else
                 echo "usage: $0 [flag] [static|animated] [--live-only]" >&2

@@ -205,7 +205,7 @@ COLOURS = {
 #   N    #AA00AA    5    5    black with a background (South Korea's trigrams)
 #   L    #00AAAA    6    6    light blue (Estonia, Greece, Luxembourg, San Marino)
 #   Q    #FF55FF   13    -    orange (Ireland, Cyprus)
-#   S    #AAAAAA    7    7    silver - the console's own light grey, unchanged
+#   S    #AAAAAA  244    7    silver - the console's own light grey, unchanged
 #
 # start.sh redefines five console palette slots on ly's VT, which is what
 # these become on screen: slot 8 (D) and slot 5 (N) to near-black #141414,
@@ -225,7 +225,10 @@ COLOURS_256 = {
     "N": (5, 5),
     "L": (6, 6),
     "Q": (13, None),
-    "S": (7, 7),
+    # Silver's foreground is a 256 grey, not index 7: ly sends 7 as #C0C0C0,
+    # which the console shows as BRIGHT white in the foreground. #808080 is
+    # the same light grey as the background (7).
+    "S": (244, 7),
 }
 FORMAT_256 = {"germany", "russianempire", "southkorea"}
 
