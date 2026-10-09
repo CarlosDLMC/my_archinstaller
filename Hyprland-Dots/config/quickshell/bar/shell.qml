@@ -279,4 +279,11 @@ ShellRoot {
         model: Quickshell.screens
         ShotOsd {}
     }
+
+    // Polkit password prompt, same deal. PolkitState holds the agent, which
+    // replaces hyprpolkitagent.
+    Variants {
+        model: Quickshell.screens
+        PolkitOsd {}
+    }
 }

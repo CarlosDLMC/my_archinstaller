@@ -31,12 +31,14 @@ SystemStats.qml     # Singleton: CPU usage/temp + memory, read from /proc via Fi
 BatteryState.qml    # Singleton: every battery reading, read from /sys via FileView
 AgentUsage.qml      # Singleton: Claude Code allowance + token stats
 ClipboardState.qml  # Singleton: clipboard history state + the clipMenu shortcut
+PolkitState.qml     # Singleton: the polkit agent (replaces hyprpolkitagent) + wrong-password/checking state
 NightLight.qml      # Singleton: night-light state, watched off Hyprsunset.sh's state file
 components/         # Modular widget components
   ├── DropdownWidget.qml   # Base component for click-to-open dropdown widgets (notch design)
   ├── AudioPanel.qml       # Audio card body: output/input device + level, per-app levels
   ├── NetworkPanel.qml     # Network card body: link, connection, traffic, DNS, speed test, share QR
   ├── ClipboardOsd.qml     # Clipboard picker (centred overlay, list + preview)
+  ├── PolkitOsd.qml        # Polkit password prompt (centred overlay; Enter authenticates, Esc cancels)
   ├── AgentWidget.qml      # Claude Code usage: session % in the bar, card on click
   ├── AgentPanel.qml       # Agents card body: plan, allowance meters, tokens by day/model
   ├── VolumeSlider.qml     # Draggable level track, shared by every row of the audio card

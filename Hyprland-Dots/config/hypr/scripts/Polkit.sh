@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 # This script starts the first available Polkit agent from a list of possible locations
 
+# The quickshell bar is the polkit agent (bar/PolkitState.qml). Polkit takes one
+# agent per session, so starting another one here would take the bar's slot.
+# Only when the installed quickshell has the module - otherwise fall through.
+if [ -f "$HOME/.config/quickshell/bar/PolkitState.qml" ] \
+   && [ -d /usr/lib/qt6/qml/Quickshell/Services/Polkit ]; then
+  echo "Polkit agent provided by the quickshell bar - not starting another."
+  exit 0
+fi
+
 # List of potential Polkit agent file paths
 polkit=(
   "/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1"
