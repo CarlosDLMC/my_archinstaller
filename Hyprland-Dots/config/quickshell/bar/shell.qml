@@ -287,6 +287,13 @@ ShellRoot {
         PolkitOsd {}
     }
 
+    // Power menu «ПУСК · ПУЛЬТ», same deal. Driven by the powerMenu global
+    // shortcut (CTRL+ALT+P) and the Arch logo; replaces wlogout.
+    Variants {
+        model: Quickshell.screens
+        PowerOsd {}
+    }
+
     // Wallpaper carousel, same deal. Driven by the wallMenu global shortcut
     // (SUPER W); WallpaperState holds the list and the thumbnails.
     Variants {

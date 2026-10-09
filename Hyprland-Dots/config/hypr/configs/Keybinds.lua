@@ -112,7 +112,7 @@ bind("CTRL + ALT + Delete", hl.dsp.exit(),                          { descriptio
 bind(M .. " + Q",           hl.dsp.window.close(),                  { description = "close active window" })
 bind(M .. " + SHIFT + Q",   exec(S .. "/KillActiveProcess.sh"),     { description = "kill active window process (force)" })
 bind("CTRL + ALT + L",      exec(S .. "/LockScreen.sh"),            { description = "lock screen" })
-bind("CTRL + ALT + P",      exec(S .. "/Wlogout.sh"),               { description = "powermenu" })
+bind("CTRL + ALT + P",      hl.dsp.global("quickshell:powerMenu"),  { description = "powermenu" })
 bind(M .. " + SHIFT + E",   exec(S .. "/Quick_Settings.sh"),   { description = "quick settings menu" })
 
 -- Master layout

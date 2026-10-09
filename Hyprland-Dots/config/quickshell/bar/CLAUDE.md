@@ -32,6 +32,7 @@ BatteryState.qml    # Singleton: every battery reading, read from /sys via FileV
 AgentUsage.qml      # Singleton: Claude Code allowance + token stats
 ClipboardState.qml  # Singleton: clipboard history state + the clipMenu shortcut
 PolkitState.qml     # Singleton: the polkit agent (replaces hyprpolkitagent) + wrong-password/checking state
+PowerState.qml      # Singleton: power menu (CTRL+ALT+P / Arch logo) - orders, 5 s armed countdown, uptime
 WallpaperState.qml  # Singleton: wallpaper carousel - the tree, thumbnails, folders + the wallMenu shortcut
 NightLight.qml      # Singleton: night-light state, watched off Hyprsunset.sh's state file
 components/         # Modular widget components
@@ -40,6 +41,7 @@ components/         # Modular widget components
   ├── NetworkPanel.qml     # Network card body: link, connection, traffic, DNS, speed test, share QR
   ├── ClipboardOsd.qml     # Clipboard picker (centred overlay, list + preview)
   ├── PolkitOsd.qml        # Polkit password prompt (centred overlay; Enter authenticates, Esc cancels)
+  ├── PowerOsd.qml         # Power menu «ПУСК · ПУЛЬТ» (centred cell-grid window, five buttons; replaces wlogout)
   ├── WallpaperOsd.qml     # Wallpaper carousel (slanted cards, folder tabs, type to search)
   ├── AgentWidget.qml      # Claude Code usage: session % in the bar, card on click
   ├── AgentPanel.qml       # Agents card body: plan, allowance meters, tokens by day/model

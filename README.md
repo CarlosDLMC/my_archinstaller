@@ -1342,7 +1342,7 @@ those three commands — the VPN widget is the only thing here that depends on i
 - `SUPER + CTRL + F8` - Handy: toggle speech-to-text (press once to start recording, press again to stop and transcribe into the focused field)
 - `SUPER + ALT + <1-0>` - Move *every* window of the current workspace to that workspace, keeping the tiling layout intact (`SUPER + CTRL + <1-0>` still moves one window silently)
 - `CTRL + ALT + L` - Lock screen (Soviet TUI)
-- `CTRL + ALT + P` - Power menu (wlogout)
+- `CTRL + ALT + P` - Power menu («ПУСК · ПУЛЬТ» in the quickshell bar; also the Arch logo)
 - `ALT + Tab` - **nothing, on purpose.** Hyprland's default cycle-window bind is
   removed in `UserKeybinds.lua` so the key reaches Herdr, which cycles terminal
   tabs with it. A compositor bind is consumed before any application sees it, so

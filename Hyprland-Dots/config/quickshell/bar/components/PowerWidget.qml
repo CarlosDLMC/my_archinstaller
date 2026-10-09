@@ -1,40 +1,22 @@
 import QtQuick
 import QtQuick.Layouts
-import Quickshell
-import Quickshell.Io
 import ".."
 
-DropdownWidget {
+// Arch logo at the bar's left edge. A click opens the power menu - the same
+// «ПУСК · ПУЛЬТ» window as CTRL+ALT+P (PowerState / PowerOsd). It used to
+// open a dropdown of its own.
+Item {
     id: powerWidget
-    popupWidth: 140
-    popupHeight: 165
-    stemAlignment: "left"   // widget now sits at the bar's left edge
 
-    // Power actions
-    Process {
-        id: lockProc
-        command: ["loginctl", "lock-session"]
-    }
-
-    Process {
-        id: logoutProc
-        command: ["hyprctl", "dispatch", "hl.dsp.exit()"]
-    }
-
-    Process {
-        id: rebootProc
-        command: ["systemctl", "reboot"]
-    }
-
-    Process {
-        id: shutdownProc
-        command: ["systemctl", "poweroff"]
-    }
+    required property var barWindow
+    Layout.preferredWidth: powerIcon.width + 16
+    Layout.preferredHeight: parent.height
 
     // Icon with spacing
     Item {
         width: powerIcon.width + 16
         height: parent.height
+        anchors.centerIn: parent
 
         Text {
             id: powerIcon
@@ -62,165 +44,9 @@ DropdownWidget {
         }
     }
 
-    popupContent: Component {
-        Column {
-            spacing: 4
-
-            // Lock
-            Rectangle {
-                width: parent.width
-                height: 32
-                color: lockMouse.containsMouse ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.1) : "transparent"
-                radius: 6
-
-                Row {
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.left: parent.left
-                    anchors.leftMargin: 8
-                    spacing: 10
-
-                    Text {
-                        text: "󰌾"
-                        color: Theme.colFg
-                        font.pixelSize: Theme.fontSize
-                        font.family: Theme.fontFamily
-                    }
-                    Text {
-                        text: "Lock"
-                        color: Theme.colWhite
-                        font.pixelSize: Theme.fontSize
-                        font.family: Theme.fontFamily
-                    }
-                }
-
-                MouseArea {
-                    id: lockMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        powerWidget.dropdownOpen = false
-                        lockProc.running = true
-                    }
-                }
-            }
-
-            // Logout
-            Rectangle {
-                width: parent.width
-                height: 32
-                color: logoutMouse.containsMouse ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.1) : "transparent"
-                radius: 6
-
-                Row {
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.left: parent.left
-                    anchors.leftMargin: 8
-                    spacing: 10
-
-                    Text {
-                        text: "󰍃"
-                        color: Theme.colFg
-                        font.pixelSize: Theme.fontSize
-                        font.family: Theme.fontFamily
-                    }
-                    Text {
-                        text: "Logout"
-                        color: Theme.colWhite
-                        font.pixelSize: Theme.fontSize
-                        font.family: Theme.fontFamily
-                    }
-                }
-
-                MouseArea {
-                    id: logoutMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        powerWidget.dropdownOpen = false
-                        logoutProc.running = true
-                    }
-                }
-            }
-
-            // Reboot
-            Rectangle {
-                width: parent.width
-                height: 32
-                color: rebootMouse.containsMouse ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.1) : "transparent"
-                radius: 6
-
-                Row {
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.left: parent.left
-                    anchors.leftMargin: 8
-                    spacing: 10
-
-                    Text {
-                        text: "󰜉"
-                        color: "#ffb86c"
-                        font.pixelSize: Theme.fontSize
-                        font.family: Theme.fontFamily
-                    }
-                    Text {
-                        text: "Reboot"
-                        color: Theme.colWhite
-                        font.pixelSize: Theme.fontSize
-                        font.family: Theme.fontFamily
-                    }
-                }
-
-                MouseArea {
-                    id: rebootMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        powerWidget.dropdownOpen = false
-                        rebootProc.running = true
-                    }
-                }
-            }
-
-            // Shutdown
-            Rectangle {
-                width: parent.width
-                height: 32
-                color: shutdownMouse.containsMouse ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.1) : "transparent"
-                radius: 6
-
-                Row {
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.left: parent.left
-                    anchors.leftMargin: 8
-                    spacing: 10
-
-                    Text {
-                        text: "󰐥"
-                        color: "#ff5555"
-                        font.pixelSize: Theme.fontSize
-                        font.family: Theme.fontFamily
-                    }
-                    Text {
-                        text: "Shutdown"
-                        color: Theme.colWhite
-                        font.pixelSize: Theme.fontSize
-                        font.family: Theme.fontFamily
-                    }
-                }
-
-                MouseArea {
-                    id: shutdownMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        powerWidget.dropdownOpen = false
-                        shutdownProc.running = true
-                    }
-                }
-            }
-        }
+    MouseArea {
+        anchors.fill: parent
+        cursorShape: Qt.PointingHandCursor
+        onClicked: PowerState.toggle()
     }
 }
