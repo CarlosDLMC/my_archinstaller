@@ -367,6 +367,11 @@ if selected printing; then
         systemctl is-enabled cups.socket
 fi
 
+if selected thp_madvise; then
+    check_outcome "transparent huge pages are not set to madvise at boot (install-scripts/thp.sh)" \
+        grep -qx 'w! /sys/kernel/mm/transparent_hugepage/enabled - - - - madvise' /etc/tmpfiles.d/thp-madvise.conf
+fi
+
 if selected docker; then
     check_outcome "docker.socket is not enabled (install-scripts/docker.sh)" \
         systemctl is-enabled docker.socket

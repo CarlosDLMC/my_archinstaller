@@ -746,6 +746,22 @@ To go back to a splash, run `./install-scripts/plymouth.sh` (it adds `splash`;
 add `quiet` yourself if you want it), or copy the `.pre-text-boot` files back
 and regenerate (`sudo limine-mkinitcpio` with Limine's entry tool).
 
+### Less memory: huge pages on request (`thp_madvise`)
+
+CachyOS's kernel uses transparent huge pages in `always` mode: programs' memory
+is backed by whole 2MB pages wherever possible, even where a program only uses a
+little of each. On a desktop that is mostly overhead. `thp_madvise="ON"` (the
+shipped preset) switches it to `madvise`, where only programs that ask for huge
+pages - databases, the JVM, some games - get them. Nothing loses a feature.
+
+Measured on the machine this repo was built from: the Quickshell bar went from
+192MB to 126MB (fair share), and the session from ~1.6GB to ~1.35GB at login.
+
+`install-scripts/thp.sh` writes `/etc/tmpfiles.d/thp-madvise.conf`, which sets it
+at every boot, and applies it at once - programs already running keep their huge
+pages until they restart. CachyOS's own `thp.conf` and `thp-shrinker.conf` stay
+as they are. Delete the file to go back to `always`.
+
 ### Boot splash (Plymouth)
 
 The `plymouth` preset option installs a Plymouth theme (`assets/plymouth/soviet/`)
@@ -2037,7 +2053,7 @@ chmod +x install.sh
 - ✅ zsh (the shell the dotfiles are written for)
 - ✅ thunar (the file manager the binds and bookmarks expect)
 - and the rest as `custom-preset.conf` has them: herdr, neovim, hunk, docker and
-  text_boot `ON`, plymouth `OFF`; nvidia, nouveau, rog, bluetooth, limine and hackbgrt are resolved from the
+  text_boot and thp_madvise `ON`, plymouth `OFF`; nvidia, nouveau, rog, bluetooth, limine and hackbgrt are resolved from the
   hardware when you pick `auto` in a preset
 
 ## Verification
