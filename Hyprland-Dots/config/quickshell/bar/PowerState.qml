@@ -234,7 +234,10 @@ Singleton {
         command: ["sh", "-c", "command -v efibootmgr >/dev/null && efibootmgr 2>/dev/null"]
         stdout: StdioCollector {
             onStreamFinished: {
-                var m = text.match(/^Boot([0-9A-Fa-f]{4})\*?\s+Windows Boot Manager/m)
+                // HackBGRT's entry first, so Windows gets the same boot logo as
+                // through Limine; plain Windows Boot Manager starts it without.
+                var m = text.match(/^Boot([0-9A-Fa-f]{4})\*.*\\EFI\\HackBGRT\\loader\.efi/im)
+                     || text.match(/^Boot([0-9A-Fa-f]{4})\*?\s+Windows Boot Manager/m)
                 root.windowsEntry = m ? m[1] : ""
             }
         }
