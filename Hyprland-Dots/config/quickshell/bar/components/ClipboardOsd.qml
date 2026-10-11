@@ -66,7 +66,7 @@ PanelWindow {
         if (shown) {
             windowVisible = true
             goneTimer.stop()
-            Qt.callLater(function () { keyCatcher.forceActiveFocus() })
+            Qt.callLater(function () { if (body.item) body.item.forceActiveFocus() })
         } else {
             goneTimer.restart()
         }
@@ -116,317 +116,334 @@ PanelWindow {
         }
     }
 
-    FocusScope {
-        id: keyCatcher
+    // The rows, thumbnails and preview exist only while the picker is on
+    // screen. Built at startup and kept, the hidden picker held ~54MB -
+    // a third of the bar's own memory - for a dialog opened now and then.
+    // The history itself stays preloaded in ClipboardState, so opening is
+    // still quick; only the view is built on open (the WallpaperOsd pattern).
+    Loader {
+        id: body
         anchors.fill: parent
-        focus: true
+        active: osd.windowVisible
+        sourceComponent: content
+        onLoaded: item.forceActiveFocus()
+    }
 
-        // The search field holds focus the whole time so you can just type, and
-        // key events start there and travel outwards. That is fine for arrows
-        // and Enter, which a single-line TextInput ignores - but Delete is an
-        // EDITING key, so the field swallowed it and Ctrl+Del did nothing at
-        // all. The handler is shared with the field itself (see below), which
-        // sees keys first and hands the ones meant for the list back here.
-        Keys.priority: Keys.BeforeItem
-        Keys.onPressed: event => osd.handleKey(event)
+    Component {
+        id: content
+
+        FocusScope {
+            id: keyCatcher
+            anchors.fill: parent
+            focus: true
+
+            // The search field holds focus the whole time so you can just type, and
+            // key events start there and travel outwards. That is fine for arrows
+            // and Enter, which a single-line TextInput ignores - but Delete is an
+            // EDITING key, so the field swallowed it and Ctrl+Del did nothing at
+            // all. The handler is shared with the field itself (see below), which
+            // sees keys first and hands the ones meant for the list back here.
+            Keys.priority: Keys.BeforeItem
+            Keys.onPressed: event => osd.handleKey(event)
 
 
-        Rectangle {
-            id: card
-            anchors.centerIn: parent
-            width: osd.cardW
-            height: osd.cardH
-            radius: osd.radius
-            color: Theme.colBg
-            border.width: 1
-            border.color: Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.10)
+            Rectangle {
+                id: card
+                anchors.centerIn: parent
+                width: osd.cardW
+                height: osd.cardH
+                radius: osd.radius
+                color: Theme.colBg
+                border.width: 1
+                border.color: Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.10)
 
-            opacity: osd.shown ? 1 : 0
-            scale: osd.shown ? 1 : 0.97
-            Behavior on opacity { NumberAnimation { duration: osd.fadeMs } }
-            Behavior on scale {
-                NumberAnimation { duration: osd.fadeMs; easing.type: Easing.OutCubic }
-            }
+                opacity: osd.shown ? 1 : 0
+                scale: osd.shown ? 1 : 0.97
+                Behavior on opacity { NumberAnimation { duration: osd.fadeMs } }
+                Behavior on scale {
+                    NumberAnimation { duration: osd.fadeMs; easing.type: Easing.OutCubic }
+                }
 
-            // Clicks inside must not reach the dismiss layer behind.
-            MouseArea { anchors.fill: parent }
+                // Clicks inside must not reach the dismiss layer behind.
+                MouseArea { anchors.fill: parent }
 
-            Column {
-                anchors.fill: parent
-                anchors.margins: osd.pad
-                spacing: Math.round(10 * osd.uiScale)
+                Column {
+                    anchors.fill: parent
+                    anchors.margins: osd.pad
+                    spacing: Math.round(10 * osd.uiScale)
 
-                // ------------------------------------------------- search
-                Item {
-                    width: parent.width
-                    height: Math.round(osd.titleSize * 2.0)
+                    // ------------------------------------------------- search
+                    Item {
+                        width: parent.width
+                        height: Math.round(osd.titleSize * 2.0)
 
-                    Text {
-                        id: searchGlyph
-                        anchors.left: parent.left
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "󰅇"
-                        color: Theme.colWhite
-                        font.pixelSize: osd.titleSize + 3
-                        font.family: Theme.fontFamilyContent
-                    }
+                        Text {
+                            id: searchGlyph
+                            anchors.left: parent.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "󰅇"
+                            color: Theme.colWhite
+                            font.pixelSize: osd.titleSize + 3
+                            font.family: Theme.fontFamilyContent
+                        }
 
-                    TextInput {
-                        id: search
-                        anchors.left: searchGlyph.right
-                        anchors.leftMargin: 10
-                        anchors.right: countText.left
-                        anchors.rightMargin: 10
-                        anchors.verticalCenter: parent.verticalCenter
-                        color: Theme.colWhite
-                        font.pixelSize: osd.titleSize
-                        font.family: Theme.fontFamilyContent
-                        clip: true
-                        focus: true
-                        onTextChanged: ClipboardState.filter = text
+                        TextInput {
+                            id: search
+                            anchors.left: searchGlyph.right
+                            anchors.leftMargin: 10
+                            anchors.right: countText.left
+                            anchors.rightMargin: 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            color: Theme.colWhite
+                            font.pixelSize: osd.titleSize
+                            font.family: Theme.fontFamilyContent
+                            clip: true
+                            focus: true
+                            onTextChanged: ClipboardState.filter = text
 
-                        // BeforeItem: this runs ahead of the field's own
-                        // editing behaviour, which is the only way Delete ever
-                        // reaches the list - TextInput treats it as "delete the
-                        // character to the right" and accepts it.
-                        Keys.priority: Keys.BeforeItem
-                        Keys.onPressed: event => osd.handleKey(event)
+                            // BeforeItem: this runs ahead of the field's own
+                            // editing behaviour, which is the only way Delete ever
+                            // reaches the list - TextInput treats it as "delete the
+                            // character to the right" and accepts it.
+                            Keys.priority: Keys.BeforeItem
+                            Keys.onPressed: event => osd.handleKey(event)
 
-                        // Reset the box whenever the dialog opens.
-                        Connections {
-                            target: ClipboardState
-                            function onDialogOpenChanged() {
-                                if (ClipboardState.dialogOpen) search.text = ""
+                            // Reset the box whenever the dialog opens.
+                            Connections {
+                                target: ClipboardState
+                                function onDialogOpenChanged() {
+                                    if (ClipboardState.dialogOpen) search.text = ""
+                                }
+                            }
+
+                            Text {
+                                anchors.fill: parent
+                                visible: search.text === ""
+                                text: "Search clipboard…"
+                                color: Theme.colGrey
+                                font.pixelSize: osd.titleSize
+                                font.family: Theme.fontFamilyContent
+                                verticalAlignment: Text.AlignVCenter
                             }
                         }
 
                         Text {
-                            anchors.fill: parent
-                            visible: search.text === ""
-                            text: "Search clipboard…"
+                            id: countText
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: ClipboardState.loading
+                                ? "…"
+                                : ClipboardState.filtered.length + " / " + ClipboardState.entries.length
                             color: Theme.colGrey
-                            font.pixelSize: osd.titleSize
+                            font.pixelSize: osd.hintSize
                             font.family: Theme.fontFamilyContent
-                            verticalAlignment: Text.AlignVCenter
                         }
                     }
 
+                    Rectangle {
+                        width: parent.width
+                        height: 1
+                        color: Theme.colSeparator
+                        opacity: 0.45
+                    }
+
+                    // ------------------------------------------- list + preview
+                    Item {
+                        width: parent.width
+                        height: parent.height - Math.round(osd.titleSize * 2.0)
+                                - Math.round(osd.hintSize * 2.4) - 1
+                                - Math.round(20 * osd.uiScale)
+
+                        ListView {
+                            id: list
+                            width: Math.round(parent.width * 0.52)
+                            height: parent.height
+                            clip: true
+                            spacing: 2
+                            model: ClipboardState.filtered
+                            currentIndex: ClipboardState.selectedIndex
+                            highlightFollowsCurrentItem: true
+                            boundsBehavior: Flickable.StopAtBounds
+
+                            onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
+
+                            delegate: Rectangle {
+                                id: row
+                                required property int index
+                                required property var modelData
+
+                                readonly property bool selected: index === ClipboardState.selectedIndex
+                                readonly property bool isImage: modelData.type === "image"
+
+                                width: list.width - 8
+                                height: osd.rowH
+                                radius: 6
+                                color: selected
+                                    ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.14)
+                                    : (rowMouse.containsMouse
+                                        ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.06)
+                                        : "transparent")
+
+                                // Ask for the picture only once the row exists, so
+                                // scrolling decodes what you look at rather than
+                                // all fifty screenshots up front.
+                                Component.onCompleted: if (isImage) ClipboardState.requestThumb(modelData.id)
+                                // ...and again on every open: close() drops the decoded
+                                // pictures, but a reopen reuses these rows, so
+                                // onCompleted never ran again and they stayed blank.
+                                Connections {
+                                    target: ClipboardState
+                                    function onDialogOpenChanged() {
+                                        if (ClipboardState.dialogOpen && row.isImage)
+                                            ClipboardState.requestThumb(row.modelData.id)
+                                    }
+                                }
+
+                                Row {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    spacing: 8
+
+                                    Item {
+                                        width: osd.rowH - 10
+                                        height: osd.rowH - 10
+                                        anchors.verticalCenter: parent.verticalCenter
+
+                                        Image {
+                                            id: thumb
+                                            anchors.fill: parent
+                                            visible: row.isImage && status === Image.Ready
+                                            source: row.isImage ? ClipboardState.thumbFor(row.modelData.id) : ""
+                                            fillMode: Image.PreserveAspectCrop
+                                            asynchronous: true
+                                            smooth: true
+                                            clip: true
+                                            // Decode at thumbnail size: the stored
+                                            // image can be 2560x1440, and holding
+                                            // that per row is pointless.
+                                            sourceSize.width: 96
+                                            sourceSize.height: 96
+                                        }
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            visible: !thumb.visible
+                                            text: row.isImage ? "󰋩" : "󰦨"
+                                            color: Theme.colGrey
+                                            font.pixelSize: osd.rowSize + 2
+                                            font.family: Theme.fontFamilyContent
+                                        }
+                                    }
+
+                                    Text {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: parent.width - (osd.rowH - 10) - 16
+                                        text: row.isImage
+                                            ? "Image  " + row.modelData.w + "×" + row.modelData.h
+                                              + "  ·  " + row.modelData.size
+                                            : row.modelData.preview
+                                        color: row.selected ? Theme.colWhite : Theme.colGrey
+                                        font.pixelSize: osd.rowSize
+                                        font.family: Theme.fontFamilyContent
+                                        elide: Text.ElideRight
+                                        maximumLineCount: 1
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: rowMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        ClipboardState.selectedIndex = row.index
+                                        ClipboardState.pick(row.modelData)
+                                    }
+                                }
+                            }
+                        }
+
+                        // ------------------------------------------- preview
+                        Rectangle {
+                            id: previewPane
+                            anchors.left: list.right
+                            anchors.leftMargin: osd.pad
+                            anchors.right: parent.right
+                            height: parent.height
+                            radius: 10
+                            color: Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.04)
+
+                            readonly property var entry: ClipboardState.current
+                            readonly property bool isImage: entry && entry.type === "image"
+
+                            Component.onCompleted:
+                                if (isImage) ClipboardState.requestThumb(entry.id)
+                            onEntryChanged:
+                                if (isImage) ClipboardState.requestThumb(entry.id)
+                            // Same on reopen as the rows above: the entry may not change.
+                            Connections {
+                                target: ClipboardState
+                                function onDialogOpenChanged() {
+                                    if (ClipboardState.dialogOpen && previewPane.isImage)
+                                        ClipboardState.requestThumb(previewPane.entry.id)
+                                }
+                            }
+
+                            Image {
+                                id: bigImage
+                                anchors.fill: parent
+                                anchors.margins: 10
+                                visible: parent.isImage && status === Image.Ready
+                                source: parent.isImage ? ClipboardState.thumbFor(parent.entry.id) : ""
+                                fillMode: Image.PreserveAspectFit
+                                asynchronous: true
+                                smooth: true
+                                sourceSize.width: 900
+                                sourceSize.height: 700
+                            }
+
+                            Text {
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                visible: parent.entry !== null && !parent.isImage
+                                text: parent.entry ? parent.entry.preview : ""
+                                color: Theme.colGrey
+                                font.pixelSize: osd.rowSize
+                                font.family: Theme.fontFamilyContent
+                                wrapMode: Text.Wrap
+                                elide: Text.ElideRight
+                            }
+
+                            Text {
+                                anchors.centerIn: parent
+                                visible: parent.isImage && !bigImage.visible
+                                text: "󰋩"
+                                color: Theme.colGrey
+                                font.pixelSize: Math.round(48 * osd.uiScale)
+                                font.family: Theme.fontFamilyContent
+                            }
+
+                            Text {
+                                anchors.centerIn: parent
+                                visible: parent.entry === null
+                                text: ClipboardState.loading ? "Reading history…" : "Nothing matches"
+                                color: Theme.colGrey
+                                font.pixelSize: osd.rowSize
+                                font.family: Theme.fontFamilyContent
+                            }
+                        }
+                    }
+
+                    // -------------------------------------------------- hints
                     Text {
-                        id: countText
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: ClipboardState.loading
-                            ? "…"
-                            : ClipboardState.filtered.length + " / " + ClipboardState.entries.length
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        text: "↑↓ move   ·   Enter paste   ·   Ctrl+Del remove   ·   Alt+Del wipe   ·   Esc close"
                         color: Theme.colGrey
                         font.pixelSize: osd.hintSize
                         font.family: Theme.fontFamilyContent
                     }
-                }
-
-                Rectangle {
-                    width: parent.width
-                    height: 1
-                    color: Theme.colSeparator
-                    opacity: 0.45
-                }
-
-                // ------------------------------------------- list + preview
-                Item {
-                    width: parent.width
-                    height: parent.height - Math.round(osd.titleSize * 2.0)
-                            - Math.round(osd.hintSize * 2.4) - 1
-                            - Math.round(20 * osd.uiScale)
-
-                    ListView {
-                        id: list
-                        width: Math.round(parent.width * 0.52)
-                        height: parent.height
-                        clip: true
-                        spacing: 2
-                        model: ClipboardState.filtered
-                        currentIndex: ClipboardState.selectedIndex
-                        highlightFollowsCurrentItem: true
-                        boundsBehavior: Flickable.StopAtBounds
-
-                        onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
-
-                        delegate: Rectangle {
-                            id: row
-                            required property int index
-                            required property var modelData
-
-                            readonly property bool selected: index === ClipboardState.selectedIndex
-                            readonly property bool isImage: modelData.type === "image"
-
-                            width: list.width - 8
-                            height: osd.rowH
-                            radius: 6
-                            color: selected
-                                ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.14)
-                                : (rowMouse.containsMouse
-                                    ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.06)
-                                    : "transparent")
-
-                            // Ask for the picture only once the row exists, so
-                            // scrolling decodes what you look at rather than
-                            // all fifty screenshots up front.
-                            Component.onCompleted: if (isImage) ClipboardState.requestThumb(modelData.id)
-                            // ...and again on every open: close() drops the decoded
-                            // pictures, but a reopen reuses these rows, so
-                            // onCompleted never ran again and they stayed blank.
-                            Connections {
-                                target: ClipboardState
-                                function onDialogOpenChanged() {
-                                    if (ClipboardState.dialogOpen && row.isImage)
-                                        ClipboardState.requestThumb(row.modelData.id)
-                                }
-                            }
-
-                            Row {
-                                anchors.fill: parent
-                                anchors.leftMargin: 8
-                                anchors.rightMargin: 8
-                                spacing: 8
-
-                                Item {
-                                    width: osd.rowH - 10
-                                    height: osd.rowH - 10
-                                    anchors.verticalCenter: parent.verticalCenter
-
-                                    Image {
-                                        id: thumb
-                                        anchors.fill: parent
-                                        visible: row.isImage && status === Image.Ready
-                                        source: row.isImage ? ClipboardState.thumbFor(row.modelData.id) : ""
-                                        fillMode: Image.PreserveAspectCrop
-                                        asynchronous: true
-                                        smooth: true
-                                        clip: true
-                                        // Decode at thumbnail size: the stored
-                                        // image can be 2560x1440, and holding
-                                        // that per row is pointless.
-                                        sourceSize.width: 96
-                                        sourceSize.height: 96
-                                    }
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        visible: !thumb.visible
-                                        text: row.isImage ? "󰋩" : "󰦨"
-                                        color: Theme.colGrey
-                                        font.pixelSize: osd.rowSize + 2
-                                        font.family: Theme.fontFamilyContent
-                                    }
-                                }
-
-                                Text {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    width: parent.width - (osd.rowH - 10) - 16
-                                    text: row.isImage
-                                        ? "Image  " + row.modelData.w + "×" + row.modelData.h
-                                          + "  ·  " + row.modelData.size
-                                        : row.modelData.preview
-                                    color: row.selected ? Theme.colWhite : Theme.colGrey
-                                    font.pixelSize: osd.rowSize
-                                    font.family: Theme.fontFamilyContent
-                                    elide: Text.ElideRight
-                                    maximumLineCount: 1
-                                }
-                            }
-
-                            MouseArea {
-                                id: rowMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    ClipboardState.selectedIndex = row.index
-                                    ClipboardState.pick(row.modelData)
-                                }
-                            }
-                        }
-                    }
-
-                    // ------------------------------------------- preview
-                    Rectangle {
-                        id: previewPane
-                        anchors.left: list.right
-                        anchors.leftMargin: osd.pad
-                        anchors.right: parent.right
-                        height: parent.height
-                        radius: 10
-                        color: Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.04)
-
-                        readonly property var entry: ClipboardState.current
-                        readonly property bool isImage: entry && entry.type === "image"
-
-                        Component.onCompleted:
-                            if (isImage) ClipboardState.requestThumb(entry.id)
-                        onEntryChanged:
-                            if (isImage) ClipboardState.requestThumb(entry.id)
-                        // Same on reopen as the rows above: the entry may not change.
-                        Connections {
-                            target: ClipboardState
-                            function onDialogOpenChanged() {
-                                if (ClipboardState.dialogOpen && previewPane.isImage)
-                                    ClipboardState.requestThumb(previewPane.entry.id)
-                            }
-                        }
-
-                        Image {
-                            id: bigImage
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            visible: parent.isImage && status === Image.Ready
-                            source: parent.isImage ? ClipboardState.thumbFor(parent.entry.id) : ""
-                            fillMode: Image.PreserveAspectFit
-                            asynchronous: true
-                            smooth: true
-                            sourceSize.width: 900
-                            sourceSize.height: 700
-                        }
-
-                        Text {
-                            anchors.fill: parent
-                            anchors.margins: 12
-                            visible: parent.entry !== null && !parent.isImage
-                            text: parent.entry ? parent.entry.preview : ""
-                            color: Theme.colGrey
-                            font.pixelSize: osd.rowSize
-                            font.family: Theme.fontFamilyContent
-                            wrapMode: Text.Wrap
-                            elide: Text.ElideRight
-                        }
-
-                        Text {
-                            anchors.centerIn: parent
-                            visible: parent.isImage && !bigImage.visible
-                            text: "󰋩"
-                            color: Theme.colGrey
-                            font.pixelSize: Math.round(48 * osd.uiScale)
-                            font.family: Theme.fontFamilyContent
-                        }
-
-                        Text {
-                            anchors.centerIn: parent
-                            visible: parent.entry === null
-                            text: ClipboardState.loading ? "Reading history…" : "Nothing matches"
-                            color: Theme.colGrey
-                            font.pixelSize: osd.rowSize
-                            font.family: Theme.fontFamilyContent
-                        }
-                    }
-                }
-
-                // -------------------------------------------------- hints
-                Text {
-                    width: parent.width
-                    horizontalAlignment: Text.AlignHCenter
-                    text: "↑↓ move   ·   Enter paste   ·   Ctrl+Del remove   ·   Alt+Del wipe   ·   Esc close"
-                    color: Theme.colGrey
-                    font.pixelSize: osd.hintSize
-                    font.family: Theme.fontFamilyContent
                 }
             }
         }

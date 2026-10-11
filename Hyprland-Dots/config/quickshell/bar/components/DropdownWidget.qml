@@ -154,8 +154,13 @@ Item {
             anchors.fill: parent
         }
 
+        // Built when the card opens and dropped when it closes. Without an
+        // `active:` every card - network, audio, battery, agents, ... - was
+        // built at startup and kept for good, open or not; the bar started
+        // ~90MB heavier for cards that were mostly never looked at.
         Loader {
             id: popupLoader
+            active: root.dropdownOpen
             anchors.fill: parent
             anchors.topMargin: cardRect.stemHeight + 8
             anchors.leftMargin: 8
