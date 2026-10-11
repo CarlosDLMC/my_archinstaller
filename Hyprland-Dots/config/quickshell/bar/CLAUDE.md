@@ -41,6 +41,7 @@ components/         # Modular widget components
   ├── NetworkPanel.qml     # Network card body: link, connection, traffic, DNS, speed test, share QR
   ├── ClipboardOsd.qml     # Clipboard picker (centred overlay, list + preview)
   ├── PolkitOsd.qml        # Polkit password prompt (centred overlay; Enter authenticates, Esc cancels)
+  ├── OnDemand.qml         # Creates a dialog's window only while it is open (shell.qml wraps the centred dialogs)
   ├── PowerOsd.qml         # Power menu «ПУСК · ПУЛЬТ» (centred cell-grid window, five buttons; replaces wlogout)
   ├── WallpaperOsd.qml     # Wallpaper carousel (slanted cards, folder tabs, type to search)
   ├── WallpaperReveal.qml  # Its transition: slanted edges opening from the centre, under the windows

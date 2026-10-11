@@ -17,7 +17,13 @@ PanelWindow {
         Hyprland.focusedMonitor && modelData
         && Hyprland.focusedMonitor.name === modelData.name
 
-    readonly property bool shown: ShotState.dialogOpen && onFocusedMonitor
+    // OnDemand creates this window when the dialog opens, so it is born
+    // with the dialog already open. `ready` turns on just after creation:
+    // until then it does not count as shown, so the usual hidden-to-shown
+    // change still happens - open code and fade-in run as they always did.
+    property bool ready: false
+    Component.onCompleted: Qt.callLater(function () { osd.ready = true })
+    readonly property bool shown: ready && ShotState.dialogOpen && onFocusedMonitor
 
     property bool windowVisible: false
 

@@ -265,46 +265,81 @@ ShellRoot {
     // focused monitor). Driven by the recordMenu global shortcut.
     Variants {
         model: Quickshell.screens
-        RecordOsd {}
+        OnDemand {
+            id: recordOsdSlot
+            required property var modelData
+            open: RecordState.dialogOpen
+            RecordOsd { modelData: recordOsdSlot.modelData }
+        }
     }
 
     // Clipboard picker, same deal. Driven by the clipMenu global shortcut.
     Variants {
         model: Quickshell.screens
-        ClipboardOsd {}
+        OnDemand {
+            id: clipboardOsdSlot
+            required property var modelData
+            open: ClipboardState.dialogOpen
+            ClipboardOsd { modelData: clipboardOsdSlot.modelData }
+        }
     }
 
     // Screenshot dialog, same deal. Driven by the shotMenu global shortcut.
     Variants {
         model: Quickshell.screens
-        ShotOsd {}
+        OnDemand {
+            id: shotOsdSlot
+            required property var modelData
+            open: ShotState.dialogOpen
+            ShotOsd { modelData: shotOsdSlot.modelData }
+        }
     }
 
     // Polkit password prompt, same deal. PolkitState holds the agent, which
     // replaces hyprpolkitagent.
     Variants {
         model: Quickshell.screens
-        PolkitOsd {}
+        OnDemand {
+            id: polkitOsdSlot
+            required property var modelData
+            open: PolkitState.open
+            PolkitOsd { modelData: polkitOsdSlot.modelData }
+        }
     }
 
     // Power menu «ПУСК · ПУЛЬТ», same deal. Driven by the powerMenu global
     // shortcut (CTRL+ALT+P) and the Arch logo; replaces wlogout.
     Variants {
         model: Quickshell.screens
-        PowerOsd {}
+        OnDemand {
+            id: powerOsdSlot
+            required property var modelData
+            open: PowerState.dialogOpen
+            PowerOsd { modelData: powerOsdSlot.modelData }
+        }
     }
 
     // Wallpaper carousel, same deal. Driven by the wallMenu global shortcut
     // (SUPER W); WallpaperState holds the list and the thumbnails.
     Variants {
         model: Quickshell.screens
-        WallpaperOsd {}
+        OnDemand {
+            id: wallpaperOsdSlot
+            required property var modelData
+            open: WallpaperState.dialogOpen
+            WallpaperOsd { modelData: wallpaperOsdSlot.modelData }
+        }
     }
 
     // ...and its transition after a pick: two slanted edges opening from the
     // centre, on the layer just above awww's.
     Variants {
         model: Quickshell.screens
-        WallpaperReveal {}
+        OnDemand {
+            id: wallpaperRevealSlot
+            required property var modelData
+            open: WallpaperState.revealPhase !== ""
+            WallpaperReveal { modelData: wallpaperRevealSlot.modelData }
+        }
     }
 }
