@@ -69,7 +69,11 @@ DropdownWidget {
     // Event-based monitoring using dbus-monitor
     Process {
         id: profileMonitor
-        command: ["sh", "-c", "dbus-monitor --system \"type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path='/net/hadess/PowerProfiles'\" 2>/dev/null | while read line; do echo 'profile_changed'; done"]
+        // setpriv --pdeathsig on both links: the kernel TERMs the shell the
+        // moment the bar dies, however it dies, and dbus-monitor the moment
+        // the shell does. A restart or a crash used to leave the pair running
+        // as orphans, one more pair each time.
+        command: ["setpriv", "--pdeathsig", "TERM", "sh", "-c", "setpriv --pdeathsig TERM dbus-monitor --system \"type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path='/net/hadess/PowerProfiles'\" 2>/dev/null | while read line; do echo 'profile_changed'; done"]
         running: true
         stdout: SplitParser {
             onRead: data => {

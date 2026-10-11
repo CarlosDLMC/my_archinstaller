@@ -384,7 +384,10 @@ DropdownWidget {
     // nobody can see.
     Process {
         id: nmMonitor
-        command: ["nmcli", "monitor"]
+        // setpriv --pdeathsig: the kernel TERMs the helper the moment the bar
+        // dies, however it dies - a restart or a crash used to leave it running
+        // as an orphan, one more each time.
+        command: ["setpriv", "--pdeathsig", "TERM", "nmcli", "monitor"]
         running: wifiWidget.hasWifi
         stdout: SplitParser {
             onRead: data => {

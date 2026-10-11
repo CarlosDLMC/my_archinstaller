@@ -186,7 +186,11 @@ DropdownWidget {
     // processes that stayed alive on a machine with no bluetooth at all.
     Process {
         id: btMonitor
-        command: ["sh", "-c", "dbus-monitor --system \"type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path_namespace='/org/bluez'\" 2>/dev/null | while read line; do echo 'bt_changed'; done"]
+        // setpriv --pdeathsig on both links: the kernel TERMs the shell the
+        // moment the bar dies, however it dies, and dbus-monitor the moment
+        // the shell does. A restart or a crash used to leave the pair running
+        // as orphans, one more pair each time.
+        command: ["setpriv", "--pdeathsig", "TERM", "sh", "-c", "setpriv --pdeathsig TERM dbus-monitor --system \"type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path_namespace='/org/bluez'\" 2>/dev/null | while read line; do echo 'bt_changed'; done"]
         running: btWidget.hasAdapter
         stdout: SplitParser {
             onRead: data => {

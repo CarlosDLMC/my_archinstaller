@@ -421,7 +421,11 @@ Singleton {
 
     Process {
         id: monitor
-        command: ["udevadm", "monitor", "--udev", "--subsystem-match=power_supply"]
+        // setpriv --pdeathsig: the kernel TERMs the helper the moment the bar
+        // dies, however it dies - a restart or a crash used to leave it running
+        // as an orphan, one more each time.
+        command: ["setpriv", "--pdeathsig", "TERM",
+                  "udevadm", "monitor", "--udev", "--subsystem-match=power_supply"]
         running: root.present
         stdout: SplitParser {
             onRead: data => {
