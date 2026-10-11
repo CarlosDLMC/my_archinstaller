@@ -32,7 +32,7 @@ BatteryState.qml    # Singleton: every battery reading, read from /sys via FileV
 AgentUsage.qml      # Singleton: Claude Code allowance + token stats
 ClipboardState.qml  # Singleton: clipboard history state + the clipMenu shortcut
 PolkitState.qml     # Singleton: the polkit agent (replaces hyprpolkitagent) + wrong-password/checking state
-PowerState.qml      # Singleton: power menu (CTRL+ALT+P / Arch logo) - orders, 5 s armed countdown, uptime
+PowerState.qml      # Singleton: power menu (CTRL+ALT+P) - orders, 5 s armed countdown, uptime
 WallpaperState.qml  # Singleton: wallpaper carousel - the tree, thumbnails, folders + the wallMenu shortcut
 NightLight.qml      # Singleton: night-light state, watched off Hyprsunset.sh's state file
 components/         # Modular widget components

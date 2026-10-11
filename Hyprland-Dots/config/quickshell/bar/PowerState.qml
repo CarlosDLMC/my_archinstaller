@@ -5,8 +5,8 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
 
-// Power menu «ПУСК · ПУЛЬТ» on CTRL+ALT+P (global shortcut quickshell:powerMenu)
-// and on the Arch logo. Replaces wlogout.
+// Power menu «ПУСК · ПУЛЬТ» on CTRL+ALT+P (global shortcut quickshell:powerMenu).
+// Replaces wlogout. The Arch logo keeps its own small dropdown (PowerWidget).
 //
 // L and U fire at once. E, R, S - and B, W, which reboot - arm a five-second
 // countdown named after a real launch («ключ на старт» → «пуск»); the same key

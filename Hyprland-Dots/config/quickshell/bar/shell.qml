@@ -95,7 +95,7 @@ ShellRoot {
                     // Left padding
                     Item { width: 12 }
 
-                    // Arch logo, doubling as the power menu. No separator after
+                    // Arch logo with a small Lock/Logout/Reboot/Shutdown dropdown. No separator after
                     // it - the logo reads as a mark, not as another widget.
                     PowerWidget {
                         barWindow: barWindow
@@ -308,7 +308,7 @@ ShellRoot {
     }
 
     // Power menu «ПУСК · ПУЛЬТ», same deal. Driven by the powerMenu global
-    // shortcut (CTRL+ALT+P) and the Arch logo; replaces wlogout.
+    // shortcut (CTRL+ALT+P); replaces wlogout.
     Variants {
         model: Quickshell.screens
         OnDemand {
