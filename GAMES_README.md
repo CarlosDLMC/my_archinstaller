@@ -73,6 +73,12 @@ VAR=value   wrapper   [flags]   --   %command%
 | FSR, game has no built-in option | `gamescope -W 2560 -H 1440 -w 1920 -h 1080 -F fsr --fsr-sharpness 5 -f --adaptive-sync --mangoapp -- %command%` |
 | Overlay visible from the start | `MANGOHUD_CONFIG=no_display=0 mangohud %command%` |
 | Uncapped, to see what the card does | `MANGOHUD_CONFIG=fps_limit=0 mangohud %command%` |
+| Huge pages, CPU-bound game slower since `thp_madvise` | `GLIBC_TUNABLES=glibc.malloc.hugetlb=1 %command%` |
+
+The huge-pages line gives one game back what THP "always" gave every program.
+Linux hands out memory in 4 KB pages; with it, the game asks for 2 MB pages
+instead. It helps native games most. See madvise in
+[README.md](README.md#less-memory-huge-pages-on-request-thp_madvise).
 
 Use `mangohud %command%` by default. gamescope is a repair tool — reach for it
 when a game gets the resolution wrong, loses the cursor to another monitor,
