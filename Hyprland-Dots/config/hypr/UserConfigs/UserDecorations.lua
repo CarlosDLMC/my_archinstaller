@@ -54,9 +54,17 @@ hl.config({
         col = {
             border_active = c.color15,
         },
+        -- Tabs are filled blocks (gradients) so the active one stands out:
+        -- bright accent with dark text, the rest dark and see-through.
         groupbar = {
+            gradients   = true,
+            height      = 24,
+            font_size   = 18,
+            text_color          = c.color0,
+            text_color_inactive = c.color15,
             col = {
-                active = c.color0,
+                active   = c.color15,
+                inactive = c.color0:gsub("^rgb%((%x+)%)$", "rgba(%1cc)"),
             },
         },
     },
