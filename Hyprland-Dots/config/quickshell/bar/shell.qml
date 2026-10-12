@@ -35,14 +35,18 @@ ShellRoot {
             readonly property real uiScale: Math.max(minScale, Math.min(1.0, width / referenceWidth))
             readonly property real designWidth: width / uiScale
 
-            // Listen to Hyprland events to close popups when focus changes
+            // Close popups when focus moves to another window. Hyprland also
+            // re-sends activewindow for the SAME window (a browser retitling
+            // itself, group redraws), so compare addresses instead of closing
+            // on every event - that closed widgets after a couple of seconds.
+            property string focusedAddress: ""
             Connections {
                 target: Hyprland
                 function onRawEvent(event) {
-                    // Close popups when active window changes or layer closes
-                    if (event.name === "activewindow" || event.name === "activewindowv2") {
-                        barWindow.closeAllPopups()
-                    }
+                    if (event.name !== "activewindowv2") return
+                    if (event.data === barWindow.focusedAddress) return
+                    barWindow.focusedAddress = event.data
+                    barWindow.closeAllPopups()
                 }
             }
 
