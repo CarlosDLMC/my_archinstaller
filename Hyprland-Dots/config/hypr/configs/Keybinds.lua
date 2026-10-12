@@ -200,8 +200,9 @@ bind(M .. " + ALT + down",  hl.dsp.window.swap({ direction = "down" }),  { descr
 -- Gamescope also grabs SUPER + G (keyboard grab), but only while its window is focused.
 bind(M .. " + G",           hl.dsp.group.toggle(), { description = "toggle group" })
 bind(M .. " + Tab",         hl.dsp.group.next(),   { description = "next window in group" })
-bind(M .. " + CTRL + Tab",  hl.dsp.group.next(),   { description = "next window in group" })
-bind(M .. " + SHIFT + Tab", hl.dsp.group.prev(),   { description = "previous window in group" })
+bind(M .. " + CTRL + Tab",  hl.dsp.group.prev(),   { description = "previous window in group" })
+bind(M .. " + SHIFT + Tab", hl.dsp.group.move_window({ forward = true }),  { description = "move tab right in group" })
+bind(M .. " + ALT + Tab",   hl.dsp.group.move_window({ forward = false }), { description = "move tab left in group" })
 bind(M .. " + CTRL + K",    hl.dsp.window.move({ into_group = "l" }),    { description = "move window into the group on the left" })
 bind(M .. " + CTRL + L",    hl.dsp.window.move({ into_group = "r" }),    { description = "move window into the group on the right" })
 bind(M .. " + O",           hl.dsp.window.move({ out_of_group = true }), { description = "move window out of its group" })
