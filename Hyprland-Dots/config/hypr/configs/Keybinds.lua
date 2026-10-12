@@ -204,7 +204,8 @@ bind(M .. " + CTRL + Tab",  hl.dsp.group.next(),   { description = "next window 
 bind(M .. " + SHIFT + Tab", hl.dsp.group.prev(),   { description = "previous window in group" })
 bind(M .. " + CTRL + K",    hl.dsp.window.move({ into_group = "l" }),    { description = "move window into the group on the left" })
 bind(M .. " + CTRL + L",    hl.dsp.window.move({ into_group = "r" }),    { description = "move window into the group on the right" })
-bind(M .. " + CTRL + H",    hl.dsp.window.move({ out_of_group = true }), { description = "move window out of its group" })
+bind(M .. " + O",           hl.dsp.window.move({ out_of_group = true }), { description = "move window out of its group" })
+bind(M .. " + U",           exec(S .. "/GroupJoin.sh"),  { description = "join window into the workspace group" })
 
 -- Move focus
 bind(M .. " + left",  hl.dsp.focus({ direction = "left" }),  { description = "focus left" })
