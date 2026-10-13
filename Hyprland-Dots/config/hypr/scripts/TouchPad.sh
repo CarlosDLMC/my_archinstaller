@@ -13,6 +13,9 @@
 notif="$HOME/.config/swaync/images/ja.png"
 
 export STATUS_FILE="$XDG_RUNTIME_DIR/touchpad.status"
+# The touchpads found below, for Laptops.lua to put the state back on after a
+# config reload - it has no udev to ask.
+DEVICES_FILE="$XDG_RUNTIME_DIR/touchpad.devices"
 
 touchpad_names() {
     local e name found=0
@@ -27,11 +30,13 @@ touchpad_names() {
 }
 
 set_touchpads() {
-    local enabled="$1" dev
+    local enabled="$1" dev names
+    names=$(touchpad_names)
+    printf '%s\n' "$names" >"$DEVICES_FILE"
     while IFS= read -r dev; do
         [ -n "$dev" ] || continue
         hyprctl eval "hl.device({ name = '$dev', enabled = $enabled })" >/dev/null
-    done < <(touchpad_names)
+    done <<< "$names"
 }
 
 enable_touchpad() {
