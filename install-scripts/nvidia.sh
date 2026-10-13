@@ -151,10 +151,28 @@ if [ -n "$prebuilt" ]; then
       _best="$_kb"; suffix="${prebuilt#"$_kb"-}"
     fi
   done
+  # Arch names them the other way round: nvidia-open is linux's, and another
+  # kernel's is nvidia-open-<that kernel without "linux-">, e.g. nvidia-open-lts
+  # for linux-lts. No kernel prefixes those, so linux-lts was offered a
+  # "linux-lts-" that does not exist. flavour: the name without a kernel's end.
+  flavour="$prebuilt"
+  if [ -z "$suffix" ]; then
+    for _kb in "${kbases[@]}"; do
+      if [ "$_kb" != linux ] && [[ "$prebuilt" == *"-${_kb#linux-}" ]]; then
+        flavour="${prebuilt%"-${_kb#linux-}"}"
+      fi
+    done
+  fi
   for i in "${!kvers[@]}"; do
     has_module "${kvers[$i]}" && continue
-    _want="${kbases[$i]}-${suffix}"
-    if [ -n "$suffix" ] && pacman -Si "$_want" &>/dev/null; then
+    if [ -n "$suffix" ]; then
+      _want="${kbases[$i]}-${suffix}"
+    elif [ "${kbases[$i]}" = linux ]; then
+      _want="$flavour"
+    else
+      _want="$flavour-${kbases[$i]#linux-}"
+    fi
+    if pacman -Si "$_want" &>/dev/null; then
       install_package "$_want" "$LOG"
     else
       echo "${ERROR} Kernel ${kbases[$i]} (${kvers[$i]}) has no NVIDIA module, and there is no prebuilt ${_want:-package} for it." | tee -a "$LOG"
