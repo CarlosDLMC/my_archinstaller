@@ -16,7 +16,9 @@ LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_boot_windows.log"
 # What this is for
 #
 # The bar's power menu (PowerOsd, key W) reboots into Windows once: it sets the
-# firmware's one-shot BootNext to the Windows Boot Manager entry and reboots.
+# firmware's one-shot BootNext to Windows and reboots - to the "Windows
+# (HackBGRT)" entry hackbgrt.sh adds when HackBGRT is set up, so Windows shows
+# the same logo as through Limine, else to Windows Boot Manager.
 # Rebooting needs no privileges (logind allows the active session), but BootNext
 # is a UEFI variable and only root may write those. Through pkexec that meant a
 # password prompt on every W.
@@ -25,7 +27,7 @@ LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_boot_windows.log"
 # thing and takes no input, and a sudoers rule for that helper alone. Granting
 # efibootmgr itself without a password would let any process running as the
 # user rewrite or delete boot entries; this helper can only point BootNext at
-# Windows Boot Manager, which is harmless.
+# a Windows entry, which is harmless.
 #
 # BIOS machines (no /sys/firmware/efi) get nothing. A UEFI machine without
 # Windows gets the helper anyway - Windows may be installed later - and the
@@ -52,18 +54,27 @@ cat > "$TMP_HELPER" <<'HELPEREOF'
 #!/bin/bash
 # Installed by my_archinstaller (install-scripts/boot_windows.sh).
 #
-# Points the firmware's one-shot BootNext at the Windows Boot Manager entry, so
-# the next reboot - and only the next one - starts Windows. Takes no arguments
-# and does nothing else; the quickshell power menu runs it through sudo and then
-# reboots with `systemctl reboot`.
+# Points the firmware's one-shot BootNext at Windows, so the next reboot - and
+# only the next one - starts Windows. Takes no arguments and does nothing else;
+# the quickshell power menu runs it through sudo and then reboots with
+# `systemctl reboot`.
 #
-# Exit 2 when there is no Windows Boot Manager entry.
+# Prefers an entry that starts HackBGRT (\EFI\HackBGRT\loader.efi), so Windows
+# gets the same boot logo as through Limine; falls back to Windows Boot Manager,
+# which starts Windows without it.
+#
+# Exit 2 when there is neither entry.
 set -u
 [ "$#" -eq 0 ] || { echo "usage: boot-windows-next" >&2; exit 64; }
-entry=$(efibootmgr 2>/dev/null \
+entries=$(efibootmgr 2>/dev/null)
+entry=$(printf '%s\n' "$entries" \
+  | grep -i '\\EFI\\HackBGRT\\loader\.efi' \
+  | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)\*.*/\1/p' \
+  | head -n 1)
+[ -n "$entry" ] || entry=$(printf '%s\n' "$entries" \
   | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)\*\{0,1\}[[:space:]]\{1,\}Windows Boot Manager.*/\1/p' \
   | head -n 1)
-[ -n "$entry" ] || { echo "boot-windows-next: no Windows Boot Manager entry" >&2; exit 2; }
+[ -n "$entry" ] || { echo "boot-windows-next: no HackBGRT or Windows Boot Manager entry" >&2; exit 2; }
 exec efibootmgr --bootnext "$entry" >/dev/null
 HELPEREOF
 

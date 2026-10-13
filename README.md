@@ -952,10 +952,18 @@ picture. Windows draws it pixel for pixel, with its spinner underneath.
   entry, so kernel updates leave it alone. If one ever adds a second, plain
   Windows entry (limine-entry-tool's `FIND_BOOTLOADERS`), a re-run of the script
   points that one at HackBGRT too.
+- A firmware boot entry `Windows (HackBGRT)` for the same loader is added with
+  `efibootmgr --create-only`, so it is not in the boot order and the machine
+  still boots Limine by default. It is what the power menu's W (reboot into
+  Windows, `install-scripts/boot_windows.sh`) points BootNext at, so a reboot
+  into Windows from the bar shows the logo too; without it W falls back to
+  Windows Boot Manager.
 
 The firmware's own boot menu (F8 on ASUS -> Windows Boot Manager) still starts
 Windows without HackBGRT. To take it out: point the entry back at
-`/EFI/Microsoft/Boot/bootmgfw.efi` and delete `EFI/HackBGRT/` on that partition.
+`/EFI/Microsoft/Boot/bootmgfw.efi`, delete the `Windows (HackBGRT)` firmware
+entry (`sudo efibootmgr -b <its number> -B`, the number from `efibootmgr`) and
+delete `EFI/HackBGRT/` on that partition.
 With Secure Boot on, HackBGRT needs shim and a key enrolled by hand at boot (its
 `shim.md`), so the script skips it. After a monitor change, re-run
 `./install-scripts/hackbgrt.sh` to render the picture for the new panel.
