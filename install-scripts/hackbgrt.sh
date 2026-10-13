@@ -22,7 +22,10 @@
 #   - points the Windows entry's path at EFI/HackBGRT/loader.efi, keeping
 #     limine.conf as limine.conf.pre-hackbgrt. Windows' own files are not touched,
 #     and the firmware boot menu's "Windows Boot Manager" still starts Windows
-#     without it.
+#     without it;
+#   - adds a firmware boot entry "Windows (HackBGRT)" for the same loader, outside
+#     the boot order, for the power menu's W (BootNext, see boot_windows.sh) - so
+#     a reboot into Windows from the bar shows the logo too.
 #
 # config.txt sets the panel's resolution explicitly. "Current" (-1x-1) is wrong
 # behind Limine: Limine leaves the screen in a lower mode for its menu, and
@@ -256,6 +259,28 @@ else
   fi
   sudo sync
   echo "${OK} The Windows entry in $CONF now starts HackBGRT - the original is kept as $CONF.pre-hackbgrt." | tee -a "$LOG"
+fi
+
+# 7. A firmware boot entry for HackBGRT. The power menu's W reboots into Windows
+#    through BootNext, which names a firmware entry (boot_windows.sh), not a
+#    Limine one - with only "Windows Boot Manager" there, Windows came up without
+#    the logo. --create-only: not added to BootOrder, so what the machine boots by
+#    default does not change. Not fatal: Limine's entry is the main way in, and
+#    without this one W simply falls back to Windows Boot Manager.
+if command -v efibootmgr &>/dev/null; then
+  if sudo efibootmgr 2>/dev/null | grep -qi '\\EFI\\HackBGRT\\loader\.efi'; then
+    echo "${OK} The firmware already has a boot entry that starts HackBGRT." | tee -a "$LOG"
+  else
+    read -r _hb_disk _hb_partn < <(lsblk -rno PKNAME,PARTN "$WIN_PART" 2>/dev/null | head -n 1) || true
+    if [ -n "${_hb_disk:-}" ] && [ -n "${_hb_partn:-}" ] \
+       && sudo efibootmgr --create-only --disk "/dev/$_hb_disk" --part "$_hb_partn" \
+            --loader '\EFI\HackBGRT\loader.efi' --label 'Windows (HackBGRT)' >>"$LOG" 2>&1 \
+       && sudo efibootmgr 2>/dev/null | grep -qi '\\EFI\\HackBGRT\\loader\.efi'; then
+      echo "${OK} Added the firmware boot entry 'Windows (HackBGRT)', outside the boot order: W in the power menu reboots into Windows through it." | tee -a "$LOG"
+    else
+      echo "${WARN} Could not add a firmware boot entry for HackBGRT (see $LOG) - W in the power menu starts Windows without the logo." | tee -a "$LOG"
+    fi
+  fi
 fi
 
 clear_package_failure "hackbgrt"
