@@ -175,8 +175,50 @@ def limine_linux_entries(lines):
             out.append((s, cl))
     return out
 
+# Whose entry is it? limine-entry-tool files each system's kernels under an OS
+# entry carrying "comment: machine-id=<id>", and that decides when it is there.
+# Otherwise the kernel the entry boots: vmlinuz-<pkgbase> of a kernel installed
+# here, as for systemd-boot above (archinstall's hand-written entries). Another
+# system sharing the ESP keeps its own command line: this one can neither fix
+# nor check it, and counting it failed the read-back on every run.
+MACHINE_ID = re.compile(r'^\s*comment\s*:.*\bmachine-id=([0-9A-Fa-f]{32})\b')
+LIMINE_PATH = re.compile(r'^\s*(?:kernel_path|path|image_path)\s*:\s*\S*?\):(\S+)\s*$', re.I)
+
+def limine_parents(lines):
+    starts = [i for i, l in enumerate(lines) if re.match(r'\s*/', l)]
+    parent, bodies, stack = {}, {}, []
+    for n, s in enumerate(starts):
+        depth = len(re.match(r'\s*(/+)', lines[s]).group(1))
+        while stack and stack[-1][0] >= depth:
+            stack.pop()
+        parent[s] = stack[-1][1] if stack else None
+        bodies[s] = range(s + 1, starts[n + 1] if n + 1 < len(starts) else len(lines))
+        stack.append((depth, s))
+    return parent, bodies
+
+def limine_is_ours(lines, s, parent, bodies):
+    mid = os.environ.get('TB_MACHINE_ID', '').strip().lower()
+    kernels = os.environ.get('TB_KERNELS', '').split()
+    e = s
+    while e is not None:
+        for i in bodies[e]:
+            m = MACHINE_ID.match(lines[i])
+            if m:
+                return not mid or m.group(1).lower() == mid
+        e = parent[e]
+    paths = [m.group(1) for m in (LIMINE_PATH.match(lines[i]) for i in bodies[s]) if m]
+    kpaths = [p for p in paths if p.rsplit('/', 1)[-1].startswith('vmlinuz')]
+    if not kpaths or not (kernels or mid):
+        return True
+    return any(p.rsplit('/', 1)[-1] in ['vmlinuz-' + k for k in kernels] or (mid and '/' + mid + '/' in p)
+               for p in kpaths)
+
+def limine_ours(lines):
+    parent, bodies = limine_parents(lines)
+    return [(s, cl) for s, cl in limine_linux_entries(lines) if limine_is_ours(lines, s, parent, bodies)]
+
 def limine_entries(lines):
-    return [cl for s, cl in limine_linux_entries(lines)]
+    return [cl for s, cl in limine_ours(lines)]
 
 # Snapshot boot entries: limine-snapper-sync's, under its "Snapshots" heading,
 # or any entry that roots the system in a snapper snapshot. Each one boots the
@@ -205,9 +247,11 @@ def is_snapshot(lines, s, cl, snaps):
     return s in snaps or any(SNAPSHOT_ROOT.search(lines[i]) for i in cl)
 
 def edit_limine(lines, var):
+    if not limine_linux_entries(lines):
+        return 'skip'
     entries = limine_entries(lines)
     if not entries:
-        return 'skip'
+        return 'foreign'
     for cl in entries:
         for i in cl:
             m = CMDLINE.match(lines[i])
@@ -297,19 +341,24 @@ if cmd == 'edit':
     with open(dst, 'w', newline='') as f:
         f.write(body)
     print('removed')
-elif cmd in ('limine-check', 'limine-snapshots'):
-    # limine-check: every Linux entry of a generated limine.conf but the
-    # snapshot ones - no word left. Prints the offending cmdline lines.
-    # limine-snapshots: how many snapshot entries still have a word.
+elif cmd in ('limine-check', 'limine-snapshots', 'limine-foreign'):
+    # limine-check: every Linux entry of this system in a generated limine.conf
+    # but the snapshot ones - no word left. Prints the offending cmdline lines.
+    # limine-snapshots: how many of this system's snapshot entries still have a
+    # word. limine-foreign: how many other systems' entries have one.
     text, nl = load(sys.argv[2])
     lines = lines_of(text or '')
     snaps = snapshot_starts(lines)
     def has_word(cl):
         return any(set(words(CMDLINE.match(lines[i]).group(2))) & set(DROP) for i in cl)
-    if cmd == 'limine-snapshots':
-        print(sum(1 for s, cl in limine_linux_entries(lines) if is_snapshot(lines, s, cl, snaps) and has_word(cl)))
+    ours = limine_ours(lines)
+    if cmd == 'limine-foreign':
+        print(sum(1 for e in limine_linux_entries(lines) if e not in ours and has_word(e[1])))
         sys.exit(0)
-    bad = [lines[i].strip() for s, cl in limine_linux_entries(lines) if not is_snapshot(lines, s, cl, snaps)
+    if cmd == 'limine-snapshots':
+        print(sum(1 for s, cl in ours if is_snapshot(lines, s, cl, snaps) and has_word(cl)))
+        sys.exit(0)
+    bad = [lines[i].strip() for s, cl in ours if not is_snapshot(lines, s, cl, snaps)
            for i in cl if set(words(CMDLINE.match(lines[i]).group(2))) & set(DROP)]
     print('\n'.join(bad))
     sys.exit(1 if bad else 0)
@@ -600,9 +649,13 @@ if [ -n "$_limine_conf" ] && [ "$_rebuild_failed" = false ] && command -v limine
      && _left=$(python3 -c "$TB_PY" limine-check "$TB_TMP/limine.conf" 2>>"$LOG"); then
     _snaps=$(python3 -c "$TB_PY" limine-snapshots "$TB_TMP/limine.conf" 2>>"$LOG") || _snaps=0
     if [ "${_snaps:-0}" -gt 0 ] 2>/dev/null; then
-      echo "${OK} No Limine entry in $_limine_conf has 'quiet' or 'splash', apart from $_snaps snapshot entr$([ "$_snaps" -eq 1 ] && echo y || echo ies): a snapshot boots the way the system was when it was taken, and those are left as they are." | tee -a "$LOG"
+      echo "${OK} No Limine entry of this system in $_limine_conf has 'quiet' or 'splash', apart from $_snaps snapshot entr$([ "$_snaps" -eq 1 ] && echo y || echo ies): a snapshot boots the way the system was when it was taken, and those are left as they are." | tee -a "$LOG"
     else
-      echo "${OK} No Limine entry in $_limine_conf has 'quiet' or 'splash'." | tee -a "$LOG"
+      echo "${OK} No Limine entry of this system in $_limine_conf has 'quiet' or 'splash'." | tee -a "$LOG"
+    fi
+    _foreign=$(python3 -c "$TB_PY" limine-foreign "$TB_TMP/limine.conf" 2>>"$LOG") || _foreign=0
+    if [ "${_foreign:-0}" -gt 0 ] 2>/dev/null; then
+      echo "${NOTE} $_foreign Limine entr$([ "$_foreign" -eq 1 ] && echo y || echo ies) of another system on this ESP still ha$([ "$_foreign" -eq 1 ] && echo s || echo ve) 'quiet' or 'splash' - left alone: that system's own command line." | tee -a "$LOG"
     fi
   else
     echo "${ERROR} Limine entries in $_limine_conf still have 'quiet' or 'splash':" | tee -a "$LOG"
