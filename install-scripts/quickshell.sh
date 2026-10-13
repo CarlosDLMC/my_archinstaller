@@ -5,16 +5,17 @@
 #
 # The bar was written against quickshell-git (0.3.0.r6.gb66495f) because that
 # was what existed at the time; the reference machine has since moved to stable
-# 0.3.1 with no changes to the bar. Installing the -git package "to match" would
-# be a trap in either case: a -git
+# 0.3.1, and a fresh install now gets 0.3.2 (built against Qt 6.12, like the
+# rest of the repos), with no changes to the bar. Installing the -git package
+# "to match" would be a trap in either case: a -git
 # PKGBUILD builds whatever upstream HEAD is on the day you install, so it pins
 # nothing and can only drift further from what the bar was tested against.
 #
 # Stable is safe here, and this was verified rather than assumed - the exported
 # QML API of 0.3.1 was diffed against the 0.3.0.r6 build this bar was written
 # on: 118 -> 119 types and 1056 -> 1057 members, with *nothing* removed or
-# renamed. The bar only touches PanelWindow, PopupWindow, Variants, ShellRoot,
-# Singleton, Process, Timer and HyprlandFocusGrab, all unchanged.
+# renamed. 0.3.2 against 0.3.1 again only adds (types and members, nothing
+# removed or changed), and the bar loads on it with the same log as on 0.3.1.
 #
 # If the bar ever does come up blank after an install, re-run that diff before
 # reaching for the -git package:
