@@ -16,8 +16,8 @@
 	<name>Open Terminal Here</name>
 	<submenu></submenu>
 	<unique-id>1703572977408169-1</unique-id>
-	<command>exo-open --working-directory %f --launch TerminalEmulator</command>
-	<description>Launch TerminalEmulator</description>
+	<command>foot --working-directory %f</command>
+	<description>Open foot in this folder</description>
 	<range></range>
 	<patterns>*</patterns>
 	<startup-notify/>
