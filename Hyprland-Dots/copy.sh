@@ -485,7 +485,6 @@ config_dirs=(
     "fastfetch"
     "btop"
     "cava"
-    "Kvantum"
     "Mousepad"
     "qt5ct"
     "qt6ct"
@@ -499,17 +498,28 @@ config_dirs=(
     # color-scheme, the xdg-desktop-portal appearance setting AND gtk-3.0's
     # settings.ini. Without this they render in GTK4's built-in light Adwaita.
     "gtk-4.0"
+    # nwg-displays' own settings (view scale, snap threshold). It is referenced
+    # 17 times across the dots as the monitor-layout tool.
+    "nwg-displays"
+)
+
+# Drop-in directories: deployed file by file INTO ~/.config/<dir> (after the
+# loop below), never moved aside whole. They are where the user and other
+# programs keep files of their own too - another environment.d/*.conf, a
+# fonts.conf, an installed Kvantum theme - and replacing the directory took
+# those into a backup, where they silently stopped applying.
+dropin_dirs=(
     # LC_TIME for the whole graphical session: 24-hour clock, Monday-first
     # calendar and Cyrillic month names. Needs install-scripts/locales.sh to
     # have generated ru_RU.UTF-8, or glibc falls back to C in silence.
     "environment.d"
-    # nwg-displays' own settings (view scale, snap threshold). It is referenced
-    # 17 times across the dots as the monitor-layout tool.
-    "nwg-displays"
     # 99-no-ligatures.conf turns off liga/clig/calt/dlig and swaps JetBrains
     # Mono and Fira Code for their no-ligature cuts. Without it a fresh machine
     # gets ligatures everywhere - ->, =>, != rendered as single glyphs.
     "fontconfig"
+    # The Kvantum theme the Qt apps use, and its kvantum.kvconfig (Light mode
+    # is a line in it - see apply_user_state).
+    "Kvantum"
     # MangoHud.conf is not just an overlay layout: fps_limit and vsync in it
     # actively cap and pace the game, so it is the panel tuning (48-75 Hz
     # FreeSync window, cap 3 under the 75 Hz ceiling) in file form. Inert
@@ -733,6 +743,40 @@ for dir in "${config_dirs[@]}"; do
         fi
     else
         printf "  ${WARN} $dir not found in $SCRIPT_DIR/config/, skipping\n"
+    fi
+done
+
+# The drop-in directories, file by file. Each repo file is compared with what
+# is there after apply_user_state has put the user's settings into a copy of it
+# (Light mode in kvantum.kvconfig), so a file that differs only by those is not
+# backed up; one that differs otherwise is kept beside it as a stamped backup.
+# Files the repo does not have are not touched.
+for dir in "${dropin_dirs[@]}"; do
+    [ -d "$SCRIPT_DIR/config/$dir" ] || continue
+    _want=$(mktemp -d) || { copy_failed+=("$dir"); continue; }
+    cp -r "$SCRIPT_DIR/config/$dir/." "$_want/"
+    if [ -d "$HOME/.config/$dir" ]; then
+        apply_user_state "$dir" "$HOME/.config/$dir" "$_want" quiet
+    fi
+    _dropin_ok=yes
+    while IFS= read -r -d '' _f; do
+        _rel="${_f#"$_want"/}"
+        _dst="$HOME/.config/$dir/$_rel"
+        if [ -f "$_dst" ] && cmp -s "$_f" "$_dst"; then
+            continue
+        fi
+        if [ -f "$_dst" ]; then
+            cp -p "$_dst" "$_dst.backup-$BACKUP_STAMP" \
+                && echo "  ${NOTE} Backed up existing $dir/$_rel to $(basename "$_dst").backup-$BACKUP_STAMP"
+        fi
+        mkdir -p "$(dirname "$_dst")" && cp "$_f" "$_dst" || _dropin_ok=no
+    done < <(find "$_want" -type f -print0)
+    rm -rf "$_want"
+    if [ "$_dropin_ok" = yes ]; then
+        echo "  ${OK} Copied $dir (file by file - files of your own in it stay)"
+    else
+        echo "  ${ERROR} Failed to copy some of $dir"
+        copy_failed+=("$dir")
     fi
 done
 
