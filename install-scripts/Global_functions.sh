@@ -631,6 +631,20 @@ keep_original() { # file suffix read-copy
   return 1
 }
 
+# BitLocker (or Windows' device encryption, the same thing) on a disk that is
+# not on USB. HackBGRT stays out of Windows' boot chain when there is one (see
+# hackbgrt.sh). A BitLocker To Go stick plugged in during the install says
+# nothing about Windows' own disk, and it used to turn HackBGRT off. Only USB
+# is left out: an internal SATA disk on a hot-swap port reports hotplug too.
+bitlocker_present() {
+  local _disk _tran
+  while read -r _disk _tran; do
+    [ "$_tran" = usb ] && continue
+    lsblk -rno FSTYPE "/dev/$_disk" 2>/dev/null | grep -qix bitlocker && return 0
+  done < <(lsblk -dnro NAME,TRAN 2>/dev/null)
+  return 1
+}
+
 # Function for removing packages
 uninstall_package() {
   local pkg="$1"
