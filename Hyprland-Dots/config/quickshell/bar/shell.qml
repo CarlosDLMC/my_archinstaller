@@ -183,10 +183,14 @@ ShellRoot {
 
                     // WiFi indicator
                     WifiWidget {
+                        id: wifiWidget
                         barWindow: barWindow
                     }
 
-                    Separator { visible: bluetoothWidget.visible }
+                    // Only with WiFi before it: without, the battery's separator
+                    // (or the volume's) already stands between, and this one
+                    // made it "| |" on a machine with Bluetooth but no WiFi.
+                    Separator { visible: bluetoothWidget.visible && wifiWidget.visible }
 
                     // Bluetooth indicator
                     BluetoothWidget {
