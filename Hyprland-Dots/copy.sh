@@ -147,6 +147,15 @@ wallust_targets=(
 # lacks or holds only as a template.
 restore_hypr_state() { # backup
     local _bak="$1" _state _ua _rc
+    # Only from a backup of THIS setup. Another one's ~/.config/hypr - JaKooLit's
+    # Hyprland-Dots uses the same .initial_startup_done marker - handed its
+    # marker over, and initial-boot.sh then never ran for this config: no
+    # wallust palette, no GTK/icon themes, no fonts. hyprland.lua is this
+    # setup's (the config is Lua here), and nobody else's.
+    if [ ! -f "$_bak/hyprland.lua" ]; then
+        echo "  ${NOTE} $(basename "$_bak") is not this setup's (no hyprland.lua) - nothing in it is carried over"
+        return 0
+    fi
     # Not in the repo at all: the first-boot marker, the active wallpaper, and
     # the monitors.conf / workspaces.conf nwg-displays writes next to the .lua.
     for _state in .initial_startup_done wallpaper_effects/.wallpaper_current wallpaper_effects/.wallpaper_modified monitors.conf workspaces.conf; do
