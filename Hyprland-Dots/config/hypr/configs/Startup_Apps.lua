@@ -44,7 +44,12 @@ hl.on("hyprland.start", function()
     -- run("blueman-applet")
     -- run("rog-control-center")
     -- run("waybar")
-    run("qs -c bar")          -- Quickshell bar
+    -- Quickshell bar. ~/.cache/quickshell first: the bar watches its timezone and
+    -- weather files there, and a watch on a file whose folder does not exist yet
+    -- never attaches - so on a fresh install the first session ignored them.
+    -- qs is the last command, so the shell execs it and the process is still
+    -- "qs -c bar" for the pgrep/pkill patterns that look for it.
+    run("mkdir -p \"$HOME/.cache/quickshell\"; qs -c bar")
     -- run("qs -c overview")  -- Quickshell overview (started on demand by OverviewToggle.sh)
 
     -- Clipboard manager
