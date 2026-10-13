@@ -126,8 +126,13 @@ animate_slide_up() {
 }
 
 # Function to get monitor info including scale and name of focused monitor
+# width/height are the mode's, before rotation: a rotated (odd transform)
+# monitor swaps them, as in ScreenShot.sh - on a portrait screen the dropdown
+# was sized for landscape and spilled onto the next monitor.
 get_monitor_info() {
-  local monitor_data=$(hyprctl monitors -j | jq -r '.[] | select(.focused == true) | "\(.x) \(.y) \(.width) \(.height) \(.scale) \(.name)"')
+  local monitor_data=$(hyprctl monitors -j | jq -r '.[] | select(.focused == true)
+    | (if (.transform % 2) == 1 then "\(.height) \(.width)" else "\(.width) \(.height)" end) as $wh
+    | "\(.x) \(.y) \($wh) \(.scale) \(.name)"')
   if [ -z "$monitor_data" ] || [[ "$monitor_data" =~ ^null ]]; then
     debug_echo "Error: Could not get focused monitor information"
     return 1
