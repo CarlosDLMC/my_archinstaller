@@ -154,7 +154,10 @@ early_install() {
 # provider again. A preset run does this unattended; an interactive run asks.
 if pacman -Qq pulseaudio &>/dev/null; then
     _pa_pkgs=(pulseaudio)
-    for _p in $(pacman -Qi pulseaudio | sed -n 's/^Required By *: //p'); do
+    # LC_ALL=C: pacman translates its field names ("Requerido por", "Krävs av"),
+    # and on a non-English system this found nothing - pulseaudio-bluetooth then
+    # stayed behind with its pulseaudio dependency gone, and broke the next -Syu.
+    for _p in $(LC_ALL=C pacman -Qi pulseaudio | sed -n 's/^Required By *: //p'); do
         case "$_p" in pulseaudio-*) _pa_pkgs+=("$_p") ;; esac
     done
     echo "${NOTE} PulseAudio is installed, and this setup uses PipeWire: replacing ${_pa_pkgs[*]} with pipewire-pulse." | tee -a "$LOG"
