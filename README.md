@@ -1892,12 +1892,12 @@ names are printed above that line and saved to
 `Install-Logs/00_CHECK-*_installed.log`.
 
 Four things feed that list. `02-Final-Check.sh` verifies a hardcoded set of
-sixteen essential packages, which catches a package that was never even
+fifteen essential packages, which catches a package that was never even
 attempted because its script was skipped or died early. Everything else on the
 package side comes from `Install-Logs/.failed-packages`, which
 `record_package_failure()` in `Global_functions.sh` appends to whenever any
 `install_*` function's post-install verification fails — so the check covers
-every package the install actually tried, not just the sixteen. Anything that
+every package the install actually tried, not just the fifteen. Anything that
 failed but was later pulled in as a dependency of something else is re-verified
 and dropped from the list, so what you see is genuinely still absent.
 
