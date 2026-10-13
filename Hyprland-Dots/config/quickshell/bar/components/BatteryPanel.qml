@@ -325,6 +325,8 @@ Item {
                         id: packName
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
+                        // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
+                        textFormat: Text.PlainText
                         text: modelData.name
                         color: Theme.colDim
                         font.pixelSize: panel.labelSize
@@ -337,6 +339,8 @@ Item {
                         anchors.right: packStats.left
                         anchors.rightMargin: 10
                         anchors.verticalCenter: parent.verticalCenter
+                        // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
+                        textFormat: Text.PlainText
                         text: modelData.model
                         color: Theme.colMuted
                         font.pixelSize: panel.labelSize - 2

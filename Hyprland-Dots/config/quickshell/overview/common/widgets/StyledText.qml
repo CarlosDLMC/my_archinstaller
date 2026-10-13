@@ -6,6 +6,8 @@ Text {
     property bool animateChange: false
 
     renderType: Text.NativeRendering
+    // Window titles go through here: plain, never rich text - an <img> in one was fetched.
+    textFormat: Text.PlainText
     verticalAlignment: Text.AlignVCenter
     font {
         hintingPreference: Font.PreferFullHinting

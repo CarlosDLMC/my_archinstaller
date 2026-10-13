@@ -345,6 +345,8 @@ PanelWindow {
                                     Text {
                                         anchors.verticalCenter: parent.verticalCenter
                                         width: parent.width - (osd.rowH - 10) - 16
+                                        // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
+                                        textFormat: Text.PlainText
                                         text: row.isImage
                                             ? "Image  " + row.modelData.w + "×" + row.modelData.h
                                               + "  ·  " + row.modelData.size
@@ -413,6 +415,8 @@ PanelWindow {
                                 anchors.fill: parent
                                 anchors.margins: 12
                                 visible: parent.entry !== null && !parent.isImage
+                                // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
+                                textFormat: Text.PlainText
                                 text: parent.entry ? parent.entry.preview : ""
                                 color: Theme.colGrey
                                 font.pixelSize: osd.rowSize

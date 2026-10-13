@@ -116,6 +116,8 @@ PanelWindow {
             // needed to mount ...").
             Text {
                 width: parent.width
+                // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
+                textFormat: Text.PlainText
                 text: osd.flow ? osd.flow.message : ""
                 wrapMode: Text.WordWrap
                 color: Theme.colWhite
@@ -125,6 +127,8 @@ PanelWindow {
 
             Text {
                 width: parent.width
+                // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
+                textFormat: Text.PlainText
                 text: osd.flow ? osd.flow.actionId : ""
                 visible: text !== ""
                 elide: Text.ElideMiddle
@@ -186,6 +190,8 @@ PanelWindow {
             Text {
                 width: parent.width
                 readonly property string polkitNote: osd.flow ? osd.flow.supplementaryMessage : ""
+                // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
+                textFormat: Text.PlainText
                 text: PolkitState.error !== "" ? PolkitState.error : polkitNote
                 visible: text !== ""
                 wrapMode: Text.WordWrap
