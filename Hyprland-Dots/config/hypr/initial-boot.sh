@@ -18,7 +18,10 @@ color_scheme="prefer-dark"
 # mismatch between the two means some windows are themed and others are not.
 gtk_theme="Adwaita"
 icon_theme="Flat-Remix-Blue-Dark"
-cursor_theme="Bibata-Modern-Ice"
+# The black cursor: the XCursor theme "default" (default-cursors, which inherits
+# Adwaita) - the one Hyprland loads and keeps in gsettings. Bibata (white) is
+# still extracted by gtk_themes.sh for nwg-look, but not selected.
+cursor_theme="default"
 # GTK application fonts. These live in dconf, not in any file the dots ship, so
 # a fresh machine used to come up with gtk-3.0/settings.ini's 14pt (or the
 # portal's Cantarell default for GTK4 apps) instead of the 16pt in use here.
