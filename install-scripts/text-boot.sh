@@ -22,7 +22,8 @@
 #
 # Each edit removes those two words and nothing else, is checked before it is
 # written (and, for Limine's entry tool and GRUB, against the command line the
-# tool itself computes), and keeps the original as <file>.pre-text-boot.
+# tool itself computes), and keeps the original as <file>.pre-text-boot - made
+# the first time only, so later runs never replace it.
 # Re-running finds nothing to remove and changes nothing.
 
 ## WARNING: DO NOT EDIT BEYOND THIS LINE IF YOU DON'T KNOW WHAT YOU ARE DOING! ##
@@ -401,11 +402,13 @@ tb_edit() {
   _st=$(python3 -c "$TB_PY" edit "$mode" "$TB_TMP/old" "$TB_TMP/new" "$var" 2>>"$LOG") || _st=error
   [ -n "$_st" ] || _st=error
   [ "$_st" = removed ] || return 0
-  if ! sudo cp -- "$file" "$file.pre-text-boot" 2>>"$LOG" || ! sudo cmp -s -- "$TB_TMP/old" "$file.pre-text-boot"; then
+  if ! keep_original "$file" pre-text-boot "$TB_TMP/old"; then
     echo "${ERROR} Could not back up $file to $file.pre-text-boot - not editing it." | tee -a "$LOG"
     _st=failed
     return 0
   fi
+  # tb_undo's copy: the file as this run found it (.pre-text-boot may be older).
+  cp -- "$TB_TMP/old" "$(tb_undo_copy "$file")" || { _st=failed; return 0; }
   if sudo cp -- "$TB_TMP/new" "$file" 2>>"$LOG" && sudo cmp -s -- "$TB_TMP/new" "$file"; then
     _edited+=("$file")
   else
@@ -415,11 +418,13 @@ tb_edit() {
   return 0
 }
 
+tb_undo_copy() { printf '%s/undo%s' "$TB_TMP" "$(printf '%s' "$1" | tr '/' '%')"; }
+
 tb_undo() {
   local f
   for f in "$@"; do
     if [[ " ${_edited[*]} " == *" $f "* ]]; then
-      sudo cp -- "$f.pre-text-boot" "$f" 2>>"$LOG" || true
+      sudo cp -- "$(tb_undo_copy "$f")" "$f" 2>>"$LOG" || true
     fi
   done
   return 0
@@ -434,7 +439,7 @@ report() {
       echo "${NOTE} $what boots a kernel that is not installed here (another system on this ESP?) - left alone." | tee -a "$LOG"
       return 0 ;;
     clean)   echo "${OK} $what has neither 'quiet' nor 'splash'." | tee -a "$LOG" ;;
-    removed) echo "${OK} Took 'quiet'/'splash' out of $what - the original is kept as $what.pre-text-boot." | tee -a "$LOG" ;;
+    removed) echo "${OK} Took 'quiet'/'splash' out of $what - the file from before text-boot first changed it is kept as $what.pre-text-boot." | tee -a "$LOG" ;;
     *)
       if [ -n "${3:-}" ]; then
         why="$3"
@@ -574,11 +579,12 @@ if command -v grub-mkconfig &>/dev/null && [ -f /etc/default/grub ] && sudo test
     if ! cmdline_is_stripped "$_gv_before" "$_gv_after"; then
       tb_undo /etc/default/grub
       report /etc/default/grub failed "sourced the way grub-mkconfig reads it, the edit did not give \"$(cmdline_minus "$_gv_before")\" (is it also set in /etc/default/grub.d?) - put back"
-    elif ! sudo cp -- "$_grub_cfg" "$_grub_cfg.pre-text-boot" 2>>"$LOG"; then
+    elif ! sudo cat -- "$_grub_cfg" > "$TB_TMP/grub.cfg.old" 2>>"$LOG" \
+         || ! keep_original "$_grub_cfg" pre-text-boot "$TB_TMP/grub.cfg.old"; then
       tb_undo /etc/default/grub
       report /etc/default/grub failed "could not back up $_grub_cfg - put back"
     elif ! sudo grub-mkconfig -o "$_grub_cfg" >> "$LOG" 2>&1 || grub_cfg_has_word; then
-      sudo cp -- "$_grub_cfg.pre-text-boot" "$_grub_cfg" 2>>"$LOG" || true
+      sudo cp -- "$TB_TMP/grub.cfg.old" "$_grub_cfg" 2>>"$LOG" || true
       tb_undo /etc/default/grub
       report /etc/default/grub failed "grub-mkconfig failed, or grub.cfg still has the words on a 'linux' line - both files were put back"
     else

@@ -607,6 +607,22 @@ rebuild_initramfs() {
   : > "$INITRAMFS_FAILED_MANIFEST"
 }
 
+# The original of a boot config file, kept ONCE: keep_original <file> <suffix>
+# copies <file> to <file>.<suffix> unless that copy already exists, and checks a
+# new copy against <read-copy> (what the script read and is about to change).
+#
+# text-boot.sh, plymouth.sh and hackbgrt.sh keep the file they change as
+# <file>.pre-text-boot / .pre-plymouth / .pre-hackbgrt, and the README says to
+# copy it back to undo them - so it has to be the file from before that script
+# first touched it. Rewritten on every edit it was not: after text_boot ->
+# plymouth -> text_boot, CachyOS's own `quiet nowatchdog splash` was in no copy
+# at all. The scripts' own rollback inside a run works from their temp dir.
+keep_original() { # file suffix read-copy
+  local _o="$1.$2"
+  sudo test -e "$_o" && return 0
+  sudo cp -p -- "$1" "$_o" 2>>"${LOG:-/dev/null}" && sudo cmp -s -- "$3" "$_o"
+}
+
 # Function for removing packages
 uninstall_package() {
   local pkg="$1"

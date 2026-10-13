@@ -23,7 +23,8 @@
 # bootloader is there - systemd-boot, GRUB, Limine, or /etc/kernel/cmdline for
 # UKIs. That makes this the second script that edits a bootloader config, after
 # limine.sh. Each edit adds that one word and nothing else, is checked before it
-# is written, and keeps the original as <file>.pre-plymouth.
+# is written, and keeps the original as <file>.pre-plymouth - made the first
+# time only, so later runs never replace it.
 
 THEME="soviet"
 SRC_DIR="assets/plymouth/$THEME"
@@ -246,7 +247,8 @@ if command -v mkinitcpio &>/dev/null; then
     fi
     _appended=false
     if ! sudo grep -qF "$PLY_MARK" "$_conf" 2>/dev/null \
-       && sudo cp -- "$_conf" "$_conf.pre-plymouth" 2>>"$LOG" \
+       && sudo cat -- "$_conf" > "$PLY_TMP/conf.old" 2>>"$LOG" \
+       && keep_original "$_conf" pre-plymouth "$PLY_TMP/conf.old" \
        && printf '\n%s (install-scripts/plymouth.sh) ---\n%s\n%s end ---\n' "$PLY_MARK" "$PLY_HOOK_SNIPPET" "$PLY_MARK" \
           | sudo tee -a "$_conf" >/dev/null; then
       _appended=true
@@ -255,7 +257,7 @@ if command -v mkinitcpio &>/dev/null; then
       echo "${OK} Added the plymouth hook to $_conf (a preset uses it with -c, so drop-ins do not apply)." | tee -a "$LOG"
     else
       if [ "$_appended" = true ]; then
-        sudo cp -- "$_conf.pre-plymouth" "$_conf" 2>>"$LOG" || true
+        sudo cp -- "$PLY_TMP/conf.old" "$_conf" 2>>"$LOG" || true
       fi
       echo "${ERROR} Could not put plymouth into the HOOKS of $_conf, which a preset uses with -c - add it after systemd or udev there by hand." | tee -a "$LOG"
       _hook_failed=true
@@ -288,8 +290,9 @@ fi
 # grub-mkconfig does. Comparing text alone let edits through that looked like one
 # word and left a command line of just "splash", with no root= in it.
 #
-# The original is kept as <file>.pre-plymouth, copied right before the edit and
-# compared with what was read. `quiet` is left alone: hiding the kernel's
+# The original is kept as <file>.pre-plymouth, copied right before the first
+# edit ever and compared with what was read; undo_splash_edit puts back what
+# this run found, from its temp dir. `quiet` is left alone: hiding the kernel's
 # messages is a choice about debugging, not about the splash. So is
 # splash=verbose, plymouth's own "text, not the logo", which is kept as it is.
 echo "${NOTE} Making sure the kernel command line asks for the ${SKY_BLUE}splash${RESET}..." | tee -a "$LOG"
@@ -687,7 +690,8 @@ ensure_splash() {
       ;;
   esac
   if [ "$existed" = true ]; then
-    if ! sudo cp -- "$file" "$file.pre-plymouth" 2>>"$LOG" || ! sudo cmp -s -- "$PLY_TMP/old" "$file.pre-plymouth"; then
+    if ! keep_original "$file" pre-plymouth "$PLY_TMP/old" \
+       || ! cp -- "$PLY_TMP/old" "$(ply_undo_copy "$file")"; then
       echo "${ERROR} Could not back up $file to $file.pre-plymouth - not editing it." | tee -a "$LOG"
       return 0
     fi
@@ -703,14 +707,17 @@ ensure_splash() {
   return 0
 }
 
-# Put a file this run changed back the way it was (or remove one it created).
+# Put a file this run changed back the way it was (or remove one it created) -
+# the way this run found it, not .pre-plymouth, which may be older.
+ply_undo_copy() { printf '%s/undo%s' "$PLY_TMP" "$(printf '%s' "$1" | tr '/' '%')"; }
+
 undo_splash_edit() {
   local f
   for f in "$@"; do
     if [[ " ${_created[*]} " == *" $f "* ]]; then
       sudo rm -f -- "$f" 2>>"$LOG" || true
     elif [[ " ${_edited[*]} " == *" $f "* ]]; then
-      sudo cp -- "$f.pre-plymouth" "$f" 2>>"$LOG" || true
+      sudo cp -- "$(ply_undo_copy "$f")" "$f" 2>>"$LOG" || true
     fi
   done
   return 0
@@ -739,7 +746,7 @@ report_splash() {
       if [ "${_sp_created:-false}" = true ]; then
         echo "${OK} Created $what with 'splash' in it." | tee -a "$LOG"
       else
-        echo "${OK} Added 'splash' to $what - the original is kept as $what.pre-plymouth." | tee -a "$LOG"
+        echo "${OK} Added 'splash' to $what - the file from before plymouth.sh first changed it is kept as $what.pre-plymouth." | tee -a "$LOG"
       fi
       ;;
     *)
@@ -954,7 +961,8 @@ elif command -v grub-mkconfig &>/dev/null && [ -f /etc/default/grub ] && sudo te
   if [ "$_sp" = added ]; then
     cp "$PLY_TMP/old" "$PLY_TMP/grub-default.old"
     _grub_entries_before=$(grub_entries)
-    if ! sudo cp -- "$_grub_cfg" "$_grub_cfg.pre-plymouth" 2>>"$LOG"; then
+    if ! sudo cat -- "$_grub_cfg" > "$PLY_TMP/grub.cfg.old" 2>>"$LOG" \
+       || ! keep_original "$_grub_cfg" pre-plymouth "$PLY_TMP/grub.cfg.old"; then
       echo "${ERROR} Could not back up $_grub_cfg - putting /etc/default/grub back." | tee -a "$LOG"
       sudo cp -- "$PLY_TMP/grub-default.old" /etc/default/grub 2>>"$LOG" || true
       _sp=failed
@@ -980,7 +988,7 @@ elif command -v grub-mkconfig &>/dev/null && [ -f /etc/default/grub ] && sudo te
         else
           echo "${ERROR} grub.cfg has no 'splash' after grub-mkconfig - putting grub.cfg and /etc/default/grub back." | tee -a "$LOG"
         fi
-        sudo cp -- "$_grub_cfg.pre-plymouth" "$_grub_cfg" 2>>"$LOG" || true
+        sudo cp -- "$PLY_TMP/grub.cfg.old" "$_grub_cfg" 2>>"$LOG" || true
         sudo cp -- "$PLY_TMP/grub-default.old" /etc/default/grub 2>>"$LOG" || true
         _sp=failed
       fi

@@ -19,8 +19,9 @@
 #   - copies loader.efi (HackBGRT's bootx64.efi), config.txt and splash.bmp to
 #     EFI/HackBGRT/ on the partition Windows' boot manager is on (boot=MS finds
 #     \EFI\Microsoft\Boot\bootmgfw.efi on its own partition);
-#   - points the Windows entry's path at EFI/HackBGRT/loader.efi, keeping
-#     limine.conf as limine.conf.pre-hackbgrt. Windows' own files are not touched,
+#   - points the Windows entry's path at EFI/HackBGRT/loader.efi, keeping a
+#     record of limine.conf as limine.conf.pre-hackbgrt (the first time only).
+#     Windows' own files are not touched,
 #     and the firmware boot menu's "Windows Boot Manager" still starts Windows
 #     without it;
 #   - adds a firmware boot entry "Windows (HackBGRT)" for the same loader, outside
@@ -259,16 +260,18 @@ else
   if [ "$_enroll" = yes ] && ! command -v limine-enroll-config &>/dev/null; then
     fail "ENABLE_ENROLL_LIMINE_CONFIG=yes but limine-enroll-config is not installed - not editing $CONF."
   fi
-  sudo cp -- "$CONF" "$CONF.pre-hackbgrt" 2>>"$LOG" && sudo cmp -s -- "$HB_TMP/limine.conf" "$CONF.pre-hackbgrt" \
-    || fail "Could not back up $CONF."
+  # A record of the file from before HackBGRT, made once. Put back from what
+  # this run read when something fails, never from that record: on CachyOS an
+  # older limine.conf has the hashes of older kernels.
+  keep_original "$CONF" pre-hackbgrt "$HB_TMP/limine.conf" || fail "Could not back up $CONF."
   sudo cp -- "$HB_TMP/limine.new" "$CONF" 2>>"$LOG" && sudo cmp -s -- "$HB_TMP/limine.new" "$CONF" \
-    || { sudo cp -- "$CONF.pre-hackbgrt" "$CONF" 2>>"$LOG"; fail "Could not write $CONF - put back."; }
+    || { sudo cp -- "$HB_TMP/limine.conf" "$CONF" 2>>"$LOG"; fail "Could not write $CONF - put back."; }
   if [ "$_enroll" = yes ] && ! sudo limine-enroll-config >> "$LOG" 2>&1; then
-    sudo cp -- "$CONF.pre-hackbgrt" "$CONF" 2>>"$LOG"
+    sudo cp -- "$HB_TMP/limine.conf" "$CONF" 2>>"$LOG"
     fail "limine-enroll-config failed - $CONF was put back so the machine still boots."
   fi
   sudo sync
-  echo "${OK} The Windows entry in $CONF now starts HackBGRT - the original is kept as $CONF.pre-hackbgrt." | tee -a "$LOG"
+  echo "${OK} The Windows entry in $CONF now starts HackBGRT. $CONF.pre-hackbgrt is a record of it from before - undo by pointing the entry back (README), not by copying that file back." | tee -a "$LOG"
 fi
 
 # 7. A firmware boot entry for HackBGRT. The power menu's W reboots into Windows
