@@ -968,6 +968,25 @@ DEFAULT_WALLPAPER="sovietpunk/sovietpunk_2k_2560x1440.png"
 # .backup-<stamp> directory - clients could no longer find the server, and the
 # next start came up with no session. Only the files the repo owns are touched;
 # a config.toml that differs is backed up next to itself first.
+#
+# herdr_resolve fills __HOME__ in as install-scripts/herdr.sh does (see there):
+# the binds are shell commands in double-quoted TOML strings, so a home that
+# needs quoting (a space: /home/John Doe) goes in single-quoted, TOML-escaped.
+# Filled in raw here first, herdr.sh found nothing left to fix and every tab
+# bind and ALT+Q ran "/home/John" with arguments. <out> "-" is stdout.
+herdr_resolve() { # template out
+    python3 - "$1" "$2" <<'PY'
+import os, shlex, sys
+home = shlex.quote(os.path.expanduser("~")).replace("\\", "\\\\").replace('"', '\\"')
+with open(sys.argv[1]) as f:
+    text = f.read().replace("__HOME__", home)
+if sys.argv[2] == "-":
+    sys.stdout.write(text)
+else:
+    with open(sys.argv[2], "w") as f:
+        f.write(text)
+PY
+}
 printf "\n${INFO} Deploying herdr config...\n"
 if [ -d "$SCRIPT_DIR/config/herdr" ]; then
     mkdir -p "$HOME/.config/herdr"
@@ -975,7 +994,7 @@ if [ -d "$SCRIPT_DIR/config/herdr" ]; then
     # Compare against the template with this machine's $HOME filled in, which
     # is what an up-to-date install holds - otherwise every re-run backed up an
     # identical file just because its placeholders had been resolved.
-    if [ -f "$_herdr_cfg" ] && ! sed "s#__HOME__#$HOME#g" "$SCRIPT_DIR/config/herdr/config.toml" | cmp -s - "$_herdr_cfg"; then
+    if [ -f "$_herdr_cfg" ] && ! herdr_resolve "$SCRIPT_DIR/config/herdr/config.toml" - | cmp -s - "$_herdr_cfg"; then
         cp "$_herdr_cfg" "$_herdr_cfg.backup-$BACKUP_STAMP" && echo "  ${NOTE} Backed up existing config.toml to config.toml.backup-$BACKUP_STAMP"
     fi
     if cp -r "$SCRIPT_DIR/config/herdr/." "$HOME/.config/herdr/"; then
@@ -985,7 +1004,7 @@ if [ -d "$SCRIPT_DIR/config/herdr" ]; then
         # dotfiles-main.sh on its own (which the installer suggests as the retry
         # for a failed dots step) used to lay the template back down and leave
         # every tab and close-workspace bind pointing at __HOME__/.local/bin.
-        if sed -i "s#__HOME__#$HOME#g" "$_herdr_cfg"; then
+        if herdr_resolve "$_herdr_cfg" "$_herdr_cfg"; then
             echo "  ${OK} Copied herdr config (paths resolved to $HOME)"
         else
             echo "  ${ERROR} Could not resolve __HOME__ in $_herdr_cfg - the herdr tab binds will do nothing"
