@@ -65,6 +65,8 @@ RowLayout {
     }
 
     Text {
+        // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
+        textFormat: Text.PlainText
         text: activeWindow
         color: Theme.colWindow
         font.pixelSize: Theme.fontSize

@@ -90,6 +90,8 @@ Item {
 
             Text {
                 anchors.verticalCenter: parent.verticalCenter
+                // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
+                textFormat: Text.PlainText
                 text: device.label
                 color: device.current ? Theme.colWhite : Theme.colDim
                 font.pixelSize: panel.labelSize
@@ -290,6 +292,8 @@ Item {
 
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
+                                // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
+                                textFormat: Text.PlainText
                                 text: panel.ctl.streamLabel(stream.modelData)
                                 color: Theme.colDim
                                 font.pixelSize: panel.labelSize

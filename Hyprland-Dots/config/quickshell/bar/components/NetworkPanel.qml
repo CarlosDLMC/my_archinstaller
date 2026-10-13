@@ -633,6 +633,8 @@ Item {
                     anchors.right: headerActions.left
                     anchors.rightMargin: 8
                     anchors.verticalCenter: parent.verticalCenter
+                    // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
+                    textFormat: Text.PlainText
                     text: panel.field("ssid", "Not connected")
                     color: panel.wifiRadioOn ? Theme.colWhite : Theme.colMuted
                     font.pixelSize: panel.labelSize
@@ -982,6 +984,8 @@ Item {
                 Text {
                     width: parent.width
                     visible: panel.qrRows.length > 0
+                    // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
+                    textFormat: Text.PlainText
                     text: panel.qrSsid + (panel.qrSecurity === "nopass" ? "  (open)" : "")
                     color: Theme.colWhite
                     font.pixelSize: panel.labelSize

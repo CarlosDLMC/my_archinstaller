@@ -526,6 +526,8 @@ PanelWindow {
 
                                     Text {
                                         id: tabLabel
+                                        // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
+                                        textFormat: Text.PlainText
                                         text: tab.modelData.label
                                         font.capitalization: Font.AllUppercase
                                         font.letterSpacing: 2
@@ -653,6 +655,8 @@ PanelWindow {
                     x: dirText.width
                     width: Math.round(caption.ch * caption.nameCols)
                     elide: Text.ElideMiddle
+                    // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
+                    textFormat: Text.PlainText
                     text: scope.centred ? scope.centred.name : ""
                     color: Theme.colWhite
                     font.pixelSize: osd.captionSize

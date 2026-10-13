@@ -248,6 +248,8 @@ DropdownWidget {
                 spacing: 8
 
                 Text {
+                    // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
+                    textFormat: Text.PlainText
                     text: btWidget.btPowered ? (btWidget.btConnected ? "󰂱 " + btWidget.btConnectedDevice : "󰂯 Bluetooth") : "󰂲 Bluetooth Off"
                     color: Theme.colFg
                     font.pixelSize: Theme.fontSize
@@ -373,6 +375,8 @@ DropdownWidget {
                         }
 
                         Text {
+                            // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
+                            textFormat: Text.PlainText
                             text: modelData.name
                             color: modelData.name === btWidget.btConnectedDevice ? Theme.colBluetooth : Theme.colFg
                             font.pixelSize: Theme.fontSize - 1

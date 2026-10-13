@@ -318,6 +318,8 @@ DropdownWidget {
                 spacing: 8
 
                 Text {
+                    // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
+                    textFormat: Text.PlainText
                     text: vpnWidget.activeVpn ? "󰖂 " + vpnWidget.activeVpn : "󰖂 Disconnected"
                     color: Theme.colFg
                     font.pixelSize: Theme.fontSize
@@ -447,6 +449,8 @@ DropdownWidget {
 
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
+                                // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
+                                textFormat: Text.PlainText
                                 text: modelData.label
                                 color: away || syncMouse.containsMouse
                                     ? Theme.colWhite : Theme.colGrey
@@ -506,6 +510,8 @@ DropdownWidget {
                         }
 
                         Text {
+                            // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
+                            textFormat: Text.PlainText
                             text: modelData
                             color: modelData === vpnWidget.activeVpn ? Theme.colNetwork : Theme.colFg
                             font.pixelSize: Theme.fontSize - 1

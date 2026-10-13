@@ -283,6 +283,8 @@ Item {
 
                 Text {
                     visible: centerInfo.barLocation !== ""
+                    // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
+                    textFormat: Text.PlainText
                     text: centerInfo.barLocation
                     color: Theme.colCenter
                     font.pixelSize: Theme.fontSize
@@ -761,6 +763,8 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
+                // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
+                textFormat: Text.PlainText
                 text: centerInfo.weatherLocation || ""
                 color: Qt.rgba(Theme.colMuted.r, Theme.colMuted.g, Theme.colMuted.b, 0.6)
                 font.pixelSize: Theme.fontSize - 2

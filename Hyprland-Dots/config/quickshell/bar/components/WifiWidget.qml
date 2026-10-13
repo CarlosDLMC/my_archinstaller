@@ -455,6 +455,8 @@ DropdownWidget {
                 spacing: 4
 
                 Text {
+                    // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
+                    textFormat: Text.PlainText
                     text: wifiWidget.connecting ? "󰓦  Connecting to " + wifiWidget.selectedSSID + "…" :
                           wifiWidget.passwordMode ? "󰌾  " + wifiWidget.selectedSSID :
                           wifiWidget.wifiConnected ? "󰤨  " + wifiWidget.wifiSSID : "󰤭  Not Connected"
@@ -650,6 +652,8 @@ DropdownWidget {
                         }
 
                         Text {
+                            // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
+                            textFormat: Text.PlainText
                             text: modelData.ssid
                                   + (wifiWidget.connecting && modelData.ssid === wifiWidget.selectedSSID
                                      ? "  ·  connecting…" : "")
