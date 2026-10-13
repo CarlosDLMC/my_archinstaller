@@ -117,7 +117,11 @@ keep_line() { # backup-file new-file ERE
     grep -qxF -- "$_line" "$2" && return 1
     grep -qE "^$3" "$2" || return 1
     _tmp=$(mktemp) || return 1
+    # awk ends its last line with a newline. A file without one stays without:
+    # swaync's style.css has none (DarkLight.sh's sed -i keeps it so), and that
+    # one added byte alone made a re-run after a theme switch back swaync up.
     if _line="$_line" awk -v re="^$3" '!done && $0 ~ re { print ENVIRON["_line"]; done = 1; next } { print }' "$2" > "$_tmp" \
+       && { [ -z "$(tail -c1 "$2")" ] || truncate -s -1 "$_tmp"; } \
        && cat "$_tmp" > "$2"; then
         rm -f "$_tmp"
         return 0
@@ -235,7 +239,7 @@ apply_user_state() { # dir from to [quiet]
         _s=$(keep_added_lines "$_from/bookmarks" "$_to/bookmarks" uri expand-home)
         [ -z "$_quiet" ] && [ "$_s" -gt 0 ] && echo "  ${OK} Kept the $_s sidebar bookmark(s) you added"
         ;;
-    wallust|Kvantum|qt5ct|qt6ct)
+    wallust|Kvantum|qt5ct|qt6ct|swaync)
         # Light mode (DarkLight.sh) is a line in each of these, and a re-run put
         # the repo's dark ones back while GTK stayed light. Its own record of the
         # mode, ~/.cache/.theme_mode, says which applies; Dark is the repo's.
@@ -243,10 +247,18 @@ apply_user_state() { # dir from to [quiet]
             case "$_dir" in
             wallust) _s=wallust.toml;     _t='palette = ' ;;
             Kvantum) _s=kvantum.kvconfig; _t='theme=' ;;
+            swaync)  _s=style.css;        _t='@define-color noti-bg ' ;;
             *)       _s=$_dir.conf;       _t='icon_theme=' ;;
             esac
             if keep_line "$_from/$_s" "$_to/$_s" "$_t" && [ -z "$_quiet" ]; then
                 echo "  ${OK} Kept Light mode in $_dir/$_s"
+            fi
+            # ...and the rofi background, which DarkLight.sh sets in wallust's
+            # rofi template: missed, the next wallpaper change made rofi dark.
+            if [ "$_dir" = wallust ] \
+               && keep_line "$_from/templates/colors-rofi.rasi" "$_to/templates/colors-rofi.rasi" 'background:' \
+               && [ -z "$_quiet" ]; then
+                echo "  ${OK} Kept Light mode in wallust/templates/colors-rofi.rasi"
             fi
         fi
         ;;
@@ -290,7 +302,7 @@ restore_state() { # dir backup
             cp "$_bak/accels.scm" "$HOME/.config/Thunar/accels.scm" && echo "  ${OK} Kept your Thunar keyboard shortcuts (accels.scm)"
         fi
         ;;
-    gtk-3.0|wallust|Kvantum|qt5ct|qt6ct)
+    gtk-3.0|wallust|Kvantum|qt5ct|qt6ct|swaync)
         apply_user_state "$_dir" "$_bak" "$HOME/.config/$_dir"
         ;;
     nwg-displays)
@@ -630,7 +642,7 @@ for dir in "${config_dirs[@]}"; do
         # The settings apply_user_state carries over, already in the comparison
         # copy - and, when that is all that differs, in what gets copied.
         case "$dir" in
-        rofi|gtk-3.0|wallust|Kvantum|qt5ct|qt6ct)
+        rofi|gtk-3.0|wallust|Kvantum|qt5ct|qt6ct|swaync)
             if [ -d "$HOME/.config/$dir" ]; then
                 if [ -z "$_cmp_tmp" ]; then
                     _cmp_tmp=$(mktemp -d)
