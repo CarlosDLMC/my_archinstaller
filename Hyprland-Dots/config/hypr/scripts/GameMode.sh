@@ -5,10 +5,16 @@
 
 notif="$HOME/.config/swaync/images/ja.png"
 SCRIPTSDIR="$HOME/.config/hypr/scripts"
+# On while this file exists. Animations being off could not tell: the
+# "03- Disable Animation" preset turns them off too, and then every press took
+# the "disabled" branch and game mode never came on. The file is in this
+# Hyprland instance's runtime dir, so it goes with the session.
+flag="$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/gamemode"
 
 # "true"/"false" with the Lua config manager (it was int 1/0 with hyprlang)
 HYPRGAMEMODE=$(hyprctl -j getoption animations.enabled | jq -r 'if has("bool") then .bool else (.int == 1) end')
-if [ "$HYPRGAMEMODE" = "true" ] ; then
+# Animations on with the file there: a reload since then undid game mode.
+if [ ! -e "$flag" ] || [ "$HYPRGAMEMODE" = "true" ] ; then
     hyprctl eval 'hl.config({
         animations = { enabled = false },
         decoration = { shadow = { enabled = false }, blur = { enabled = false }, rounding = 0 },
@@ -16,10 +22,12 @@ if [ "$HYPRGAMEMODE" = "true" ] ; then
     })'
     hyprctl eval 'hl.window_rule({ name = "gamemode-opaque", match = { class = ".*" }, opacity = "1 override 1 override 1 override" })'
     awww kill
+    : > "$flag"
     notify-send -t 1000 -e -u low -i "$notif" " Gamemode:" " enabled"
     sleep 0.1
     exit
 else
+	rm -f "$flag"
 	awww-daemon --format argb && awww img "$HOME/.config/rofi/.current_wallpaper" &
 	sleep 0.1
 	${SCRIPTSDIR}/WallustSwww.sh
