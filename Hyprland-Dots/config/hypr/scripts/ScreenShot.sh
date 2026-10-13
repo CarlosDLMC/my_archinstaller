@@ -73,10 +73,13 @@ countdown() {
 annotate=false
 
 # satty, sized to 80% of the focused monitor so the editor never opens bigger
-# than the screen it lands on. Reads the image on stdin.
+# than the screen it lands on. Reads the image on stdin. A rotated (odd
+# transform) monitor swaps the mode's width and height, as in output_at_cursor.
 satty_open() {
 	local res w h
-	res=$(hyprctl monitors -j | jq -r '.[] | select(.focused==true) | "\(.width / .scale | floor)x\(.height / .scale | floor)"')
+	res=$(hyprctl monitors -j | jq -r '.[] | select(.focused==true)
+		| (if (.transform % 2) == 1 then [.height, .width] else [.width, .height] end) as [$w, $h]
+		| "\($w / .scale | floor)x\($h / .scale | floor)"')
 	w=$(echo "$res" | cut -dx -f1)
 	h=$(echo "$res" | cut -dx -f2)
 	w=$(( w * 80 / 100 ))
