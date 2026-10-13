@@ -33,8 +33,9 @@
 # that left a corner of it, with no recognisable part of the girl in it.
 #
 # Not with Secure Boot on: HackBGRT then needs shim and a key enrolled by hand
-# at the next boot (its shim.md), which no script can do. Re-running replaces
-# the files and finds the entry already pointing at HackBGRT.
+# at the next boot (its shim.md), which no script can do. Not with BitLocker
+# either, unless HACKBGRT_ALLOW_BITLOCKER=1. Re-running replaces the files and
+# finds the entry already pointing at HackBGRT.
 
 HACKBGRT_VERSION="2.6.0"
 HACKBGRT_URL="https://github.com/Metabolix/HackBGRT/releases/download/v${HACKBGRT_VERSION}/HackBGRT-${HACKBGRT_VERSION}.zip"
@@ -77,6 +78,15 @@ CONF=$(find_limine_conf) || { echo "${NOTE} No limine.conf here - HackBGRT is on
 _sb=$(od -An -t u1 -j4 -N1 /sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c 2>/dev/null | tr -d ' ' || true)
 if [ "$_sb" = 1 ]; then
   echo "${WARN} Secure Boot is on. HackBGRT then has to go through shim with a key enrolled by hand at boot (see its shim.md) - not done by this script. Skipping." | tee -a "$LOG"
+  exit 0
+fi
+# BitLocker (Windows' device encryption is the same thing) measures the boot
+# chain, and a new program in it can send Windows to the recovery key screen.
+# HackBGRT's README says to turn BitLocker off first; its own installer refuses
+# unless told otherwise. So does this, unless HACKBGRT_ALLOW_BITLOCKER=1.
+if lsblk -rno FSTYPE 2>/dev/null | grep -qix bitlocker && [ "${HACKBGRT_ALLOW_BITLOCKER:-}" != 1 ]; then
+  echo "${WARN} A BitLocker-encrypted partition is on this machine. HackBGRT in Windows' boot chain can trigger BitLocker recovery - skipping." | tee -a "$LOG"
+  echo "${NOTE} With BitLocker suspended (or your recovery key at hand): HACKBGRT_ALLOW_BITLOCKER=1 install-scripts/hackbgrt.sh" | tee -a "$LOG"
   exit 0
 fi
 

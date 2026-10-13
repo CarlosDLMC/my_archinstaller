@@ -673,12 +673,20 @@ fi
 # entry whose partition hackbgrt.sh can find - guid(), uuid(), fslabel(),
 # boot() or boot(<n>): one on hdd()/odd(), numbered the firmware's way, used to
 # turn "auto" on, fail in the script and stop the reboot over a boot logo.
+# And not with BitLocker (or Windows' device encryption, the same thing) on any
+# partition: a new program in Windows' boot chain can send it to the recovery
+# key screen at its next start - HackBGRT's own README says to turn BitLocker
+# off first, and its installer refuses unless told otherwise.
 hackbgrt_detected=false
 if [ -n "$_limine_conf" ] \
    && sudo grep -qiE '^\s*(image_)?path\s*:\s*(guid|uuid|fslabel|boot)\([^)]*\):/EFI/(Microsoft/Boot/bootmgfw|HackBGRT/loader)\.efi\s*$' "$_limine_conf" 2>/dev/null \
    && [ "$(od -An -t u1 -j4 -N1 /sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c 2>/dev/null | tr -d ' ')" != 1 ]; then
-    hackbgrt_detected=true
-    echo "${NOTE} Windows entry in Limine detected - HackBGRT can put the logo on Windows' boot screen." | tee -a "$LOG"
+    if lsblk -rno FSTYPE 2>/dev/null | grep -qix bitlocker; then
+        echo "${NOTE} Windows entry in Limine, but a BitLocker-encrypted partition too - leaving Windows' boot chain alone (HackBGRT could trigger BitLocker recovery)." | tee -a "$LOG"
+    else
+        hackbgrt_detected=true
+        echo "${NOTE} Windows entry in Limine detected - HackBGRT can put the logo on Windows' boot screen." | tee -a "$LOG"
+    fi
 fi
 
 # Resolve "auto" into ON/OFF from what was just detected. Only the preset loop
