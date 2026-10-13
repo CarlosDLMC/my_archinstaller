@@ -33,7 +33,8 @@ bind(M .. " + ALT + E",   exec(S .. "/RofiEmoji.sh"),    { description = "emoji 
 bind(M .. " + CTRL + S",  exec("rofi -show window"),     { description = "window switcher" })
 bind(M .. " + ALT + O",   exec(S .. "/ChangeBlur.sh"),   { description = "toggle blur" })
 bind(M .. " + SHIFT + G", exec(S .. "/GameMode.sh"),     { description = "toggle game mode" })
-bind(M .. " + ALT + L",   exec(S .. "/ChangeLayout.sh"), { description = "toggle master/dwindle layout" })
+-- Off: the master/dwindle toggle was never used.
+-- bind(M .. " + ALT + L",   exec(S .. "/ChangeLayout.sh"), { description = "toggle master/dwindle layout" })
 bind(M .. " + ALT + V",   hl.dsp.global("quickshell:clipMenu"), { description = "clipboard history", locked = true })
 
 -- The bar runs as `qs -c bar`, so its process name is "qs", not "quickshell".
