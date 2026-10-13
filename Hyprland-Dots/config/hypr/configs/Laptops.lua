@@ -8,11 +8,18 @@ local bind = hl.bind
 
 bind("XF86KbdBrightnessDown", exec(S .. "/BrightnessKbd.sh --dec"), { description = "decrease keyboard brightness", repeating = true })
 bind("XF86KbdBrightnessUp",   exec(S .. "/BrightnessKbd.sh --inc"), { description = "increase keyboard brightness", repeating = true })
-bind("XF86Launch1",           exec("rog-control-center"),           { description = "ASUS Armoury Crate" })
--- asusctl 6.x spellings. The 5.x ones these keys used (`led-mode -n`,
--- `profile -n`) are rejected outright by 6.x ("Unrecognized argument").
-bind("XF86Launch3",           exec("asusctl aura effect --next-mode"), { description = "switch keyboard RGB profile (FN+F4)" })
-bind("XF86Launch4",           exec("asusctl profile next"),         { description = "cycle fan profile (FN+F5)" })
+-- ASUS keys, only where rog.sh installed asusctl (ASUS laptops): elsewhere
+-- they named tools that are not there, and filled the cheat sheet with
+-- "ASUS Armoury Crate" and FN keys the keyboard does not have.
+local has_asusctl = io.open("/usr/bin/asusctl", "r")
+if has_asusctl then
+    has_asusctl:close()
+    bind("XF86Launch1",       exec("rog-control-center"),           { description = "ASUS Armoury Crate" })
+    -- asusctl 6.x spellings. The 5.x ones these keys used (`led-mode -n`,
+    -- `profile -n`) are rejected outright by 6.x ("Unrecognized argument").
+    bind("XF86Launch3",       exec("asusctl aura effect --next-mode"), { description = "switch keyboard RGB profile (FN+F4)" })
+    bind("XF86Launch4",       exec("asusctl profile next"),         { description = "cycle fan profile (FN+F5)" })
+end
 bind("XF86MonBrightnessDown", exec(S .. "/Brightness.sh --dec"),    { description = "decrease monitor brightness", repeating = true })
 bind("XF86MonBrightnessUp",   exec(S .. "/Brightness.sh --inc"),    { description = "increase monitor brightness", repeating = true })
 bind("XF86TouchpadToggle",    exec(S .. "/TouchPad.sh"),            { description = "toggle touchpad" })
