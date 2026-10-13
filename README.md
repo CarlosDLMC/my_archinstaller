@@ -1941,7 +1941,9 @@ Re-running `./install.sh --preset custom-preset.conf` is also safe — every
 package step skips what is already installed, and `copy.sh` will not overwrite
 a `secrets.zsh` you have filled in. It also keeps your wallust palette, your
 active wallpaper, the first-boot marker, your monitor layout (`monitors.lua`,
-`workspaces.lua`) and herdr's saved session. Everything else under a copied
+`workspaces.lua`), herdr's saved session, your rofi theme, RofiBeats stations,
+sidebar bookmarks and Light mode, and files of your own in `environment.d`,
+`fontconfig`, `Kvantum` and `MangoHud`. Everything else under a copied
 `~/.config` directory is reset to the repo version — edits you made there
 (`UserConfigs/*.lua`, say) are in the `<dir>.backup-<stamp>` copy next to it.
 
@@ -2112,7 +2114,11 @@ anything was installed. Run it on the old machine before you clone on the new on
 ## Notes
 
 - The installation backs up existing configs to `~/.config/<app>.backup-<YYYYMMDD-HHMMSS>`
-  (one per run, never overwritten). Single files it replaces get the same
+  (one per run, never overwritten). `environment.d`, `fontconfig`, `Kvantum` and
+  `MangoHud` are deployed file by file instead, since other files belong in them
+  too (an `environment.d/*.conf` of your own, an installed Kvantum theme): those
+  stay, and only a repo file you changed is kept beside it as
+  `<file>.backup-<stamp>`. Single files it replaces get the same
   stamped `<file>.backup-<stamp>` beside them: the shell files in `~`
   (`.zshrc`, `.zprofile`, `pokefetch_perfect`, ...) when they differ from the repo copy, and
   `~/.config/mimeapps.list`, `xdg-terminals.list` and `user-dirs.dirs` when they
