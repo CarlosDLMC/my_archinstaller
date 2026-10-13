@@ -206,6 +206,54 @@ restore_hypr_state() { # backup
     fi
 }
 
+# Settings changed from the desktop that live INSIDE files the repo also ships,
+# so a fresh copy resets them: the rofi theme picked in SUPER+SHIFT+E and the
+# stations added in RofiBeats, the sidebar bookmarks added with Ctrl+D, Light
+# mode. Applied from <from> onto <to> - by restore_state, from a backup onto the
+# fresh copy, and before the comparison in the loop below, from the live
+# directory onto the repo copy, so that a directory differing from the repo
+# only by these counts as unchanged. Compared raw, it never matched again once
+# anything had been picked, and every re-run backed it up (rofi ~220 KB) just to
+# put the same things back. With a 4th argument, quietly.
+apply_user_state() { # dir from to [quiet]
+    local _dir="$1" _from="$2" _to="$3" _quiet="${4:-}" _t _s
+    case "$_dir" in
+    rofi)
+        # Stations added with RofiBeats' Add Music.
+        _s=$(keep_added_lines "$_from/online_music.list" "$_to/online_music.list" name)
+        [ -z "$_quiet" ] && [ "$_s" -gt 0 ] && echo "  ${OK} Kept the $_s radio station(s) you added (RofiBeats)"
+        # The theme picked in SUPER+SHIFT+E > Choose Rofi Themes: the one
+        # @theme line that is not commented out. Only while that theme exists.
+        _t=$(grep -m1 -E '^[[:space:]]*@theme ' "$_from/config.rasi" 2>/dev/null | sed -E 's/^[[:space:]]*@theme "(.*)".*/\1/')
+        if [ -n "$_t" ] && [ -f "${_t/#\~/$HOME}" ] \
+           && keep_line "$_from/config.rasi" "$_to/config.rasi" '[[:space:]]*@theme ' && [ -z "$_quiet" ]; then
+            echo "  ${OK} Kept your rofi theme (${_t##*/})"
+        fi
+        ;;
+    gtk-3.0)
+        # Sidebar bookmarks added in Thunar or a file chooser (Ctrl+D).
+        _s=$(keep_added_lines "$_from/bookmarks" "$_to/bookmarks" uri expand-home)
+        [ -z "$_quiet" ] && [ "$_s" -gt 0 ] && echo "  ${OK} Kept the $_s sidebar bookmark(s) you added"
+        ;;
+    wallust|Kvantum|qt5ct|qt6ct)
+        # Light mode (DarkLight.sh) is a line in each of these, and a re-run put
+        # the repo's dark ones back while GTK stayed light. Its own record of the
+        # mode, ~/.cache/.theme_mode, says which applies; Dark is the repo's.
+        if [ "$(cat "$HOME/.cache/.theme_mode" 2>/dev/null)" = Light ]; then
+            case "$_dir" in
+            wallust) _s=wallust.toml;     _t='palette = ' ;;
+            Kvantum) _s=kvantum.kvconfig; _t='theme=' ;;
+            *)       _s=$_dir.conf;       _t='icon_theme=' ;;
+            esac
+            if keep_line "$_from/$_s" "$_to/$_s" "$_t" && [ -z "$_quiet" ]; then
+                echo "  ${OK} Kept Light mode in $_dir/$_s"
+            fi
+        fi
+        ;;
+    esac
+    return 0
+}
+
 # Put a directory's machine state back from its backup RIGHT AFTER the loop
 # below copies it. It used to happen only at the very end, after every other
 # directory and the ~140 MB wallpaper copy, from the backup path remembered in
@@ -234,16 +282,7 @@ restore_state() { # dir backup
             ln -sfn "$(readlink -f "$_bak/.current_wallpaper")" "$HOME/.config/rofi/.current_wallpaper" \
                 && echo "  ${NOTE} Keeping your current rofi background"
         fi
-        # Stations added with RofiBeats' Add Music.
-        _s=$(keep_added_lines "$_bak/online_music.list" "$HOME/.config/rofi/online_music.list" name)
-        [ "$_s" -gt 0 ] && echo "  ${OK} Kept the $_s radio station(s) you added (RofiBeats)"
-        # The theme picked in SUPER+SHIFT+E > Choose Rofi Themes: the one
-        # @theme line that is not commented out. Only while that theme exists.
-        _t=$(grep -m1 -E '^[[:space:]]*@theme ' "$_bak/config.rasi" 2>/dev/null | sed -E 's/^[[:space:]]*@theme "(.*)".*/\1/')
-        if [ -n "$_t" ] && [ -f "${_t/#\~/$HOME}" ] \
-           && keep_line "$_bak/config.rasi" "$HOME/.config/rofi/config.rasi" '[[:space:]]*@theme '; then
-            echo "  ${OK} Kept your rofi theme (${_t##*/})"
-        fi
+        apply_user_state rofi "$_bak" "$HOME/.config/rofi"
         ;;
     Thunar)
         # Keyboard shortcuts edited in Thunar: the repo's accels.scm binds nothing.
@@ -251,25 +290,8 @@ restore_state() { # dir backup
             cp "$_bak/accels.scm" "$HOME/.config/Thunar/accels.scm" && echo "  ${OK} Kept your Thunar keyboard shortcuts (accels.scm)"
         fi
         ;;
-    gtk-3.0)
-        # Sidebar bookmarks added in Thunar or a file chooser (Ctrl+D).
-        _s=$(keep_added_lines "$_bak/bookmarks" "$HOME/.config/gtk-3.0/bookmarks" uri expand-home)
-        [ "$_s" -gt 0 ] && echo "  ${OK} Kept the $_s sidebar bookmark(s) you added"
-        ;;
-    wallust|Kvantum|qt5ct|qt6ct)
-        # Light mode (DarkLight.sh) is a line in each of these, and a re-run put
-        # the repo's dark ones back while GTK stayed light. Its own record of the
-        # mode, ~/.cache/.theme_mode, says which applies; Dark is the repo's.
-        if [ "$(cat "$HOME/.cache/.theme_mode" 2>/dev/null)" = Light ]; then
-            case "$_dir" in
-            wallust) _s=wallust.toml;     _t='palette = ' ;;
-            Kvantum) _s=kvantum.kvconfig; _t='theme=' ;;
-            *)       _s=$_dir.conf;       _t='icon_theme=' ;;
-            esac
-            if keep_line "$_bak/$_s" "$HOME/.config/$_dir/$_s" "$_t"; then
-                echo "  ${OK} Kept Light mode in $_dir/$_s"
-            fi
-        fi
+    gtk-3.0|wallust|Kvantum|qt5ct|qt6ct)
+        apply_user_state "$_dir" "$_bak" "$HOME/.config/$_dir"
         ;;
     nwg-displays)
         # Saved display profiles and the active one: nwg-displays' own state,
@@ -592,6 +614,20 @@ for dir in "${config_dirs[@]}"; do
             cp "$HOME/.config/xfce4/$_tx" "$_cmp_tmp/$_tx"
             _cmp_src="$_cmp_tmp"
         fi
+        # The settings apply_user_state carries over, already in the comparison
+        # copy - and, when that is all that differs, in what gets copied.
+        case "$dir" in
+        rofi|gtk-3.0|wallust|Kvantum|qt5ct|qt6ct)
+            if [ -d "$HOME/.config/$dir" ]; then
+                if [ -z "$_cmp_tmp" ]; then
+                    _cmp_tmp=$(mktemp -d)
+                    cp -r "$_cmp_src/." "$_cmp_tmp/"
+                    _cmp_src="$_cmp_tmp"
+                fi
+                apply_user_state "$dir" "$HOME/.config/$dir" "$_cmp_tmp" quiet
+            fi
+            ;;
+        esac
         # Runtime files this script seeds itself (all gitignored), left out of the
         # comparison: with them counted, hypr, quickshell, wallust, rofi and cava
         # were backed up on every re-run with no edits at all, ~12 MB each time.
