@@ -619,8 +619,16 @@ rebuild_initramfs() {
 # at all. The scripts' own rollback inside a run works from their temp dir.
 keep_original() { # file suffix read-copy
   local _o="$1.$2"
-  sudo test -e "$_o" && return 0
-  sudo cp -p -- "$1" "$_o" 2>>"${LOG:-/dev/null}" && sudo cmp -s -- "$3" "$_o"
+  sudo test -s "$_o" && return 0
+  if sudo cp -p -- "$1" "$_o" 2>>"${LOG:-/dev/null}" && sudo cmp -s -- "$3" "$_o"; then
+    return 0
+  fi
+  # A copy that is not the file - a full ESP cut it short - must not stay: kept
+  # once, it would count as the original for good, and copying it back (the
+  # README's undo) would write a truncated boot config. An empty one left by
+  # an earlier failure counts as missing (-s above).
+  sudo rm -f -- "$_o" 2>/dev/null
+  return 1
 }
 
 # Function for removing packages
