@@ -722,7 +722,9 @@ entries and `/etc/sdboot-manage.conf`, `refind_linux.conf`, and
 Each edit removes the two words and nothing else: it is checked line by line
 before it is written, and for Limine's entry tool and GRUB the command line
 the tool itself computes has to come out as before minus the two words, or the
-file goes back. The original is kept as `<file>.pre-text-boot`. Limine's
+file goes back. The original is kept as `<file>.pre-text-boot`, made the first
+time only: a later run (after switching to the splash and back, say) never
+replaces it, so it stays the file from before text-boot first changed it. Limine's
 entries (and UKIs) are then regenerated, and the generated `limine.conf` is read
 back. A failure is recorded as `text-boot` and stops the preset's auto-reboot.
 Snapshot boot entries (limine-snapper-sync on btrfs) and GRUB entries of other
@@ -746,8 +748,9 @@ firmware). The NVIDIA proprietary driver is not in that hook either way. Delete
 the drop-in and rebuild to put `kms` back.
 
 To go back to a splash, run `./install-scripts/plymouth.sh` (it adds `splash`;
-add `quiet` yourself if you want it), or copy the `.pre-text-boot` files back
-and regenerate (`sudo limine-mkinitcpio` with Limine's entry tool).
+add `quiet` yourself if you want it), or copy the `.pre-text-boot` files of the
+config files back and regenerate (`sudo limine-mkinitcpio` with Limine's entry
+tool, `sudo grub-mkconfig -o /boot/grub/grub.cfg` on GRUB).
 
 ### Less memory: huge pages on request (`thp_madvise`)
 
@@ -809,7 +812,8 @@ through every official path.
     `grub-mkconfig` reads it. An edit that would change anything else - a
     blank `KERNEL_CMDLINE` that would leave the kernel with only `splash`, an
     `export`ed GRUB variable - is not written, or is put back. The original is
-    kept as `<file>.pre-plymouth`. `quiet` is not added, and a `splash=verbose`
+    kept as `<file>.pre-plymouth`, made the first time only, so later runs never
+    replace it. `quiet` is not added, and a `splash=verbose`
     (plymouth's "text, please") is kept.
 
   When one of these cannot be done (a form of the file it does not edit, a
@@ -950,7 +954,9 @@ picture. Windows draws it pixel for pixel, with its spinner underneath.
   `\EFI\Microsoft\Boot\bootmgfw.efi` from there. Windows' own files are not
   touched.
 - The Windows entry's path in `limine.conf` is pointed at
-  `EFI/HackBGRT/loader.efi` (the original kept as `limine.conf.pre-hackbgrt`;
+  `EFI/HackBGRT/loader.efi` (a record of it from before, made once, is kept as
+  `limine.conf.pre-hackbgrt` - undo as below, not by copying it back: on
+  CachyOS an older `limine.conf` carries older kernels' hashes;
   an enrolled config is re-enrolled). Limine's tools never regenerate that
   entry, so kernel updates leave it alone. If one ever adds a second, plain
   Windows entry (limine-entry-tool's `FIND_BOOTLOADERS`), a re-run of the script
