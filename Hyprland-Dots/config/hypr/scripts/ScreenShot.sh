@@ -180,10 +180,16 @@ output_at_cursor() {
 
 	[[ -z "$x" || -z "$y" ]] && return 1
 
+	# width/height are the mode's, before rotation: a rotated (odd transform)
+	# monitor swaps them, as in ScreenRecord.sh - a portrait screen's box was
+	# landscape, so the pointer on its lower part found no monitor at all.
 	hyprctl -j monitors | jq -r --argjson x "$x" --argjson y "$y" '
-		.[] | select(
-			$x >= .x and $x < (.x + (.width / .scale)) and
-			$y >= .y and $y < (.y + (.height / .scale))
+		.[]
+		| ((if (.transform % 2) == 1 then .height else .width end) / .scale) as $w
+		| ((if (.transform % 2) == 1 then .width else .height end) / .scale) as $h
+		| select(
+			$x >= .x and $x < (.x + $w) and
+			$y >= .y and $y < (.y + $h)
 		) | .name' | head -1
 }
 
