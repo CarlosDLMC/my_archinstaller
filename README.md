@@ -968,7 +968,12 @@ Windows without HackBGRT. To take it out: point the entry back at
 entry (`sudo efibootmgr -b <its number> -B`, the number from `efibootmgr`) and
 delete `EFI/HackBGRT/` on that partition.
 With Secure Boot on, HackBGRT needs shim and a key enrolled by hand at boot (its
-`shim.md`), so the script skips it. After a monitor change, re-run
+`shim.md`), so the script skips it. It also skips a machine with a
+BitLocker-encrypted partition (Windows' device encryption included), and `auto`
+stays off there: a new program in Windows' boot chain can send BitLocker to the
+recovery key screen, which HackBGRT's own README warns about. With BitLocker
+suspended, or the recovery key at hand, run it with
+`HACKBGRT_ALLOW_BITLOCKER=1 ./install-scripts/hackbgrt.sh`. After a monitor change, re-run
 `./install-scripts/hackbgrt.sh` to render the picture for the new panel.
 
 ### BIOS logo
