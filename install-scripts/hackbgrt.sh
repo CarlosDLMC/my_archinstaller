@@ -85,7 +85,7 @@ fi
 # chain, and a new program in it can send Windows to the recovery key screen.
 # HackBGRT's README says to turn BitLocker off first; its own installer refuses
 # unless told otherwise. So does this, unless HACKBGRT_ALLOW_BITLOCKER=1.
-if lsblk -rno FSTYPE 2>/dev/null | grep -qix bitlocker && [ "${HACKBGRT_ALLOW_BITLOCKER:-}" != 1 ]; then
+if bitlocker_present && [ "${HACKBGRT_ALLOW_BITLOCKER:-}" != 1 ]; then
   echo "${WARN} A BitLocker-encrypted partition is on this machine. HackBGRT in Windows' boot chain can trigger BitLocker recovery - skipping." | tee -a "$LOG"
   echo "${NOTE} With BitLocker suspended (or your recovery key at hand): HACKBGRT_ALLOW_BITLOCKER=1 install-scripts/hackbgrt.sh" | tee -a "$LOG"
   exit 0
