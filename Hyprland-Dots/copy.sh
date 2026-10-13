@@ -435,9 +435,12 @@ if [ -f "$HOME/.config/user-dirs.dirs" ]; then
     (
         # shellcheck disable=SC1091
         source "$HOME/.config/user-dirs.dirs"
+        # Projects too: xdg-user-dirs 0.20 has it as a default, and missing from
+        # the file, it was added in the installer's language - a Russian or
+        # Spanish system got ~/Проекты or ~/Proyectos next to the English rest.
         for d in "$XDG_DESKTOP_DIR" "$XDG_DOWNLOAD_DIR" "$XDG_TEMPLATES_DIR" \
                  "$XDG_PUBLICSHARE_DIR" "$XDG_DOCUMENTS_DIR" "$XDG_MUSIC_DIR" \
-                 "$XDG_PICTURES_DIR" "$XDG_VIDEOS_DIR"; do
+                 "$XDG_PICTURES_DIR" "$XDG_VIDEOS_DIR" "${XDG_PROJECTS_DIR:-}"; do
             [ -n "$d" ] && [ "$d" != "$HOME" ] && [ "$d" != "$HOME/" ] && mkdir -p "$d"
         done
     )
