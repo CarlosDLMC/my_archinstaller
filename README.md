@@ -407,10 +407,13 @@ fresh machine used to come up at `settings.ini`'s 14pt (or the portal's
 Cantarell default in GTK4 apps) while this one showed 16pt. Change it with
 `gtk_font` / `gtk_mono_font` at the top of `initial-boot.sh`.
 
-The **icon** theme (`Flat-Remix-Blue-Dark`) and **cursor** (`Bibata-Modern-Ice`)
-are unchanged and still come from `GTK-themes-icons/` via `gtk_themes.sh`, which
-also still installs the Flat-Remix GTK themes — they are simply no longer
-selected. One consequence worth knowing: `scripts/DarkLight.sh` picks a *random*
+The **icon** theme (`Flat-Remix-Blue-Dark`) is unchanged and still comes from
+`GTK-themes-icons/` via `gtk_themes.sh`, which also still installs the
+Flat-Remix GTK themes and the white `Bibata-Modern-Ice` cursor — they are simply
+no longer selected. The **cursor** is the black one Hyprland loads by itself:
+the XCursor theme `default` (the `default-cursors` package, which inherits
+Adwaita), named in `settings.ini` and by `initial-boot.sh` too, so the first
+session already has it. One consequence worth knowing: `scripts/DarkLight.sh` picks a *random*
 theme matching `*Dark*` or `*Light*` from `~/.themes`, so running it would
 switch away from Adwaita. Nothing binds it to a key, so it only happens if you
 call it yourself.
