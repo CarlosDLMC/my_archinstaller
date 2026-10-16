@@ -95,7 +95,10 @@ FIELD_RISE = 0.00  # * font_size, calibrated below
 FIELD_DX = 0.00  # * font_size
 LABEL_DX = 0.00  # * font_size
 
-HEIGHT_BUDGET = 0.85  # of screen height the whole stack may occupy
+HEIGHT_BUDGET = 0.90  # of screen height the whole stack may occupy - 0.85 until the
+                      # panel gained its attempts and ДОНЕСЕНИЯ rows (27 rows); 0.90
+                      # keeps the font every resolution had at 25 (1440p is the
+                      # tightest: 0.895 at font 18)
 WIDTH_BUDGET = 0.40  # of screen width the panel may occupy
 FS_MIN, FS_MAX = 8, 44
 
@@ -208,6 +211,12 @@ def font_size(w, h, rows):
 # ---------------------------------------------------------------- panel probe
 
 
+# The panel label is cmd[update:30000:1] ... --panel $ATTEMPTS: hyprlock fills in
+# $ATTEMPTS before it runs a cmd[] label, and the trailing :1 lets it re-run the
+# label straight after a failed unlock (and on SIGUSR2, which SovietLock.py's
+# --watch-reports sends) - so the attempts and ДОНЕСЕНИЯ rows update at once
+# rather than at the 30s tick. The probe below runs it with neither, which
+# renders the same rows unlit, so the measured shape holds for the whole lock.
 def panel_shape():
     """Actual panel geometry. The row count is not fixed: a machine with no
     battery, no AC device or no weather cache renders fewer rows, and the
@@ -226,7 +235,7 @@ def panel_shape():
     except Exception:
         lines = []
     if not lines:
-        return 25, 64, 6, 5
+        return 27, 64, 6, 5
     cols = max(len(ln) for ln in lines)
     pw_row = next((i for i, ln in enumerate(lines) if "КОД ДОСТУПА" in ln), 6)
     lay_row = next((i for i, ln in enumerate(lines) if "РАСКЛАДКА" in ln), 5)
@@ -335,7 +344,7 @@ label {{
 
 label {{
     monitor = {m}
-    text = cmd[update:30000] $SL --panel
+    text = cmd[update:30000:1] $SL --panel $ATTEMPTS
     color = $ink
     font_size = {fs}
     font_family = $mono

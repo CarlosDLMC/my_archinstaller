@@ -1688,6 +1688,16 @@ and Russian labels (`ГРАЖДАНИН`, `КОД ДОСТУПА`). A wrong pass
 Everything sits in one bordered TUI panel: date, kernel, uptime, load, memory, AC state,
 every battery pack, keyboard layout, and weather.
 
+**Two rows light up when there is something to see.** `ПОПЫТКИ ВХОДА  НЕТ` turns into a
+red `НЕСАНКЦИОНИРОВАННЫЕ ПОПЫТКИ: N` after a wrong password and stays until you unlock;
+`ДОНЕСЕНИЯ  НЕТ` turns gold with the count and the senders (`3 · SLACK, TELEGRAM`) when
+notifications arrive while locked. Only normal and critical ones count, not volume or
+brightness toasts, and both reset with every lock. The panel gets the attempts from
+hyprlock itself (`--panel $ATTEMPTS`, re-run straight after each failed unlock); the
+notifications are counted off the session bus by `SovietLock.py --watch-reports`, which
+`LockRun.sh` runs for exactly as long as hyprlock does - dunst is not involved. The rows
+are there even unlit, because the widgets laid over the panel are placed once per lock.
+
 **Weather comes from the bar**, `~/.cache/quickshell/weather.json`, so the lock screen
 and the bar always show the same reading. If that file is missing (a machine without
 quickshell) it falls back to the legacy `~/.cache/.weather_cache`. Either way, a reading
@@ -1732,7 +1742,7 @@ blanks on battery.
 - `scripts/SovietClock.sh` — draws the block-glyph clock
 - `scripts/SovietLockGen.py` — sizes the widgets per monitor
 - `scripts/IdleDpms.sh` — idle blanking policy (only used if you re-enable the blank listener)
-- `scripts/LockRun.sh` — starts hyprlock, logs its output and exit code
+- `scripts/LockRun.sh` — starts hyprlock and the ДОНЕСЕНИЯ watcher, logs hyprlock's output and exit code
 - `hypridle.conf` — calls `LockRun.sh` before sleep; the idle lock and blank listeners are commented out
 
 The clock is shell rather than another `SovietLock.py` mode because it is the one
