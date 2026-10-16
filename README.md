@@ -359,7 +359,7 @@ The ones that matter:
 
 | Family | Package | Used by |
 | --- | --- | --- |
-| `Terminess Nerd Font` | `ttf-terminus-nerd` | **the quickshell bar** — `bar/Theme.qml` |
+| `Terminess Nerd Font` | `ttf-terminus-nerd` | **the quickshell bar** — `bar/Theme.qml`; the stamps on dunst's cards |
 | `JetBrainsMono Nerd Font Mono` | `ttf-jetbrains-mono-nerd` | foot, hyprlock, `SovietLockGen.py` |
 | `JetBrainsMono Nerd Font` | `ttf-jetbrains-mono-nerd` | dunst |
 | `Fira Code` | `ttf-fira-code` | `gtk-3.0/settings.ini` - but see below |
