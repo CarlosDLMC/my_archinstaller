@@ -34,7 +34,7 @@ listview {
 /* ---- Entry input ---- */
 entry {
   expand: true;
-  placeholder: " 💫  Customize Hyprland  💫";
+  placeholder: " Настройка Hyprland";
   horizontal-align: 0.5;
 }
 

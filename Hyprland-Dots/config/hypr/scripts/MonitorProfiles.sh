@@ -12,7 +12,7 @@ SCRIPTSDIR="$HOME/.config/hypr/scripts"
 monitor_dir="$HOME/.config/hypr/Monitor_Profiles"
 target="$HOME/.config/hypr/monitors.lua"
 rofi_theme="$HOME/.config/rofi/config-Monitors.rasi"
-msg='❗NOTE:❗ This will overwrite $HOME/.config/hypr/monitors.lua'
+msg='Внимание: будет перезаписан $HOME/.config/hypr/monitors.lua'
 
 # Define the list of files to ignore
 ignore_files=(

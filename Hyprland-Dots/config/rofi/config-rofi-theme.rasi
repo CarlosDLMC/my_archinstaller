@@ -26,7 +26,7 @@ custombox {
 /* ---- Entry input ---- */
 entry {
   expand: true;
-  placeholder: " ⬇️  Select Which Rofi Theme wanted to apply";
+  placeholder: " Тема rofi";
 }
 
 /* ---- Listview ---- */

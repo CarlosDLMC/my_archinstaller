@@ -74,7 +74,7 @@ is_animation_preset() { # file animations-dir
 }
 
 # Lists the repo seeds and the desktop adds to - GTK/Thunar bookmarks (Ctrl+D),
-# RofiBeats stations (Add Music): a replaced directory came back with only the
+# RofiBeats stations (Добавить станцию): a replaced directory came back with only the
 # seeded entries. This appends the backup's entries that the fresh copy lacks,
 # matched by key, so an entry the repo has since changed is not doubled: "uri"
 # (a bookmark's first field), "name" (a station's text before |). With a 4th
@@ -182,7 +182,7 @@ restore_hypr_state() { # backup
 
     # Monitor profiles saved by hand (see Monitor_Profiles/README): the repo
     # ships only default.lua, so a re-run left nothing else in
-    # SUPER+SHIFT+E > Monitor Profiles.
+    # SUPER+SHIFT+E > Профиль мониторов.
     for _state in "$_bak"/Monitor_Profiles/*; do
         if [ -f "$_state" ] && [ ! -e "$HOME/.config/hypr/Monitor_Profiles/${_state##*/}" ]; then
             mkdir -p "$HOME/.config/hypr/Monitor_Profiles"
@@ -223,10 +223,10 @@ apply_user_state() { # dir from to [quiet]
     local _dir="$1" _from="$2" _to="$3" _quiet="${4:-}" _t _s
     case "$_dir" in
     rofi)
-        # Stations added with RofiBeats' Add Music.
+        # Stations added with RofiBeats' Добавить станцию.
         _s=$(keep_added_lines "$_from/online_music.list" "$_to/online_music.list" name)
         [ -z "$_quiet" ] && [ "$_s" -gt 0 ] && echo "  ${OK} Kept the $_s radio station(s) you added (RofiBeats)"
-        # The theme picked in SUPER+SHIFT+E > Choose Rofi Themes: the one
+        # The theme picked in SUPER+SHIFT+E > Тема rofi: the one
         # @theme line that is not commented out. Only while that theme exists.
         _t=$(grep -m1 -E '^[[:space:]]*@theme ' "$_from/config.rasi" 2>/dev/null | sed -E 's/^[[:space:]]*@theme "(.*)".*/\1/')
         if [ -n "$_t" ] && [ -f "${_t/#\~/$HOME}" ] \

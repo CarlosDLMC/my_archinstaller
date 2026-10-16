@@ -31,7 +31,7 @@ inputbar {
 
 entry {
   expand: true;
-  placeholder: " 🪟  Search / Choose ZSH theme";
+  placeholder: " Тема ZSH";
 }
 
 /* ---- Listview ---- */

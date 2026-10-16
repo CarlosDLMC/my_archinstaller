@@ -19,7 +19,7 @@ fi
 
 # Rofi theme and message
 rofi_theme="$HOME/.config/rofi/config-search.rasi"
-msg='‼️ **note** ‼️ search via default web browser'
+msg='Поиск откроется в браузере по умолчанию'
 
 # Kill Rofi if already running before execution
 if pgrep -x "rofi" >/dev/null; then
