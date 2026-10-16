@@ -12,7 +12,7 @@ mainbox {
 /* ---- Entry ---- */ 
 entry {
   width: 32%;
-  placeholder: " 🏙️ Search / Choose desired wallpaper effect";
+  placeholder: " Эффект для обоев";
 }
 
 /* ---- Window ---- */

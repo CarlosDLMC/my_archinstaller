@@ -13,7 +13,7 @@ edit="${EDITOR:-${editor:-nano}}"
 configs="$HOME/.config/hypr/configs"
 UserConfigs="$HOME/.config/hypr/UserConfigs"
 rofi_theme="$HOME/.config/rofi/config-edit.rasi"
-msg=' ⁉️ Choose what to do ⁉️'
+msg='Выберите действие'
 iDIR="$HOME/.config/swaync/images"
 scriptsDir="$HOME/.config/hypr/scripts"
 UserScripts="$HOME/.config/hypr/UserScripts"
@@ -30,33 +30,33 @@ show_info() {
 # Function to display the menu options without numbers
 menu() {
     cat <<EOF
---- USER CUSTOMIZATIONS ---
-Edit User Defaults
-Edit User Keybinds
-Edit User ENV variables
-Edit User Startup Apps (overlay)
-Edit User Window Rules (overlay)
-Edit User Settings
-Edit User Decorations
-Edit User Animations
-Edit User Laptop Settings
---- SYSTEM DEFAULTS  ---
-Edit System Default Keybinds
-Edit System Default Startup Apps
-Edit System Default Window Rules
-Edit System Default Settings
---- UTILITIES ---
-Configure Monitors (nwg-displays)
-Configure Workspace Rules (nwg-displays)
-GTK Settings (nwg-look)
-QT Apps Settings (qt6ct)
-QT Apps Settings (qt5ct)
-Choose Hyprland Animations
-Choose Monitor Profiles
-Choose Rofi Themes
-Search for Keybinds
-Toggle Game Mode
-Switch Dark-Light Theme
+--- СВОИ НАСТРОЙКИ ---
+Приложения по умолчанию
+Свои сочетания клавиш
+Свои переменные окружения
+Свой автозапуск
+Свои правила окон
+Свои настройки
+Своё оформление
+Свои анимации
+Настройки ноутбука
+--- СИСТЕМНЫЕ НАСТРОЙКИ ---
+Системные сочетания клавиш
+Системный автозапуск
+Системные правила окон
+Системные настройки
+--- УТИЛИТЫ ---
+Мониторы (nwg-displays)
+Рабочие столы (nwg-displays)
+Оформление GTK (nwg-look)
+Qt-приложения (qt6ct)
+Qt-приложения (qt5ct)
+Анимации Hyprland
+Профиль мониторов
+Тема rofi
+Поиск сочетаний клавиш
+Игровой режим вкл/выкл
+Тёмная/светлая тема
 EOF
 }
 
@@ -66,55 +66,55 @@ main() {
     
     # Map choices to corresponding files
     case "$choice" in
-    	"Edit User Defaults") file="$UserConfigs/01-UserDefaults.lua" ;;
-        "Edit User ENV variables") file="$UserConfigs/ENVariables.lua" ;;
-        "Edit User Keybinds") file="$UserConfigs/UserKeybinds.lua" ;;
-        "Edit User Startup Apps (overlay)") file="$UserConfigs/Startup_Apps.lua" ;;
-        "Edit User Window Rules (overlay)") file="$UserConfigs/WindowRules.lua" ;;
-        "Edit User Settings") file="$UserConfigs/UserSettings.lua" ;;
-        "Edit User Decorations") file="$UserConfigs/UserDecorations.lua" ;;
-        "Edit User Animations") file="$UserConfigs/UserAnimations.lua" ;;
-        "Edit User Laptop Settings") file="$UserConfigs/Laptops.lua" ;;
-        "Edit System Default Keybinds") file="$configs/Keybinds.lua" ;;
-        "Edit System Default Startup Apps") file="$configs/Startup_Apps.lua" ;;
-        "Edit System Default Window Rules") file="$configs/WindowRules.lua" ;;
-        "Edit System Default Settings") file="$configs/SystemSettings.lua" ;;
-        "Configure Monitors (nwg-displays)") 
+    	"Приложения по умолчанию") file="$UserConfigs/01-UserDefaults.lua" ;;
+        "Свои переменные окружения") file="$UserConfigs/ENVariables.lua" ;;
+        "Свои сочетания клавиш") file="$UserConfigs/UserKeybinds.lua" ;;
+        "Свой автозапуск") file="$UserConfigs/Startup_Apps.lua" ;;
+        "Свои правила окон") file="$UserConfigs/WindowRules.lua" ;;
+        "Свои настройки") file="$UserConfigs/UserSettings.lua" ;;
+        "Своё оформление") file="$UserConfigs/UserDecorations.lua" ;;
+        "Свои анимации") file="$UserConfigs/UserAnimations.lua" ;;
+        "Настройки ноутбука") file="$UserConfigs/Laptops.lua" ;;
+        "Системные сочетания клавиш") file="$configs/Keybinds.lua" ;;
+        "Системный автозапуск") file="$configs/Startup_Apps.lua" ;;
+        "Системные правила окон") file="$configs/WindowRules.lua" ;;
+        "Системные настройки") file="$configs/SystemSettings.lua" ;;
+        "Мониторы (nwg-displays)") 
             if ! command -v nwg-displays &>/dev/null; then
                 notify-send -i "$iDIR/error.png" "ОШИБКА" "Сначала установите nwg-displays"
                 exit 1
             fi
             nwg-displays ;;
-        "Configure Workspace Rules (nwg-displays)") 
+        "Рабочие столы (nwg-displays)") 
             if ! command -v nwg-displays &>/dev/null; then
                 notify-send -i "$iDIR/error.png" "ОШИБКА" "Сначала установите nwg-displays"
                 exit 1
             fi
             nwg-displays ;;
-		"GTK Settings (nwg-look)") 
+		"Оформление GTK (nwg-look)") 
             if ! command -v nwg-look &>/dev/null; then
                 notify-send -i "$iDIR/error.png" "ОШИБКА" "Сначала установите nwg-look"
                 exit 1
             fi
             nwg-look ;;
-		"QT Apps Settings (qt6ct)") 
+		"Qt-приложения (qt6ct)") 
             if ! command -v qt6ct &>/dev/null; then
                 notify-send -i "$iDIR/error.png" "ОШИБКА" "Сначала установите qt6ct"
                 exit 1
             fi
             qt6ct ;;
-		"QT Apps Settings (qt5ct)") 
+		"Qt-приложения (qt5ct)") 
             if ! command -v qt5ct &>/dev/null; then
                 notify-send -i "$iDIR/error.png" "ОШИБКА" "Сначала установите qt5ct"
                 exit 1
             fi
             qt5ct ;;
-        "Choose Hyprland Animations") $scriptsDir/Animations.sh ;;
-        "Choose Monitor Profiles") $scriptsDir/MonitorProfiles.sh ;;
-        "Choose Rofi Themes") $scriptsDir/RofiThemeSelector.sh ;;
-        "Search for Keybinds") $scriptsDir/KeyBinds.sh ;;
-        "Toggle Game Mode") $scriptsDir/GameMode.sh ;;
-        "Switch Dark-Light Theme") $scriptsDir/DarkLight.sh ;;
+        "Анимации Hyprland") $scriptsDir/Animations.sh ;;
+        "Профиль мониторов") $scriptsDir/MonitorProfiles.sh ;;
+        "Тема rofi") $scriptsDir/RofiThemeSelector.sh ;;
+        "Поиск сочетаний клавиш") $scriptsDir/KeyBinds.sh ;;
+        "Игровой режим вкл/выкл") $scriptsDir/GameMode.sh ;;
+        "Тёмная/светлая тема") $scriptsDir/DarkLight.sh ;;
         *) return ;;  # Do nothing for invalid choices
     esac
 

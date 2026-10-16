@@ -16,7 +16,7 @@ mainbox {
 
 /* ---- Entry ---- */ 
 entry {
-  placeholder: "📻 Choose Media or Stations to play";
+  placeholder: " Музыка или станция";
 }
 
 /* ---- Listview ---- */

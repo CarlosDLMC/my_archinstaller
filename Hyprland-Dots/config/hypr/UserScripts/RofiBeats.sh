@@ -49,7 +49,7 @@ populate_local_music() {
 play_local_music() {
   populate_local_music
   choice=$(printf "%s\n" "${filenames[@]}" | rofi -i -dmenu -config "$rofi_theme" \
-    -theme-str 'entry { placeholder: "🎵 Choose Local Music"; }')
+    -theme-str 'entry { placeholder: " Музыка из папки"; }')
   [[ -z "$choice" ]] && exit 1
   for ((i = 0; i < "${#filenames[@]}"; ++i)); do
     if [ "${filenames[$i]}" = "$choice" ]; then
@@ -71,11 +71,11 @@ shuffle_local_music() {
 # Play selected online music
 play_online_music() {
   if [ ! -s "$music_list" ]; then
-    notify-send -u low -i "$iDIR/music.png" "Нет онлайн-станций" "Добавьте их через «Manage Music List»"
+    notify-send -u low -i "$iDIR/music.png" "Нет онлайн-станций" "Добавьте их через «Список станций»"
     exit 0
   fi
   choice=$(awk -F'|' '{print $1}' "$music_list" | sort | rofi -i -dmenu -config "$rofi_theme" \
-    -theme-str 'entry { placeholder: "🌐 Choose Online Station"; }')
+    -theme-str 'entry { placeholder: " Онлайн-станция"; }')
   [[ -z "$choice" ]] && exit 1
   link=$(awk -F'|' -v name="$choice" '$1 == name {print $2; exit}' "$music_list")
   [[ -z "$link" ]] && {
@@ -89,24 +89,24 @@ play_online_music() {
 
 # Manage online music list (add, remove, view)
 manage_music() {
-  sub_choice=$(printf "Add Music\nRemove Music\nView List" | rofi -dmenu \
+  sub_choice=$(printf "Добавить станцию\nУдалить станцию\nПоказать список" | rofi -dmenu \
     -config "$rofi_theme_menu" \
-    -theme-str 'entry { placeholder: "🛠️ Manage Music List"; }')
+    -theme-str 'entry { placeholder: " Список станций"; }')
 
   case "$sub_choice" in
-  "Add Music")
+  "Добавить станцию")
     name=$(rofi -dmenu -lines 0 -config "$rofi_theme_menu" \
-      -theme-str 'entry { placeholder: "🎼 Enter Music Title"; }')
+      -theme-str 'entry { placeholder: " Название станции"; }')
     [[ -z "$name" ]] && return
     url=$(rofi -dmenu -lines 0 -config "$rofi_theme_menu" \
-      -theme-str 'entry { placeholder: "🔗 Enter Music URL"; }')
+      -theme-str 'entry { placeholder: " Адрес (URL)"; }')
     [[ -z "$url" ]] && return
     echo "$name|$url" >>"$music_list"
     notification "Добавлено:" "$name"
     ;;
-  "Remove Music")
+  "Удалить станцию")
     entry=$(awk -F'|' '{print $1}' "$music_list" | rofi -dmenu -config "$rofi_theme_menu" \
-      -theme-str 'entry { placeholder: "🗑️ Select Music to Remove"; }')
+      -theme-str 'entry { placeholder: " Какую станцию удалить"; }')
     [[ -z "$entry" ]] && return
     # By the exact name field. `grep -vF ... && mv` skipped the mv when the last
     # station was removed (grep printed nothing and exited 1) while still saying
@@ -116,28 +116,28 @@ manage_music() {
       && mv "$music_list.tmp" "$music_list"
     notification "Удалено:" "$entry"
     ;;
-  "View List")
+  "Показать список")
     # Show only titles, not URLs
     awk -F'|' '{print $1}' "$music_list" | rofi -dmenu -config "$rofi_theme_menu" \
-      -theme-str 'entry { placeholder: "📜 Online Music List"; }' >/dev/null
+      -theme-str 'entry { placeholder: " Онлайн-станции"; }' >/dev/null
     ;;
   esac
 }
 
 # Main menu
 user_choice=$(printf "%s\n" \
-  "Play from Online Stations" \
-  "Play from Music directory" \
-  "Shuffle Play from Music directory" \
-  "Stop RofiBeats" \
-  "Manage Music List" |
+  "Онлайн-станции" \
+  "Музыка из папки" \
+  "Музыка из папки вперемешку" \
+  "Остановить RofiBeats" \
+  "Список станций" |
   rofi -dmenu -config "$rofi_theme_menu" \
-    -theme-str 'entry { placeholder: "🎧 RofiBeats Menu"; }')
+    -theme-str 'entry { placeholder: " RofiBeats"; }')
 
 case "$user_choice" in
-"Play from Online Stations") play_online_music ;;
-"Play from Music directory") play_local_music ;;
-"Shuffle Play from Music directory") shuffle_local_music ;;
-"Stop RofiBeats") music_playing && stop_music ;;
-"Manage Music List") manage_music ;;
+"Онлайн-станции") play_online_music ;;
+"Музыка из папки") play_local_music ;;
+"Музыка из папки вперемешку") shuffle_local_music ;;
+"Остановить RofiBeats") music_playing && stop_music ;;
+"Список станций") manage_music ;;
 esac

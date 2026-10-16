@@ -12,7 +12,7 @@ mainbox {
 /* ---- Entry ---- */
 entry {
   expand: true;
-  placeholder: " 🧮 Search Keybinds";
+  placeholder: " Сочетания клавиш";
 }
 
 /* ---- Listview ---- */
