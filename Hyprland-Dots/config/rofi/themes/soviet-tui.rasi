@@ -55,6 +55,12 @@ window {
     anchor:                      center;
     fullscreen:                  false;
     width:                       35%;
+    /* One size for every tab. The file tab adds rofi's "Current directory" line,
+       so with an automatic height the window grew 39px on Tab and Hyprland
+       animated the resize. 423px is that tab's own height at these fonts (6 rows +
+       the directory line); the other tabs keep that line as one blank row. The per-menu
+       config-*.rasi files set their own height, so this is the launcher's alone. */
+    height:                      423px;
     x-offset:                    0px;
     y-offset:                    0px;
     padding:                     0px;
