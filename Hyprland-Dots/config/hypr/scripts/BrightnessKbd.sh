@@ -25,7 +25,7 @@ get_icon() {
 }
 # Notify
 notify_user() {
-	notify-send -t 1000 -e -h string:x-canonical-private-synchronous:brightness_notif -h int:value:$current -h boolean:SWAYNC_BYPASS_DND:true -u low -i "$icon" "Keyboard" "Brightness:$current%"
+	notify-send -t 1000 -e -h string:x-canonical-private-synchronous:brightness_notif -h int:value:$current -h boolean:SWAYNC_BYPASS_DND:true -u low -i "$icon" "Подсветка клавиатуры:" "$current%"
 }
 
 # Change brightness

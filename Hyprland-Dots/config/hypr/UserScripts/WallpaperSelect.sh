@@ -57,7 +57,7 @@ WALL_FIND_TYPES=(
 prepare_menu() {
   # Check if package bc exists
   if ! command -v bc &>/dev/null; then
-    notify-send -i "$iDIR/error.png" "bc missing" "Install package bc first"
+    notify-send -i "$iDIR/error.png" "Нет bc" "Сначала установите пакет bc"
     exit 1
   fi
 
@@ -67,7 +67,7 @@ prepare_menu() {
 
   # Ensure focused_monitor is detected
   if [[ -z "$focused_monitor" ]]; then
-    notify-send -i "$iDIR/error.png" "E-R-R-O-R" "Could not detect focused monitor"
+    notify-send -i "$iDIR/error.png" "ОШИБКА" "Не удалось определить активный монитор"
     exit 1
   fi
 
@@ -342,7 +342,7 @@ apply_video_wallpaper() {
 
   # Check if mpvpaper is installed
   if ! command -v mpvpaper &>/dev/null; then
-    notify-send -i "$iDIR/error.png" "E-R-R-O-R" "mpvpaper not found"
+    notify-send -i "$iDIR/error.png" "ОШИБКА" "mpvpaper не найден"
     return 1
   fi
   kill_wallpaper_for_video
@@ -415,8 +415,8 @@ apply_selected() {
   # is written, not after.
   if [[ "${selected_file,,}" =~ \.(mp4|mkv|mov|webm)$ ]] \
      && ! command -v mpvpaper &>/dev/null; then
-    notify-send -i "$iDIR/error.png" "Video wallpaper unavailable" \
-      "mpvpaper is not installed, so $(basename "$selected_file") cannot be used. Nothing was changed." 2>/dev/null
+    notify-send -i "$iDIR/error.png" "Видеообои недоступны" \
+      "Не установлен mpvpaper, поэтому видео $(basename "$selected_file") использовать нельзя. Ничего не изменено." 2>/dev/null
     echo "mpvpaper is not installed - refusing to switch to a video wallpaper."
     exit 1
   fi
@@ -440,7 +440,7 @@ if (( $# > 0 )); then
   # point nowhere.
   [[ "$selected_file" == /* ]] || selected_file="$PWD/$selected_file"
   if [[ ! -f "$selected_file" ]]; then
-    notify-send -i "$iDIR/error.png" "Wallpaper not found" "$selected_file" 2>/dev/null
+    notify-send -i "$iDIR/error.png" "Обои не найдены" "$selected_file" 2>/dev/null
     echo "File not found: $selected_file"
     exit 1
   fi

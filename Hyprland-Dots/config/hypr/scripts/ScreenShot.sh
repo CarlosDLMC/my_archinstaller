@@ -17,7 +17,7 @@ sDIR="$HOME/.config/hypr/scripts"
 # every kind, to build a filename only --active ever uses. shotactive sets them
 # itself, and notify_view "active" is only ever reached from shotactive.
 
-notify_cmd_base="notify-send -t 10000 -A action1=Open -A action2=Delete -h string:x-canonical-private-synchronous:shot-notify"
+notify_cmd_base="notify-send -t 10000 -A action1=Открыть -A action2=Удалить -h string:x-canonical-private-synchronous:shot-notify"
 notify_cmd_shot="${notify_cmd_base} -i ${iDIR}/picture.png "
 notify_cmd_shot_win="${notify_cmd_base} -i ${iDIR}/picture.png "
 notify_cmd_NOT="notify-send -u low -i ${iDoR}/note.png "
@@ -26,7 +26,7 @@ notify_cmd_NOT="notify-send -u low -i ${iDoR}/note.png "
 notify_view() {
     if [[ "$1" == "active" ]]; then
         if [[ -e "${active_window_path}" ]]; then
-            resp=$(timeout 5 ${notify_cmd_shot_win} " Screenshot of:" " ${active_window_class} Saved.")
+            resp=$(timeout 5 ${notify_cmd_shot_win} "Снимок окна:" "${active_window_class} сохранён.")
             case "$resp" in
 				action1)
 					xdg-open "${active_window_path}" &
@@ -36,14 +36,14 @@ notify_view() {
 					;;
 			esac
         else
-            ${notify_cmd_NOT} " Screenshot of:" " ${active_window_class} NOT Saved."
+            ${notify_cmd_NOT} "Снимок окна:" "${active_window_class} не сохранён."
             "${sDIR}/Sounds.sh" --error
         fi
 
     else
         local check_file="${dir}/${file}"
         if [[ -e "$check_file" ]]; then
-            resp=$(timeout 5 ${notify_cmd_shot} " Screenshot" " Saved")
+            resp=$(timeout 5 ${notify_cmd_shot} "Снимок экрана:" "сохранён")
 			case "$resp" in
 				action1)
 					xdg-open "${check_file}" &
@@ -53,7 +53,7 @@ notify_view() {
 					;;
 			esac
         else
-            ${notify_cmd_NOT} " Screenshot" " NOT Saved"
+            ${notify_cmd_NOT} "Снимок экрана:" "не сохранён"
             "${sDIR}/Sounds.sh" --error
         fi
     fi
@@ -62,7 +62,7 @@ notify_view() {
 # countdown
 countdown() {
 	for sec in $(seq $1 -1 1); do
-		notify-send -h string:x-canonical-private-synchronous:shot-notify -t 1000 -i "$iDIR"/timer.png  " Taking shot" " in: $sec secs"
+		notify-send -h string:x-canonical-private-synchronous:shot-notify -t 1000 -i "$iDIR"/timer.png  "Снимок через:" "$sec с"
 		sleep 1
 	done
 }
@@ -202,7 +202,7 @@ shotmouse() {
 	output=$(output_at_cursor)
 
 	if [[ -z "$output" ]]; then
-		${notify_cmd_NOT} " Screenshot" " Could not find the monitor under the pointer"
+		${notify_cmd_NOT} "Снимок экрана:" "не найден монитор под указателем"
 		return 1
 	fi
 
@@ -215,7 +215,7 @@ shotmonitor() {
 	[[ -z "$output" ]] && output=$(hyprctl -j monitors | jq -r '.[] | select(.focused) | .name' | head -1)
 
 	if [[ -z "$output" ]]; then
-		${notify_cmd_NOT} " Screenshot" " Could not determine which monitor"
+		${notify_cmd_NOT} "Снимок экрана:" "не удалось определить монитор"
 		return 1
 	fi
 

@@ -42,5 +42,5 @@ if command -v ags >/dev/null 2>&1; then
 fi
 
 # If we get here, neither worked
-notify-send "Overview" "Neither Quickshell nor AGS is available" -u low 2>/dev/null || true
+notify-send "Обзор" "Нет ни Quickshell, ни AGS" -u low 2>/dev/null || true
 exit 1

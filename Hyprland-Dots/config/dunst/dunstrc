@@ -111,9 +111,10 @@
 # Every script in this repo notifies through notify-send, which would
 # stamp them all NOTIFY-SEND. They are the desktop's own messages, so
 # they say СИСТЕМА, and they are set as one line: the scripts split one
-# sentence across summary and body (" Volume Level:" + " 62%"), each half
-# with a leading space left over from swaync's centred layout. On one
-# line those spaces are only the gaps between the words.
+# sentence across summary and body ("Громкость:" + "62 %"), so on one
+# line it reads as that sentence again. (Upstream's own strings also
+# start each half with a space, left from swaync's centred layout - on
+# one line that is only a gap between the words.)
 #
 # A critical one gets a red ТРЕВОГА stamp instead, followed by the
 # sender when it is an application.
@@ -151,9 +152,10 @@
     override_dbus_timeout = 1s
     set_transient = yes
 
-# The "NOT Saved" paths send no stack tag.
+# The "не сохранён" (not saved) paths send no stack tag. "Screenshot"
+# still matches the English originals.
 [flash_screenshot_untagged]
-    summary = "Screenshot"
+    summary = "Screenshot|Снимок"
     override_dbus_timeout = 1s
     set_transient = yes
 
@@ -162,10 +164,11 @@
     override_dbus_timeout = 1s
     set_transient = yes
 
-# Covers "Recording Started/Stopped/Failed/Cancelled", "No Recording"
-# and "Already Recording", which are sent without a stack tag.
+# Covers the ScreenRecord.sh messages that are sent without a stack tag
+# ("Запись отменена", "Запись не идёт", "Запись уже идёт", "Ошибка
+# записи"); "Recording" still matches the English originals.
 [flash_recording_untagged]
-    summary = "Recording"
+    summary = "Recording|Запис|запис"
     override_dbus_timeout = 1s
     set_transient = yes
 
@@ -179,7 +182,7 @@
 # first-run "pick a model" hint under the same "Handy" summary, and
 # that one is worth reading.
 [flash_handy_toggle]
-    body = "^Toggling transcription$"
+    body = "^(Toggling transcription|Переключение диктовки)$"
     override_dbus_timeout = 1s
     set_transient = yes
 

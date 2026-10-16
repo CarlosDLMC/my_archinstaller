@@ -53,7 +53,7 @@ no-effects() {
 	sleep 2
 	"$SCRIPTSDIR/Refresh.sh"
 
-    notify-send -u low -i "$iDIR/ja.png" "No wallpaper" "effects applied"
+    notify-send -u low -i "$iDIR/ja.png" "Обои:" "эффекты сняты"
     # copying wallpaper for rofi menu
     cp "$wallpaper_current" "$wallpaper_output"
 }
@@ -74,7 +74,7 @@ main() {
             no-effects
         elif [[ "${effects[$choice]+exists}" ]]; then
             # Apply selected effect
-            notify-send -u normal -i "$iDIR/ja.png"  "Applying:" "$choice effects"
+            notify-send -u normal -i "$iDIR/ja.png"  "Применяется эффект:" "$choice"
             eval "${effects[$choice]}"
             
             # intial kill process
@@ -95,7 +95,7 @@ main() {
             "$HOME/.config/hypr/scripts/RofiContrast.py" || true
             # Refresh rofi, quickshell, wallust palettes
             "${SCRIPTSDIR}/Refresh.sh"
-            notify-send -u low -i "$iDIR/ja.png" "$choice" "effects applied"
+            notify-send -u low -i "$iDIR/ja.png" "Эффект применён:" "$choice"
         else
             echo "Effect '$choice' not recognized."
         fi
