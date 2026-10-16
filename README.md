@@ -1216,7 +1216,7 @@ These are machine-specific, so a fresh install starts without them:
   up got committed and the next wallpaper change dirtied the tree, which
   `auto-install.sh` then refuses to pull over.
 
-  Most of them still have to *exist*: twelve rofi themes `@theme`
+  Most of them still have to *exist*: thirteen rofi themes `@theme`
   `colors-rofi.rasi` — a missing file there is an error on first launch, not a silent fallback.
   (`UserDecorations.lua` is the exception: it loads `wallust-hyprland.lua`
   through `pcall` and falls back to a built-in palette.) So a rendered snapshot

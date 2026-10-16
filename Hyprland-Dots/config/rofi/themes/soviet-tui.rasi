@@ -1,0 +1,225 @@
+/* Soviet TUI
+ *
+ * The launcher (SUPER + D) and every rofi menu that imports config.rasi: the
+ * shape of the dunst cards and the «ПУСК · ПУЛЬТ» power menu - square, a
+ * 1px frame, a reverse-video stamp, a block cursor, tabs along the bottom -
+ * in the wallpaper's colours.
+ *
+ * The colours are wallust's, from colors-rofi.rasi like the other themes here,
+ * so rofi recolours with the wallpaper. Every slot used as a fill is paired with
+ * its @on-colorN, the readable text RofiContrast.py measures for it. The roles
+ * follow the rest of the desktop: color12 is Hyprland's focused-window border
+ * and the bar's palBorder, color14 the bar's alert hue.
+ *
+ * Element names are style-4's (inputbar, entry, message, listview), because the
+ * per-menu config-*.rasi files override those: their own mainbox children,
+ * placeholders, columns, and size: 0% icons.
+ */
+
+configuration {
+    modi:                       "drun,run,filebrowser";
+    show-icons:                 true;
+    display-drun:               "ПРОГРАММЫ";
+    display-run:                "КОМАНДЫ";
+    display-filebrowser:        "ФАЙЛЫ";
+    display-window:             "ОКНА";
+    drun-display-format:        "{name}";
+    /* No {w}: rofi has no workspace name for a Wayland window, so it only
+       left a dangling " · " at the start of every row. */
+    window-format:              "{c} · {t}";
+    hover-select:               true;
+    me-select-entry:            "MouseSecondary";
+    me-accept-entry:            "MousePrimary";
+}
+
+/* ---- Load wallust colors ---- */
+@theme "~/.config/rofi/wallust/colors-rofi.rasi"
+
+* {
+    tui-frame:                   @color12;     /* window frame */
+    tui-pick:                    @color12;     /* the selected row */
+    tui-on-pick:                 @on-color12;
+    tui-accent:                  @color14;     /* stamp, active tab, cursor */
+    tui-on-accent:               @on-color14;
+    tui-rule:                    @color0;      /* the dividers */
+    tui-hint:                    @color8;      /* hints, placeholders, idle tabs */
+    tui-bright:                  @color15;
+
+    background-color:            transparent;
+    text-color:                  @foreground;
+}
+
+/*****----- Main Window -----*****/
+window {
+    location:                    center;
+    anchor:                      center;
+    fullscreen:                  false;
+    width:                       35%;
+    x-offset:                    0px;
+    y-offset:                    0px;
+    padding:                     0px;
+    border:                      1px solid;
+    border-radius:               0px;
+    border-color:                @tui-frame;
+    cursor:                      "default";
+    /* Opaque, in wallust's background - the overview panel's and the bar
+       cards' fill. @background is 70% black, and the rofi blur rule's
+       ignore_alpha = 1 skips anything not opaque, so the windows behind
+       showed through sharp and fought the list. */
+    background-color:            @normal-background;
+}
+
+mainbox {
+    spacing:                     10px;
+    padding:                     14px 18px;
+    children:                    [ "inputbar", "message", "listview", "mode-switcher" ];
+}
+
+/*****----- Inputbar: the stamp, then what you type -----*****/
+inputbar {
+    spacing:                     12px;
+    padding:                     0px;
+    children:                    [ "textbox-prompt-colon", "entry" ];
+}
+/* Fixed, not the mode's prompt: a dmenu menu that passes no -p would stamp
+   itself "dmenu". The mode is the tab marked below. */
+textbox-prompt-colon {
+    expand:                      false;
+    str:                         " ПОИСК ";
+    font:                        "Terminess Nerd Font Bold 18";
+    vertical-align:              0.5;
+    background-color:            @tui-accent;
+    text-color:                  @tui-on-accent;
+}
+entry {
+    vertical-align:              0.5;
+    text-color:                  @foreground;
+    cursor:                      text;
+    cursor-width:                13px;   /* one cell of the entry font (JetBrains Mono 16: 0.6em = 12.8px) */
+    cursor-color:                @tui-accent;
+    placeholder:                 "";
+    placeholder-color:           @tui-hint;
+}
+
+/*****----- Message: a dim hint line, like the lock screen's footer -----*****/
+message {
+    padding:                     0px;
+    border:                      0px;
+}
+textbox {
+    padding:                     0px;
+    text-color:                  @tui-hint;
+    vertical-align:              0.5;
+    horizontal-align:            0.0;
+    highlight:                   none;
+    placeholder-color:           @tui-hint;
+    blink:                       true;
+    markup:                      true;
+}
+error-message {
+    padding:                     10px 14px;
+    border:                      1px solid;
+    border-color:                @tui-accent;
+    background-color:            @normal-background;
+    text-color:                  @foreground;
+}
+
+/*****----- Listview -----*****/
+listview {
+    columns:                     1;
+    lines:                       6;
+    cycle:                       true;
+    dynamic:                     true;
+    scrollbar:                   false;
+    layout:                      vertical;
+    reverse:                     false;
+    fixed-height:                true;
+    fixed-columns:               true;
+    spacing:                     2px;
+    padding:                     8px 0px 0px 0px;
+    border:                      1px 0px 0px 0px;
+    border-color:                @tui-rule;
+    cursor:                      "default";
+}
+scrollbar {
+    handle-width:                2px;
+    handle-color:                @tui-frame;
+    border-radius:               0px;
+    background-color:            transparent;
+}
+
+/*****----- Elements -----*****/
+element {
+    spacing:                     10px;
+    padding:                     6px 10px;
+    border:                      0px;
+    border-radius:               0px;
+    cursor:                      pointer;
+}
+element normal.normal,
+element alternate.normal {
+    background-color:            transparent;
+    text-color:                  @foreground;
+}
+element normal.active,
+element alternate.active {
+    background-color:            transparent;
+    text-color:                  @tui-bright;
+}
+element normal.urgent,
+element alternate.urgent {
+    background-color:            transparent;
+    text-color:                  @tui-accent;
+}
+element selected.normal,
+element selected.active {
+    background-color:            @tui-pick;
+    text-color:                  @tui-on-pick;
+}
+element selected.urgent {
+    background-color:            @tui-accent;
+    text-color:                  @tui-on-accent;
+}
+/* The caption as well as the row: config-wallpaper.rasi clears the selected
+   tile's fill, and then the caption is the only mark of the pick. In a normal
+   row it is the same fill as the row, so it does not show. */
+element-text selected.normal,
+element-text selected.active {
+    background-color:            @tui-pick;
+    text-color:                  @tui-on-pick;
+}
+element-icon {
+    size:                        24px;
+    background-color:            transparent;
+    text-color:                  inherit;
+    cursor:                      inherit;
+}
+element-text {
+    background-color:            transparent;
+    text-color:                  inherit;
+    highlight:                   bold;
+    cursor:                      inherit;
+    vertical-align:              0.5;
+    horizontal-align:            0.0;
+}
+
+/*****----- Mode switcher: tabs along the bottom, the current one stamped -----*****/
+mode-switcher {
+    spacing:                     6px;
+    padding:                     8px 0px 0px 0px;
+    border:                      1px 0px 0px 0px;
+    border-color:                @tui-rule;
+}
+/* Tabs hug their label, as on a TUI menu bar, rather than splitting the width. */
+button {
+    expand:                      false;
+    padding:                     2px 10px;
+    font:                        "Terminess Nerd Font Bold 18";
+    background-color:            transparent;
+    text-color:                  @tui-hint;
+    cursor:                      pointer;
+}
+button selected {
+    background-color:            @tui-accent;
+    text-color:                  @tui-on-accent;
+}

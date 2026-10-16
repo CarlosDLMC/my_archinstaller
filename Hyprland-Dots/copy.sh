@@ -832,7 +832,7 @@ fi
 #
 #   - UserConfigs/UserDecorations.lua requires wallust/wallust-hyprland.lua
 #     (it falls back to a built-in palette, but seeding keeps colours consistent)
-#   - twelve rofi themes `@theme` colors-rofi.rasi
+#   - thirteen rofi themes `@theme` colors-rofi.rasi
 #
 # A missing file at any of those is a config error on first launch, not a
 # silent fallback, and first launch happens before initial-boot.sh has had a
