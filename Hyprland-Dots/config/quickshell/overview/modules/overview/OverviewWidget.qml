@@ -58,7 +58,8 @@ Item {
 
         implicitWidth: workspaceColumnLayout.implicitWidth + padding * 2
         implicitHeight: workspaceColumnLayout.implicitHeight + padding * 2
-        radius: Appearance.rounding.screenRounding * root.scale + padding
+        // Concentric with the workspaces' corners - and square when they are.
+        radius: Appearance.rounding.screenRounding > 0 ? Appearance.rounding.screenRounding * root.scale + padding : 0
         color: Appearance.colors.colLayer0
         border.width: 1
         border.color: Appearance.colors.colLayer0Border

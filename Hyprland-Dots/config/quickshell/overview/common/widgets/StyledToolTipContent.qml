@@ -21,6 +21,9 @@ Item {
         }
         color: Appearance?.colors.colTooltip ?? "#3C4043"
         radius: Appearance?.rounding.verysmall ?? 7
+        // Dark on dark window previews, so it carries the bar's card frame.
+        border.width: 1
+        border.color: Appearance?.colors.colTooltipBorder ?? "transparent"
         opacity: shown ? 1 : 0
         implicitWidth: shown ? (tooltipTextObject.implicitWidth + 2 * root.horizontalPadding) : 0
         implicitHeight: shown ? (tooltipTextObject.implicitHeight + 2 * root.verticalPadding) : 0

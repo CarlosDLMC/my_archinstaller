@@ -359,9 +359,9 @@ The ones that matter:
 
 | Family | Package | Used by |
 | --- | --- | --- |
-| `Terminess Nerd Font` | `ttf-terminus-nerd` | **the quickshell bar** — `bar/Theme.qml`; the stamps on dunst's cards |
+| `Terminess Nerd Font` | `ttf-terminus-nerd` | **the quickshell bar** — `bar/Theme.qml`; the stamps on dunst's cards; the overview's workspace numbers |
 | `JetBrainsMono Nerd Font Mono` | `ttf-jetbrains-mono-nerd` | foot, hyprlock, `SovietLockGen.py` |
-| `JetBrainsMono Nerd Font` | `ttf-jetbrains-mono-nerd` | dunst |
+| `JetBrainsMono Nerd Font` | `ttf-jetbrains-mono-nerd` | dunst, the overview's tooltips |
 | `Fira Code` | `ttf-fira-code` | `gtk-3.0/settings.ini` - but see below |
 
 `gtk-3.0/settings.ini` asks for `Fira Code Semi-Bold`, and two things stand in
@@ -379,7 +379,7 @@ One place names a font that is **not** installed and never has been:
 `config/rofi/themes/LonerOrZ.rasi` asks for `Iosevka`. It renders substituted
 here already, so this is inherited from upstream rather than something the
 install broke. (The quickshell overview takes its fonts from
-`overview/common/Appearance.qml`, which asks for plain `sans-serif`.)
+`overview/common/Appearance.qml`: Terminess and JetBrains Mono, as above.)
 
 ### GTK theme
 

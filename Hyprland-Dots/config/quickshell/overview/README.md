@@ -31,7 +31,7 @@ https://github.com/user-attachments/assets/79ceb141-6b9e-4956-8e09-aaf72b66550c
 - 🔄 Drag and drop windows between workspaces
 - ⌨️ Keyboard navigation (Arrow keys to switch workspaces, Escape/Enter to close)
 - 💡 Hover tooltips showing window information
-- 🎨 Material Design 3 theming
+- 🎨 The bar's look: its wallust palette (recolours with the wallpaper), square tiles, Terminess numbers
 - ⚡ Smooth animations and transitions
 
 ## 📦 Installation
@@ -103,11 +103,19 @@ anchors {
 
 ### Theme & Colors
 
+The colours are not set in this folder. `common/Appearance.qml` reads the bar's
+palette, `~/.config/quickshell/bar/wallust-colors.json`, which wallust rewrites on
+every wallpaper change, so the overview recolours together with the bar. It
+reads it by absolute path, built from `Quickshell.shellDir`: a relative URL that
+climbs out of this config (`../../bar/...`) is resolved by Quickshell to
+`qrc:/qs-blackhole` and silently never read. The palette literals in the file
+are only fallbacks for when it cannot be read.
+
 Edit `~/.config/quickshell/overview/common/Appearance.qml` to customize:
-- Colors (m3colors and colors objects)
-- Font families and sizes  
+- Which palette role each part uses (the `colors` object)
+- Font families and sizes
 - Animation curves and durations
-- Border radius values
+- Corner radii - all 0, to match the square windows
 
 ---
 
