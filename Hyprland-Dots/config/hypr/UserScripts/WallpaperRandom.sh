@@ -18,7 +18,7 @@ mapfile -d '' PICS < <(find -L "${wallDIR}" -type f \( \
   -name "*.tga" -o -name "*.tiff" -o -name "*.webp" -o -name "*.bmp" -o \
   -name "*.farbfeld" -o -name "*.gif" \) -print0)
 if (( ${#PICS[@]} == 0 )); then
-  notify-send -u low "Random wallpaper" "No wallpapers found in $wallDIR" 2>/dev/null
+  notify-send -u low "Случайные обои" "В $wallDIR нет обоев" 2>/dev/null
   exit 1
 fi
 RANDOMPICS="${PICS[$((RANDOM % ${#PICS[@]}))]}"

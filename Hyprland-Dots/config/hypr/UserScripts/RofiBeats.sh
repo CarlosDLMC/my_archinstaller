@@ -31,7 +31,7 @@ music_playing() { pgrep -f -- "$MUSIC_MATCH" >/dev/null; }
 stop_music() {
   if music_playing; then
     pkill -f -- "$MUSIC_MATCH" || true
-    notification "Music stopped"
+    notification "Музыка остановлена"
   fi
 }
 
@@ -54,7 +54,7 @@ play_local_music() {
   for ((i = 0; i < "${#filenames[@]}"; ++i)); do
     if [ "${filenames[$i]}" = "$choice" ]; then
       music_playing && stop_music
-      notification "Now Playing:" "$choice"
+      notification "Сейчас играет:" "$choice"
       mpv "$MUSIC_MARK" --no-video --playlist-start="$i" --loop-playlist "${local_music[@]}"
       break
     fi
@@ -64,14 +64,14 @@ play_local_music() {
 # Shuffle and play all local music
 shuffle_local_music() {
   music_playing && stop_music
-  notification "Shuffle Play local music"
+  notification "Локальная музыка вперемешку"
   mpv "$MUSIC_MARK" --no-video --shuffle --loop-playlist "$mDIR"
 }
 
 # Play selected online music
 play_online_music() {
   if [ ! -s "$music_list" ]; then
-    notify-send -u low -i "$iDIR/music.png" "No online music found" "Add some with Manage Music"
+    notify-send -u low -i "$iDIR/music.png" "Нет онлайн-станций" "Добавьте их через «Manage Music List»"
     exit 0
   fi
   choice=$(awk -F'|' '{print $1}' "$music_list" | sort | rofi -i -dmenu -config "$rofi_theme" \
@@ -79,11 +79,11 @@ play_online_music() {
   [[ -z "$choice" ]] && exit 1
   link=$(awk -F'|' -v name="$choice" '$1 == name {print $2; exit}' "$music_list")
   [[ -z "$link" ]] && {
-    notify-send -u low -i "$iDIR/music.png" "URL not found for" "$choice"
+    notify-send -u low -i "$iDIR/music.png" "Не найден адрес станции" "$choice"
     exit 1
   }
   music_playing && stop_music
-  notification "Now Playing:" "$choice"
+  notification "Сейчас играет:" "$choice"
   mpv "$MUSIC_MARK" --no-video --shuffle "$link"
 }
 
@@ -102,7 +102,7 @@ manage_music() {
       -theme-str 'entry { placeholder: "🔗 Enter Music URL"; }')
     [[ -z "$url" ]] && return
     echo "$name|$url" >>"$music_list"
-    notification "Added" "$name"
+    notification "Добавлено:" "$name"
     ;;
   "Remove Music")
     entry=$(awk -F'|' '{print $1}' "$music_list" | rofi -dmenu -config "$rofi_theme_menu" \
@@ -114,7 +114,7 @@ manage_music() {
     # the name. ENVIRON, not awk -v, so a backslash in the name stays as typed.
     E="$entry" awk -F'|' '$1 != ENVIRON["E"]' "$music_list" >"$music_list.tmp" \
       && mv "$music_list.tmp" "$music_list"
-    notification "Removed" "$entry"
+    notification "Удалено:" "$entry"
     ;;
   "View List")
     # Show only titles, not URLs

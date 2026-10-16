@@ -34,7 +34,7 @@ if [[ -n "$chosen_file" ]]; then
     full_path="$monitor_dir/$chosen_file.lua"
     cp "$full_path" "$target"
     
-    notify-send -t 1000 -u low -i "$iDIR/ja.png" "$chosen_file" "Monitor Profile Loaded"
+    notify-send -t 1000 -u low -i "$iDIR/ja.png" "Профиль мониторов загружен:" "$chosen_file"
 fi
 
 sleep 1
