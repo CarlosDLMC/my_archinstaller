@@ -11,6 +11,7 @@ Usage:
 """
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -99,6 +100,69 @@ def dump(rows):
         print(f"{keys}\t{act}")
 
 
+# The launcher's look (SUPER + D, rofi/themes/soviet-tui.rasi) in wallust's
+# rofi colours, so the cheat sheet follows the wallpaper exactly as rofi does,
+# Light mode included. The literals are the sovietpunk fallbacks, for when the
+# file is missing. Hyprland draws the frame: it is the focused-window border.
+ROFI_COLORS = os.path.expanduser("~/.config/rofi/wallust/colors-rofi.rasi")
+PALETTE = {
+    "normal-background": "#262625",   # the window
+    "foreground": "#E8C4C0",          # text
+    "color0": "#4C4C4B",              # dividers
+    "color8": "#96716D",              # column headers, the status line
+    "color12": "#59302D",             # scrollbar
+    "color14": "#BE564A",             # the stamp and the caret
+    "on-color14": "rgba(0,0,0,0.7)",  # text on the stamp, as RofiContrast.py picks it
+}
+
+CSS = """
+#cheatsheet, #cheatsheet treeview.view {
+    background-color: %(normal-background)s; color: %(foreground)s; }
+#cheatsheet * { border-radius: 0; }
+#cheatsheet .stamp {
+    background-color: %(color14)s; color: %(on-color14)s; padding: 0 8px;
+    font-family: "Terminess Nerd Font"; font-weight: bold; font-size: 18pt; }
+#cheatsheet entry {
+    background: none; border: none; box-shadow: none; outline: none;
+    color: %(foreground)s; caret-color: %(color14)s;
+    -GtkWidget-cursor-aspect-ratio: 0.08; }
+/* A thin caret, not the launcher's block: GTK centres a wide caret on the
+   insertion point, so a block would sit on top of the last letter typed. */
+#cheatsheet .list { border-top: 1px solid %(color0)s; }
+#cheatsheet treeview header button {
+    background: none; border: none; box-shadow: none;
+    border-bottom: 1px solid %(color0)s; color: %(color8)s;
+    font-family: "Terminess Nerd Font"; font-weight: bold; font-size: 18pt; }
+#cheatsheet scrollbar { background: none; border: none; }
+#cheatsheet scrollbar slider {
+    background-color: %(color12)s; min-width: 2px; border: none; }
+#cheatsheet .status {
+    color: %(color8)s; border-top: 1px solid %(color0)s; padding-top: 8px; }
+"""
+
+
+def palette():
+    """PALETTE with wallust's values from colors-rofi.rasi, @references resolved."""
+    pal = dict(PALETTE)
+    try:
+        with open(ROFI_COLORS, encoding="utf-8") as f:
+            raw = dict(re.findall(r"^\s*([a-z0-9-]+):\s*([^;]+);", f.read(), re.M))
+    except OSError:
+        return pal
+
+    def resolve(value, depth=0):
+        value = value.strip()
+        if value.startswith("@") and depth < 4:
+            return resolve(raw.get(value[1:], ""), depth + 1)
+        return value
+
+    for key in pal:
+        value = resolve(raw.get(key, ""))
+        if value:
+            pal[key] = value
+    return pal
+
+
 def gui(rows):
     import gi
     from gi.repository import GLib
@@ -110,17 +174,30 @@ def gui(rows):
     # The title is what configs/WindowRules.lua matches (tag Cheat_Sheet:
     # float, center, 65% x 90%), so keep it in sync with that rule.
     win = Gtk.Window(title="Quick Cheat Sheet")
+    win.set_name("cheatsheet")  # what the CSS above is scoped to
     win.set_default_size(1100, 1000)
     win.connect("destroy", Gtk.main_quit)
 
-    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8,
-                  margin=12)
+    provider = Gtk.CssProvider()
+    provider.load_from_data((CSS % palette()).encode())
+    Gtk.StyleContext.add_provider_for_screen(
+        Gdk.Screen.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10,
+                  margin_top=14, margin_bottom=14, margin_start=18, margin_end=18)
     win.add(box)
 
-    search = Gtk.SearchEntry()
+    # The launcher's search line: the ПОИСК stamp, then what you type. A plain
+    # Entry, not a SearchEntry, which brings its own magnifier and clear icons.
+    line = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+    stamp = Gtk.Label(label=" ПОИСК ", valign=Gtk.Align.CENTER)
+    stamp.get_style_context().add_class("stamp")
+    line.pack_start(stamp, False, False, 0)
+    search = Gtk.Entry()
     search.set_placeholder_text(
-        "Type to filter by action or keys, e.g. screenshot, workspace, super shift")
-    box.pack_start(search, False, False, 0)
+        " действие или клавиши, например: screenshot, workspace, super shift")
+    line.pack_start(search, True, True, 0)
+    box.pack_start(line, False, False, 0)
 
     # keys, action, lowercase haystack used for filtering
     store = Gtk.ListStore(str, str, str)
@@ -145,22 +222,25 @@ def gui(rows):
     tree.get_selection().set_mode(Gtk.SelectionMode.NONE)
 
     r_keys = Gtk.CellRendererText(weight=Pango.Weight.BOLD, ypad=6)
-    col_keys = Gtk.TreeViewColumn("Keys", r_keys, text=0)
+    col_keys = Gtk.TreeViewColumn("КЛАВИШИ", r_keys, text=0)
     col_keys.set_resizable(True)
     tree.append_column(col_keys)
 
     r_act = Gtk.CellRendererText(ypad=6)
-    col_act = Gtk.TreeViewColumn("Action", r_act, text=1)
+    col_act = Gtk.TreeViewColumn("ДЕЙСТВИЕ", r_act, text=1)
     col_act.set_expand(True)
     tree.append_column(col_act)
 
     scroll = Gtk.ScrolledWindow()
     scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
     scroll.add(tree)
+    scroll.get_style_context().add_class("list")
     box.pack_start(scroll, True, True, 0)
 
-    status = Gtk.Label(xalign=0)
-    status.get_style_context().add_class("dim-label")
+    # Ellipsized, so the line can never set the window's minimum width: it used
+    # to, and held the window wider than the 65% the window rule asks for.
+    status = Gtk.Label(xalign=0, ellipsize=Pango.EllipsizeMode.END)
+    status.get_style_context().add_class("status")
     box.pack_start(status, False, False, 0)
 
     total = len(rows)
@@ -172,11 +252,11 @@ def gui(rows):
         filt.refilter()
         n = len(filt)
         status.set_text(
-            f"{n} of {total} keybinds    ·    Esc closes    ·    "
-            f"SUPER H toggles    ·    SUPER SHIFT K: same list in rofi")
+            f"{n} из {total} · Esc - закрыть · "
+            f"SUPER H - открыть/закрыть · SUPER SHIFT K - список в rofi")
         scroll.get_vadjustment().set_value(0)
 
-    search.connect("search-changed", refresh)
+    search.connect("changed", refresh)
 
     def on_key(_w, ev):
         adj = scroll.get_vadjustment()
