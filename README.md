@@ -278,7 +278,8 @@ first prompt.
 - Quickshell (custom bar)
 - foot (terminal)
 - rofi (launcher)
-- «ПУСК · ПУЛЬТ» power menu (in the Quickshell bar, CTRL + ALT + P)
+- «ПУСК · ПУЛЬТ» power menu (in the Quickshell bar, CTRL + ALT + P); logout, reboot and
+  power-off end with a CRT power-off - the picture folds into a line, then a dot
 - dunst (notifications — swaync is removed if present)
 - awww (wallpaper daemon)
 - wallust (color scheme generator)

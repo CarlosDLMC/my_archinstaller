@@ -677,6 +677,12 @@ singleton that the widgets render; only the rendering should be per-screen. See
   added by `install-scripts/hackbgrt.sh`) so Windows shows the same boot logo, else to Windows Boot
   Manager, run through `sudo -n` under a rule for that helper alone. Optional: without it W falls
   back to `pkexec` and a password prompt (same entry choice, `PowerState.qml`)
+- `~/.config/hypr/scripts/CrtOff.sh` in front of the power menu's E, R, S, B and W (`crt` in
+  `PowerState.qml`): one frame per monitor (grim, PPM - a PNG took 658ms), then
+  `qs -c crt` (`config/quickshell/crt`, its own config, not this bar) folds the picture into a
+  line and a dot and stays black until the session ends; a failed command or 30s without the
+  machine going down give the desktop back. W runs it after the password step, never over a
+  prompt. Shown without a layer animation (`quickshell:crt` in `UserConfigs/WindowRules.lua`)
 - `dunstctl` for DND (Do Not Disturb) toggle
 - `wpctl` / `pactl` for volume control and audio sink detection
 - `hyprctl` for workspace/window data
