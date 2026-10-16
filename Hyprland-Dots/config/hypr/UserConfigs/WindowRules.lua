@@ -21,6 +21,11 @@ hl.layer_rule({ match = { namespace = "quickshell:bar" }, blur = true })
 -- ~/.config/quickshell/bar/components/WallpaperOsd.qml.
 hl.layer_rule({ match = { namespace = "quickshell:wallpaper" }, blur = true })
 
+-- The CRT power-off (scripts/CrtOff.sh, ~/.config/quickshell/crt) shows a frame
+-- of the screen and collapses it; it has to appear at once on top of that
+-- frame, not fade or pop in over it.
+hl.layer_rule({ match = { namespace = "quickshell:crt" }, no_anim = true })
+
 -- Thunar's rename, properties, bulk-rename and file-transfer dialogs are separate
 -- toplevels carrying the same class as the browser window, so they tile and take
 -- half the screen. Thunar has no in-view rename - the dialog is the only way it

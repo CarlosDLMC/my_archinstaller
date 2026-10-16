@@ -18,6 +18,10 @@ Singleton {
     id: root
 
     readonly property string home: Quickshell.env("HOME") || ""
+    // In front of every command that ends the session: the picture collapses
+    // to a line and a dot, CRT-style, then the command runs (hypr/scripts/
+    // CrtOff.sh, which draws it with quickshell/crt - not this bar).
+    readonly property string crt: home + "/.config/hypr/scripts/CrtOff.sh "
 
     // Fixed palette, the hyprlock one (SovietLock.py) - deliberately not
     // wallust, exactly like the lock screen: the menu that leads to the lock
@@ -38,29 +42,30 @@ Singleton {
           show: "loginctl lock-session", cmd: home + "/.config/hypr/scripts/LockScreen.sh" },
         { k: "E", ru: "У", name: "ВЫХОД",        slogan: "СМЕНА ОКОНЧЕНА.", arm: true,  glyph: 0xF0343,
           ask: "Смену закончить, сеанс сдать.", readback: "Вас понял: смену сдаю.",
-          show: "hyprctl dispatch 'hl.dsp.exit()'", cmd: "hyprctl dispatch 'hl.dsp.exit()'" },
+          show: "hyprctl dispatch 'hl.dsp.exit()'", cmd: crt + "hyprctl dispatch 'hl.dsp.exit()'" },
         { k: "U", ru: "Г", name: "СПЯЩИЙ РЕЖИМ", slogan: "ПЕРЕКУР.",        arm: false, glyph: 0xF04B2,
           ask: "Разрешаю перекур.", readback: "",
           show: "systemctl suspend", cmd: "systemctl suspend" },
         { k: "R", ru: "К", name: "ПЕРЕЗАГРУЗКА", slogan: "ПОЕХАЛИ!",        arm: true,  glyph: 0xF0709,
           ask: "Повторный старт. Поехали!", readback: "Вас понял: к повторному старту готов.",
-          show: "systemctl reboot", cmd: "systemctl reboot" },
+          show: "systemctl reboot", cmd: crt + "systemctl reboot" },
         { k: "S", ru: "Ы", name: "ВЫКЛЮЧЕНИЕ",   slogan: "ОТБОЙ, ТОВАРИЩ.", arm: true,  glyph: 0xF0425,
           ask: "Приказ на отбой. Как поняли?", readback: "Вас понял: отбой.",
-          show: "systemctl poweroff", cmd: "systemctl poweroff" }
+          show: "systemctl poweroff", cmd: crt + "systemctl poweroff" }
     ]
     // The quiet extras, each shown only where the machine can do it.
     readonly property var extras: ({
         "B": { ru: "И", name: "ПЕРЕЗАГРУЗКА В UEFI", readback: "Вас понял: иду в машинное отделение.",
-               show: "systemctl reboot --firmware-setup", cmd: "systemctl reboot --firmware-setup" },
+               show: "systemctl reboot --firmware-setup", cmd: crt + "systemctl reboot --firmware-setup" },
         "W": { ru: "Ц", name: "ПЕРЕЗАГРУЗКА В WINDOWS", readback: "Вас понял: ухожу на чужую ОС.",
                show: "boot-windows-next && systemctl reboot",
                // BootNext is a UEFI variable, root-only. The root-owned helper
                // (install-scripts/boot_windows.sh) does exactly that one write
                // and has a sudoers rule, so W asks for no password; without it,
-               // pkexec and the bar's polkit prompt.
+               // pkexec and the bar's polkit prompt. The CRT goes after that step,
+               // so its black screen can never cover a password prompt.
                cmd: "if [ -x /usr/local/bin/boot-windows-next ]; then sudo -n /usr/local/bin/boot-windows-next;"
-                    + " else pkexec efibootmgr --bootnext " + windowsEntry + " >/dev/null; fi && systemctl reboot" }
+                    + " else pkexec efibootmgr --bootnext " + windowsEntry + " >/dev/null; fi && " + crt + "systemctl reboot" }
     })
 
     readonly property var litany: ["КЛЮЧ НА СТАРТ", "ПРОТЯЖКА-1", "ПРОДУВКА", "КЛЮЧ НА ДРЕНАЖ", "ПУСК"]
