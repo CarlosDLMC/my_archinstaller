@@ -1,8 +1,8 @@
 /* Soviet teletype («ТЕЛЕТАЙП»)
  *
  * The launcher (SUPER + D) and the base of every rofi menu that imports
- * config.rasi. The launcher as a terminal session on a Soviet computer: no
- * icons, every line in Terminess, a header line like a system banner, a `>` prompt, and the
+ * config.rasi. The launcher as a terminal session on a Soviet computer: the
+ * apps' own logos, every line in Terminess, a header line like a system banner, a `>` prompt, and the
  * picked row marked the way a terminal marks it - a bar at its left edge and
  * the text in the mark colour - rather than a fill. Tabs are bracketed menu-bar items.
  *
@@ -14,9 +14,7 @@
 
 configuration {
     modi:                       "drun,run,filebrowser";
-    /* Off: a terminal has no icons. The one menu that needs them, the
-       wallpaper thumbnails, turns them back on in config-wallpaper.rasi. */
-    show-icons:                 false;
+    show-icons:                 true;
     display-drun:               "ПРОГРАММЫ";
     display-run:                "КОМАНДЫ";
     display-filebrowser:        "ФАЙЛЫ";
@@ -36,7 +34,8 @@ configuration {
     tty-rule:                    @color0;
     tty-bright:                  @color15;
     tty-screen:                  #000000;      /* the terminal's black (foot.ini) */
-    font:                        "Terminess Nerd Font 18";
+    tty-title:                   rgba(255,255,255,0.07);   /* the banner's band: a shade off the window */
+    font:                        "Terminess Nerd Font 20";
 
     background-color:            transparent;
     text-color:                  @foreground;
@@ -61,14 +60,15 @@ mainbox {
     children:                    [ "textbox-banner", "inputbar", "message", "listview", "mode-switcher" ];
 }
 
-/* The banner line, as a terminal prints on login. */
+/* The banner line, as a terminal prints on login, on a band of its own a
+   shade off the window - a title strip, run out to the window's edges. */
 textbox-banner {
     expand:                      false;
     str:                         "ЭВМ «ЭЛЕКТРОНИКА» · ЗАПУСК ПРОГРАММ";
-    font:                        "Terminess Nerd Font Bold 15";
-    padding:                     0px 0px 6px 0px;
-    border:                      0px 0px 1px 0px;
-    border-color:                @tty-rule;
+    font:                        "Terminess Nerd Font Bold 17";
+    margin:                      -14px -20px 2px -20px;
+    padding:                     9px 20px;
+    background-color:            @tty-title;
     text-color:                  @tty-dim;
 }
 
@@ -80,18 +80,18 @@ inputbar {
 textbox-prompt-colon {
     expand:                      false;
     str:                         ">";
-    font:                        "Terminess Nerd Font Bold 20";
+    font:                        "Terminess Nerd Font Bold 22";
     vertical-align:              0.5;
     text-color:                  @tty-mark;
 }
 entry {
     vertical-align:              0.5;
-    font:                        "Terminess Nerd Font 20";
+    font:                        "Terminess Nerd Font 22";
     text-color:                  @tty-bright;
     cursor:                      text;
-    /* One cell: Terminess 20 here advances 13px a character (measured off a
+    /* One cell: Terminess 22 here advances 15px a character (measured off a
        row of Ш in the live entry), so the block covers a letter exactly. */
-    cursor-width:                13px;
+    cursor-width:                15px;
     cursor-color:                @tty-mark;
     blink:                       true;
     placeholder:                 "";
@@ -136,7 +136,7 @@ listview {
 }
 
 element {
-    spacing:                     0px;
+    spacing:                     12px;
     padding:                     4px 12px;
     border:                      0px 0px 0px 4px;
     border-color:                transparent;
@@ -169,11 +169,15 @@ element-text selected.active {
     background-color:            transparent;
     text-color:                  @tty-mark;
 }
+/* The apps' own logos, in their own colours. */
 element-icon {
-    size:                        0px;
+    size:                        26px;
+    background-color:            transparent;
+    text-color:                  inherit;
+    cursor:                      inherit;
 }
 element-text {
-    font:                        "Terminess Nerd Font 18";
+    font:                        "Terminess Nerd Font 20";
     background-color:            transparent;
     text-color:                  inherit;
     highlight:                   bold underline;
@@ -185,7 +189,10 @@ element-text {
 /* Menu-bar items: the current one boxed in the mark colour. */
 mode-switcher {
     spacing:                     4px;
-    padding:                     6px 0px 0px 0px;
+    /* Room under the tabs: with Terminess 18 the row came out a hair short
+       and cut the selected tab's box off along the bottom (2px is the least
+       that draws it; 3px to spare). */
+    padding:                     6px 0px 3px 0px;
     border:                      1px 0px 0px 0px;
     border-color:                @tty-rule;
 }
@@ -194,7 +201,7 @@ button {
     padding:                     1px 8px;
     border:                      1px;
     border-color:                transparent;
-    font:                        "Terminess Nerd Font Bold 16";
+    font:                        "Terminess Nerd Font Bold 18";
     background-color:            transparent;
     text-color:                  @tty-dim;
     cursor:                      pointer;
