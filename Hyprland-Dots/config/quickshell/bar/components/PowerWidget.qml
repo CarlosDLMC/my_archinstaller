@@ -16,19 +16,24 @@ DropdownWidget {
         command: ["loginctl", "lock-session"]
     }
 
-    Process {
-        id: logoutProc
-        command: ["hyprctl", "dispatch", "hl.dsp.exit()"]
+    // Logout, reboot and power-off end in the same CRT power-off as the
+    // «ПУСК · ПУЛЬТ» menu (PowerState.crt, hypr/scripts/CrtOff.sh): the picture
+    // collapses to a line and a dot, then the command runs. The card closes
+    // first and the command waits out the 250ms the menu also waits, so the
+    // frame CrtOff collapses is the desktop, not this card. Detached, so the
+    // session going down does not take the command with the bar.
+    property string pendingEnd: ""
+
+    function endSession(cmd) {
+        pendingEnd = cmd
+        dropdownOpen = false
+        endDelay.restart()
     }
 
-    Process {
-        id: rebootProc
-        command: ["systemctl", "reboot"]
-    }
-
-    Process {
-        id: shutdownProc
-        command: ["systemctl", "poweroff"]
+    Timer {
+        id: endDelay
+        interval: 250
+        onTriggered: Quickshell.execDetached(["sh", "-c", PowerState.crt + powerWidget.pendingEnd])
     }
 
     // Icon with spacing
@@ -86,20 +91,14 @@ DropdownWidget {
                 width: parent.width
                 icon: "󰍃"
                 label: "ВЫХОД"
-                onPicked: {
-                    powerWidget.dropdownOpen = false
-                    logoutProc.running = true
-                }
+                onPicked: powerWidget.endSession("hyprctl dispatch 'hl.dsp.exit()'")
             }
 
             ConsoleButton {
                 width: parent.width
                 icon: "󰜉"
                 label: "ПЕРЕЗАГРУЗКА"
-                onPicked: {
-                    powerWidget.dropdownOpen = false
-                    rebootProc.running = true
-                }
+                onPicked: powerWidget.endSession("systemctl reboot")
             }
 
             ConsoleButton {
@@ -107,10 +106,7 @@ DropdownWidget {
                 icon: "󰐥"
                 iconColor: Theme.colAlert
                 label: "ВЫКЛЮЧЕНИЕ"
-                onPicked: {
-                    powerWidget.dropdownOpen = false
-                    shutdownProc.running = true
-                }
+                onPicked: powerWidget.endSession("systemctl poweroff")
             }
         }
     }
