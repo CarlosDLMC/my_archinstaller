@@ -19,7 +19,7 @@
 /* You can manually change here or you can use rofi theme selector SUPER SHIFT E */
 
 
-@theme "~/.config/rofi/themes/soviet-tui.rasi"
+@theme "~/.config/rofi/themes/soviet-teletype.rasi"
 
 /* Tab / Shift+Tab switch the launcher's tabs (ПРОГРАММЫ · ФАЙЛЫ · КОМАНДЫ ·
    ОКНА). rofi gives Tab to row-stepping and refuses a key bound twice, so that

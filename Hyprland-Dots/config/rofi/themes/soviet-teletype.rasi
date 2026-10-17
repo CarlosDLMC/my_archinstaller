@@ -1,0 +1,198 @@
+/* Soviet teletype («ТЕЛЕТАЙП»)
+ *
+ * The launcher (SUPER + D) and the base of every rofi menu that imports
+ * config.rasi. The launcher as a terminal session on a Soviet computer: no
+ * icons, every line in Terminess, a header line like a system banner, a `>` prompt, and the
+ * picked row marked the way a terminal marks it - a bar at its left edge and
+ * the text in the mark colour - rather than a fill. Tabs are bracketed menu-bar items.
+ *
+ * Colours are wallust's (colors-rofi.rasi): color14 for the marks, color8 for
+ * everything dim.
+ */
+
+configuration {
+    modi:                       "drun,run,filebrowser";
+    /* Off: a terminal has no icons. The one menu that needs them, the
+       wallpaper thumbnails, turns them back on in config-wallpaper.rasi. */
+    show-icons:                 false;
+    display-drun:               "ПРОГРАММЫ";
+    display-run:                "КОМАНДЫ";
+    display-filebrowser:        "ФАЙЛЫ";
+    display-window:             "ОКНА";
+    drun-display-format:        "{name}";
+    window-format:              "{c} · {t}";
+    hover-select:               true;
+    me-select-entry:            "MouseSecondary";
+    me-accept-entry:            "MousePrimary";
+}
+
+@theme "~/.config/rofi/wallust/colors-rofi.rasi"
+
+* {
+    tty-mark:                    @color14;
+    tty-dim:                     @color8;
+    tty-rule:                    @color0;
+    tty-bright:                  @color15;
+    font:                        "Terminess Nerd Font 18";
+
+    background-color:            transparent;
+    text-color:                  @foreground;
+}
+
+window {
+    location:                    center;
+    anchor:                      center;
+    fullscreen:                  false;
+    width:                       34%;
+    height:                      452px;
+    padding:                     0px;
+    border:                      0px;
+    border-radius:               0px;
+    cursor:                      "default";
+    background-color:            @normal-background;
+}
+
+mainbox {
+    spacing:                     8px;
+    padding:                     14px 20px;
+    children:                    [ "textbox-banner", "inputbar", "message", "listview", "mode-switcher" ];
+}
+
+/* The banner line, as a terminal prints on login. */
+textbox-banner {
+    expand:                      false;
+    str:                         "ЭВМ «ЭЛЕКТРОНИКА» · ЗАПУСК ПРОГРАММ";
+    font:                        "Terminess Nerd Font Bold 15";
+    padding:                     0px 0px 6px 0px;
+    border:                      0px 0px 1px 0px;
+    border-color:                @tty-rule;
+    text-color:                  @tty-dim;
+}
+
+inputbar {
+    spacing:                     10px;
+    padding:                     4px 0px;
+    children:                    [ "textbox-prompt-colon", "entry" ];
+}
+textbox-prompt-colon {
+    expand:                      false;
+    str:                         ">";
+    font:                        "Terminess Nerd Font Bold 20";
+    vertical-align:              0.5;
+    text-color:                  @tty-mark;
+}
+entry {
+    vertical-align:              0.5;
+    font:                        "Terminess Nerd Font 20";
+    text-color:                  @tty-bright;
+    cursor:                      text;
+    cursor-width:                11px;
+    cursor-color:                @tty-mark;
+    placeholder:                 "";
+    placeholder-color:           @tty-dim;
+}
+
+message {
+    padding:                     0px;
+    border:                      0px;
+}
+textbox {
+    padding:                     0px;
+    text-color:                  @tty-dim;
+    vertical-align:              0.5;
+    horizontal-align:            0.0;
+    highlight:                   none;
+    placeholder-color:           @tty-dim;
+    blink:                       true;
+    markup:                      true;
+}
+error-message {
+    padding:                     10px 14px;
+    border:                      0px 0px 0px 3px;
+    border-color:                @tty-mark;
+    background-color:            @normal-background;
+    text-color:                  @foreground;
+}
+
+listview {
+    columns:                     1;
+    lines:                       7;
+    cycle:                       true;
+    dynamic:                     true;
+    scrollbar:                   false;
+    layout:                      vertical;
+    fixed-height:                true;
+    fixed-columns:               true;
+    spacing:                     0px;
+    padding:                     4px 0px 0px 0px;
+    cursor:                      "default";
+}
+
+element {
+    spacing:                     0px;
+    padding:                     4px 12px;
+    border:                      0px 0px 0px 4px;
+    border-color:                transparent;
+    cursor:                      pointer;
+}
+element normal.normal,
+element alternate.normal {
+    background-color:            transparent;
+    text-color:                  @foreground;
+}
+element normal.active,
+element alternate.active {
+    background-color:            transparent;
+    text-color:                  @tty-bright;
+}
+element normal.urgent,
+element alternate.urgent {
+    background-color:            transparent;
+    text-color:                  @tty-mark;
+}
+element selected.normal,
+element selected.active,
+element selected.urgent {
+    border-color:                @tty-mark;
+    background-color:            transparent;
+    text-color:                  @tty-mark;
+}
+element-text selected.normal,
+element-text selected.active {
+    background-color:            transparent;
+    text-color:                  @tty-mark;
+}
+element-icon {
+    size:                        0px;
+}
+element-text {
+    font:                        "Terminess Nerd Font 18";
+    background-color:            transparent;
+    text-color:                  inherit;
+    highlight:                   bold underline;
+    cursor:                      inherit;
+    vertical-align:              0.5;
+    horizontal-align:            0.0;
+}
+
+/* Menu-bar items: the current one boxed in the mark colour. */
+mode-switcher {
+    spacing:                     4px;
+    padding:                     6px 0px 0px 0px;
+    border:                      1px 0px 0px 0px;
+    border-color:                @tty-rule;
+}
+button {
+    expand:                      false;
+    padding:                     1px 8px;
+    border:                      1px;
+    border-color:                transparent;
+    font:                        "Terminess Nerd Font Bold 16";
+    background-color:            transparent;
+    text-color:                  @tty-dim;
+    cursor:                      pointer;
+}
+button selected {
+    border-color:                @tty-mark;
+    text-color:                  @tty-mark;
+}
