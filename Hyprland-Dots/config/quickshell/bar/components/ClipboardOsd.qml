@@ -12,6 +12,10 @@ import ".."
 // view, type to filter, keyboard-first - and the overlay plumbing follows
 // ShotOsd, which is how every other full-screen dialog in this bar is built.
 //
+// Dressed as the bar's console cards: a lamp and «БУФЕР ОБМЕНА» at the head,
+// the list and the preview on recessed plates, the picked entry lit in the
+// accent like a pressed key, the keys as keycaps along the bottom.
+//
 // Type and colour here deliberately depart from the bar:
 //
 // - The font is Theme.fontFamilyContent (JetBrains Mono), not Terminess. This
@@ -54,7 +58,7 @@ PanelWindow {
     readonly property int cardW: Math.round(820 * uiScale)
     readonly property int cardH: Math.round(480 * uiScale)
     readonly property int pad: Math.round(18 * uiScale)
-    readonly property int radius: Math.round(18 * uiScale)
+    readonly property int radius: Math.round(12 * uiScale)
     readonly property int rowH: Math.round(38 * uiScale)
     readonly property int titleSize: Math.round(14 * uiScale)
     readonly property int rowSize: Math.round(13 * uiScale)
@@ -160,8 +164,6 @@ PanelWindow {
                 height: osd.cardH
                 radius: osd.radius
                 color: Theme.colBg
-                border.width: 1
-                border.color: Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.10)
 
                 opacity: osd.shown ? 1 : 0
                 scale: osd.shown ? 1 : 0.97
@@ -183,20 +185,28 @@ PanelWindow {
                         width: parent.width
                         height: Math.round(osd.titleSize * 2.0)
 
-                        Text {
+                        Row {
                             id: searchGlyph
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
-                            text: "󰅇"
-                            color: Theme.colWhite
-                            font.pixelSize: osd.titleSize + 3
-                            font.family: Theme.fontFamilyContent
+                            spacing: 12
+
+                            ConsoleLamp {
+                                anchors.verticalCenter: parent.verticalCenter
+                                lit: true
+                            }
+
+                            ConsoleCaption {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "БУФЕР ОБМЕНА"
+                                fontSize: osd.titleSize
+                            }
                         }
 
                         TextInput {
                             id: search
                             anchors.left: searchGlyph.right
-                            anchors.leftMargin: 10
+                            anchors.leftMargin: 20
                             anchors.right: countText.left
                             anchors.rightMargin: 10
                             anchors.verticalCenter: parent.verticalCenter
@@ -225,7 +235,7 @@ PanelWindow {
                             Text {
                                 anchors.fill: parent
                                 visible: search.text === ""
-                                text: "Search clipboard…"
+                                text: "Поиск…"
                                 color: Theme.colGrey
                                 font.pixelSize: osd.titleSize
                                 font.family: Theme.fontFamilyContent
@@ -246,24 +256,28 @@ PanelWindow {
                         }
                     }
 
-                    Rectangle {
-                        width: parent.width
-                        height: 1
-                        color: Theme.colSeparator
-                        opacity: 0.45
-                    }
-
                     // ------------------------------------------- list + preview
                     Item {
                         width: parent.width
                         height: parent.height - Math.round(osd.titleSize * 2.0)
-                                - Math.round(osd.hintSize * 2.4) - 1
+                                - Math.round(osd.hintSize * 2.4)
                                 - Math.round(20 * osd.uiScale)
+
+                        // The list's recessed plate.
+                        Rectangle {
+                            id: listPlate
+                            width: Math.round(parent.width * 0.52)
+                            height: parent.height
+                            radius: 5
+                            color: Theme.colPlate
+                        }
 
                         ListView {
                             id: list
-                            width: Math.round(parent.width * 0.52)
-                            height: parent.height
+                            x: 6
+                            y: 6
+                            width: listPlate.width - 12
+                            height: parent.height - 12
                             clip: true
                             spacing: 2
                             model: ClipboardState.filtered
@@ -281,14 +295,13 @@ PanelWindow {
                                 readonly property bool selected: index === ClipboardState.selectedIndex
                                 readonly property bool isImage: modelData.type === "image"
 
-                                width: list.width - 8
+                                width: list.width
                                 height: osd.rowH
-                                radius: 6
+                                radius: 4
+                                // Picked: lit like a pressed key. Hovered: a shade off the plate.
                                 color: selected
-                                    ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.14)
-                                    : (rowMouse.containsMouse
-                                        ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.06)
-                                        : "transparent")
+                                    ? Theme.colAccent
+                                    : (rowMouse.containsMouse ? Qt.lighter(Theme.colPlate, 1.6) : "transparent")
 
                                 // Ask for the picture only once the row exists, so
                                 // scrolling decodes what you look at rather than
@@ -336,7 +349,7 @@ PanelWindow {
                                             anchors.centerIn: parent
                                             visible: !thumb.visible
                                             text: row.isImage ? "󰋩" : "󰦨"
-                                            color: Theme.colGrey
+                                            color: row.selected ? Theme.colBg : Theme.colGrey
                                             font.pixelSize: osd.rowSize + 2
                                             font.family: Theme.fontFamilyContent
                                         }
@@ -348,10 +361,10 @@ PanelWindow {
                                         // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
                                         textFormat: Text.PlainText
                                         text: row.isImage
-                                            ? "Image  " + row.modelData.w + "×" + row.modelData.h
+                                            ? "Изображение  " + row.modelData.w + "×" + row.modelData.h
                                               + "  ·  " + row.modelData.size
                                             : row.modelData.preview
-                                        color: row.selected ? Theme.colWhite : Theme.colGrey
+                                        color: row.selected ? Theme.colBg : Theme.colGrey
                                         font.pixelSize: osd.rowSize
                                         font.family: Theme.fontFamilyContent
                                         elide: Text.ElideRight
@@ -375,12 +388,12 @@ PanelWindow {
                         // ------------------------------------------- preview
                         Rectangle {
                             id: previewPane
-                            anchors.left: list.right
+                            anchors.left: listPlate.right
                             anchors.leftMargin: osd.pad
                             anchors.right: parent.right
                             height: parent.height
-                            radius: 10
-                            color: Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.04)
+                            radius: 5
+                            color: Theme.colPlate
 
                             readonly property var entry: ClipboardState.current
                             readonly property bool isImage: entry && entry.type === "image"
@@ -437,7 +450,7 @@ PanelWindow {
                             Text {
                                 anchors.centerIn: parent
                                 visible: parent.entry === null
-                                text: ClipboardState.loading ? "Reading history…" : "Nothing matches"
+                                text: ClipboardState.loading ? "Чтение истории…" : "Ничего не найдено"
                                 color: Theme.colGrey
                                 font.pixelSize: osd.rowSize
                                 font.family: Theme.fontFamilyContent
@@ -446,13 +459,15 @@ PanelWindow {
                     }
 
                     // -------------------------------------------------- hints
-                    Text {
-                        width: parent.width
-                        horizontalAlignment: Text.AlignHCenter
-                        text: "↑↓ move   ·   Enter paste   ·   Ctrl+Del remove   ·   Alt+Del wipe   ·   Esc close"
-                        color: Theme.colGrey
-                        font.pixelSize: osd.hintSize
-                        font.family: Theme.fontFamilyContent
+                    Row {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        spacing: Math.round(14 * osd.uiScale)
+
+                        ConsoleKeycap { keys: "↑↓"; label: "ВЫБОР"; fontSize: osd.hintSize }
+                        ConsoleKeycap { keys: "ENTER"; label: "ВСТАВИТЬ"; fontSize: osd.hintSize }
+                        ConsoleKeycap { keys: "CTRL+DEL"; label: "УДАЛИТЬ"; fontSize: osd.hintSize }
+                        ConsoleKeycap { keys: "ALT+DEL"; label: "ОЧИСТИТЬ"; fontSize: osd.hintSize }
+                        ConsoleKeycap { keys: "ESC"; label: "ЗАКРЫТЬ"; fontSize: osd.hintSize }
                     }
                 }
             }

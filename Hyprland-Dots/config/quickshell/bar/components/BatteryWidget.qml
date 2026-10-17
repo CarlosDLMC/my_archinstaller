@@ -11,7 +11,7 @@ import ".."
 DropdownWidget {
     id: batteryWidget
 
-    popupWidth: 380
+    popupWidth: 440   // was 380; the Russian labels left the values no room ("29.7 Вт·ч")
     // Sized to what the card measured rather than to arithmetic over row
     // counts: text height follows the font's line metrics, not pixelSize, so
     // counting rows clips the last one.

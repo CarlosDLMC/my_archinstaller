@@ -12,7 +12,7 @@ SCRIPTSDIR="$HOME/.config/hypr/scripts"
 monitor_dir="$HOME/.config/hypr/Monitor_Profiles"
 target="$HOME/.config/hypr/monitors.lua"
 rofi_theme="$HOME/.config/rofi/config-Monitors.rasi"
-msg='❗NOTE:❗ This will overwrite $HOME/.config/hypr/monitors.lua'
+msg='Внимание: будет перезаписан $HOME/.config/hypr/monitors.lua'
 
 # Define the list of files to ignore
 ignore_files=(
@@ -34,7 +34,7 @@ if [[ -n "$chosen_file" ]]; then
     full_path="$monitor_dir/$chosen_file.lua"
     cp "$full_path" "$target"
     
-    notify-send -t 1000 -u low -i "$iDIR/ja.png" "$chosen_file" "Monitor Profile Loaded"
+    notify-send -t 1000 -u low -i "$iDIR/ja.png" "Профиль мониторов загружен:" "$chosen_file"
 fi
 
 sleep 1

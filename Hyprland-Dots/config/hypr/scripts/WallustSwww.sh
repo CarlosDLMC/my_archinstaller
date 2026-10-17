@@ -44,7 +44,7 @@ fi
 # Update helpers that depend on the path - unless what awww shows is an effect
 # image (WallpaperEffects.sh's .wallpaper_modified, made FROM .wallpaper_current).
 # Callers without a path (Game Mode, the animations menu, monitor profiles) used
-# to copy it over .wallpaper_current, and "No Effects" could no longer bring the
+# to copy it over .wallpaper_current, and "Без эффектов" could no longer bring the
 # original back. The colours still follow what is on screen.
 case "$wallpaper_path" in
   "$HOME/.config/hypr/wallpaper_effects/"*) ;;
@@ -63,3 +63,8 @@ wallust run -s "$wallpaper_path" || true
 # palette can only be conditioned once `wallust run` has exited - see
 # RofiContrast.py, which picks a readable text colour for each colour slot.
 "$HOME/.config/hypr/scripts/RofiContrast.py" || true
+
+# The icons follow too: IconsWallust.py recolours Flat-Remix-Wallust-Dark with
+# the accent wallust just wrote. In the background - about a second, and
+# nothing waits on it.
+"$HOME/.config/hypr/scripts/IconsWallust.py" >/dev/null 2>&1 &

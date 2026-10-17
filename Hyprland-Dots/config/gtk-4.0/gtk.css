@@ -1,0 +1,5 @@
+/* GTK4 / libadwaita apps (Loupe and the like) take their accent from the
+   wallpaper: wallust.css beside this file is generated on every wallpaper
+   change (wallust template gtk4-colors.css) and sets libadwaita's
+   accent_bg_color / accent_color / accent_fg_color. */
+@import url("wallust.css");

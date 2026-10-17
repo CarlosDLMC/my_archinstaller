@@ -9,7 +9,7 @@ RowLayout {
 
     // Label — dim, same weight as the CPU label
     Text {
-        text: "MEM "
+        text: "ОЗУ "
         color: Theme.colMem
         font.pixelSize: Theme.fontSize
         font.family: Theme.fontFamily
@@ -19,7 +19,7 @@ RowLayout {
 
     // Value — steps up to full foreground
     Text {
-        text: SystemStats.memUsage
+        text: SystemStats.memUsage.replace(/G$/, "Г")
         color: Theme.colValue
         font.pixelSize: Theme.fontSize
         font.family: Theme.fontFamily

@@ -66,7 +66,7 @@ if [ -z "$MAPPING" ]; then
     echo "Unknown VPN: $VPN_NAME"
     # Said, not only logged: the Time and Weather buttons otherwise just did
     # nothing for a config this table does not know (es-bcn did).
-    notify-send -u normal "VPN" "No city for $VPN_NAME: add it to VPN_MAP in ~/.config/quickshell/bar/scripts/vpn-sync.sh (and its coordinates to weather-location.py)." 2>/dev/null
+    notify-send -u normal "ВПН" "Нет города для $VPN_NAME: добавьте его в VPN_MAP в ~/.config/quickshell/bar/scripts/vpn-sync.sh (а его координаты - в weather-location.py)." 2>/dev/null
     exit 1
 fi
 
@@ -156,7 +156,7 @@ TZSNAP
             echo "Timezone set to $TIMEZONE"
         else
             echo "Error: sudo refused timedatectl (no NOPASSWD rule for this user?)" | tee -a "$LOG_FILE"
-            notify-send -u critical "VPN" "Could not change the timezone: sudo needs a password. See README 'VPN configs'." 2>/dev/null
+            notify-send -u critical "ВПН" "Не удалось сменить часовой пояс: sudo просит пароль. См. раздел README «VPN configs»." 2>/dev/null
             FAILED=1
         fi
     else
@@ -236,7 +236,7 @@ SNAPSHOT
                 # already had. The city preference stays set, so the next refresh
                 # that succeeds lands on $CITY without another click.
                 echo "Warning: no weather provider answered - still showing the previous reading" | tee -a "$LOG_FILE"
-                notify-send -u low "Weather" "No provider answered. Still showing the previous reading; $CITY will load on the next refresh." 2>/dev/null
+                notify-send -u low "Погода" "Ни один источник не ответил. Пока показаны прежние данные, $CITY загрузится при следующем обновлении." 2>/dev/null
                 FAILED=1
                 ;;
             *)

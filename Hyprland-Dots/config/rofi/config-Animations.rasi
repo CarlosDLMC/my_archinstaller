@@ -17,7 +17,7 @@ window {
 /* ---- Entry ---- */ 
 entry {
   width: 43%;
-  placeholder: " ✨ Search / Choose which Animations to load";
+  placeholder: " Анимации";
 }
 
 /* ---- Listview ---- */

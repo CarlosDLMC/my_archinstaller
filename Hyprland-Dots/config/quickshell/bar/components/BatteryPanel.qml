@@ -26,9 +26,9 @@ Item {
     // or not it is being cycled, and ~3.85V is where that slows down. 80 is the
     // usual compromise for a laptop that travels. 100 is off.
     readonly property var presets: [
-        { value: 60,  label: "60%",  note: "Always plugged in" },
-        { value: 80,  label: "80%",  note: "Mixed use" },
-        { value: 100, label: "Full", note: "No limit" }
+        { value: 60,  label: "60%",  note: "Всегда от сети" },
+        { value: 80,  label: "80%",  note: "Смешанный режим" },
+        { value: 100, label: "100%", note: "Без ограничения" }
     ]
 
     function fmtDuration(seconds) {
@@ -38,22 +38,22 @@ Item {
         var m = Math.round((seconds % 3600) / 60)
         if (m === 60) { h += 1; m = 0 }
         if (h > 0)
-            return m > 0 ? h + "h " + m + "m" : h + "h"
-        return m + "m"
+            return m > 0 ? h + " ч " + m + " мин" : h + " ч"
+        return m + " мин"
     }
 
     function fmtWh(microWattHours) {
         if (!(microWattHours > 0))
             return "—"
-        return (microWattHours / 1000000).toFixed(1) + " Wh"
+        return (microWattHours / 1000000).toFixed(1) + " Вт·ч"
     }
 
     function stateLabel() {
         switch (BatteryState.chargeState) {
-        case "charging":    return "Charging"
-        case "discharging": return "On battery"
-        case "full":        return "Full"
-        case "idle":        return "Plugged in"
+        case "charging":    return "Зарядка"
+        case "discharging": return "От батареи"
+        case "full":        return "Заряжена"
+        case "idle":        return "От сети"
         case "holding":
             // Two different situations wear the same sysfs state, and calling
             // both of them "Holding at 60%" is how you end up staring at a pack
@@ -63,8 +63,8 @@ Item {
             // actually drains it - charging stops, but nothing discharges a
             // machine that is on mains.
             if (BatteryState.level > BatteryState.limitEnd + 2)
-                return "Above limit · " + BatteryState.limitEnd + "%"
-            return "Holding at " + BatteryState.limitEnd + "%"
+                return "Выше предела · " + BatteryState.limitEnd + "%"
+            return "Удержание " + BatteryState.limitEnd + "%"
         default:            return "—"
         }
     }
@@ -90,37 +90,16 @@ Item {
     }
 
     // ------------------------------------------------------------------
-    //  Shared cell types, same shapes NetworkPanel uses
+    //  The console: recessed plates (ConsolePlate), a segmented gauge, lamps
+    //  and push buttons, in the wallpaper's colours - the «ПУСК · ПУЛЬТ» power
+    //  menu's control-panel idea, applied to the card. Labels are small caps.
     // ------------------------------------------------------------------
-
-    component SectionHeader: Item {
-        property string label: ""
-        width: parent ? parent.width : 0
-        height: Math.round(panel.headerSize * 1.9)
-
-        Text {
-            anchors.left: parent.left
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: 2
-            text: parent.label
-            color: Theme.colMuted
-            font.pixelSize: panel.headerSize
-            font.family: Theme.fontFamily
-            font.bold: true
-        }
-    }
-
-    component Divider: Rectangle {
-        width: parent ? parent.width : 0
-        height: 1
-        color: Theme.colMuted
-        opacity: 0.45
-    }
 
     component GLabel: Text {
         color: Theme.colDim
-        font.pixelSize: panel.labelSize
+        font.pixelSize: panel.labelSize - 1
         font.family: Theme.fontFamily
+        font.letterSpacing: 1
         Layout.alignment: Qt.AlignVCenter
     }
 
@@ -140,46 +119,12 @@ Item {
         width: parent ? parent.width : 0
         columns: 4
         columnSpacing: 14
-        rowSpacing: 3
+        rowSpacing: 4
     }
 
-    component Pill: Rectangle {
-        property string label: ""
-        property bool current: false
-        signal picked()
-        implicitWidth: pillText.implicitWidth + 18
-        implicitHeight: Math.round(panel.labelSize * 1.9)
-        radius: height / 2
-        color: current
-            ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.85)
-            : (pillMouse.containsMouse
-                ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.14)
-                : Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.06))
-        border.width: 1
-        border.color: current
-            ? Theme.colWhite
-            : Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.22)
-        Behavior on color { ColorAnimation { duration: 130 } }
-
-        Text {
-            id: pillText
-            anchors.centerIn: parent
-            text: parent.label
-            color: parent.current ? Theme.colBg : Theme.colDim
-            font.pixelSize: panel.labelSize
-            font.family: Theme.fontFamily
-            font.bold: parent.current
-        }
-
-        MouseArea {
-            id: pillMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: parent.picked()
-        }
-    }
-
+    readonly property bool charging: BatteryState.chargeState === "charging"
+    readonly property bool onMains: BatteryState.onAc
+    readonly property bool low: BatteryState.chargeState === "discharging" && BatteryState.level <= 15
     readonly property real contentHeight: body.implicitHeight
 
     Flickable {
@@ -194,200 +139,210 @@ Item {
             spacing: 8
 
             // ----------------------------------------------------------
-            //  Header: level and what the pack is doing
+            //  The main instrument: the level as a readout, a lamp for
+            //  mains, the gauge with the charge limit as its tick (so a
+            //  pack stopped at 60% reads as "arrived", not "stuck"), and
+            //  time and draw underneath.
             // ----------------------------------------------------------
-            Item {
-                width: parent.width
-                height: Math.round(Theme.fontSize * 1.5)
-
-                Text {
-                    id: headerGlyph
-                    anchors.left: parent.left
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: BatteryState.holding ? "󱊢" : "󰁹"
-                    color: panel.levelColor(BatteryState.level)
-                    font.pixelSize: Theme.fontSize
-                    font.family: Theme.fontFamily
-                }
-
-                Text {
-                    anchors.left: headerGlyph.right
-                    anchors.leftMargin: 8
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: BatteryState.level + "%"
-                    color: panel.levelColor(BatteryState.level)
-                    font.pixelSize: Theme.fontSize
-                    font.family: Theme.fontFamily
-                    font.bold: true
-                }
-
-                Text {
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: panel.stateLabel()
-                    color: Theme.colDim
-                    font.pixelSize: panel.labelSize
-                    font.family: Theme.fontFamily
-                }
-            }
-
-            // ----------------------------------------------------------
-            //  Fill bar. The limit is marked on the track, so a pack that
-            //  stops at 60% reads as "arrived" rather than "stuck".
-            // ----------------------------------------------------------
-            Item {
-                width: parent.width
-                height: 8
-
-                Rectangle {
-                    id: track
-                    anchors.fill: parent
-                    radius: height / 2
-                    color: Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.12)
-                }
-
-                Rectangle {
-                    anchors.left: track.left
-                    anchors.verticalCenter: track.verticalCenter
-                    height: track.height
-                    radius: track.radius
-                    width: Math.max(track.height, track.width * BatteryState.level / 100)
-                    color: panel.levelColor(BatteryState.level)
-                    Behavior on width { NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
-                }
-
-                // The limit marker, the pills and the note all bind to
-                // effectiveLimit rather than limitEnd, so they move on the click
-                // instead of ~170ms later when the write round trip lands. The
-                // state label above does not: it describes what the hardware is
-                // doing right now, and that has not changed yet.
-                Rectangle {
-                    visible: BatteryState.effectiveLimit > 0 && BatteryState.effectiveLimit < 100
-                    x: Math.round(track.width * BatteryState.effectiveLimit / 100) - 1
-                    width: 2
-                    height: track.height + 6
-                    anchors.verticalCenter: track.verticalCenter
-                    color: Theme.colGrey
-                }
-            }
-
-            // ----------------------------------------------------------
-            //  Stats
-            // ----------------------------------------------------------
-            InfoGrid {
-                GLabel { text: "Capacity" }
-                GValue { text: panel.fmtWh(BatteryState.energyFull) }
-                GLabel { text: "Cycles" }
-                GValue { text: BatteryState.cycles > 0 ? String(BatteryState.cycles) : "—" }
-
-                GLabel { text: "Health" }
-                GValue {
-                    text: BatteryState.health > 0 ? BatteryState.health + "%" : "—"
-                    color: panel.healthColor(BatteryState.health)
-                }
-                GLabel {
-                    text: BatteryState.chargeState === "charging" ? "To full" : "Time left"
-                }
-                GValue { text: panel.fmtDuration(BatteryState.secondsLeft) }
-
-                GLabel { text: "Charge" }
-                GValue { text: panel.fmtWh(BatteryState.energyNow) }
-                GLabel {
-                    text: BatteryState.chargeState === "charging" ? "Charging at" : "Draw"
-                }
-                GValue {
-                    text: BatteryState.drawWatts > 0.2
-                        ? BatteryState.drawWatts.toFixed(1) + " W"
-                        : "—"
-                }
-            }
-
-            // ----------------------------------------------------------
-            //  Per-pack breakdown, only where there is more than one pack
-            //  to break down. This is where a ThinkPad's two batteries stop
-            //  being one number: on this machine the internal one is at 44%
-            //  health and the removable one at 82%.
-            // ----------------------------------------------------------
-            Divider { visible: BatteryState.packs.length > 1 }
-            SectionHeader {
-                visible: BatteryState.packs.length > 1
-                label: "PACKS"
-            }
-
-            Repeater {
-                model: BatteryState.packs.length > 1 ? BatteryState.packs : []
-
+            ConsolePlate {
                 Item {
-                    width: body.width
-                    height: Math.round(panel.labelSize * 1.7)
+                    width: parent.width
+                    height: readout.implicitHeight
 
-                    Text {
-                        id: packName
+                    ConsoleCaption {
+                        id: levelCap
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
-                        // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
-                        textFormat: Text.PlainText
-                        text: modelData.name
-                        color: Theme.colDim
-                        font.pixelSize: panel.labelSize
-                        font.family: Theme.fontFamily
+                        text: "ЗАРЯД"
                     }
 
                     Text {
-                        anchors.left: packName.right
+                        id: readout
+                        anchors.left: levelCap.right
                         anchors.leftMargin: 10
-                        anchors.right: packStats.left
-                        anchors.rightMargin: 10
                         anchors.verticalCenter: parent.verticalCenter
-                        // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
-                        textFormat: Text.PlainText
-                        text: modelData.model
-                        color: Theme.colMuted
-                        font.pixelSize: panel.labelSize - 2
-                        font.family: Theme.fontFamily
-                        elide: Text.ElideRight
-                    }
-
-                    Text {
-                        id: packStats
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: modelData.capacity + "%  ·  "
-                              + (modelData.health > 0 ? modelData.health + "% health" : "—")
-                              + "  ·  " + modelData.cycles + " cyc"
-                        color: panel.healthColor(modelData.health)
-                        font.pixelSize: panel.labelSize
+                        text: BatteryState.level + "%"
+                        color: panel.levelColor(BatteryState.level)
+                        font.pixelSize: Theme.fontSize + 6
                         font.family: Theme.fontFamily
                         font.bold: true
                     }
+
+                    Row {
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 8
+
+                        ConsoleLamp {
+                            anchors.verticalCenter: parent.verticalCenter
+                            lit: panel.onMains
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: panel.stateLabel().toUpperCase()
+                            color: Theme.colGrey
+                            font.pixelSize: panel.labelSize - 1
+                            font.family: Theme.fontFamily
+                            font.bold: true
+                        }
+                    }
+                }
+
+                // The limit tick and the buttons bind to effectiveLimit rather
+                // than limitEnd, so they move on the click instead of ~170ms
+                // later when the write round trip lands.
+                SegmentGauge {
+                    width: parent.width
+                    value: BatteryState.level
+                    marker: BatteryState.effectiveLimit
+                    tint: panel.low ? Theme.colAlert : Theme.colAccent
+                }
+
+                // Nothing to predict and nothing flowing - a pack held at its
+                // limit on mains - leaves the row out instead of two dashes.
+                Item {
+                    visible: BatteryState.secondsLeft >= 0 || BatteryState.drawWatts > 0.2
+                    width: parent.width
+                    height: timeLine.implicitHeight
+
+                    Text {
+                        id: timeLine
+                        anchors.left: parent.left
+                        text: (panel.charging ? "ДО ПОЛНОЙ  " : "ОСТАЛОСЬ  ")
+                              + panel.fmtDuration(BatteryState.secondsLeft)
+                        color: Theme.colDim
+                        font.pixelSize: panel.labelSize - 2
+                        font.family: Theme.fontFamily
+                    }
+                    Text {
+                        anchors.right: parent.right
+                        text: (panel.charging ? "ЗАРЯДКА  " : "РАСХОД  ")
+                              + (BatteryState.drawWatts > 0.2 ? BatteryState.drawWatts.toFixed(1) + " Вт" : "—")
+                        color: Theme.colDim
+                        font.pixelSize: panel.labelSize - 2
+                        font.family: Theme.fontFamily
+                    }
                 }
             }
 
             // ----------------------------------------------------------
-            //  Charge limit
+            //  The pack's data
             // ----------------------------------------------------------
-            Divider { visible: BatteryState.limitSupported }
-            SectionHeader {
-                visible: BatteryState.limitSupported
-                label: "CHARGE LIMIT"
+            ConsolePlate {
+                InfoGrid {
+                    GLabel { text: "ЁМКОСТЬ" }
+                    GValue { text: panel.fmtWh(BatteryState.energyFull) }
+                    GLabel { text: "ЦИКЛЫ" }
+                    GValue { text: BatteryState.cycles > 0 ? String(BatteryState.cycles) : "—" }
+
+                    GLabel { text: "РЕСУРС" }
+                    GValue {
+                        text: BatteryState.health > 0 ? BatteryState.health + "%" : "—"
+                        color: panel.healthColor(BatteryState.health)
+                    }
+                    GLabel { text: "ЗАПАС" }
+                    GValue { text: panel.fmtWh(BatteryState.energyNow) }
+                }
             }
 
-            Row {
-                visible: BatteryState.limitWritable
-                width: parent.width
-                spacing: 6
+            // ----------------------------------------------------------
+            //  One lamp per pack, only where there is more than one pack.
+            //  This is where a ThinkPad's two batteries stop being one
+            //  number: here the internal one is at 44% health and the
+            //  removable one at 82%. A worn-out pack's lamp is colAlert.
+            // ----------------------------------------------------------
+            ConsolePlate {
+                visible: BatteryState.packs.length > 1
 
                 Repeater {
-                    model: panel.presets
+                    model: BatteryState.packs.length > 1 ? BatteryState.packs : []
 
-                    Pill {
-                        label: modelData.label
-                        // A limit the hardware clamped to something off-preset
-                        // still has to light one of these up, or the card shows
-                        // three unselected pills and no way to tell what is set.
-                        current: BatteryState.effectiveLimit === modelData.value
-                                 || (modelData.value === 100 && BatteryState.effectiveLimit >= 99)
-                        onPicked: BatteryState.setLimit(modelData.value)
+                    Item {
+                        width: parent.width
+                        height: Math.round(panel.labelSize * 1.5)
+
+                        ConsoleLamp {
+                            id: packLamp
+                            anchors.left: parent.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            lit: true
+                            tint: modelData.health > 0 && modelData.health < 60 ? Theme.colAlert : Theme.colAccent
+                        }
+
+                        Text {
+                            id: packName
+                            anchors.left: packLamp.right
+                            anchors.leftMargin: 8
+                            anchors.verticalCenter: parent.verticalCenter
+                            // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
+                            textFormat: Text.PlainText
+                            text: modelData.name
+                            color: Theme.colWhite
+                            font.pixelSize: panel.labelSize
+                            font.family: Theme.fontFamily
+                            font.bold: true
+                        }
+
+                        Text {
+                            anchors.left: packName.right
+                            anchors.leftMargin: 10
+                            anchors.right: packStats.left
+                            anchors.rightMargin: 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
+                            textFormat: Text.PlainText
+                            text: modelData.model
+                            color: Theme.colMuted
+                            font.pixelSize: panel.labelSize - 2
+                            font.family: Theme.fontFamily
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            id: packStats
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: modelData.capacity + "% · "
+                                  + (modelData.health > 0 ? "ресурс " + modelData.health + "%" : "—")
+                                  + " · " + modelData.cycles + " цикл."
+                            color: panel.healthColor(modelData.health)
+                            font.pixelSize: panel.labelSize - 1
+                            font.family: Theme.fontFamily
+                        }
+                    }
+                }
+            }
+
+            // ----------------------------------------------------------
+            //  Charge limit: push buttons
+            // ----------------------------------------------------------
+            Item {
+                visible: BatteryState.limitWritable
+                width: parent.width
+                height: limitButtons.implicitHeight
+
+                ConsoleCaption {
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "ПРЕДЕЛ ЗАРЯДА"
+                }
+
+                Row {
+                    id: limitButtons
+                    anchors.right: parent.right
+                    spacing: 6
+
+                    Repeater {
+                        model: panel.presets
+
+                        ConsoleButton {
+                            label: modelData.label
+                            // A limit the hardware clamped to something
+                            // off-preset still has to light one of these up.
+                            current: BatteryState.effectiveLimit === modelData.value
+                                     || (modelData.value === 100 && BatteryState.effectiveLimit >= 99)
+                            onPicked: BatteryState.setLimit(modelData.value)
+                        }
                     }
                 }
             }
@@ -400,6 +355,7 @@ Item {
             Text {
                 visible: BatteryState.limitWritable
                 width: parent.width
+                horizontalAlignment: Text.AlignRight
                 text: {
                     var note = ""
                     for (var i = 0; i < panel.presets.length; i++) {
@@ -407,11 +363,11 @@ Item {
                             note = panel.presets[i].note
                     }
                     if (note === "" && BatteryState.effectiveLimit > 0)
-                        note = "Stops charging at " + BatteryState.effectiveLimit + "%"
+                        note = "Зарядка до " + BatteryState.effectiveLimit + "%"
 
                     if (BatteryState.effectiveLimit > 0 && BatteryState.effectiveLimit < 100
                         && BatteryState.level > BatteryState.effectiveLimit + 2)
-                        note += "  ·  unplug to bring the pack down to it"
+                        note += "  ·  отключите питание, чтобы разрядить до него"
 
                     return note
                 }
@@ -422,12 +378,12 @@ Item {
             }
 
             // The hardware has thresholds but the root helper is not installed,
-            // so the pills would be decoration. Say why instead of showing them.
+            // so the buttons would be decoration. Say why instead of showing them.
             Text {
                 visible: BatteryState.limitSupported && !BatteryState.limitWritable
                 width: parent.width
-                text: "Limit is " + BatteryState.limitEnd
-                      + "%. Run install-scripts/battery_charge_limit.sh to change it from here."
+                text: "Предел " + BatteryState.limitEnd
+                      + "%. Чтобы менять его здесь, запустите install-scripts/battery_charge_limit.sh."
                 color: Theme.colWarn
                 font.pixelSize: panel.labelSize - 2
                 font.family: Theme.fontFamily

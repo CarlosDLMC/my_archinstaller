@@ -278,7 +278,8 @@ first prompt.
 - Quickshell (custom bar)
 - foot (terminal)
 - rofi (launcher)
-- «ПУСК · ПУЛЬТ» power menu (in the Quickshell bar, CTRL + ALT + P)
+- «ПУСК · ПУЛЬТ» power menu (in the Quickshell bar, CTRL + ALT + P); logout, reboot and
+  power-off end with a CRT power-off - the picture folds into a line, then a dot
 - dunst (notifications — swaync is removed if present)
 - awww (wallpaper daemon)
 - wallust (color scheme generator)
@@ -359,9 +360,9 @@ The ones that matter:
 
 | Family | Package | Used by |
 | --- | --- | --- |
-| `Terminess Nerd Font` | `ttf-terminus-nerd` | **the quickshell bar** — `bar/Theme.qml` |
+| `Terminess Nerd Font` | `ttf-terminus-nerd` | **the quickshell bar** — `bar/Theme.qml`; the stamps on dunst's cards; the overview's workspace numbers |
 | `JetBrainsMono Nerd Font Mono` | `ttf-jetbrains-mono-nerd` | foot, hyprlock, `SovietLockGen.py` |
-| `JetBrainsMono Nerd Font` | `ttf-jetbrains-mono-nerd` | dunst |
+| `JetBrainsMono Nerd Font` | `ttf-jetbrains-mono-nerd` | dunst, the overview's tooltips |
 | `Fira Code` | `ttf-fira-code` | `gtk-3.0/settings.ini` - but see below |
 
 `gtk-3.0/settings.ini` asks for `Fira Code Semi-Bold`, and two things stand in
@@ -379,7 +380,7 @@ One place names a font that is **not** installed and never has been:
 `config/rofi/themes/LonerOrZ.rasi` asks for `Iosevka`. It renders substituted
 here already, so this is inherited from upstream rather than something the
 install broke. (The quickshell overview takes its fonts from
-`overview/common/Appearance.qml`, which asks for plain `sans-serif`.)
+`overview/common/Appearance.qml`: Terminess and JetBrains Mono, as above.)
 
 ### GTK theme
 
@@ -407,16 +408,35 @@ fresh machine used to come up at `settings.ini`'s 14pt (or the portal's
 Cantarell default in GTK4 apps) while this one showed 16pt. Change it with
 `gtk_font` / `gtk_mono_font` at the top of `initial-boot.sh`.
 
-The **icon** theme (`Flat-Remix-Blue-Dark`) is unchanged and still comes from
-`GTK-themes-icons/` via `gtk_themes.sh`, which also still installs the
-Flat-Remix GTK themes and the white `Bibata-Modern-Ice` cursor — they are simply
-no longer selected. The **cursor** is the black one Hyprland loads by itself:
-the XCursor theme `default` (the `default-cursors` package, which inherits
-Adwaita), named in `settings.ini` and by `initial-boot.sh` too, so the first
-session already has it. One consequence worth knowing: `scripts/DarkLight.sh` picks a *random*
-theme matching `*Dark*` or `*Light*` from `~/.themes`, so running it would
-switch away from Adwaita. Nothing binds it to a key, so it only happens if you
-call it yourself.
+The **icon** theme follows the wallpaper. `GTK-themes-icons/` (via
+`gtk_themes.sh`) installs `Flat-Remix-Blue-Dark`, and
+`scripts/IconsWallust.py` turns it into `Flat-Remix-Wallust-Dark`: Flat-Remix
+colours its variants with two hexes (`#367bf0` and the darker `#2b62c0`), and
+the script swaps them for wallust's accent - the colour the bar's console cards
+light up in - with its lightness held between 0.50 and 0.68 so folders stay
+visible on any wallpaper. The generated theme holds only the ~12,000 icons that
+carry the blue (69 MB) and inherits the rest from `Flat-Remix-Blue-Dark`.
+`WallustSwww.sh` and `WallpaperEffects.sh` run it after every `wallust run` (in
+the background, about a second; nothing when the colours did not change), and
+it steps the icon theme away and back so open GTK apps reload.
+`initial-boot.sh` builds it on the first login and `copy.sh` on a re-run;
+`settings.ini`, `qt5ct.conf`, `qt6ct.conf` and gsettings all name it.
+
+The GTK apps and btop follow the wallpaper too, through wallust templates:
+`gtk-3.0/gtk.css` and `gtk-4.0/gtk.css` import a generated `wallust.css`, so
+selections, focus rings, checked boxes and switches, sliders, highlighted
+buttons and links take the same accent (libadwaita apps through its own accent
+colour names); btop's `color_theme = "wallust"` is a generated theme in the
+same roles - dim frames, red highlighted keys, gauges running dim to accent to
+red. GTK reads its stylesheet when an app starts, so open apps change at their
+next launch.
+
+`gtk_themes.sh` also still installs the Flat-Remix GTK theme and the white
+`Bibata-Modern-Ice` cursor — they are simply no longer selected. The **cursor**
+is the black one Hyprland loads by itself: the XCursor theme `default` (the
+`default-cursors` package, which inherits Adwaita), named in `settings.ini` and
+by `initial-boot.sh` too, so the first session already has it. There is no
+light mode: the desktop is dark only.
 
 ### Terminal greeting (pokefetch)
 
@@ -1216,7 +1236,7 @@ These are machine-specific, so a fresh install starts without them:
   up got committed and the next wallpaper change dirtied the tree, which
   `auto-install.sh` then refuses to pull over.
 
-  Most of them still have to *exist*: twelve rofi themes `@theme`
+  Most of them still have to *exist*: thirteen rofi themes `@theme`
   `colors-rofi.rasi` — a missing file there is an error on first launch, not a silent fallback.
   (`UserDecorations.lua` is the exception: it loads `wallust-hyprland.lua`
   through `pcall` and falls back to a built-in palette.) So a rendered snapshot
@@ -1688,6 +1708,16 @@ and Russian labels (`ГРАЖДАНИН`, `КОД ДОСТУПА`). A wrong pass
 Everything sits in one bordered TUI panel: date, kernel, uptime, load, memory, AC state,
 every battery pack, keyboard layout, and weather.
 
+**Two rows light up when there is something to see.** `ПОПЫТКИ ВХОДА  НЕТ` turns into a
+red `НЕСАНКЦИОНИРОВАННЫЕ ПОПЫТКИ: N` after a wrong password and stays until you unlock;
+`ДОНЕСЕНИЯ  НЕТ` turns gold with the count and the senders (`3 · SLACK, TELEGRAM`) when
+notifications arrive while locked. Only normal and critical ones count, not volume or
+brightness toasts, and both reset with every lock. The panel gets the attempts from
+hyprlock itself (`--panel $ATTEMPTS`, re-run straight after each failed unlock); the
+notifications are counted off the session bus by `SovietLock.py --watch-reports`, which
+`LockRun.sh` runs for exactly as long as hyprlock does - dunst is not involved. The rows
+are there even unlit, because the widgets laid over the panel are placed once per lock.
+
 **Weather comes from the bar**, `~/.cache/quickshell/weather.json`, so the lock screen
 and the bar always show the same reading. If that file is missing (a machine without
 quickshell) it falls back to the legacy `~/.cache/.weather_cache`. Either way, a reading
@@ -1732,7 +1762,7 @@ blanks on battery.
 - `scripts/SovietClock.sh` — draws the block-glyph clock
 - `scripts/SovietLockGen.py` — sizes the widgets per monitor
 - `scripts/IdleDpms.sh` — idle blanking policy (only used if you re-enable the blank listener)
-- `scripts/LockRun.sh` — starts hyprlock, logs its output and exit code
+- `scripts/LockRun.sh` — starts hyprlock and the ДОНЕСЕНИЯ watcher, logs hyprlock's output and exit code
 - `hypridle.conf` — calls `LockRun.sh` before sleep; the idle lock and blank listeners are commented out
 
 The clock is shell rather than another `SovietLock.py` mode because it is the one
@@ -1942,7 +1972,7 @@ package step skips what is already installed, and `copy.sh` will not overwrite
 a `secrets.zsh` you have filled in. It also keeps your wallust palette, your
 active wallpaper, the first-boot marker, your monitor layout (`monitors.lua`,
 `workspaces.lua`), herdr's saved session, your rofi theme, RofiBeats stations,
-sidebar bookmarks and Light mode, and files of your own in `environment.d`,
+sidebar bookmarks, and files of your own in `environment.d`,
 `fontconfig`, `Kvantum` and `MangoHud`. Everything else under a copied
 `~/.config` directory is reset to the repo version — edits you made there
 (`UserConfigs/*.lua`, say) are in the `<dir>.backup-<stamp>` copy next to it.
@@ -2064,7 +2094,7 @@ chmod +x install.sh
 - ✅ quickshell
 - ✅ dots (Download and install pre-configured Hyprland dotfiles)
 - ✅ ly (lightweight TUI display manager)
-- ✅ gtk_themes (for Dark/Light mode)
+- ✅ gtk_themes (the Flat-Remix icons the wallust icon theme is made from)
 - ✅ bluetooth (if you need it)
 - ✅ xdph (for screen sharing)
 - ✅ handy (offline speech-to-text, SUPER + CTRL + F8)

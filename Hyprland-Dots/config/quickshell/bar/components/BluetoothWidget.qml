@@ -7,7 +7,9 @@ import ".."
 DropdownWidget {
     id: btWidget
     popupWidth: 400
-    popupHeight: Math.max(btDevices.length * 40 + 100, 200)
+    // Sized to what the body measures, plus the card's 28 of stem and padding.
+    property real cardHeight: 160
+    popupHeight: Math.ceil(cardHeight) + 28
     popupXOffset: 280
 
     property bool btPowered: false
@@ -237,170 +239,129 @@ DropdownWidget {
         font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
     }
 
-    // Popup content
+    // Popup content: the radio's lamp and power button, then the paired
+    // devices on a plate, a lamp lit on the connected one.
     popupContent: Component {
         Column {
-            spacing: 4
+            spacing: 8
+            onImplicitHeightChanged: btWidget.cardHeight = implicitHeight
+            Component.onCompleted: btWidget.cardHeight = implicitHeight
 
-            // Header with power toggle
-            RowLayout {
+            Item {
                 width: parent.width
-                spacing: 8
+                height: Math.max(btState.implicitHeight, powerButton.implicitHeight)
+
+                ConsoleLamp {
+                    id: btLamp
+                    anchors.left: parent.left
+                    anchors.leftMargin: 4
+                    anchors.verticalCenter: parent.verticalCenter
+                    lit: btWidget.btPowered
+                }
+
+                ConsoleCaption {
+                    id: btCaption
+                    anchors.left: btLamp.right
+                    anchors.leftMargin: 10
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "BLUETOOTH"
+                }
 
                 Text {
+                    id: btState
+                    anchors.left: btCaption.right
+                    anchors.leftMargin: 10
+                    anchors.right: powerButton.left
+                    anchors.rightMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
                     // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
                     textFormat: Text.PlainText
-                    text: btWidget.btPowered ? (btWidget.btConnected ? "󰂱 " + btWidget.btConnectedDevice : "󰂯 Bluetooth") : "󰂲 Bluetooth Off"
-                    color: Theme.colFg
-                    font.pixelSize: Theme.fontSize
+                    text: !btWidget.btPowered ? "ВЫКЛЮЧЕН"
+                        : btWidget.btConnected ? btWidget.btConnectedDevice : "ВКЛЮЧЁН"
+                    color: btWidget.btConnected ? Theme.colWhite : Theme.colGrey
+                    font.pixelSize: Theme.fontSize - 2
                     font.family: Theme.fontFamily
-                    font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
-                    Layout.fillWidth: true
+                    font.bold: true
+                    elide: Text.ElideRight
                 }
 
-                Rectangle {
-                    width: 40
-                    height: 20
-                    radius: 10
-                    color: btWidget.btPowered ? Theme.colBluetooth : Theme.colMuted
+                // The radio's power: a latching button, lit while it is on.
+                ConsoleButton {
+                    id: powerButton
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    fontSize: Theme.fontSize - 6
+                    icon: "󰐥"
+                    label: btWidget.btPowered ? "ВКЛ" : "ВЫКЛ"
+                    current: btWidget.btPowered
+                    onPicked: {
+                        // Optimistically update UI immediately for instant feedback
+                        var newState = !btWidget.btPowered
+                        btWidget.btPowered = newState
 
-                    Rectangle {
-                        width: 16
-                        height: 16
-                        radius: 8
-                        color: Theme.colFg
-                        x: btWidget.btPowered ? parent.width - width - 2 : 2
-                        anchors.verticalCenter: parent.verticalCenter
+                        btPowerProc.powerOn = newState
+                        btPowerProc.running = true
 
-                        Behavior on x {
-                            NumberAnimation { duration: 150 }
-                        }
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            // Optimistically update UI immediately for instant feedback
-                            var newState = !btWidget.btPowered
-                            btWidget.btPowered = newState
-
-                            btPowerProc.powerOn = newState
-                            btPowerProc.running = true
-
-                            // Start or stop blueman-applet based on power state
-                            if (newState) {
-                                // Turning on - start blueman-applet
-                                btStartAppletProc.running = true
-                            } else {
-                                // Turning off - kill blueman-applet
-                                btKillAppletProc.running = true
-                            }
+                        // Start or stop blueman-applet based on power state
+                        if (newState) {
+                            // Turning on - start blueman-applet
+                            btStartAppletProc.running = true
+                        } else {
+                            // Turning off - kill blueman-applet
+                            btKillAppletProc.running = true
                         }
                     }
                 }
-            }
-
-            Rectangle {
-                width: parent.width
-                height: 1
-                color: Theme.colMuted
             }
 
             // Paired devices header with manager button
-            RowLayout {
+            Item {
                 width: parent.width
+                height: searchButton.implicitHeight
                 visible: btWidget.btPowered
 
-                Text {
-                    text: "Paired Devices"
-                    color: Theme.colMuted
-                    font.pixelSize: Theme.fontSize - 2
-                    font.family: Theme.fontFamily
-                    Layout.fillWidth: true
+                ConsoleCaption {
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "СОПРЯЖЁННЫЕ УСТРОЙСТВА"
                 }
 
-                Rectangle {
-                    width: 60
-                    height: 20
-                    radius: 4
-                    color: btManagerMouseArea.containsMouse ? Theme.colBluetooth : Qt.rgba(Theme.colBluetooth.r, Theme.colBluetooth.g, Theme.colBluetooth.b, 0.3)
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "Scan"
-                        color: Theme.colFg
-                        font.pixelSize: Theme.fontSize - 3
-                        font.family: Theme.fontFamily
-                    }
-
-                    MouseArea {
-                        id: btManagerMouseArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            btManagerProc.running = true
-                        }
-                    }
+                ConsoleButton {
+                    id: searchButton
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    fontSize: Theme.fontSize - 6
+                    icon: "󰍉"
+                    label: "ПОИСК"
+                    onPicked: btManagerProc.running = true
                 }
             }
 
             // Device list
-            ListView {
-                id: btDeviceListView
-                width: parent.width
-                height: parent.height - 80
-                clip: true
-                model: btWidget.btDevices
-                spacing: 2
-                visible: btWidget.btPowered
+            ConsolePlate {
+                visible: btWidget.btPowered && btWidget.btDevices.length > 0
+                pad: 4
+                spacing: 0
 
-                delegate: Rectangle {
-                    width: btDeviceListView.width
-                    height: 36
-                    color: btMouseArea.containsMouse ? Qt.rgba(255, 255, 255, 0.1) : "transparent"
-                    radius: 6
+                ListView {
+                    id: btDeviceListView
+                    readonly property int rowPitch: Math.round((Theme.fontSize - 3) * 1.75) + spacing
+                    width: parent.width
+                    height: Math.min(count, 8) * rowPitch - spacing
+                    clip: true
+                    model: btWidget.btDevices
+                    spacing: 2
+                    boundsBehavior: Flickable.StopAtBounds
 
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.margins: 6
-                        spacing: 8
-
-                        Text {
-                            text: "󰂯"
-                            color: Theme.colBluetooth
-                            font.pixelSize: Theme.fontSize
-                            font.family: Theme.fontFamily
-                        }
-
-                        Text {
-                            // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
-                            textFormat: Text.PlainText
-                            text: modelData.name
-                            color: modelData.name === btWidget.btConnectedDevice ? Theme.colBluetooth : Theme.colFg
-                            font.pixelSize: Theme.fontSize - 1
-                            font.family: Theme.fontFamily
-                            font.bold: modelData.name === btWidget.btConnectedDevice
-                            Layout.fillWidth: true
-                            elide: Text.ElideRight
-                        }
-
-                        Text {
-                            text: modelData.name === btWidget.btConnectedDevice ? "Connected" : ""
-                            color: Theme.colBluetooth
-                            font.pixelSize: Theme.fontSize - 3
-                            font.family: Theme.fontFamily
-                        }
-                    }
-
-                    MouseArea {
-                        id: btMouseArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (modelData.name === btWidget.btConnectedDevice) {
+                    delegate: ConsoleRow {
+                        width: btDeviceListView.width
+                        readonly property bool connected: modelData.name === btWidget.btConnectedDevice
+                        lit: connected
+                        icon: "󰂯"
+                        label: modelData.name
+                        detail: connected ? "ПОДКЛЮЧЕНО" : ""
+                        onPicked: {
+                            if (connected) {
                                 btDisconnectProc.running = true
                             } else {
                                 btConnectProc.targetMAC = modelData.mac
@@ -414,13 +375,14 @@ DropdownWidget {
 
             // Empty state
             Text {
-                text: btWidget.btPowered ? "No paired devices" : "Turn on Bluetooth to see devices"
-                color: Theme.colMuted
-                font.pixelSize: Theme.fontSize - 2
+                text: btWidget.btPowered ? "Нет сопряжённых устройств" : "Включите Bluetooth, чтобы увидеть устройства"
+                color: Theme.colGrey
+                font.pixelSize: Theme.fontSize - 4
                 font.family: Theme.fontFamily
-                visible: btWidget.btDevices.length === 0
+                visible: btWidget.btDevices.length === 0 || !btWidget.btPowered
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
             }
         }
     }

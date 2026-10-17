@@ -21,24 +21,24 @@ SWWW_PARAMS="--transition-fps $FPS --transition-type $TYPE --transition-duration
 
 # Define ImageMagick effects
 declare -A effects=(
-    ["No Effects"]="no-effects"
-    ["Black & White"]="magick $wallpaper_current -colorspace gray -sigmoidal-contrast 10,40% $wallpaper_output"
-    ["Blurred"]="magick $wallpaper_current -blur 0x10 $wallpaper_output"
-    ["Charcoal"]="magick $wallpaper_current -charcoal 0x5 $wallpaper_output"
-    ["Edge Detect"]="magick $wallpaper_current -edge 1 $wallpaper_output"
-    ["Emboss"]="magick $wallpaper_current -emboss 0x5 $wallpaper_output"
-    ["Frame Raised"]="magick $wallpaper_current +raise 150 $wallpaper_output"
-    ["Frame Sunk"]="magick $wallpaper_current -raise 150 $wallpaper_output"
-    ["Negate"]="magick $wallpaper_current -negate $wallpaper_output"
-    ["Oil Paint"]="magick $wallpaper_current -paint 4 $wallpaper_output"
-    ["Posterize"]="magick $wallpaper_current -posterize 4 $wallpaper_output"
-    ["Polaroid"]="magick $wallpaper_current -polaroid 0 $wallpaper_output"
-    ["Sepia Tone"]="magick $wallpaper_current -sepia-tone 65% $wallpaper_output"
-    ["Solarize"]="magick $wallpaper_current -solarize 80% $wallpaper_output"
-    ["Sharpen"]="magick $wallpaper_current -sharpen 0x5 $wallpaper_output"
-    ["Vignette"]="magick $wallpaper_current -vignette 0x3 $wallpaper_output"
-    ["Vignette-black"]="magick $wallpaper_current -background black -vignette 0x3 $wallpaper_output"
-    ["Zoomed"]="magick $wallpaper_current -gravity Center -extent 1:1 $wallpaper_output"
+    ["Без эффектов"]="no-effects"
+    ["Чёрно-белый"]="magick $wallpaper_current -colorspace gray -sigmoidal-contrast 10,40% $wallpaper_output"
+    ["Размытие"]="magick $wallpaper_current -blur 0x10 $wallpaper_output"
+    ["Уголь"]="magick $wallpaper_current -charcoal 0x5 $wallpaper_output"
+    ["Контуры"]="magick $wallpaper_current -edge 1 $wallpaper_output"
+    ["Тиснение"]="magick $wallpaper_current -emboss 0x5 $wallpaper_output"
+    ["Рамка выпуклая"]="magick $wallpaper_current +raise 150 $wallpaper_output"
+    ["Рамка вдавленная"]="magick $wallpaper_current -raise 150 $wallpaper_output"
+    ["Негатив"]="magick $wallpaper_current -negate $wallpaper_output"
+    ["Масло"]="magick $wallpaper_current -paint 4 $wallpaper_output"
+    ["Постеризация"]="magick $wallpaper_current -posterize 4 $wallpaper_output"
+    ["Полароид"]="magick $wallpaper_current -polaroid 0 $wallpaper_output"
+    ["Сепия"]="magick $wallpaper_current -sepia-tone 65% $wallpaper_output"
+    ["Соляризация"]="magick $wallpaper_current -solarize 80% $wallpaper_output"
+    ["Резкость"]="magick $wallpaper_current -sharpen 0x5 $wallpaper_output"
+    ["Виньетка"]="magick $wallpaper_current -vignette 0x3 $wallpaper_output"
+    ["Виньетка чёрная"]="magick $wallpaper_current -background black -vignette 0x3 $wallpaper_output"
+    ["Кадрирование"]="magick $wallpaper_current -gravity Center -extent 1:1 $wallpaper_output"
 )
 
 # Function to apply no effects
@@ -49,11 +49,13 @@ no-effects() {
     wait $!
     # readable rofi text for this palette - after wallust, see RofiContrast.py
     "$HOME/.config/hypr/scripts/RofiContrast.py" || true
+    # the icons in the new accent - see IconsWallust.py
+    "$HOME/.config/hypr/scripts/IconsWallust.py" >/dev/null 2>&1 &
     # Refresh rofi, quickshell, wallust palettes
 	sleep 2
 	"$SCRIPTSDIR/Refresh.sh"
 
-    notify-send -u low -i "$iDIR/ja.png" "No wallpaper" "effects applied"
+    notify-send -u low -i "$iDIR/ja.png" "Обои:" "эффекты сняты"
     # copying wallpaper for rofi menu
     cp "$wallpaper_current" "$wallpaper_output"
 }
@@ -61,20 +63,20 @@ no-effects() {
 # Function to run rofi menu
 main() {
     # Populate rofi menu options
-    options=("No Effects")
+    options=("Без эффектов")
     for effect in "${!effects[@]}"; do
-        [[ "$effect" != "No Effects" ]] && options+=("$effect")
+        [[ "$effect" != "Без эффектов" ]] && options+=("$effect")
     done
 
     choice=$(printf "%s\n" "${options[@]}" | LC_COLLATE=C sort | rofi -dmenu -i -config $rofi_theme)
 
     # Process user choice
     if [[ -n "$choice" ]]; then
-        if [[ "$choice" == "No Effects" ]]; then
+        if [[ "$choice" == "Без эффектов" ]]; then
             no-effects
         elif [[ "${effects[$choice]+exists}" ]]; then
             # Apply selected effect
-            notify-send -u normal -i "$iDIR/ja.png"  "Applying:" "$choice effects"
+            notify-send -u normal -i "$iDIR/ja.png"  "Применяется эффект:" "$choice"
             eval "${effects[$choice]}"
             
             # intial kill process
@@ -93,9 +95,11 @@ main() {
             wallust run "$wallpaper_output" -s
             # readable rofi text for this palette - see RofiContrast.py
             "$HOME/.config/hypr/scripts/RofiContrast.py" || true
+            # the icons in the new accent - see IconsWallust.py
+            "$HOME/.config/hypr/scripts/IconsWallust.py" >/dev/null 2>&1 &
             # Refresh rofi, quickshell, wallust palettes
             "${SCRIPTSDIR}/Refresh.sh"
-            notify-send -u low -i "$iDIR/ja.png" "$choice" "effects applied"
+            notify-send -u low -i "$iDIR/ja.png" "Эффект применён:" "$choice"
         else
             echo "Effect '$choice' not recognized."
         fi

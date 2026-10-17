@@ -53,6 +53,17 @@ waybar.target = '~/.config/wallust/output/colors-waybar.css'
 bar.template = 'bar-colors.json'
 bar.target = '~/.config/quickshell/bar/wallust-colors.json'
 
+# btop: its own theme file, picked by color_theme = "wallust" in btop.conf.
+btop.template = 'colors-btop.theme'
+btop.target = '~/.config/btop/themes/wallust.theme'
+
+# GTK3 and GTK4: colour names that gtk-3.0/gtk.css and gtk-4.0/gtk.css import.
+gtk3.template = 'gtk3-colors.css'
+gtk3.target = '~/.config/gtk-3.0/wallust.css'
+
+gtk4.template = 'gtk4-colors.css'
+gtk4.target = '~/.config/gtk-4.0/wallust.css'
+
 #swaync.template = 'colors-swaync.css'
 #swaync.target = '~/.config/swaync/wallust/colors-wallust.css'
 

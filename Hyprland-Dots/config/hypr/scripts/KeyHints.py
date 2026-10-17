@@ -11,6 +11,7 @@ Usage:
 """
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -99,6 +100,80 @@ def dump(rows):
         print(f"{keys}\t{act}")
 
 
+# The launcher's look (SUPER + D, rofi/themes/soviet-teletype.rasi) in
+# wallust's rofi colours, so the cheat sheet follows the wallpaper exactly as
+# rofi does: a grey window under a title band, a red > prompt with a blinking
+# one-letter block cursor, and the list on the terminal's black. The literals
+# are the sovietpunk fallbacks, for when the file is missing. Hyprland draws
+# the frame: it is the focused-window border.
+ROFI_COLORS = os.path.expanduser("~/.config/rofi/wallust/colors-rofi.rasi")
+PALETTE = {
+    "normal-background": "#262625",   # the window
+    "foreground": "#E8C4C0",          # text
+    "color0": "#4C4C4B",              # dividers
+    "color8": "#96716D",              # the band, column headers, the status line
+    "color12": "#59302D",             # scrollbar
+    "color14": "#BE564A",             # the prompt and the cursor
+    "color15": "#D6A29C",             # what you type
+}
+
+CSS = """
+#cheatsheet { background-color: %(normal-background)s; color: %(foreground)s; }
+#cheatsheet * { border-radius: 0; }
+/* The title band, a shade off the window and run out to its edges. */
+#cheatsheet .band {
+    background-color: rgba(255,255,255,0.07); color: %(color8)s; padding: 9px 20px;
+    font-family: "Terminess Nerd Font"; font-weight: bold; font-size: 17pt; }
+#cheatsheet .prompt {
+    color: %(color14)s; font-family: "Terminess Nerd Font"; font-weight: bold; font-size: 22pt; }
+#cheatsheet .typed {
+    color: %(color15)s; font-family: "Terminess Nerd Font"; font-size: 22pt; }
+/* The real field takes the typing but is not seen: GTK centres a wide caret on
+   the insertion point, so its own block would sit on the last letter typed.
+   The line is drawn in .typed instead, with the block after it. */
+#cheatsheet entry.hidden {
+    opacity: 0; min-width: 1px; min-height: 1px; padding: 0; margin: 0;
+    border: none; box-shadow: none; background: none; }
+/* The list on the terminal's black (foot.ini), as in the launcher. */
+#cheatsheet .screen { background-color: #000000; padding: 8px 6px; }
+#cheatsheet treeview.view {
+    background-color: #000000; color: %(foreground)s;
+    font-family: "Terminess Nerd Font"; font-size: 20pt; }
+#cheatsheet treeview header button {
+    background: #000000; border: none; box-shadow: none;
+    border-bottom: 1px solid %(color0)s; color: %(color8)s;
+    font-family: "Terminess Nerd Font"; font-weight: bold; font-size: 18pt; }
+#cheatsheet scrollbar { background: none; border: none; }
+#cheatsheet scrollbar slider {
+    background-color: %(color12)s; min-width: 2px; border: none; }
+#cheatsheet .status {
+    color: %(color8)s; padding-top: 4px;
+    font-family: "Terminess Nerd Font"; font-weight: bold; font-size: 16pt; }
+"""
+
+
+def palette():
+    """PALETTE with wallust's values from colors-rofi.rasi, @references resolved."""
+    pal = dict(PALETTE)
+    try:
+        with open(ROFI_COLORS, encoding="utf-8") as f:
+            raw = dict(re.findall(r"^\s*([a-z0-9-]+):\s*([^;]+);", f.read(), re.M))
+    except OSError:
+        return pal
+
+    def resolve(value, depth=0):
+        value = value.strip()
+        if value.startswith("@") and depth < 4:
+            return resolve(raw.get(value[1:], ""), depth + 1)
+        return value
+
+    for key in pal:
+        value = resolve(raw.get(key, ""))
+        if value:
+            pal[key] = value
+    return pal
+
+
 def gui(rows):
     import gi
     from gi.repository import GLib
@@ -110,17 +185,58 @@ def gui(rows):
     # The title is what configs/WindowRules.lua matches (tag Cheat_Sheet:
     # float, center, 65% x 90%), so keep it in sync with that rule.
     win = Gtk.Window(title="Quick Cheat Sheet")
+    win.set_name("cheatsheet")  # what the CSS above is scoped to
     win.set_default_size(1100, 1000)
     win.connect("destroy", Gtk.main_quit)
 
-    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8,
-                  margin=12)
-    win.add(box)
+    pal = palette()
+    provider = Gtk.CssProvider()
+    provider.load_from_data((CSS % pal).encode())
+    Gtk.StyleContext.add_provider_for_screen(
+        Gdk.Screen.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
-    search = Gtk.SearchEntry()
-    search.set_placeholder_text(
-        "Type to filter by action or keys, e.g. screenshot, workspace, super shift")
-    box.pack_start(search, False, False, 0)
+    outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+    win.add(outer)
+
+    band = Gtk.Label(label="ЭВМ «ЭЛЕКТРОНИКА» · СОЧЕТАНИЯ КЛАВИШ", xalign=0)
+    band.get_style_context().add_class("band")
+    outer.pack_start(band, False, False, 0)
+
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10,
+                  margin_top=12, margin_bottom=14, margin_start=20, margin_end=20)
+    outer.pack_start(box, True, True, 0)
+
+    # The search line, as the launcher's: a red >, then what you type with a
+    # blinking block after it.
+    line = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+    prompt = Gtk.Label(label=">", valign=Gtk.Align.CENTER)
+    prompt.get_style_context().add_class("prompt")
+    line.pack_start(prompt, False, False, 0)
+    typed = Gtk.Label(xalign=0, valign=Gtk.Align.CENTER, ellipsize=Pango.EllipsizeMode.START)
+    typed.get_style_context().add_class("typed")
+    line.pack_start(typed, True, True, 0)
+    search = Gtk.Entry(width_chars=1, max_width_chars=1)
+    search.get_style_context().add_class("hidden")
+    line.pack_start(search, False, False, 0)
+    box.pack_start(line, False, False, 0)
+
+    hint = " действие или клавиши, например: screenshot, workspace, super shift"
+    cursor_on = True
+
+    def draw_line():
+        text = GLib.markup_escape_text(search.get_text())
+        # A space when off, the same width as the block: nothing shifts.
+        block = f'<span foreground="{pal["color14"]}">█</span>' if cursor_on else " "
+        tail = "" if search.get_text() else f'<span foreground="{pal["color8"]}">{GLib.markup_escape_text(hint)}</span>'
+        typed.set_markup(text + block + tail)
+
+    def blink():
+        nonlocal cursor_on
+        cursor_on = not cursor_on
+        draw_line()
+        return True
+
+    blinker = [GLib.timeout_add(600, blink)]
 
     # keys, action, lowercase haystack used for filtering
     store = Gtk.ListStore(str, str, str)
@@ -144,44 +260,56 @@ def gui(rows):
     tree.set_headers_visible(True)
     tree.get_selection().set_mode(Gtk.SelectionMode.NONE)
 
-    r_keys = Gtk.CellRendererText(weight=Pango.Weight.BOLD, ypad=6)
-    col_keys = Gtk.TreeViewColumn("Keys", r_keys, text=0)
+    r_keys = Gtk.CellRendererText(weight=Pango.Weight.BOLD, ypad=4)
+    col_keys = Gtk.TreeViewColumn("КЛАВИШИ", r_keys, text=0)
     col_keys.set_resizable(True)
     tree.append_column(col_keys)
 
-    r_act = Gtk.CellRendererText(ypad=6)
-    col_act = Gtk.TreeViewColumn("Action", r_act, text=1)
+    r_act = Gtk.CellRendererText(ypad=4)
+    col_act = Gtk.TreeViewColumn("ДЕЙСТВИЕ", r_act, text=1)
     col_act.set_expand(True)
     tree.append_column(col_act)
 
     scroll = Gtk.ScrolledWindow()
     scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
     scroll.add(tree)
+    scroll.get_style_context().add_class("screen")
     box.pack_start(scroll, True, True, 0)
 
-    status = Gtk.Label(xalign=0)
-    status.get_style_context().add_class("dim-label")
+    # Ellipsized, so the line can never set the window's minimum width: it used
+    # to, and held the window wider than the 65% the window rule asks for.
+    status = Gtk.Label(xalign=0, ellipsize=Pango.EllipsizeMode.END)
+    status.get_style_context().add_class("status")
     box.pack_start(status, False, False, 0)
 
     total = len(rows)
 
     def refresh(*_):
-        nonlocal tokens
+        nonlocal tokens, cursor_on
         text = search.get_text().lower().replace("+", " ")
         tokens = text.split()
         filt.refilter()
         n = len(filt)
         status.set_text(
-            f"{n} of {total} keybinds    ·    Esc closes    ·    "
-            f"SUPER H toggles    ·    SUPER SHIFT K: same list in rofi")
+            f"{n} ИЗ {total} · ESC - ЗАКРЫТЬ · "
+            f"SUPER H - ОТКРЫТЬ/ЗАКРЫТЬ · SUPER SHIFT K - СПИСОК В ROFI")
         scroll.get_vadjustment().set_value(0)
+        # Typing shows the cursor and restarts its blink, as a terminal does.
+        cursor_on = True
+        GLib.source_remove(blinker[0])
+        blinker[0] = GLib.timeout_add(600, blink)
+        draw_line()
 
-    search.connect("search-changed", refresh)
+    search.connect("changed", refresh)
 
     def on_key(_w, ev):
         adj = scroll.get_vadjustment()
         if ev.keyval == Gdk.KEY_Escape:
             win.destroy()
+            return True
+        # The cursor lives at the end of the line: moving it inside the hidden
+        # field would type where the drawn line does not show it.
+        if ev.keyval in (Gdk.KEY_Left, Gdk.KEY_Right, Gdk.KEY_Home, Gdk.KEY_End):
             return True
         step = {Gdk.KEY_Down: adj.get_step_increment() * 3,
                 Gdk.KEY_Up: -adj.get_step_increment() * 3,

@@ -1,0 +1,60 @@
+# btop in the wallpaper's colours - wallust template, rendered to
+# ~/.config/btop/themes/wallust.theme on every wallpaper change (wallust.toml).
+# The roles follow the rest of the desktop: color8 dim (frames, labels),
+# color14 the alert red (key letters, hot ends of the graphs), color12 the
+# window border's maroon (the selected row), color7 the bar cards' accent.
+
+# Transparent: btop sits on the terminal's own black.
+theme[main_bg]=""
+theme[main_fg]="{{foreground}}"
+theme[title]="{{foreground}}"
+theme[hi_fg]="{{color14}}"
+theme[selected_bg]="{{color12}}"
+theme[selected_fg]="{{foreground}}"
+theme[inactive_fg]="{{color8}}"
+theme[graph_text]="{{color8}}"
+theme[meter_bg]="{{color0}}"
+theme[proc_misc]="{{color14}}"
+
+theme[cpu_box]="{{color8}}"
+theme[mem_box]="{{color8}}"
+theme[net_box]="{{color8}}"
+theme[proc_box]="{{color8}}"
+theme[div_line]="{{color0}}"
+
+# Every gauge and graph runs dim -> accent -> red as it fills.
+theme[temp_start]="{{color8}}"
+theme[temp_mid]="{{color7}}"
+theme[temp_end]="{{color14}}"
+
+theme[cpu_start]="{{color8}}"
+theme[cpu_mid]="{{color7}}"
+theme[cpu_end]="{{color14}}"
+
+theme[free_start]="{{color8}}"
+theme[free_mid]="{{color7}}"
+theme[free_end]="{{color14}}"
+
+theme[cached_start]="{{color8}}"
+theme[cached_mid]="{{color7}}"
+theme[cached_end]="{{color14}}"
+
+theme[available_start]="{{color8}}"
+theme[available_mid]="{{color7}}"
+theme[available_end]="{{color14}}"
+
+theme[used_start]="{{color8}}"
+theme[used_mid]="{{color7}}"
+theme[used_end]="{{color14}}"
+
+theme[download_start]="{{color8}}"
+theme[download_mid]="{{color7}}"
+theme[download_end]="{{color14}}"
+
+theme[upload_start]="{{color8}}"
+theme[upload_mid]="{{color7}}"
+theme[upload_end]="{{color14}}"
+
+theme[process_start]="{{color8}}"
+theme[process_mid]="{{color7}}"
+theme[process_end]="{{color14}}"

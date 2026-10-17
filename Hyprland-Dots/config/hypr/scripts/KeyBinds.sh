@@ -16,7 +16,7 @@ if pidof rofi > /dev/null; then
 fi
 
 rofi_theme="$HOME/.config/rofi/config-keybinds.rasi"
-msg='☣️ NOTE ☣️: Clicking with Mouse or Pressing ENTER will have NO function'
+msg='Только для просмотра: щелчок и Enter ничего не делают'
 
 # "KEYS — DESCRIPTION", one per bind, SUPER first
 display_keybinds=$("$(dirname "$(readlink -f "$0")")/KeyHints.py" --dump | awk -F'\t' '{ print $1 " — " $2 }')

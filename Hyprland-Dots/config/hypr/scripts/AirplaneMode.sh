@@ -8,8 +8,8 @@ wifi_blocked=$(rfkill list wifi | grep -o "Soft blocked: yes")
 
 if [ -n "$wifi_blocked" ]; then
     rfkill unblock wifi
-    notify-send -t 1000 -u low -i "$notif" " Airplane" " mode: OFF"
+    notify-send -t 1000 -u low -i "$notif" "Режим полёта:" "выключен"
 else
     rfkill block wifi
-    notify-send -t 1000 -u low -i "$notif" " Airplane" " mode: ON"
+    notify-send -t 1000 -u low -i "$notif" "Режим полёта:" "включён"
 fi

@@ -14,8 +14,8 @@ Rectangle {
     Layout.preferredWidth: 1
     Layout.preferredHeight: Math.round(Theme.fontSize * 0.75)
     Layout.alignment: Qt.AlignVCenter
-    Layout.leftMargin: 9
-    Layout.rightMargin: 9
+    Layout.leftMargin: 6
+    Layout.rightMargin: 6
     color: Theme.colSeparator
     opacity: 0.45
 }

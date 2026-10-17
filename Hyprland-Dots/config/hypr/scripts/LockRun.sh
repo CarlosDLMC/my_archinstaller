@@ -36,6 +36,11 @@ done
     echo "--- SovietLockGen.py ---"
 } >>"$LOG" 2>&1
 
+# The panel's ДОНЕСЕНИЯ row counts notifications from this lock only. Cleared
+# before the generator, whose panel probe must see the row unlit.
+REPORTS="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/soviet-lock-reports.json"
+rm -f "$REPORTS"
+
 # Size the widgets for whatever monitors are attached right now.
 python3 "$HOME/.config/hypr/scripts/SovietLockGen.py" >>"$LOG" 2>&1
 _gen_rc=$?
@@ -54,8 +59,14 @@ if [ "$_gen_rc" -ne 0 ] && [ -f "$_lock_conf" ]; then
         && mv "$_lock_conf.tmp" "$_lock_conf"
 fi
 
+# Counts what arrives while locked; exits on its own if this script goes away.
+python3 "$HOME/.config/hypr/scripts/SovietLock.py" --watch-reports $$ >>"$LOG" 2>&1 &
+_reports_pid=$!
+
 echo "--- hyprlock ---" >>"$LOG" 2>&1
 hyprlock >>"$LOG" 2>&1
 rc=$?
+kill "$_reports_pid" 2>/dev/null
+rm -f "$REPORTS"
 echo "=== hyprlock exited rc=$rc at $(date -Is) ===" >>"$LOG" 2>&1
 exit "$rc"
