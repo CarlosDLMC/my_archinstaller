@@ -457,9 +457,9 @@ DropdownWidget {
                 Text {
                     // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
                     textFormat: Text.PlainText
-                    text: wifiWidget.connecting ? "󰓦  Connecting to " + wifiWidget.selectedSSID + "…" :
+                    text: wifiWidget.connecting ? "󰓦  Подключение к " + wifiWidget.selectedSSID + "…" :
                           wifiWidget.passwordMode ? "󰌾  " + wifiWidget.selectedSSID :
-                          wifiWidget.wifiConnected ? "󰤨  " + wifiWidget.wifiSSID : "󰤭  Not Connected"
+                          wifiWidget.wifiConnected ? "󰤨  " + wifiWidget.wifiSSID : "󰤭  Нет подключения"
                     color: wifiWidget.connecting ? Theme.colAlert : Theme.colFg
                     font.pixelSize: Theme.fontSize
                     font.family: Theme.fontFamily
@@ -523,7 +523,7 @@ DropdownWidget {
                 Item { width: 1; height: 4 }
 
                 Text {
-                    text: "Enter password:"
+                    text: "Код доступа:"
                     color: Theme.colMuted
                     font.pixelSize: Theme.fontSize - 2
                     font.family: Theme.fontFamily
@@ -567,7 +567,7 @@ DropdownWidget {
 
                         Text {
                             anchors.centerIn: parent
-                            text: "Cancel"
+                            text: "Отмена"
                             color: Theme.colFg
                             font.pixelSize: Theme.fontSize - 2
                             font.family: Theme.fontFamily
@@ -590,7 +590,7 @@ DropdownWidget {
 
                         Text {
                             anchors.centerIn: parent
-                            text: "Connect"
+                            text: "Подключить"
                             color: Theme.colOnAlert
                             font.pixelSize: Theme.fontSize - 2
                             font.family: Theme.fontFamily
@@ -614,7 +614,7 @@ DropdownWidget {
                 visible: wifiWidget.scanning && wifiWidget.wifiNetworks.length <= 1
                          && !wifiWidget.passwordMode
                 width: parent.width
-                text: "Looking for networks…"
+                text: "Поиск сетей…"
                 color: Theme.colMuted
                 font.pixelSize: Theme.fontSize - 2
                 font.family: Theme.fontFamily
@@ -656,7 +656,7 @@ DropdownWidget {
                             textFormat: Text.PlainText
                             text: modelData.ssid
                                   + (wifiWidget.connecting && modelData.ssid === wifiWidget.selectedSSID
-                                     ? "  ·  connecting…" : "")
+                                     ? "  ·  подключение…" : "")
                             color: wifiWidget.connecting && modelData.ssid === wifiWidget.selectedSSID
                                    ? Theme.colAlert
                                    : modelData.ssid === wifiWidget.wifiSSID ? Theme.colNetwork : Theme.colFg

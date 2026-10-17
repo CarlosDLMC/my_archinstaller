@@ -250,7 +250,7 @@ DropdownWidget {
                 Text {
                     // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
                     textFormat: Text.PlainText
-                    text: btWidget.btPowered ? (btWidget.btConnected ? "󰂱 " + btWidget.btConnectedDevice : "󰂯 Bluetooth") : "󰂲 Bluetooth Off"
+                    text: btWidget.btPowered ? (btWidget.btConnected ? "󰂱 " + btWidget.btConnectedDevice : "󰂯 Bluetooth") : "󰂲 Bluetooth выключен"
                     color: Theme.colFg
                     font.pixelSize: Theme.fontSize
                     font.family: Theme.fontFamily
@@ -313,7 +313,7 @@ DropdownWidget {
                 visible: btWidget.btPowered
 
                 Text {
-                    text: "Paired Devices"
+                    text: "Сопряжённые устройства"
                     color: Theme.colMuted
                     font.pixelSize: Theme.fontSize - 2
                     font.family: Theme.fontFamily
@@ -328,7 +328,7 @@ DropdownWidget {
 
                     Text {
                         anchors.centerIn: parent
-                        text: "Scan"
+                        text: "Поиск"
                         color: Theme.colFg
                         font.pixelSize: Theme.fontSize - 3
                         font.family: Theme.fontFamily
@@ -387,7 +387,7 @@ DropdownWidget {
                         }
 
                         Text {
-                            text: modelData.name === btWidget.btConnectedDevice ? "Connected" : ""
+                            text: modelData.name === btWidget.btConnectedDevice ? "Подключено" : ""
                             color: Theme.colBluetooth
                             font.pixelSize: Theme.fontSize - 3
                             font.family: Theme.fontFamily
@@ -414,7 +414,7 @@ DropdownWidget {
 
             // Empty state
             Text {
-                text: btWidget.btPowered ? "No paired devices" : "Turn on Bluetooth to see devices"
+                text: btWidget.btPowered ? "Нет сопряжённых устройств" : "Включите Bluetooth, чтобы увидеть устройства"
                 color: Theme.colMuted
                 font.pixelSize: Theme.fontSize - 2
                 font.family: Theme.fontFamily
