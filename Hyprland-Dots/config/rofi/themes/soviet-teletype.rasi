@@ -57,18 +57,31 @@ window {
 mainbox {
     spacing:                     8px;
     padding:                     14px 20px;
-    children:                    [ "textbox-banner", "inputbar", "message", "listview", "mode-switcher" ];
+    children:                    [ "titlebar", "inputbar", "message", "listview", "mode-switcher" ];
 }
 
 /* The banner line, as a terminal prints on login, on a band of its own a
-   shade off the window - a title strip, run out to the window's edges. */
-textbox-banner {
+   shade off the window - a title strip, run out to the window's edges. It
+   names the mode in use with rofi's own prompt (display-drun and the rest),
+   so it reads ПРОГРАММЫ, ФАЙЛЫ, КОМАНДЫ or ОКНА - right in every tab and in
+   the window switcher (SUPER + CTRL + S) too. */
+titlebar {
+    orientation:                 horizontal;
     expand:                      false;
-    str:                         "ЭВМ «ЭЛЕКТРОНИКА» · ЗАПУСК ПРОГРАММ";
-    font:                        "Terminess Nerd Font Bold 17";
+    spacing:                     10px;
     margin:                      -14px -20px 2px -20px;
     padding:                     9px 20px;
     background-color:            @tty-title;
+    children:                    [ "textbox-banner", "prompt" ];
+}
+textbox-banner {
+    expand:                      false;
+    str:                         "ЭВМ «ЭЛЕКТРОНИКА» ·";
+    font:                        "Terminess Nerd Font Bold 17";
+    text-color:                  @tty-dim;
+}
+prompt {
+    font:                        "Terminess Nerd Font Bold 17";
     text-color:                  @tty-dim;
 }
 
