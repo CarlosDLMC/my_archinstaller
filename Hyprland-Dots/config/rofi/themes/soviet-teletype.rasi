@@ -6,8 +6,10 @@
  * picked row marked the way a terminal marks it - a bar at its left edge and
  * the text in the mark colour - rather than a fill. Tabs are bracketed menu-bar items.
  *
- * Colours are wallust's (colors-rofi.rasi): color14 for the marks, color8 for
- * everything dim.
+ * The window is wallust's grey and the list sits on a black screen - the
+ * terminal's own #000000 (foot.ini) - like main's style-4, whose grey chrome
+ * around a black list this keeps. Otherwise the colours are wallust's
+ * (colors-rofi.rasi): color14 for the marks, color8 for everything dim.
  */
 
 configuration {
@@ -33,6 +35,7 @@ configuration {
     tty-dim:                     @color8;
     tty-rule:                    @color0;
     tty-bright:                  @color15;
+    tty-screen:                  #000000;      /* the terminal's black (foot.ini) */
     font:                        "Terminess Nerd Font 18";
 
     background-color:            transparent;
@@ -86,8 +89,11 @@ entry {
     font:                        "Terminess Nerd Font 20";
     text-color:                  @tty-bright;
     cursor:                      text;
-    cursor-width:                11px;
+    /* One cell: Terminess 20 here advances 13px a character (measured off a
+       row of Ш in the live entry), so the block covers a letter exactly. */
+    cursor-width:                13px;
     cursor-color:                @tty-mark;
+    blink:                       true;
     placeholder:                 "";
     placeholder-color:           @tty-dim;
 }
@@ -124,7 +130,8 @@ listview {
     fixed-height:                true;
     fixed-columns:               true;
     spacing:                     0px;
-    padding:                     4px 0px 0px 0px;
+    padding:                     8px 6px;
+    background-color:            @tty-screen;
     cursor:                      "default";
 }
 
