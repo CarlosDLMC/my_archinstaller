@@ -63,6 +63,7 @@ components/         # Modular widget components
   ├── ConsoleButton.qml    # Console cards: a chunky push button (label, glyph, spinner), lit when current
   ├── ConsoleRow.qml       # Console cards: a pickable list row - lamp, glyph, name, detail
   ├── ConsoleCaption.qml   # Console cards: the small-caps caption beside a control
+  ├── ConsoleKeycap.qml    # Console dialogs: a key hint - the key on a small raised cap, its action beside it
   ├── SegmentGauge.qml     # Console cards: a segmented gauge with an optional marker tick
   ├── WifiWidget.qml       # WiFi status with network speeds (extends DropdownWidget)
   ├── BluetoothWidget.qml  # Bluetooth status with dropdown (extends DropdownWidget)
@@ -70,8 +71,8 @@ components/         # Modular widget components
   ├── PowerWidget.qml      # Power menu: lock, logout, reboot, shutdown (extends DropdownWidget)
   ├── RecordOsd.qml        # Screen-recording dialog (centred box, big buttons, audio toggles)
   ├── ShotOsd.qml          # Screenshot dialog (same box, no audio row)
-  ├── BigButton.qml        # Big icon+label button, shared by both capture dialogs
-  ├── ToggleRow.qml        # Labelled switch, shared by both capture dialogs
+  ├── BigButton.qml        # Big console key (icon, label, key letter), shared by both capture dialogs
+  ├── ToggleRow.qml        # Lamp + label + latching ВКЛ/ВЫКЛ key, shared by both capture dialogs
   ├── SlackWidget.qml      # Slack indicator, click to focus app
   ├── WhatsAppWidget.qml   # WhatsApp indicator, click to focus app
   ├── Spinner.qml          # Ring of dots for indeterminate waits (drawn, not a glyph)

@@ -1,13 +1,16 @@
 import QtQuick
 import ".."
 
-// A labelled switch, as wide as its dialog: icon + name on the left, the
-// switch on the right, and the whole row is the hit target.
+// A labelled switch on a console, as wide as its dialog: a lamp, the icon and
+// the name on the left, the keyboard key that flips it, and a latching key on
+// the right - pushed in and lit «ВКЛ», or standing up «ВЫКЛ». The whole row is
+// the hit target.
 Item {
     id: row
 
     property string icon: ""
     property string label: ""
+    property string keyHint: ""
     property bool checked: false
     property int labelSize: 15
 
@@ -15,18 +18,20 @@ Item {
 
     height: Math.round(labelSize * 2.6)
 
-    readonly property int trackW: Math.round(labelSize * 3.2)
-    readonly property int trackH: Math.round(labelSize * 1.65)
-
     Row {
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
-        spacing: 10
+        spacing: 12
+
+        ConsoleLamp {
+            anchors.verticalCenter: parent.verticalCenter
+            lit: row.checked
+        }
 
         Text {
             anchors.verticalCenter: parent.verticalCenter
             text: row.icon
-            color: row.checked ? Theme.colWhite : Theme.colMuted
+            color: row.checked ? Theme.colWhite : Theme.colGrey
             font.family: Theme.fontFamily
             font.pixelSize: row.labelSize + 3
         }
@@ -34,45 +39,60 @@ Item {
         Text {
             anchors.verticalCenter: parent.verticalCenter
             text: row.label
-            color: row.checked ? Theme.colWhite : Theme.colDim
+            color: row.checked ? Theme.colWhite : Theme.colGrey
             font.family: Theme.fontFamily
             font.pixelSize: row.labelSize
+            font.bold: true
+            font.letterSpacing: 1
+        }
+
+        Text {
+            anchors.verticalCenter: parent.verticalCenter
+            visible: row.keyHint !== ""
+            text: row.keyHint
+            color: Theme.colDim
+            font.family: Theme.fontFamily
+            font.pixelSize: row.labelSize - 3
+            font.bold: true
         }
     }
 
-    // The switch: a track with a knob that slides, so "on" reads at a glance
-    // from shape as well as brightness (the bar is monochrome by design).
+    // The latching key. Drawn here rather than as a ConsoleButton so the
+    // whole row stays one hit target.
     Rectangle {
-        id: track
+        id: key
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        width: row.trackW
-        height: row.trackH
-        radius: height / 2
-        color: row.checked
-            ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.85)
-            : Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.10)
-        border.width: 1
-        border.color: row.checked
-            ? Theme.colWhite
-            : Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.22)
-
+        width: Math.round(row.labelSize * 4.2)
+        height: Math.round(row.labelSize * 1.9)
+        radius: 4
+        color: row.checked ? Theme.colAccent
+             : (area.containsMouse ? Qt.lighter(Theme.colPlate, 1.6) : Qt.lighter(Theme.colPlate, 1.25))
         Behavior on color { ColorAnimation { duration: 130 } }
 
         Rectangle {
-            width: parent.height - 6
-            height: width
-            radius: width / 2
-            y: 3
-            x: row.checked ? parent.width - width - 3 : 3
-            color: row.checked ? Theme.colBg : Theme.colDim
+            visible: !row.checked
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: 3
+            radius: key.radius
+            color: Qt.rgba(0, 0, 0, 0.45)
+        }
 
-            Behavior on x { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
-            Behavior on color { ColorAnimation { duration: 130 } }
+        Text {
+            anchors.centerIn: parent
+            anchors.verticalCenterOffset: row.checked ? 0 : -1
+            text: row.checked ? "ВКЛ" : "ВЫКЛ"
+            color: row.checked ? Theme.colBg : Theme.colGrey
+            font.family: Theme.fontFamily
+            font.pixelSize: row.labelSize - 2
+            font.bold: true
         }
     }
 
     MouseArea {
+        id: area
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
