@@ -14,31 +14,29 @@ DropdownWidget {
     property string panelMode: "networks"     // "networks" | "details"
 
     // Width follows the longest SSID instead of a fixed 240px, which was
-    // only wide enough for ~14 characters and elided anything longer.
+    // only wide enough for ~14 characters and elided anything longer. The 170
+    // is the header's lamp, «WI-FI» caption and disconnect button around it.
     // Clamped so one absurd name cannot stretch the popup off-screen.
     popupWidth: panelMode === "details"
         ? 520
-        : Math.max(260, Math.min(560, Math.ceil(ssidMetrics.width) + 104))
+        : Math.max(300, Math.min(600, Math.ceil(ssidMetrics.width) + 170))
     // The details card carries a lot, so its cap follows the screen rather than
     // a fixed number: a 620px ceiling left the DNS pills, the saved networks
     // and the radio toggle below the fold on every monitor. Past the cap the
     // body still scrolls, which on the 1080p panel it will.
     readonly property real detailsMaxHeight:
         (barWindow && barWindow.screen ? barWindow.screen.height : 1080) * 0.85
-    // Rows are 36 high with 2 of spacing, and the header, its divider and the
-    // card's own padding take 68 before the list gets any room. The old
-    // `length * 40 + 50` was short of that, so a single-network list left the
-    // ListView 22px tall and drew half a row - which is exactly what the first
-    // moment after opening looks like, because the cached read usually returns
-    // only the network already connected.
-    //
-    // The floor of three rows keeps that moment from being a sliver: the scan
-    // fills it within a couple of seconds and the card does not resize under
-    // the pointer.
+    // The network list is sized by what it measures (networksHeight), and the
+    // list itself shows at most eight rows before it scrolls. The first moment
+    // after opening is the cached read, usually only the network already
+    // connected; the floor of three rows while scanning keeps that from being
+    // a sliver, so the scan fills it within a couple of seconds and the card
+    // does not resize under the pointer.
     readonly property int listRows: Math.max(scanning ? 3 : 1, wifiNetworks.length)
+    property real networksHeight: 160
     popupHeight: panelMode === "details"
         ? Math.max(200, Math.min(Math.ceil(detailsHeight) + 30, detailsMaxHeight))
-        : Math.min(listRows * 38 + 72, 420)
+        : Math.ceil(networksHeight) + 28
     popupXOffset: 250
 
     // Reported by NetworkPanel, so the details card is sized to what it
@@ -442,31 +440,53 @@ DropdownWidget {
 
         Column {
             visible: wifiWidget.panelMode === "networks"
-            // Fill the Loader explicitly. Without this the Column's height is
-            // implicit from its children, while the ListView below sizes
-            // itself from parent.height - a circular dependency that resolved
-            // wrong and clipped the first network behind the header.
-            anchors.fill: parent
-            spacing: 4
+            width: parent.width
+            spacing: 8
+            onImplicitHeightChanged: wifiWidget.networksHeight = implicitHeight
+            Component.onCompleted: wifiWidget.networksHeight = implicitHeight
 
-            // Header
-            Row {
+            // The link: a lamp, the network (or what is happening to it), the
+            // scan's spinner and the disconnect button.
+            Item {
                 width: parent.width
-                spacing: 4
+                height: Math.max(linkName.implicitHeight, disconnectBtn.visible ? disconnectBtn.implicitHeight : 0)
+
+                ConsoleLamp {
+                    id: linkLamp
+                    anchors.left: parent.left
+                    anchors.leftMargin: 4
+                    anchors.verticalCenter: parent.verticalCenter
+                    lit: wifiWidget.wifiConnected || wifiWidget.connecting
+                    tint: wifiWidget.connecting ? Theme.colAlert : Theme.colAccent
+                }
+
+                ConsoleCaption {
+                    id: linkCaption
+                    anchors.left: linkLamp.right
+                    anchors.leftMargin: 10
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: wifiWidget.connecting ? "ПОДКЛЮЧЕНИЕ"
+                        : wifiWidget.passwordMode ? "СЕТЬ" : "WI-FI"
+                }
 
                 Text {
+                    id: linkName
+                    anchors.left: linkCaption.right
+                    anchors.leftMargin: 10
+                    anchors.right: scanBadge.visible ? scanBadge.left
+                                 : disconnectBtn.visible ? disconnectBtn.left : parent.right
+                    anchors.rightMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
                     // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
                     textFormat: Text.PlainText
-                    text: wifiWidget.connecting ? "󰓦  Подключение к " + wifiWidget.selectedSSID + "…" :
-                          wifiWidget.passwordMode ? "󰌾  " + wifiWidget.selectedSSID :
-                          wifiWidget.wifiConnected ? "󰤨  " + wifiWidget.wifiSSID : "󰤭  Нет подключения"
-                    color: wifiWidget.connecting ? Theme.colAlert : Theme.colFg
-                    font.pixelSize: Theme.fontSize
+                    text: wifiWidget.connecting ? wifiWidget.selectedSSID + "…" :
+                          wifiWidget.passwordMode ? wifiWidget.selectedSSID :
+                          wifiWidget.wifiConnected ? wifiWidget.wifiSSID : "НЕТ ПОДКЛЮЧЕНИЯ"
+                    color: wifiWidget.connecting ? Theme.colAlert
+                         : wifiWidget.wifiConnected || wifiWidget.passwordMode ? Theme.colWhite : Theme.colGrey
+                    font.pixelSize: Theme.fontSize - 2
                     font.family: Theme.fontFamily
-                    font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
-                    width: parent.width
-                           - (scanBadge.visible ? scanBadge.width + 4 : 0)
-                           - (disconnectBtn.visible ? disconnectBtn.width + 4 : 0)
+                    font.bold: true
                     elide: Text.ElideRight
                 }
 
@@ -475,43 +495,33 @@ DropdownWidget {
                 // already connected - do not read as a finished, wrong answer.
                 Spinner {
                     id: scanBadge
+                    anchors.right: disconnectBtn.visible ? disconnectBtn.left : parent.right
+                    anchors.rightMargin: disconnectBtn.visible ? 8 : 0
+                    anchors.verticalCenter: parent.verticalCenter
                     visible: wifiWidget.scanning && !wifiWidget.passwordMode
                              && !wifiWidget.connecting
                     width: Theme.fontSize - 4
                     height: width
-                    anchors.verticalCenter: parent.verticalCenter
                 }
 
-                Text {
+                ConsoleButton {
                     id: disconnectBtn
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
                     visible: wifiWidget.wifiConnected && !wifiWidget.passwordMode
-                    text: "󰅖"
-                    color: disconnectMouse.containsMouse ? Theme.colAlert : Theme.colMuted
-                    font.pixelSize: Theme.fontSize
-                    font.family: Theme.fontFamily
-
-                    MouseArea {
-                        id: disconnectMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            // By device, not `nmcli connection down <SSID>`: nmcli
-                            // matches the saved connection's NAME there, which can
-                            // differ from the SSID (a second profile becomes
-                            // "Foo 1"), and then the button silently did nothing.
-                            wifiConnectProc.command = ["sh", "-c",
-                                "nmcli -t -f DEVICE,TYPE,STATE device | awk -F: '$2 == \"wifi\" && $3 == \"connected\" { print $1 }' | while IFS= read -r d; do nmcli device disconnect \"$d\"; done"]
-                            wifiConnectProc.running = true
-                        }
+                    icon: "󰅖"
+                    minWidth: 0
+                    fontSize: Theme.fontSize - 6
+                    onPicked: {
+                        // By device, not `nmcli connection down <SSID>`: nmcli
+                        // matches the saved connection's NAME there, which can
+                        // differ from the SSID (a second profile becomes
+                        // "Foo 1"), and then the button silently did nothing.
+                        wifiConnectProc.command = ["sh", "-c",
+                            "nmcli -t -f DEVICE,TYPE,STATE device | awk -F: '$2 == \"wifi\" && $3 == \"connected\" { print $1 }' | while IFS= read -r d; do nmcli device disconnect \"$d\"; done"]
+                        wifiConnectProc.running = true
                     }
                 }
-            }
-
-            Rectangle {
-                width: parent.width
-                height: 1
-                color: Theme.colMuted
             }
 
             // Password entry view
@@ -520,28 +530,24 @@ DropdownWidget {
                 width: parent.width
                 spacing: 8
 
-                Item { width: 1; height: 4 }
+                ConsoleCaption { text: "КОД ДОСТУПА" }
 
-                Text {
-                    text: "Код доступа:"
-                    color: Theme.colMuted
-                    font.pixelSize: Theme.fontSize - 2
-                    font.family: Theme.fontFamily
-                }
-
+                // The field is a recessed plate, like the readings elsewhere;
+                // focused, it is rimmed in the accent.
                 Rectangle {
                     width: parent.width
-                    height: 32
-                    color: Qt.rgba(255, 255, 255, 0.1)
-                    radius: 6
-                    border.color: passwordInput.activeFocus ? Theme.colNetwork : Theme.colMuted
+                    height: 36
+                    color: Theme.colPlate
+                    radius: 4
+                    border.color: passwordInput.activeFocus ? Theme.colAccent : "transparent"
                     border.width: 1
 
                     TextInput {
                         id: passwordInput
                         anchors.fill: parent
                         anchors.margins: 8
-                        color: Theme.colFg
+                        verticalAlignment: TextInput.AlignVCenter
+                        color: Theme.colWhite
                         font.pixelSize: Theme.fontSize - 1
                         font.family: Theme.fontFamily
                         echoMode: TextInput.Password
@@ -559,51 +565,19 @@ DropdownWidget {
                     width: parent.width
                     spacing: 8
 
-                    Rectangle {
+                    ConsoleButton {
                         width: (parent.width - 8) / 2
-                        height: 30
-                        color: cancelMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.15) : Qt.rgba(255, 255, 255, 0.1)
-                        radius: 6
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "Отмена"
-                            color: Theme.colFg
-                            font.pixelSize: Theme.fontSize - 2
-                            font.family: Theme.fontFamily
-                        }
-
-                        MouseArea {
-                            id: cancelMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: wifiWidget.cancelPasswordEntry()
-                        }
+                        fontSize: Theme.fontSize - 6
+                        label: "ОТМЕНА"
+                        onPicked: wifiWidget.cancelPasswordEntry()
                     }
 
-                    Rectangle {
+                    ConsoleButton {
                         width: (parent.width - 8) / 2
-                        height: 30
-                        color: connectMouse.containsMouse ? Qt.rgba(Theme.colNetwork.r, Theme.colNetwork.g, Theme.colNetwork.b, 0.8) : Theme.colNetwork
-                        radius: 6
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "Подключить"
-                            color: Theme.colOnAlert
-                            font.pixelSize: Theme.fontSize - 2
-                            font.family: Theme.fontFamily
-                            font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
-                        }
-
-                        MouseArea {
-                            id: connectMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: wifiWidget.connectWithPassword()
-                        }
+                        fontSize: Theme.fontSize - 6
+                        label: "ПОДКЛЮЧИТЬ"
+                        current: true
+                        onPicked: wifiWidget.connectWithPassword()
                     }
                 }
             }
@@ -615,78 +589,49 @@ DropdownWidget {
                          && !wifiWidget.passwordMode
                 width: parent.width
                 text: "Поиск сетей…"
-                color: Theme.colMuted
-                font.pixelSize: Theme.fontSize - 2
+                color: Theme.colGrey
+                font.pixelSize: Theme.fontSize - 4
                 font.family: Theme.fontFamily
             }
 
             // Network list
-            ListView {
-                id: networkListView
+            ConsolePlate {
                 visible: !wifiWidget.passwordMode
-                width: parent.width
-                height: parent.height - 40
-                clip: true
-                model: wifiWidget.wifiNetworks
-                spacing: 2
+                pad: 4
+                spacing: 0
 
-                delegate: Rectangle {
-                    width: networkListView.width
-                    height: 36
-                    color: mouseArea.containsMouse ? Qt.rgba(255, 255, 255, 0.1) : "transparent"
-                    radius: 6
+                ListView {
+                    id: networkListView
+                    readonly property int rowPitch: Math.round((Theme.fontSize - 3) * 1.75) + spacing
+                    width: parent.width
+                    height: Math.min(wifiWidget.listRows, 8) * rowPitch - spacing
+                    clip: true
+                    model: wifiWidget.wifiNetworks
+                    spacing: 2
+                    boundsBehavior: Flickable.StopAtBounds
 
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.margins: 6
-                        spacing: 8
-
-                        Text {
-                            text: modelData.signal >= 80 ? "󰤨" :
-                                  modelData.signal >= 60 ? "󰤥" :
-                                  modelData.signal >= 40 ? "󰤢" :
-                                  modelData.signal >= 20 ? "󰤟" : "󰤯"
-                            color: Theme.colNetwork
-                            font.pixelSize: Theme.fontSize
-                            font.family: Theme.fontFamily
-                        }
-
-                        Text {
-                            // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
-                            textFormat: Text.PlainText
-                            text: modelData.ssid
-                                  + (wifiWidget.connecting && modelData.ssid === wifiWidget.selectedSSID
-                                     ? "  ·  подключение…" : "")
-                            color: wifiWidget.connecting && modelData.ssid === wifiWidget.selectedSSID
-                                   ? Theme.colAlert
-                                   : modelData.ssid === wifiWidget.wifiSSID ? Theme.colNetwork : Theme.colFg
-                            font.pixelSize: Theme.fontSize - 1
-                            font.family: Theme.fontFamily
-                            font.bold: modelData.ssid === wifiWidget.wifiSSID
-                            Layout.fillWidth: true
-                            // No elide: popupWidth is derived from the longest
-                            // SSID, so full names fit. Only a name past the
-                            // 560px clamp can still be cut.
-                            elide: Text.ElideNone
-                        }
+                    delegate: ConsoleRow {
+                        readonly property bool isConnecting:
+                            wifiWidget.connecting && modelData.ssid === wifiWidget.selectedSSID
+                        width: networkListView.width
+                        lit: modelData.ssid === wifiWidget.wifiSSID || isConnecting
+                        tint: isConnecting ? Theme.colAlert : Theme.colAccent
+                        icon: modelData.signal >= 80 ? "󰤨" :
+                              modelData.signal >= 60 ? "󰤥" :
+                              modelData.signal >= 40 ? "󰤢" :
+                              modelData.signal >= 20 ? "󰤟" : "󰤯"
+                        label: modelData.ssid
+                        detail: isConnecting ? "подключение…" : ""
+                        detailColor: Theme.colAlert
+                        // Always try to connect first (works for open or saved networks)
+                        // If it fails and has security, password input will be shown
+                        onPicked: wifiWidget.tryConnect(modelData.ssid, modelData.security)
 
                         Text {
                             text: modelData.security ? "󰌾" : ""
-                            color: Theme.colMuted
-                            font.pixelSize: Theme.fontSize - 2
+                            color: Theme.colGrey
+                            font.pixelSize: Theme.fontSize - 4
                             font.family: Theme.fontFamily
-                        }
-                    }
-
-                    MouseArea {
-                        id: mouseArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            // Always try to connect first (works for open or saved networks)
-                            // If it fails and has security, password input will be shown
-                            wifiWidget.tryConnect(modelData.ssid, modelData.security)
                         }
                     }
                 }

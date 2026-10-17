@@ -6,13 +6,12 @@ import ".."
 
 DropdownWidget {
     id: vpnWidget
-    popupWidth: 240
-    // Rows are 36 with 2 of spacing; 72 is the header, divider, stem and padding
-    // above them, and the sync row costs its 28 plus one gap while a tunnel is
-    // up. Same arithmetic as WifiWidget, for the same reason: the old
-    // `* 40 + 50` was short of the chrome and drew a half row.
-    popupHeight: Math.min(vpnConfigs.length * 38 + 72
-                          + (activeVpn !== "" ? 32 : 0), 350)
+    popupWidth: 260
+    // Sized to what the body measures (it reports cardHeight), plus the card's
+    // own 28 of stem and padding. The list scrolls past eight tunnels, so the
+    // card has a ceiling without anyone doing arithmetic over row heights.
+    property real cardHeight: 200
+    popupHeight: Math.ceil(cardHeight) + 28
     popupXOffset: 250
 
     required property var centerInfoRef
@@ -306,68 +305,71 @@ DropdownWidget {
         font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
     }
 
-    // Popup content
+    // Popup content: the tunnel's lamp and name with an off button, the two
+    // sync toggles as latching push buttons, and the tunnels on a plate.
     popupContent: Component {
         Column {
-            spacing: 4
+            spacing: 8
+            onImplicitHeightChanged: vpnWidget.cardHeight = implicitHeight
+            Component.onCompleted: vpnWidget.cardHeight = implicitHeight
 
-            // Header
-            RowLayout {
-                id: headerRow
+            Item {
                 width: parent.width
-                spacing: 8
+                height: Math.max(tunnelName.implicitHeight, offButton.visible ? offButton.implicitHeight : 0)
+
+                ConsoleLamp {
+                    id: tunnelLamp
+                    anchors.left: parent.left
+                    anchors.leftMargin: 4
+                    anchors.verticalCenter: parent.verticalCenter
+                    lit: vpnWidget.activeVpn !== ""
+                }
+
+                ConsoleCaption {
+                    id: tunnelCaption
+                    anchors.left: tunnelLamp.right
+                    anchors.leftMargin: 10
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "ТУННЕЛЬ"
+                }
 
                 Text {
+                    id: tunnelName
+                    anchors.left: tunnelCaption.right
+                    anchors.leftMargin: 10
+                    anchors.right: offButton.visible ? offButton.left : parent.right
+                    anchors.rightMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
                     // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
                     textFormat: Text.PlainText
-                    text: vpnWidget.activeVpn ? "󰖂 " + vpnWidget.activeVpn : "󰖂 Отключено"
-                    color: Theme.colFg
-                    font.pixelSize: Theme.fontSize
+                    text: vpnWidget.activeVpn !== "" ? vpnWidget.activeVpn : "ОТКЛЮЧЁН"
+                    color: vpnWidget.activeVpn !== "" ? Theme.colWhite : Theme.colGrey
+                    font.pixelSize: Theme.fontSize - 2
                     font.family: Theme.fontFamily
-                    font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
-                    Layout.fillWidth: true
+                    font.bold: true
+                    elide: Text.ElideRight
                 }
 
-                // Disconnect button (only show when connected)
-                Rectangle {
+                // Disconnect (only while a tunnel is up)
+                ConsoleButton {
+                    id: offButton
                     visible: vpnWidget.activeVpn !== ""
-                    Layout.preferredWidth: 30
-                    Layout.preferredHeight: 24
-                    color: disconnectMouseArea.containsMouse ? Qt.rgba(255, 100, 100, 0.2) : "transparent"
-                    radius: 4
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "󰅖"
-                        color: Theme.colMuted
-                        font.pixelSize: Theme.fontSize
-                        font.family: Theme.fontFamily
-                    }
-
-                    MouseArea {
-                        id: disconnectMouseArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            vpnActionProc.switchFrom = ""
-                            vpnActionProc.targetVpn = vpnWidget.activeVpn
-                            vpnActionProc.isDisconnect = true
-                            vpnWidget.isConnecting = true
-                            vpnActionProc.running = true
-                            // Also reset timezone/weather to local
-                            vpnResetProc.running = true
-                            vpnWidget.dropdownOpen = false
-                        }
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    icon: "󰅖"
+                    minWidth: 0
+                    fontSize: Theme.fontSize - 6
+                    onPicked: {
+                        vpnActionProc.switchFrom = ""
+                        vpnActionProc.targetVpn = vpnWidget.activeVpn
+                        vpnActionProc.isDisconnect = true
+                        vpnWidget.isConnecting = true
+                        vpnActionProc.running = true
+                        // Also reset timezone/weather to local
+                        vpnResetProc.running = true
+                        vpnWidget.dropdownOpen = false
                     }
                 }
-            }
-
-            Rectangle {
-                id: headerDivider
-                width: parent.width
-                height: 1
-                color: Theme.colMuted
             }
 
             // One toggle per thing that can follow the tunnel: press to send that
@@ -375,150 +377,79 @@ DropdownWidget {
             // labelled rather than left as two bare glyphs - this is the one
             // place in the card where a misread click moves the system clock,
             // and "󰑓" twice over says nothing about which half is which.
+            //
+            // Lit (pushed in) means that half is on the tunnel. Without it the
+            // card said nothing about whether the weather was following the
+            // tunnel - the exact thing that is easy to lose track of once the
+            // two halves can disagree.
             Row {
                 id: syncRow
                 width: parent.width
-                height: 28
                 spacing: 6
                 visible: vpnWidget.activeVpn !== ""
 
                 Repeater {
                     model: [
-                        { kind: "time",    icon: "󰥔", label: "Время" },
-                        { kind: "weather", icon: "󰖐", label: "Погода" }
+                        { kind: "time",    icon: "󰥔", label: "ВРЕМЯ" },
+                        { kind: "weather", icon: "󰖐", label: "ПОГОДА" }
                     ]
 
-                    delegate: Rectangle {
+                    delegate: ConsoleButton {
                         required property var modelData
 
                         readonly property bool isTime: modelData.kind === "time"
-                        readonly property bool busy: isTime ? vpnWidget.timeBusy
-                                                            : vpnWidget.weatherBusy
-                        // Following the tunnel. The button is a toggle, so this
-                        // is both what it reports and what the next click undoes.
-                        readonly property bool away: isTime ? vpnWidget.timeAway
-                                                            : vpnWidget.weatherAway
 
                         width: (syncRow.width - syncRow.spacing) / 2
-                        height: syncRow.height
-                        radius: 6
-                        // Filled means this half is on the tunnel: the bar's own
-                        // white-active/grey-idle rule, which is the only state
-                        // signal a 28px button has room for. Without it the card
-                        // said nothing about whether the weather was following
-                        // the tunnel - the exact thing that is easy to lose track
-                        // of once the two halves can disagree.
-                        color: away
-                            ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b,
-                                      syncMouse.containsMouse ? 0.26 : 0.18)
-                            : Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b,
-                                      syncMouse.containsMouse ? 0.14 : 0.04)
-                        Behavior on color { ColorAnimation { duration: 110 } }
-
-                        Row {
-                            anchors.centerIn: parent
-                            spacing: 6
-
-                            // Fixed box, so swapping the glyph for the spinner
-                            // does not shift the label sideways.
-                            Item {
-                                width: Theme.fontSize
-                                height: Theme.fontSize
-                                anchors.verticalCenter: parent.verticalCenter
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    visible: !busy
-                                    text: modelData.icon
-                                    color: away || syncMouse.containsMouse
-                                        ? Theme.colWhite : Theme.colGrey
-                                    font.pixelSize: Theme.fontSize
-                                    font.family: Theme.fontFamily
-                                }
-
-                                // Same ring the network card shows while it is
-                                // scanning: an indeterminate wait, no progress to
-                                // report.
-                                Spinner {
-                                    anchors.centerIn: parent
-                                    visible: busy
-                                    width: Theme.fontSize - 3
-                                    height: width
-                                }
-                            }
-
-                            Text {
-                                anchors.verticalCenter: parent.verticalCenter
-                                // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
-                                textFormat: Text.PlainText
-                                text: modelData.label
-                                color: away || syncMouse.containsMouse
-                                    ? Theme.colWhite : Theme.colGrey
-                                font.pixelSize: Theme.fontSize - 2
-                                font.family: Theme.fontFamily
-                                style: Text.Outline; styleColor: Theme.colTextShadow
-                            }
-                        }
-
-                        MouseArea {
-                            id: syncMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            enabled: !busy
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                if (isTime)
-                                    vpnWidget.toggleTime()
-                                else
-                                    vpnWidget.toggleWeather()
-                            }
+                        fontSize: Theme.fontSize - 6
+                        icon: modelData.icon
+                        label: modelData.label
+                        // Same ring the network card shows while it is
+                        // scanning: an indeterminate wait, no progress to report.
+                        busy: isTime ? vpnWidget.timeBusy : vpnWidget.weatherBusy
+                        enabled: !busy
+                        // Following the tunnel. The button is a toggle, so this
+                        // is both what it reports and what the next click undoes.
+                        current: isTime ? vpnWidget.timeAway : vpnWidget.weatherAway
+                        onPicked: {
+                            if (isTime)
+                                vpnWidget.toggleTime()
+                            else
+                                vpnWidget.toggleWeather()
                         }
                     }
                 }
             }
 
             // VPN config list
-            ListView {
-                id: vpnListView
-                width: parent.width
-                // Measured off the siblings above rather than a constant: the
-                // old `parent.height - 40` predates the sync row and would cut
-                // the list short by exactly its height whenever a tunnel is up.
-                height: parent.height - headerRow.height - headerDivider.height
-                        - (syncRow.visible ? syncRow.height + parent.spacing : 0)
-                        - parent.spacing * 2
-                clip: true
-                model: vpnWidget.vpnConfigs
-                spacing: 2
+            ConsolePlate {
+                visible: vpnWidget.vpnConfigs.length > 0
+                pad: 4
+                spacing: 0
 
-                delegate: Rectangle {
-                    width: vpnListView.width
-                    height: 36
-                    color: mouseArea.containsMouse ? Qt.rgba(255, 255, 255, 0.1) : "transparent"
-                    radius: 6
+                ListView {
+                    id: vpnListView
+                    readonly property int rowPitch: Math.round((Theme.fontSize - 3) * 1.75) + spacing
+                    width: parent.width
+                    height: Math.min(count, 8) * rowPitch - spacing
+                    clip: true
+                    model: vpnWidget.vpnConfigs
+                    spacing: 2
+                    boundsBehavior: Flickable.StopAtBounds
 
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.margins: 6
-                        spacing: 8
-
-                        Text {
-                            text: modelData === vpnWidget.activeVpn ? "󰄬" : "󰖂"
-                            color: modelData === vpnWidget.activeVpn ? Theme.colNetwork : Theme.colMuted
-                            font.pixelSize: Theme.fontSize
-                            font.family: Theme.fontFamily
-                        }
-
-                        Text {
-                            // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
-                            textFormat: Text.PlainText
-                            text: modelData
-                            color: modelData === vpnWidget.activeVpn ? Theme.colNetwork : Theme.colFg
-                            font.pixelSize: Theme.fontSize - 1
-                            font.family: Theme.fontFamily
-                            font.bold: modelData === vpnWidget.activeVpn
-                            Layout.fillWidth: true
-                            elide: Text.ElideRight
+                    delegate: ConsoleRow {
+                        width: vpnListView.width
+                        lit: modelData === vpnWidget.activeVpn
+                        label: modelData
+                        interactive: modelData !== vpnWidget.activeVpn
+                        onPicked: {
+                            // Connected already? Then down and up run as one
+                            // command (see switchFrom on vpnActionProc).
+                            vpnActionProc.switchFrom = vpnWidget.activeVpn
+                            vpnActionProc.targetVpn = modelData
+                            vpnActionProc.isDisconnect = false
+                            vpnWidget.isConnecting = true
+                            vpnActionProc.running = true
+                            vpnWidget.dropdownOpen = false
                         }
 
                         // Location indicator: config names start with a two-letter country code
@@ -529,24 +460,6 @@ DropdownWidget {
                                 return flags[modelData.substring(0, 2).toLowerCase()] || ""
                             }
                             font.pixelSize: Theme.fontSize + 2
-                        }
-                    }
-
-                    MouseArea {
-                        id: mouseArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        enabled: modelData !== vpnWidget.activeVpn
-                        onClicked: {
-                            // Connected already? Then down and up run as one
-                            // command (see switchFrom on vpnActionProc).
-                            vpnActionProc.switchFrom = vpnWidget.activeVpn
-                            vpnActionProc.targetVpn = modelData
-                            vpnActionProc.isDisconnect = false
-                            vpnWidget.isConnecting = true
-                            vpnActionProc.running = true
-                            vpnWidget.dropdownOpen = false
                         }
                     }
                 }

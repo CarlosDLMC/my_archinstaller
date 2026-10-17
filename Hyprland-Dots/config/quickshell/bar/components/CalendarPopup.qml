@@ -116,7 +116,7 @@ Item {
         anchor.rect.x: root.anchorX - 200
         anchor.rect.y: barWindow.designHeight * barWindow.uiScale + 2
         implicitWidth: 400
-        implicitHeight: calendarContent.implicitHeight + 12 + 32
+        implicitHeight: calendarContent.implicitHeight + 12 + 24
         color: "transparent"
 
         Canvas {
@@ -171,194 +171,169 @@ Item {
             onWheel: function (wheel) { root.wheelStep(wheel) }
         }
 
+        // A console, like the bar's other cards: the month between two push
+        // buttons, and the days on a recessed plate with today lit like a
+        // pressed button.
         Column {
             id: calendarContent
             anchors.fill: cardRect
 
-            anchors.topMargin: cardRect.stemHeight + 16
-            anchors.leftMargin: 16
-            anchors.rightMargin: 16
-            anchors.bottomMargin: 16
-            spacing: 12
+            anchors.topMargin: cardRect.stemHeight + 12
+            anchors.leftMargin: 12
+            anchors.rightMargin: 12
+            anchors.bottomMargin: 12
+            spacing: 8
 
-            Row {
+            Item {
                 width: parent.width
-                // 48 rather than the label's own 32px line height: the taller
-                // label would technically still fit the old 36px row, but with
-                // only 4px to spare it sat visually flush against the week-day
-                // header below it. This keeps the month name breathing.
-                height: 48
+                height: Math.max(monthTitle.implicitHeight, prevMonth.implicitHeight)
 
-                Rectangle {
-                    width: 36
-                    height: 36
-                    // The row is now taller than the buttons, and a Row only
-                    // positions its children horizontally - without this they sit
-                    // at the top, out of line with the month name.
+                ConsoleButton {
+                    id: prevMonth
+                    anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
-                    radius: 6
-                    color: prevMonthArea.containsMouse ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.12) : "transparent"
+                    fontSize: Theme.fontSize - 6
+                    minWidth: 0
+                    icon: "󰅁"
+                    onPicked: root.stepMonth(-1)
 
-                    Text {
-                        anchors.centerIn: parent
-                        text: "󰅁"
-                        font.pixelSize: 24
-                        color: Theme.colWhite
-                        font.family: Theme.fontFamily
-                    }
-
-                    MouseArea {
-                        id: prevMonthArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.stepMonth(-1)
-                        onWheel: function (wheel) { root.wheelStep(wheel) }
+                    // The button's own MouseArea takes the wheel too.
+                    WheelHandler {
+                        onWheel: event => root.wheelStep(event)
                     }
                 }
 
                 Text {
-                    width: parent.width - 72
-                    height: parent.height
+                    id: monthTitle
+                    anchors.left: prevMonth.right
+                    anchors.right: nextMonth.left
+                    anchors.verticalCenter: parent.verticalCenter
                     // standaloneMonthName, not a "MMMM" format string: in Russian -
                     // and in every language with grammatical case - MMMM gives the
                     // genitive form used *inside* a full date ("10 сентября 2026"),
                     // so a bare month heading came out as "сентября 2026". The
                     // standalone form is the nominative "сентябрь" a heading wants.
                     // The month index is 0-based, same as Date.getMonth().
-                    // Russian writes month names lowercase ("сентябрь"), which is
-                    // correct prose but reads as a typo in a heading - so the first
-                    // letter is lifted here rather than in the locale data.
+                    // Set in capitals, like the console's other captions;
                     // toUpperCase() is Unicode-aware, so "с" -> "С" works.
-                    text: {
-                        const name = Qt.locale().standaloneMonthName(root.displayDate.getMonth(),
-                                                                     Locale.LongFormat)
-                        return name.charAt(0).toUpperCase() + name.slice(1)
-                               + " " + root.displayDate.getFullYear()
-                    }
-                    font.pixelSize: Theme.fontSize + 10
+                    text: Qt.locale().standaloneMonthName(root.displayDate.getMonth(),
+                                                          Locale.LongFormat).toUpperCase()
+                          + " " + root.displayDate.getFullYear()
+                    font.pixelSize: Theme.fontSize + 4
                     color: Theme.colWhite
                     font.family: Theme.fontFamily
-                    font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
+                    font.bold: true
+                    font.letterSpacing: 1
                     horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
                 }
 
-                Rectangle {
-                    width: 36
-                    height: 36
+                ConsoleButton {
+                    id: nextMonth
+                    anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
-                    radius: 6
-                    color: nextMonthArea.containsMouse ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.12) : "transparent"
+                    fontSize: Theme.fontSize - 6
+                    minWidth: 0
+                    icon: "󰅂"
+                    onPicked: root.stepMonth(1)
 
-                    Text {
-                        anchors.centerIn: parent
-                        text: "󰅂"
-                        font.pixelSize: 24
-                        color: Theme.colWhite
-                        font.family: Theme.fontFamily
-                    }
-
-                    MouseArea {
-                        id: nextMonthArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.stepMonth(1)
-                        onWheel: function (wheel) { root.wheelStep(wheel) }
+                    WheelHandler {
+                        onWheel: event => root.wheelStep(event)
                     }
                 }
             }
 
-            Row {
-                width: parent.width
-                height: 24
+            ConsolePlate {
+                pad: 8
+                spacing: 4
 
-                Repeater {
-                    model: {
-                        const days = []
-                        const loc = Qt.locale()
-                        const qtFirst = loc.firstDayOfWeek
-                        for (let i = 0; i < 7; ++i) {
-                            const qtDay = ((qtFirst - 1 + i) % 7) + 1
-                            days.push(loc.dayName(qtDay, Locale.ShortFormat))
+                Row {
+                    width: parent.width
+                    height: 24
+
+                    Repeater {
+                        model: {
+                            const days = []
+                            const loc = Qt.locale()
+                            const qtFirst = loc.firstDayOfWeek
+                            for (let i = 0; i < 7; ++i) {
+                                const qtDay = ((qtFirst - 1 + i) % 7) + 1
+                                days.push(loc.dayName(qtDay, Locale.ShortFormat).toUpperCase())
+                            }
+                            return days
                         }
-                        return days
-                    }
 
-                    Rectangle {
-                        width: parent.width / 7
-                        height: 24
-                        color: "transparent"
+                        Item {
+                            width: parent.width / 7
+                            height: 24
 
-                        Text {
-                            anchors.centerIn: parent
-                            text: modelData
-                            font.pixelSize: Theme.fontSize - 3
-                            color: Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.6)
-                            font.family: Theme.fontFamily
-                            font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
-                        }
-                    }
-                }
-            }
-
-            Grid {
-                id: calendarGrid
-
-                readonly property date firstDay: {
-                    const firstOfMonth = new Date(root.displayDate.getFullYear(), root.displayDate.getMonth(), 1)
-                    return startOfWeek(firstOfMonth)
-                }
-
-                width: parent.width
-                height: 240
-                columns: 7
-                rows: 6
-
-                Repeater {
-                    model: 42
-
-                    Rectangle {
-                        readonly property date dayDate: {
-                            const date = new Date(parent.firstDay)
-                            date.setDate(date.getDate() + index)
-                            return date
-                        }
-                        readonly property bool isCurrentMonth: dayDate.getMonth() === root.displayDate.getMonth()
-                        readonly property bool isToday: dayDate.toDateString() === root.currentDate.toDateString()
-                        readonly property bool isSelected: dayDate.toDateString() === root.selectedDate.toDateString()
-
-                        width: parent.width / 7
-                        height: parent.height / 6
-                        color: "transparent"
-
-                        Rectangle {
-                            anchors.centerIn: parent
-                            width: Math.min(parent.width - 4, parent.height - 4, 42)
-                            height: width
-                            color: isToday ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.12) : dayArea.containsMouse ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.08) : "transparent"
-                            radius: 6
-
-                            Text {
+                            ConsoleCaption {
                                 anchors.centerIn: parent
-                                text: dayDate.getDate()
-                                font.pixelSize: Theme.fontSize
-                                font.family: Theme.fontFamily
-                                color: isToday ? Theme.colWhite : isCurrentMonth ? Theme.colWhite : Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.4)
-                                font.bold: isToday
+                                text: modelData
                             }
                         }
+                    }
+                }
 
-                        MouseArea {
-                            id: dayArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onWheel: function (wheel) { root.wheelStep(wheel) }
-                            onClicked: {
-                                root.selectedDate = dayDate
-                                root.dateClicked(dayDate)
+                Grid {
+                    id: calendarGrid
+
+                    readonly property date firstDay: {
+                        const firstOfMonth = new Date(root.displayDate.getFullYear(), root.displayDate.getMonth(), 1)
+                        return startOfWeek(firstOfMonth)
+                    }
+
+                    width: parent.width
+                    height: 240
+                    columns: 7
+                    rows: 6
+
+                    Repeater {
+                        model: 42
+
+                        Item {
+                            readonly property date dayDate: {
+                                const date = new Date(parent.firstDay)
+                                date.setDate(date.getDate() + index)
+                                return date
+                            }
+                            readonly property bool isCurrentMonth: dayDate.getMonth() === root.displayDate.getMonth()
+                            readonly property bool isToday: dayDate.toDateString() === root.currentDate.toDateString()
+                            readonly property bool isSelected: dayDate.toDateString() === root.selectedDate.toDateString()
+
+                            width: parent.width / 7
+                            height: parent.height / 6
+
+                            Rectangle {
+                                anchors.centerIn: parent
+                                width: Math.min(parent.width - 4, parent.height - 4, 42)
+                                height: width
+                                radius: 4
+                                color: isToday ? Theme.colAccent
+                                     : dayArea.containsMouse ? Qt.lighter(Theme.colPlate, 1.6) : "transparent"
+                                Behavior on color { ColorAnimation { duration: 110 } }
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: dayDate.getDate()
+                                    font.pixelSize: Theme.fontSize - 2
+                                    font.family: Theme.fontFamily
+                                    font.bold: isToday
+                                    color: isToday ? Theme.colBg
+                                         : isCurrentMonth ? Theme.colWhite
+                                         : Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.3)
+                                }
+                            }
+
+                            MouseArea {
+                                id: dayArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onWheel: function (wheel) { root.wheelStep(wheel) }
+                                onClicked: {
+                                    root.selectedDate = dayDate
+                                    root.dateClicked(dayDate)
+                                }
                             }
                         }
                     }

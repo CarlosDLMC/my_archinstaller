@@ -7,7 +7,7 @@ import ".."
 DropdownWidget {
     id: powerWidget
     popupWidth: 210   // was 140; fits «ПЕРЕЗАГРУЗКА» and «ВЫКЛЮЧЕНИЕ»
-    popupHeight: 165
+    popupHeight: Math.ceil(cardHeight) + 28
     stemAlignment: "left"   // widget now sits at the bar's left edge
 
     // Power actions
@@ -62,163 +62,54 @@ DropdownWidget {
         }
     }
 
+    // The card: four push buttons, as on a console. Power-off carries the one
+    // alert glyph - it is the button not to press by accident.
+    property real cardHeight: 186
+
     popupContent: Component {
         Column {
-            spacing: 4
+            spacing: 6
+            onImplicitHeightChanged: powerWidget.cardHeight = implicitHeight
+            Component.onCompleted: powerWidget.cardHeight = implicitHeight
 
-            // Lock
-            Rectangle {
+            ConsoleButton {
                 width: parent.width
-                height: 32
-                color: lockMouse.containsMouse ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.1) : "transparent"
-                radius: 6
-
-                Row {
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.left: parent.left
-                    anchors.leftMargin: 8
-                    spacing: 10
-
-                    Text {
-                        text: "󰌾"
-                        color: Theme.colFg
-                        font.pixelSize: Theme.fontSize
-                        font.family: Theme.fontFamily
-                    }
-                    Text {
-                        text: "БЛОКИРОВКА"
-                        color: Theme.colWhite
-                        font.pixelSize: Theme.fontSize
-                        font.family: Theme.fontFamily
-                    }
-                }
-
-                MouseArea {
-                    id: lockMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        powerWidget.dropdownOpen = false
-                        lockProc.running = true
-                    }
+                icon: "󰌾"
+                label: "БЛОКИРОВКА"
+                onPicked: {
+                    powerWidget.dropdownOpen = false
+                    lockProc.running = true
                 }
             }
 
-            // Logout
-            Rectangle {
+            ConsoleButton {
                 width: parent.width
-                height: 32
-                color: logoutMouse.containsMouse ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.1) : "transparent"
-                radius: 6
-
-                Row {
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.left: parent.left
-                    anchors.leftMargin: 8
-                    spacing: 10
-
-                    Text {
-                        text: "󰍃"
-                        color: Theme.colFg
-                        font.pixelSize: Theme.fontSize
-                        font.family: Theme.fontFamily
-                    }
-                    Text {
-                        text: "ВЫХОД"
-                        color: Theme.colWhite
-                        font.pixelSize: Theme.fontSize
-                        font.family: Theme.fontFamily
-                    }
-                }
-
-                MouseArea {
-                    id: logoutMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        powerWidget.dropdownOpen = false
-                        logoutProc.running = true
-                    }
+                icon: "󰍃"
+                label: "ВЫХОД"
+                onPicked: {
+                    powerWidget.dropdownOpen = false
+                    logoutProc.running = true
                 }
             }
 
-            // Reboot
-            Rectangle {
+            ConsoleButton {
                 width: parent.width
-                height: 32
-                color: rebootMouse.containsMouse ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.1) : "transparent"
-                radius: 6
-
-                Row {
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.left: parent.left
-                    anchors.leftMargin: 8
-                    spacing: 10
-
-                    Text {
-                        text: "󰜉"
-                        color: "#ffb86c"
-                        font.pixelSize: Theme.fontSize
-                        font.family: Theme.fontFamily
-                    }
-                    Text {
-                        text: "ПЕРЕЗАГРУЗКА"
-                        color: Theme.colWhite
-                        font.pixelSize: Theme.fontSize
-                        font.family: Theme.fontFamily
-                    }
-                }
-
-                MouseArea {
-                    id: rebootMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        powerWidget.dropdownOpen = false
-                        rebootProc.running = true
-                    }
+                icon: "󰜉"
+                label: "ПЕРЕЗАГРУЗКА"
+                onPicked: {
+                    powerWidget.dropdownOpen = false
+                    rebootProc.running = true
                 }
             }
 
-            // Shutdown
-            Rectangle {
+            ConsoleButton {
                 width: parent.width
-                height: 32
-                color: shutdownMouse.containsMouse ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.1) : "transparent"
-                radius: 6
-
-                Row {
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.left: parent.left
-                    anchors.leftMargin: 8
-                    spacing: 10
-
-                    Text {
-                        text: "󰐥"
-                        color: "#ff5555"
-                        font.pixelSize: Theme.fontSize
-                        font.family: Theme.fontFamily
-                    }
-                    Text {
-                        text: "ВЫКЛЮЧЕНИЕ"
-                        color: Theme.colWhite
-                        font.pixelSize: Theme.fontSize
-                        font.family: Theme.fontFamily
-                    }
-                }
-
-                MouseArea {
-                    id: shutdownMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        powerWidget.dropdownOpen = false
-                        shutdownProc.running = true
-                    }
+                icon: "󰐥"
+                iconColor: Theme.colAlert
+                label: "ВЫКЛЮЧЕНИЕ"
+                onPicked: {
+                    powerWidget.dropdownOpen = false
+                    shutdownProc.running = true
                 }
             }
         }
