@@ -1,13 +1,13 @@
 
 hl.config({ animations = { enabled = true } })
 
-hl.curve("wind", { type = "bezier", points = { {0.05, 0.9}, {0.1, 1.05} } })
-hl.curve("winIn", { type = "bezier", points = { {0.1, 1.1}, {0.1, 1.1} } })
-hl.curve("winOut", { type = "bezier", points = { {0.3, -0.3}, {0, 1} } })
+-- No bounce: every curve stays inside y = [0, 1]. A y above 1 overshoots the
+-- target and springs back; a y below 0 pulls back before it starts moving.
+hl.curve("wind", { type = "bezier", points = { {0.05, 0.9}, {0.1, 1.0} } })
+hl.curve("winIn", { type = "bezier", points = { {0.1, 0.9}, {0.1, 1.0} } })
+hl.curve("winOut", { type = "bezier", points = { {0.3, 0.0}, {0, 1} } })
 hl.curve("liner", { type = "bezier", points = { {1, 1}, {1, 1} } })
-hl.curve("overshot", { type = "bezier", points = { {0.05, 0.9}, {0.1, 1.05} } })
 hl.curve("smoothOut", { type = "bezier", points = { {0.5, 0}, {0.99, 0.99} } })
-hl.curve("smoothIn", { type = "bezier", points = { {0.5, -0.5}, {0.68, 1.5} } })
 
 hl.animation({ leaf = "windows", enabled = true, speed = 6, bezier = "wind", style = "slide"})
 hl.animation({ leaf = "windowsIn", enabled = true, speed = 5, bezier = "winIn", style = "slide"})
@@ -20,7 +20,7 @@ hl.animation({ leaf = "border", enabled = true, speed = 1, bezier = "liner"})
 -- "loop" with a gradient border, e.g. RainbowBorders.
 hl.animation({ leaf = "borderangle", enabled = true, speed = 100, bezier = "liner", style = "once"}) -- was 180: clamped, Lua caps speed at 100
 hl.animation({ leaf = "fade", enabled = true, speed = 3, bezier = "smoothOut"})
-hl.animation({ leaf = "workspaces", enabled = true, speed = 5, bezier = "overshot"})
+hl.animation({ leaf = "workspaces", enabled = true, speed = 5, bezier = "wind"})
 
 -- animations for -git or version >0.42.0
 hl.animation({ leaf = "workspacesIn", enabled = true, speed = 5, bezier = "winIn", style = "slide"})
