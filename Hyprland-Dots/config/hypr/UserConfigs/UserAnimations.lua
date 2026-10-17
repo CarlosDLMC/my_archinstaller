@@ -23,5 +23,7 @@ hl.animation({ leaf = "fade", enabled = true, speed = 3, bezier = "smoothOut"})
 hl.animation({ leaf = "workspaces", enabled = true, speed = 5, bezier = "wind"})
 
 -- animations for -git or version >0.42.0
-hl.animation({ leaf = "workspacesIn", enabled = true, speed = 5, bezier = "winIn", style = "slide"})
-hl.animation({ leaf = "workspacesOut", enabled = true, speed = 5, bezier = "winOut", style = "slide"})
+-- In and Out share one curve and speed, so the old and new workspace slide
+-- together as one strip instead of drifting apart mid-switch.
+hl.animation({ leaf = "workspacesIn", enabled = true, speed = 5, bezier = "wind", style = "slide"})
+hl.animation({ leaf = "workspacesOut", enabled = true, speed = 5, bezier = "wind", style = "slide"})
