@@ -40,3 +40,11 @@ rule({ match = { class = "^([Tt]hunar)$", title = "negative:(.* - Thunar$)" }, f
 -- translucency (it dims only the BACKGROUND, so glyphs stay crisp); this rule
 -- adds only the focus differential: 0.85 x 0.82 = 0.70.
 rule({ match = { tag = "terminal*" }, opacity = "1.0 0.82" })
+
+-- From omarchy (default/hypr/windows.lua): apps may not maximize themselves.
+rule({ match = { class = ".*" }, suppress_event = "maximize" })
+-- Fix some dragging issues with XWayland.
+rule({
+    match = { class = "^$", title = "^$", xwayland = true, float = true, fullscreen = false, pin = false },
+    no_focus = true,
+})
