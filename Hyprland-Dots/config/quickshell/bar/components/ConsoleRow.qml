@@ -21,10 +21,23 @@ Rectangle {
     default property alias trailing: extra.data
     signal picked()
 
+    // Keyboard (CardKeys.qml): a pickable row takes focus, Enter or Space
+    // picks it. Focus looks like hover, plus a white outline.
+    activeFocusOnTab: interactive && visible
+    readonly property bool hot: (area.containsMouse && interactive) || activeFocus
+    border.width: activeFocus ? 2 : 0
+    border.color: Theme.colWhite
+    Keys.onPressed: event => {
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+            row.picked()
+            event.accepted = true
+        }
+    }
+
     width: parent ? parent.width : 0
     implicitHeight: Math.round(fontSize * 1.75)
     radius: 4
-    color: area.containsMouse && interactive ? Qt.lighter(Theme.colPlate, 1.6) : "transparent"
+    color: row.hot ? Qt.lighter(Theme.colPlate, 1.6) : "transparent"
     Behavior on color { ColorAnimation { duration: 110 } }
 
     RowLayout {
@@ -43,7 +56,7 @@ Rectangle {
         Text {
             visible: row.icon !== ""
             text: row.icon
-            color: row.lit || area.containsMouse ? Theme.colWhite : Theme.colGrey
+            color: row.lit || row.hot ? Theme.colWhite : Theme.colGrey
             font.pixelSize: row.fontSize
             font.family: Theme.fontFamily
             horizontalAlignment: Text.AlignHCenter
@@ -55,7 +68,7 @@ Rectangle {
             // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
             textFormat: Text.PlainText
             text: row.label
-            color: row.lit || area.containsMouse ? Theme.colWhite : Theme.colGrey
+            color: row.lit || row.hot ? Theme.colWhite : Theme.colGrey
             font.pixelSize: row.fontSize
             font.family: Theme.fontFamily
             font.bold: row.lit

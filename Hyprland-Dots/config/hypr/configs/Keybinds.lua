@@ -36,6 +36,19 @@ bind(M .. " + SHIFT + G", exec(S .. "/GameMode.sh"),     { description = "toggle
 -- Off: the master/dwindle toggle was never used.
 -- bind(M .. " + ALT + L",   exec(S .. "/ChangeLayout.sh"), { description = "toggle master/dwindle layout" })
 bind(M .. " + ALT + V",   hl.dsp.global("quickshell:clipMenu"), { description = "clipboard history", locked = true })
+-- The bar's cards from the keyboard, omarchy-style (quickshell/bar/BarCards.qml):
+-- the card opens with its first control focused - arrows/Tab move, Enter or
+-- Space press, Esc closes; the same key again closes it too.
+bind(M .. " + CTRL + A", hl.dsp.global("quickshell:cardAudio"),     { description = "audio card" })
+bind(M .. " + CTRL + W", hl.dsp.global("quickshell:cardNetwork"),   { description = "network card" })
+bind(M .. " + CTRL + P", hl.dsp.global("quickshell:cardPower"),     { description = "power card" })
+bind(M .. " + CTRL + T", hl.dsp.global("quickshell:cardBluetooth"), { description = "bluetooth card" })
+bind(M .. " + CTRL + C", hl.dsp.global("quickshell:cardCalendar"),  { description = "calendar" })
+bind(M .. " + CTRL + M", hl.dsp.global("quickshell:cardWeather"),   { description = "weather card" })
+bind(M .. " + CTRL + V", hl.dsp.global("quickshell:cardVpn"),       { description = "VPN card" })
+bind(M .. " + CTRL + E", hl.dsp.global("quickshell:cardProfile"),   { description = "power profile card" })
+bind(M .. " + CTRL + G", hl.dsp.global("quickshell:cardBattery"),   { description = "battery card" })
+bind(M .. " + CTRL + I", hl.dsp.global("quickshell:cardAgent"),     { description = "Claude Code card" })
 
 -- The bar runs as `qs -c bar`, so its process name is "qs", not "quickshell".
 -- The pattern is anchored with ^ on purpose: exec runs through `/bin/sh -c

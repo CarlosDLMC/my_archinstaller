@@ -32,6 +32,21 @@ Item {
 
     default property alias iconContent: iconContainer.data
 
+    // Opened from the keyboard (BarCards.qml): the card's first control takes
+    // focus as soon as it is built, and Esc closes it again.
+    property bool keyboardOpened: false
+    onDropdownOpenChanged: if (!dropdownOpen) keyboardOpened = false
+
+    function navOpen() {
+        keyboardOpened = true
+        if (dropdownOpen) {
+            cardKeys.focusFirst()    // already open (by the mouse): just take the keys
+            return
+        }
+        dropdownOpen = true
+        root.opened()
+    }
+
     Connections {
         target: barWindow
         function onCloseAllPopups() {
@@ -158,14 +173,24 @@ Item {
         // `active:` every card - network, audio, battery, agents, ... - was
         // built at startup and kept for good, open or not; the bar started
         // ~90MB heavier for cards that were mostly never looked at.
-        Loader {
-            id: popupLoader
-            active: root.dropdownOpen
+        CardKeys {
+            id: cardKeys
             anchors.fill: parent
-            anchors.topMargin: cardRect.stemHeight + 8
-            anchors.leftMargin: 8
-            anchors.rightMargin: 8
-            anchors.bottomMargin: 8
+            focus: true
+            onDismissed: root.dropdownOpen = false
+
+            Loader {
+                id: popupLoader
+                active: root.dropdownOpen
+                anchors.fill: parent
+                anchors.topMargin: cardRect.stemHeight + 8
+                anchors.leftMargin: 8
+                anchors.rightMargin: 8
+                anchors.bottomMargin: 8
+                // After the card's own Component.onCompleted, which may still
+                // be filling it in.
+                onLoaded: if (root.keyboardOpened) Qt.callLater(cardKeys.focusFirst)
+            }
         }
 
         onVisibleChanged: {

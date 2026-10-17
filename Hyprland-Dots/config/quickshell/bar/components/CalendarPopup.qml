@@ -17,6 +17,12 @@ Item {
     signal dateClicked(var clickedDate)
     signal closed()
 
+    // Opened from the keyboard (BarCards.qml): the month buttons take the
+    // keyboard, Enter or Space pages the month, Esc closes.
+    function focusKeys() {
+        Qt.callLater(calKeys.focusFirst)
+    }
+
     // Re-seed the dates every time the popup opens. CenterInfo only toggles
     // isOpen - the popup itself is never destroyed - so without this displayDate
     // stayed on whatever month was last paged to, and currentDate stayed on the
@@ -171,12 +177,18 @@ Item {
             onWheel: function (wheel) { root.wheelStep(wheel) }
         }
 
+        CardKeys {
+            id: calKeys
+            anchors.fill: parent
+            focus: true
+            onDismissed: root.closed()
+
         // A console, like the bar's other cards: the month between two push
         // buttons, and the days on a recessed plate with today lit like a
         // pressed button.
         Column {
             id: calendarContent
-            anchors.fill: cardRect
+            anchors.fill: parent
 
             anchors.topMargin: cardRect.stemHeight + 12
             anchors.leftMargin: 12
@@ -339,6 +351,7 @@ Item {
                     }
                 }
             }
+        }
         }
     }
 }

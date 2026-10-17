@@ -50,6 +50,41 @@ ShellRoot {
                 }
             }
 
+            // ---- The cards from the keyboard (BarCards.qml, SUPER+CTRL+<letter>) ----
+            // The shortcut opens the card on the focused monitor's bar, with its
+            // first control focused; the same shortcut again closes it.
+            Connections {
+                target: BarCards
+                function onToggleRequested(card, screenName) {
+                    if (!barWindow.modelData || screenName !== barWindow.modelData.name)
+                        return
+                    var open = {
+                        "audio":     [volumeWidget.dropdownOpen,       () => volumeWidget.navOpen()],
+                        "network":   [wifiWidget.dropdownOpen,         () => wifiWidget.navOpen()],
+                        "power":     [powerWidget.dropdownOpen,        () => powerWidget.navOpen()],
+                        "bluetooth": [bluetoothWidget.dropdownOpen,    () => bluetoothWidget.navOpen()],
+                        "calendar":  [centerInfo.calendarVisible,      () => centerInfo.navOpenCalendar()],
+                        "weather":   [centerInfo.popupVisible,         () => centerInfo.navOpenWeather()],
+                        "vpn":       [vpnWidget.dropdownOpen,          () => vpnWidget.navOpen()],
+                        "profile":   [powerProfileWidget.dropdownOpen, () => powerProfileWidget.navOpen()],
+                        "battery":   [batteryWidget.dropdownOpen,      () => batteryWidget.navOpen()],
+                        "agent":     [agentWidget.dropdownOpen,        () => agentWidget.navOpen()]
+                    }[card]
+                    if (!open)
+                        return
+                    // A hidden widget (no battery, no Claude Code) has no card.
+                    if ((card === "battery" && !batteryWidget.visible)
+                        || (card === "agent" && !agentWidget.visible))
+                        return
+                    var wasOpen = open[0]
+                    barWindow.closeAllPopups()
+                    centerInfo.popupVisible = false
+                    centerInfo.calendarVisible = false
+                    if (!wasOpen)
+                        open[1]()
+                }
+            }
+
             anchors {
                 top: true
                 left: true
@@ -102,6 +137,7 @@ ShellRoot {
                     // Arch logo with a small Lock/Logout/Reboot/Shutdown dropdown. No separator after
                     // it - the logo reads as a mark, not as another widget.
                     PowerWidget {
+                        id: powerWidget
                         barWindow: barWindow
                         Layout.rightMargin: -6
                     }
@@ -165,6 +201,7 @@ ShellRoot {
                     // barWindow: the volume readout is a DropdownWidget now -
                     // right-click opens the audio card.
                     VolumeWidget {
+                        id: volumeWidget
                         barWindow: barWindow
                     }
 
@@ -201,24 +238,27 @@ ShellRoot {
 
                     // Power profile
                     PowerProfileWidget {
+                        id: powerProfileWidget
                         barWindow: barWindow
                         Layout.rightMargin: 8
                     }
 
                     // Night light toggle
                     NightLightWidget {
+                        id: nightLightWidget
                         Layout.leftMargin: 8
                     }
 
                     Separator {}
 
                     // Keyboard layout
-                    KeyboardLayoutWidget {}
+                    KeyboardLayoutWidget { id: kbLayoutWidget }
 
                     Separator {}
 
                     // VPN selector
                     VpnWidget {
+                        id: vpnWidget
                         barWindow: barWindow
                         centerInfoRef: centerInfo
                         Layout.rightMargin: 0

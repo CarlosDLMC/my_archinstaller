@@ -19,12 +19,26 @@ Rectangle {
     property int minWidth: 58
     signal picked()
 
+    // Keyboard (CardKeys.qml): Tab and the arrows land here, Enter or Space
+    // presses it. Focus looks like hover - plus a white outline, so it still
+    // shows on a lit button, which hover leaves alone.
+    activeFocusOnTab: enabled && visible
+    readonly property bool hot: area.containsMouse || activeFocus
+    border.width: activeFocus ? 2 : 0
+    border.color: Theme.colWhite
+    Keys.onPressed: event => {
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+            btn.picked()
+            event.accepted = true
+        }
+    }
+
     implicitWidth: Math.max(minWidth, face.implicitWidth + 26)
     implicitHeight: Math.round(fontSize * 2.1)
     radius: 4
     opacity: enabled ? 1 : 0.45
     color: current ? tint
-         : (area.containsMouse ? Qt.lighter(Theme.colPlate, 1.6) : Qt.lighter(Theme.colPlate, 1.25))
+         : (btn.hot ? Qt.lighter(Theme.colPlate, 1.6) : Qt.lighter(Theme.colPlate, 1.25))
     Behavior on color { ColorAnimation { duration: 130 } }
 
     // The button's lower edge. A pushed-in button has none: it sits level.
@@ -56,7 +70,7 @@ Rectangle {
                 anchors.centerIn: parent
                 visible: !btn.busy
                 text: btn.icon
-                color: btn.current ? Theme.colBg : (area.containsMouse ? Theme.colWhite : btn.iconColor)
+                color: btn.current ? Theme.colBg : (btn.hot ? Theme.colWhite : btn.iconColor)
                 font.pixelSize: btn.fontSize + 2
                 font.family: Theme.fontFamily
             }

@@ -35,8 +35,10 @@ PolkitState.qml     # Singleton: the polkit agent (replaces hyprpolkitagent) + w
 PowerState.qml      # Singleton: power menu (CTRL+ALT+P) - orders, 5 s armed countdown, uptime
 WallpaperState.qml  # Singleton: wallpaper carousel - the tree, thumbnails, folders + the wallMenu shortcut
 NightLight.qml      # Singleton: night-light state, watched off Hyprsunset.sh's state file
+BarCards.qml        # Singleton: one global shortcut per card (quickshell:card<Name>, SUPER+CTRL+<letter>)
 components/         # Modular widget components
   ├── DropdownWidget.qml   # Base component for click-to-open dropdown widgets (notch design)
+  ├── CardKeys.qml         # Keyboard inside a card: arrows/Tab between controls, Esc closes
   ├── AudioPanel.qml       # Audio card body: output/input device + level, per-app levels
   ├── NetworkPanel.qml     # Network card body: link, connection, traffic, DNS, speed test, share QR
   ├── ClipboardOsd.qml     # Clipboard picker (centred overlay, list + preview)

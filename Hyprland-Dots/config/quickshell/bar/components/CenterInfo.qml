@@ -30,6 +30,17 @@ Item {
 
     property bool popupVisible: false
     property bool calendarVisible: false
+
+    // Opened from the keyboard (BarCards.qml): the weather card, and the
+    // calendar under the clock.
+    function navOpenWeather() {
+        popupVisible = true
+        Qt.callLater(weatherKeys.focusFirst)
+    }
+    function navOpenCalendar() {
+        calendarVisible = true
+        calendarPopup.focusKeys()
+    }
     property bool dndEnabled: false
     // False when dunstctl cannot reach the daemon. Kept distinct from
     // dndEnabled so the icon can show "unknown" rather than silently
@@ -705,6 +716,15 @@ Item {
         MouseArea {
             id: popupMouse
             anchors.fill: parent
+        }
+
+        // Nothing to press in here; holding the focus lets Esc close it when
+        // it was opened from the keyboard (BarCards.qml).
+        CardKeys {
+            id: weatherKeys
+            anchors.fill: parent
+            focus: true
+            onDismissed: centerInfo.popupVisible = false
         }
 
         // A console, like the bar's other cards: the reading on one plate,

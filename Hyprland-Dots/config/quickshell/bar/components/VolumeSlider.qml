@@ -27,6 +27,42 @@ Item {
     implicitHeight: 20
     opacity: enabled ? 1.0 : 0.4
 
+    // Keyboard (CardKeys.qml): Left/Right step the level by 5% - the wheel's
+    // step - and Enter, Space or M mute, like right-click. Up/Down and Tab
+    // are left to the card, to move on to the next control.
+    activeFocusOnTab: enabled && visible
+    Keys.onPressed: event => {
+        var step = slider.maximum * 0.05
+        switch (event.key) {
+        case Qt.Key_Left:
+            slider.moved(Math.max(0, slider.value - step))
+            break
+        case Qt.Key_Right:
+            slider.moved(Math.min(slider.maximum, slider.value + step))
+            break
+        case Qt.Key_Return:
+        case Qt.Key_Enter:
+        case Qt.Key_Space:
+        case Qt.Key_M:
+            slider.rightClicked()
+            break
+        default:
+            return
+        }
+        event.accepted = true
+    }
+
+    // The keyboard cursor: a white outline around the whole fader.
+    Rectangle {
+        visible: slider.activeFocus
+        anchors.fill: parent
+        anchors.margins: -3
+        radius: 4
+        color: "transparent"
+        border.width: 2
+        border.color: Theme.colWhite
+    }
+
     readonly property real ratio: maximum > 0
         ? Math.max(0, Math.min(1, value / maximum))
         : 0
