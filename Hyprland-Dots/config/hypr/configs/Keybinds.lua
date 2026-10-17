@@ -113,6 +113,10 @@ bind("CTRL + ALT + Delete", hl.dsp.exit(),                          { descriptio
 bind(M .. " + Q",           hl.dsp.window.close(),                  { description = "close active window" })
 bind(M .. " + SHIFT + Q",   exec(S .. "/KillActiveProcess.sh"),     { description = "kill active window process (force)" })
 bind("CTRL + ALT + L",      exec(S .. "/LockScreen.sh"),            { description = "lock screen" })
+-- Shutdown from the lock screen (press twice). Locked binds fire while working
+-- too, so it is non-consuming - apps still get F1 - and LockPower.sh does
+-- nothing unless hyprlock is running.
+bind("F1", exec(S .. "/LockPower.sh key"), { description = "shutdown (on the lock screen, press twice)", locked = true, non_consuming = true })
 bind("CTRL + ALT + P",      hl.dsp.global("quickshell:powerMenu"),  { description = "powermenu" })
 bind(M .. " + SHIFT + E",   exec(S .. "/Quick_Settings.sh"),   { description = "quick settings menu" })
 

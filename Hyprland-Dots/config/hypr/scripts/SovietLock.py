@@ -418,16 +418,15 @@ def mode_date():
 
 
 def mode_footer():
-    """Only keys hyprlock actually honours.
+    """Only keys that actually work here - the lock screen is keyboard only.
 
-    ly's own footer offers F1/F2/F3 (shutdown/restart/sleep), but hyprlock has
-    no keybinds of its own, and Hyprland's `bindl` fires whether the session is
-    locked or not - binding F1 to shutdown would fire while working. So the
-    hints here are limited to what really works: hyprlock clears the password
-    buffer on ESC, Ctrl+U and Ctrl+Backspace. ALT+SHIFT is listed because
-    that bind is `bindld` and dispatches a global to quickshell, which
-    keeps running while locked - so it genuinely works here."""
-    print("ENTER ПОДТВЕРДИТЬ    ESC ОЧИСТИТЬ    ALT+SHIFT РАСКЛАДКА")
+    hyprlock clears the password buffer on ESC, Ctrl+U and Ctrl+Backspace.
+    ALT+SHIFT is listed because that bind is `bindld` and dispatches a global
+    to quickshell, which keeps running while locked. F1 is ly's shutdown key:
+    Hyprland's locked binds fire whether the session is locked or not, so it is
+    bound non-consuming (apps keep their F1) and LockPower.sh does nothing
+    unless hyprlock is running; two presses, so one stray key cannot power off."""
+    print("ENTER ПОДТВЕРДИТЬ   ESC ОЧИСТИТЬ   ALT+SHIFT РАСКЛАДКА   F1 ВЫКЛЮЧИТЬ")
 
 
 def mode_panel():

@@ -312,7 +312,7 @@ def widgets(mon, rows, cols, pw_row, lay_row, codes):
     f_y = up(row_centre(pw_row) - FIELD_RISE * fs)
 
     # layout label: centre-aligned, so fold in half its padded width
-    code_w = max(len(c) for c in codes) + 6  # +6 NBSP to widen the click target
+    code_w = max(len(c) for c in codes) + 6  # +6 NBSP padding (it was a click target; l_x folds it in)
     l_x = round(val_dx + (code_w * cell) / 2 + LABEL_DX * fs)
     l_y = up(row_centre(lay_row) - LABEL_RISE * fs)
     bracket = ",".join(c + NBSP * 6 for c in codes)
@@ -384,7 +384,6 @@ label {{
     color = $ink
     font_size = {fs}
     font_family = $mono
-    onclick = {SCRIPTS}/LayoutNext.sh
     position = {l_x}, {l_y}
     halign = center
     valign = center
@@ -397,6 +396,19 @@ label {{
     font_size = {fs}
     font_family = $mono
     position = 0, {up(c_foot)}
+    halign = center
+    valign = center
+}}
+
+# The F1 shutdown's notice, a line above the footer: empty until the first F1
+# arms it (LockPower.sh), so a second press within 4 s is a deliberate one.
+label {{
+    monitor = {m}
+    text = cmd[update:500] {SCRIPTS}/LockPower.sh label
+    color = $dim
+    font_size = {fs}
+    font_family = $mono
+    position = 0, {up(c_foot - 1.5 * pitch)}
     halign = center
     valign = center
 }}
