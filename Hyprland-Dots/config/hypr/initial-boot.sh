@@ -17,7 +17,10 @@ color_scheme="prefer-dark"
 # gsettings or from settings.ini depending on how they are launched, so a
 # mismatch between the two means some windows are themed and others are not.
 gtk_theme="Adwaita"
-icon_theme="Flat-Remix-Blue-Dark"
+# Flat-Remix recoloured with the wallpaper's accent - generated from
+# Flat-Remix-Blue-Dark by IconsWallust.py below, which falls back to the blue
+# one if it could not be built.
+icon_theme="Flat-Remix-Wallust-Dark"
 # The black cursor: the XCursor theme "default" (default-cursors, which inherits
 # Adwaita) - the one Hyprland loads and keeps in gsettings. Bibata (white) is
 # still extracted by gtk_themes.sh for nwg-look, but not selected.
@@ -47,6 +50,9 @@ if [ ! -f "$HOME/.config/hypr/.initial_startup_done" ]; then
 		# see RofiContrast.py - readable rofi text for whatever slots this
 		# wallpaper produced; must follow wallust, never run as its hook.
 		"$HOME/.config/hypr/scripts/RofiContrast.py" || true
+		# Builds the wallust icon theme from the palette just written. In the
+		# foreground: it has to exist before gsettings is pointed at it.
+		"$HOME/.config/hypr/scripts/IconsWallust.py" || true
 		# awww-daemon does not fork: `query || daemon && img` would block here forever
 		# when the daemon is not up yet. Start it in the background, then set the image.
 		awww query >/dev/null 2>&1 || { awww-daemon --format argb >/dev/null 2>&1 & sleep 0.5; }
@@ -65,6 +71,7 @@ if [ ! -f "$HOME/.config/hypr/.initial_startup_done" ]; then
     done
     _gs color-scheme "$color_scheme" || setup_ok=false
     _gs gtk-theme "$gtk_theme" || setup_ok=false
+    [ -f "$HOME/.icons/$icon_theme/index.theme" ] || icon_theme="Flat-Remix-Blue-Dark"
     _gs icon-theme "$icon_theme" || setup_ok=false
     _gs cursor-theme "$cursor_theme" || setup_ok=false
     _gs cursor-size 24 || setup_ok=false

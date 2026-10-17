@@ -408,16 +408,26 @@ fresh machine used to come up at `settings.ini`'s 14pt (or the portal's
 Cantarell default in GTK4 apps) while this one showed 16pt. Change it with
 `gtk_font` / `gtk_mono_font` at the top of `initial-boot.sh`.
 
-The **icon** theme (`Flat-Remix-Blue-Dark`) is unchanged and still comes from
-`GTK-themes-icons/` via `gtk_themes.sh`, which also still installs the
-Flat-Remix GTK themes and the white `Bibata-Modern-Ice` cursor — they are simply
-no longer selected. The **cursor** is the black one Hyprland loads by itself:
-the XCursor theme `default` (the `default-cursors` package, which inherits
-Adwaita), named in `settings.ini` and by `initial-boot.sh` too, so the first
-session already has it. One consequence worth knowing: `scripts/DarkLight.sh` picks a *random*
-theme matching `*Dark*` or `*Light*` from `~/.themes`, so running it would
-switch away from Adwaita. Nothing binds it to a key, so it only happens if you
-call it yourself.
+The **icon** theme follows the wallpaper. `GTK-themes-icons/` (via
+`gtk_themes.sh`) installs `Flat-Remix-Blue-Dark`, and
+`scripts/IconsWallust.py` turns it into `Flat-Remix-Wallust-Dark`: Flat-Remix
+colours its variants with two hexes (`#367bf0` and the darker `#2b62c0`), and
+the script swaps them for wallust's accent - the colour the bar's console cards
+light up in - with its lightness held between 0.50 and 0.68 so folders stay
+visible on any wallpaper. The generated theme holds only the ~12,000 icons that
+carry the blue (69 MB) and inherits the rest from `Flat-Remix-Blue-Dark`.
+`WallustSwww.sh` and `WallpaperEffects.sh` run it after every `wallust run` (in
+the background, about a second; nothing when the colours did not change), and
+it steps the icon theme away and back so open GTK apps reload.
+`initial-boot.sh` builds it on the first login and `copy.sh` on a re-run;
+`settings.ini`, `qt5ct.conf`, `qt6ct.conf` and gsettings all name it.
+
+`gtk_themes.sh` also still installs the Flat-Remix GTK theme and the white
+`Bibata-Modern-Ice` cursor — they are simply no longer selected. The **cursor**
+is the black one Hyprland loads by itself: the XCursor theme `default` (the
+`default-cursors` package, which inherits Adwaita), named in `settings.ini` and
+by `initial-boot.sh` too, so the first session already has it. There is no
+light mode: the desktop is dark only.
 
 ### Terminal greeting (pokefetch)
 
@@ -1953,7 +1963,7 @@ package step skips what is already installed, and `copy.sh` will not overwrite
 a `secrets.zsh` you have filled in. It also keeps your wallust palette, your
 active wallpaper, the first-boot marker, your monitor layout (`monitors.lua`,
 `workspaces.lua`), herdr's saved session, your rofi theme, RofiBeats stations,
-sidebar bookmarks and Light mode, and files of your own in `environment.d`,
+sidebar bookmarks, and files of your own in `environment.d`,
 `fontconfig`, `Kvantum` and `MangoHud`. Everything else under a copied
 `~/.config` directory is reset to the repo version — edits you made there
 (`UserConfigs/*.lua`, say) are in the `<dir>.backup-<stamp>` copy next to it.
@@ -2075,7 +2085,7 @@ chmod +x install.sh
 - ✅ quickshell
 - ✅ dots (Download and install pre-configured Hyprland dotfiles)
 - ✅ ly (lightweight TUI display manager)
-- ✅ gtk_themes (for Dark/Light mode)
+- ✅ gtk_themes (the Flat-Remix icons the wallust icon theme is made from)
 - ✅ bluetooth (if you need it)
 - ✅ xdph (for screen sharing)
 - ✅ handy (offline speech-to-text, SUPER + CTRL + F8)

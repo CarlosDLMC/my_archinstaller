@@ -124,7 +124,7 @@ def readable_on(fill, background, foreground):
     print, so it wins every tie and every case where it is merely adequate.
     That keeps the look identical on the wallpapers where nothing was ever
     wrong; only the unreadable ones change. Returning a rasi reference rather
-    than a hex value also keeps DarkLight.sh's light-mode rewrite working.
+    than a hex value also keeps it tracking the template's background line.
     """
     if contrast(background, fill) >= MIN_RATIO:
         return "@background"
