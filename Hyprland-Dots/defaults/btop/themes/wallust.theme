@@ -1,60 +1,71 @@
 # btop in the wallpaper's colours - wallust template, rendered to
 # ~/.config/btop/themes/wallust.theme on every wallpaper change (wallust.toml).
-# The roles follow the rest of the desktop: color8 dim (frames, labels),
-# color14 the alert red (key letters, hot ends of the graphs), color12 the
-# window border's maroon (the selected row), color7 the bar cards' accent.
+#
+# Calm by default, like the bar: text and frames are neutral, keeping only a
+# whisper of the wallpaper's hue (saturate(-0.85), the bar's colWhite trick),
+# and colour is spent where it means something - the key letters, the selected
+# row, and a graph or meter as it fills. Straight wallust slots made btop a
+# wall of one colour on wallpapers whose palette is mostly a single saturated
+# hue (an all-green osaka-jade: foreground, frames, labels and graphs all green).
+#
+# Load-type readings (CPU, temperature, used memory, processes) run grey ->
+# accent -> the alert hue, which only shows near the top. Readings that are
+# good when high (free, available, cached, network) stop at the accent.
 
 # Transparent: btop sits on the terminal's own black.
 theme[main_bg]=""
-theme[main_fg]="#E8C4C0"
-theme[title]="#E8C4C0"
-theme[hi_fg]="#BE564A"
-theme[selected_bg]="#59302D"
-theme[selected_fg]="#E8C4C0"
-theme[inactive_fg]="#96716D"
-theme[graph_text]="#96716D"
-theme[meter_bg]="#4C4C4B"
-theme[proc_misc]="#BE564A"
+theme[main_fg]="#E8E3E2"
+theme[title]="#E8E3E2"
+theme[hi_fg]="#D6AFAB"
+# Dark enough that the white text on it clears 4.5:1 (darken 0.42 gave 3.6-4.0:1).
+theme[selected_bg]="#564A49"
+theme[selected_fg]="#E8E3E2"
+theme[inactive_fg]="#968B8A"
+theme[graph_text]="#968B8A"
+theme[meter_bg]="#3C3939"
+theme[proc_misc]="#D6AFAB"
 
-theme[cpu_box]="#96716D"
-theme[mem_box]="#96716D"
-theme[net_box]="#96716D"
-theme[proc_box]="#96716D"
-theme[div_line]="#4C4C4B"
+# Frames, dividers and meter tracks from color8 darkened, not color0: color0 is a
+# mid grey on some palettes and nearly black on others (Nordic-Blue_forest:
+# #000108, invisible on the terminal), while color8 is always a light grey.
+theme[cpu_box]="#5A5655"
+theme[mem_box]="#5A5655"
+theme[net_box]="#5A5655"
+theme[proc_box]="#5A5655"
+theme[div_line]="#4B4847"
 
-# Every gauge and graph runs dim -> accent -> red as it fills.
-theme[temp_start]="#96716D"
-theme[temp_mid]="#D6A29C"
+theme[temp_start]="#968B8A"
+theme[temp_mid]="#D6AFAB"
 theme[temp_end]="#BE564A"
 
-theme[cpu_start]="#96716D"
-theme[cpu_mid]="#D6A29C"
+theme[cpu_start]="#968B8A"
+theme[cpu_mid]="#D6AFAB"
 theme[cpu_end]="#BE564A"
 
-theme[free_start]="#96716D"
-theme[free_mid]="#D6A29C"
-theme[free_end]="#BE564A"
-
-theme[cached_start]="#96716D"
-theme[cached_mid]="#D6A29C"
-theme[cached_end]="#BE564A"
-
-theme[available_start]="#96716D"
-theme[available_mid]="#D6A29C"
-theme[available_end]="#BE564A"
-
-theme[used_start]="#96716D"
-theme[used_mid]="#D6A29C"
+theme[used_start]="#968B8A"
+theme[used_mid]="#D6AFAB"
 theme[used_end]="#BE564A"
 
-theme[download_start]="#96716D"
-theme[download_mid]="#D6A29C"
-theme[download_end]="#BE564A"
-
-theme[upload_start]="#96716D"
-theme[upload_mid]="#D6A29C"
-theme[upload_end]="#BE564A"
-
-theme[process_start]="#96716D"
-theme[process_mid]="#D6A29C"
+theme[process_start]="#968B8A"
+theme[process_mid]="#D6AFAB"
 theme[process_end]="#BE564A"
+
+theme[free_start]="#968B8A"
+theme[free_mid]="#967E7B"
+theme[free_end]="#D6AFAB"
+
+theme[available_start]="#968B8A"
+theme[available_mid]="#967E7B"
+theme[available_end]="#D6AFAB"
+
+theme[cached_start]="#968B8A"
+theme[cached_mid]="#967E7B"
+theme[cached_end]="#D6AFAB"
+
+theme[download_start]="#968B8A"
+theme[download_mid]="#967E7B"
+theme[download_end]="#D6AFAB"
+
+theme[upload_start]="#968B8A"
+theme[upload_mid]="#967E7B"
+theme[upload_end]="#D6AFAB"

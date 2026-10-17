@@ -1,60 +1,71 @@
 # btop in the wallpaper's colours - wallust template, rendered to
 # ~/.config/btop/themes/wallust.theme on every wallpaper change (wallust.toml).
-# The roles follow the rest of the desktop: color8 dim (frames, labels),
-# color14 the alert red (key letters, hot ends of the graphs), color12 the
-# window border's maroon (the selected row), color7 the bar cards' accent.
+#
+# Calm by default, like the bar: text and frames are neutral, keeping only a
+# whisper of the wallpaper's hue (saturate(-0.85), the bar's colWhite trick),
+# and colour is spent where it means something - the key letters, the selected
+# row, and a graph or meter as it fills. Straight wallust slots made btop a
+# wall of one colour on wallpapers whose palette is mostly a single saturated
+# hue (an all-green osaka-jade: foreground, frames, labels and graphs all green).
+#
+# Load-type readings (CPU, temperature, used memory, processes) run grey ->
+# accent -> the alert hue, which only shows near the top. Readings that are
+# good when high (free, available, cached, network) stop at the accent.
 
 # Transparent: btop sits on the terminal's own black.
 theme[main_bg]=""
-theme[main_fg]="{{foreground}}"
-theme[title]="{{foreground}}"
-theme[hi_fg]="{{color14}}"
-theme[selected_bg]="{{color12}}"
-theme[selected_fg]="{{foreground}}"
-theme[inactive_fg]="{{color8}}"
-theme[graph_text]="{{color8}}"
-theme[meter_bg]="{{color0}}"
-theme[proc_misc]="{{color14}}"
+theme[main_fg]="{{foreground | saturate(-0.85)}}"
+theme[title]="{{foreground | saturate(-0.85)}}"
+theme[hi_fg]="{{color7 | saturate(-0.25)}}"
+# Dark enough that the white text on it clears 4.5:1 (darken 0.42 gave 3.6-4.0:1).
+theme[selected_bg]="{{color7 | saturate(-0.45) | darken(0.6)}}"
+theme[selected_fg]="{{foreground | saturate(-0.85)}}"
+theme[inactive_fg]="{{color8 | saturate(-0.7)}}"
+theme[graph_text]="{{color8 | saturate(-0.7)}}"
+theme[meter_bg]="{{color8 | saturate(-0.8) | darken(0.6)}}"
+theme[proc_misc]="{{color7 | saturate(-0.25)}}"
 
-theme[cpu_box]="{{color8}}"
-theme[mem_box]="{{color8}}"
-theme[net_box]="{{color8}}"
-theme[proc_box]="{{color8}}"
-theme[div_line]="{{color0}}"
+# Frames, dividers and meter tracks from color8 darkened, not color0: color0 is a
+# mid grey on some palettes and nearly black on others (Nordic-Blue_forest:
+# #000108, invisible on the terminal), while color8 is always a light grey.
+theme[cpu_box]="{{color8 | saturate(-0.8) | darken(0.4)}}"
+theme[mem_box]="{{color8 | saturate(-0.8) | darken(0.4)}}"
+theme[net_box]="{{color8 | saturate(-0.8) | darken(0.4)}}"
+theme[proc_box]="{{color8 | saturate(-0.8) | darken(0.4)}}"
+theme[div_line]="{{color8 | saturate(-0.8) | darken(0.5)}}"
 
-# Every gauge and graph runs dim -> accent -> red as it fills.
-theme[temp_start]="{{color8}}"
-theme[temp_mid]="{{color7}}"
+theme[temp_start]="{{color8 | saturate(-0.7)}}"
+theme[temp_mid]="{{color7 | saturate(-0.25)}}"
 theme[temp_end]="{{color14}}"
 
-theme[cpu_start]="{{color8}}"
-theme[cpu_mid]="{{color7}}"
+theme[cpu_start]="{{color8 | saturate(-0.7)}}"
+theme[cpu_mid]="{{color7 | saturate(-0.25)}}"
 theme[cpu_end]="{{color14}}"
 
-theme[free_start]="{{color8}}"
-theme[free_mid]="{{color7}}"
-theme[free_end]="{{color14}}"
-
-theme[cached_start]="{{color8}}"
-theme[cached_mid]="{{color7}}"
-theme[cached_end]="{{color14}}"
-
-theme[available_start]="{{color8}}"
-theme[available_mid]="{{color7}}"
-theme[available_end]="{{color14}}"
-
-theme[used_start]="{{color8}}"
-theme[used_mid]="{{color7}}"
+theme[used_start]="{{color8 | saturate(-0.7)}}"
+theme[used_mid]="{{color7 | saturate(-0.25)}}"
 theme[used_end]="{{color14}}"
 
-theme[download_start]="{{color8}}"
-theme[download_mid]="{{color7}}"
-theme[download_end]="{{color14}}"
-
-theme[upload_start]="{{color8}}"
-theme[upload_mid]="{{color7}}"
-theme[upload_end]="{{color14}}"
-
-theme[process_start]="{{color8}}"
-theme[process_mid]="{{color7}}"
+theme[process_start]="{{color8 | saturate(-0.7)}}"
+theme[process_mid]="{{color7 | saturate(-0.25)}}"
 theme[process_end]="{{color14}}"
+
+theme[free_start]="{{color8 | saturate(-0.7)}}"
+theme[free_mid]="{{color8 | saturate(-0.35)}}"
+theme[free_end]="{{color7 | saturate(-0.25)}}"
+
+theme[available_start]="{{color8 | saturate(-0.7)}}"
+theme[available_mid]="{{color8 | saturate(-0.35)}}"
+theme[available_end]="{{color7 | saturate(-0.25)}}"
+
+theme[cached_start]="{{color8 | saturate(-0.7)}}"
+theme[cached_mid]="{{color8 | saturate(-0.35)}}"
+theme[cached_end]="{{color7 | saturate(-0.25)}}"
+
+theme[download_start]="{{color8 | saturate(-0.7)}}"
+theme[download_mid]="{{color8 | saturate(-0.35)}}"
+theme[download_end]="{{color7 | saturate(-0.25)}}"
+
+theme[upload_start]="{{color8 | saturate(-0.7)}}"
+theme[upload_mid]="{{color8 | saturate(-0.35)}}"
+theme[upload_end]="{{color7 | saturate(-0.25)}}"
