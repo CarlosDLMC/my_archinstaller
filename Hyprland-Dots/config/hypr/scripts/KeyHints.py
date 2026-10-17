@@ -101,8 +101,8 @@ def dump(rows):
 
 
 # The launcher's look (SUPER + D, rofi/themes/soviet-tui.rasi) in wallust's
-# rofi colours, so the cheat sheet follows the wallpaper exactly as rofi does,
-# Light mode included. The literals are the sovietpunk fallbacks, for when the
+# rofi colours, so the cheat sheet follows the wallpaper exactly as rofi does.
+# The literals are the sovietpunk fallbacks, for when the
 # file is missing. Hyprland draws the frame: it is the focused-window border.
 ROFI_COLORS = os.path.expanduser("~/.config/rofi/wallust/colors-rofi.rasi")
 PALETTE = {

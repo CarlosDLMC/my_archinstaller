@@ -49,6 +49,8 @@ no-effects() {
     wait $!
     # readable rofi text for this palette - after wallust, see RofiContrast.py
     "$HOME/.config/hypr/scripts/RofiContrast.py" || true
+    # the icons in the new accent - see IconsWallust.py
+    "$HOME/.config/hypr/scripts/IconsWallust.py" >/dev/null 2>&1 &
     # Refresh rofi, quickshell, wallust palettes
 	sleep 2
 	"$SCRIPTSDIR/Refresh.sh"
@@ -93,6 +95,8 @@ main() {
             wallust run "$wallpaper_output" -s
             # readable rofi text for this palette - see RofiContrast.py
             "$HOME/.config/hypr/scripts/RofiContrast.py" || true
+            # the icons in the new accent - see IconsWallust.py
+            "$HOME/.config/hypr/scripts/IconsWallust.py" >/dev/null 2>&1 &
             # Refresh rofi, quickshell, wallust palettes
             "${SCRIPTSDIR}/Refresh.sh"
             notify-send -u low -i "$iDIR/ja.png" "Эффект применён:" "$choice"

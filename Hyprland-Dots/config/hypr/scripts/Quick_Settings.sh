@@ -56,7 +56,6 @@ Qt-приложения (qt5ct)
 Тема rofi
 Поиск сочетаний клавиш
 Игровой режим вкл/выкл
-Тёмная/светлая тема
 EOF
 }
 
@@ -114,7 +113,6 @@ main() {
         "Тема rofi") $scriptsDir/RofiThemeSelector.sh ;;
         "Поиск сочетаний клавиш") $scriptsDir/KeyBinds.sh ;;
         "Игровой режим вкл/выкл") $scriptsDir/GameMode.sh ;;
-        "Тёмная/светлая тема") $scriptsDir/DarkLight.sh ;;
         *) return ;;  # Do nothing for invalid choices
     esac
 

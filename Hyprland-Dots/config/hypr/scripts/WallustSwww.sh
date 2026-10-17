@@ -63,3 +63,8 @@ wallust run -s "$wallpaper_path" || true
 # palette can only be conditioned once `wallust run` has exited - see
 # RofiContrast.py, which picks a readable text colour for each colour slot.
 "$HOME/.config/hypr/scripts/RofiContrast.py" || true
+
+# The icons follow too: IconsWallust.py recolours Flat-Remix-Wallust-Dark with
+# the accent wallust just wrote. In the background - about a second, and
+# nothing waits on it.
+"$HOME/.config/hypr/scripts/IconsWallust.py" >/dev/null 2>&1 &

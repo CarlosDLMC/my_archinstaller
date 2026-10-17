@@ -118,8 +118,7 @@ keep_line() { # backup-file new-file ERE
     grep -qE "^$3" "$2" || return 1
     _tmp=$(mktemp) || return 1
     # awk ends its last line with a newline. A file without one stays without:
-    # swaync's style.css has none (DarkLight.sh's sed -i keeps it so), and that
-    # one added byte alone made a re-run after a theme switch back swaync up.
+    # one added byte alone made a re-run back a file up that had not changed.
     if _line="$_line" awk -v re="^$3" '!done && $0 ~ re { print ENVIRON["_line"]; done = 1; next } { print }' "$2" > "$_tmp" \
        && { [ -z "$(tail -c1 "$2")" ] || truncate -s -1 "$_tmp"; } \
        && cat "$_tmp" > "$2"; then
@@ -212,8 +211,8 @@ restore_hypr_state() { # backup
 
 # Settings changed from the desktop that live INSIDE files the repo also ships,
 # so a fresh copy resets them: the rofi theme picked in SUPER+SHIFT+E and the
-# stations added in RofiBeats, the sidebar bookmarks added with Ctrl+D, Light
-# mode. Applied from <from> onto <to> - by restore_state, from a backup onto the
+# stations added in RofiBeats, the sidebar bookmarks added with Ctrl+D.
+# Applied from <from> onto <to> - by restore_state, from a backup onto the
 # fresh copy, and before the comparison in the loop below, from the live
 # directory onto the repo copy, so that a directory differing from the repo
 # only by these counts as unchanged. Compared raw, it never matched again once
@@ -238,29 +237,6 @@ apply_user_state() { # dir from to [quiet]
         # Sidebar bookmarks added in Thunar or a file chooser (Ctrl+D).
         _s=$(keep_added_lines "$_from/bookmarks" "$_to/bookmarks" uri expand-home)
         [ -z "$_quiet" ] && [ "$_s" -gt 0 ] && echo "  ${OK} Kept the $_s sidebar bookmark(s) you added"
-        ;;
-    wallust|Kvantum|qt5ct|qt6ct|swaync)
-        # Light mode (DarkLight.sh) is a line in each of these, and a re-run put
-        # the repo's dark ones back while GTK stayed light. Its own record of the
-        # mode, ~/.cache/.theme_mode, says which applies; Dark is the repo's.
-        if [ "$(cat "$HOME/.cache/.theme_mode" 2>/dev/null)" = Light ]; then
-            case "$_dir" in
-            wallust) _s=wallust.toml;     _t='palette = ' ;;
-            Kvantum) _s=kvantum.kvconfig; _t='theme=' ;;
-            swaync)  _s=style.css;        _t='@define-color noti-bg ' ;;
-            *)       _s=$_dir.conf;       _t='icon_theme=' ;;
-            esac
-            if keep_line "$_from/$_s" "$_to/$_s" "$_t" && [ -z "$_quiet" ]; then
-                echo "  ${OK} Kept Light mode in $_dir/$_s"
-            fi
-            # ...and the rofi background, which DarkLight.sh sets in wallust's
-            # rofi template: missed, the next wallpaper change made rofi dark.
-            if [ "$_dir" = wallust ] \
-               && keep_line "$_from/templates/colors-rofi.rasi" "$_to/templates/colors-rofi.rasi" 'background:' \
-               && [ -z "$_quiet" ]; then
-                echo "  ${OK} Kept Light mode in wallust/templates/colors-rofi.rasi"
-            fi
-        fi
         ;;
     esac
     return 0
@@ -529,8 +505,7 @@ dropin_dirs=(
     # Mono and Fira Code for their no-ligature cuts. Without it a fresh machine
     # gets ligatures everywhere - ->, =>, != rendered as single glyphs.
     "fontconfig"
-    # The Kvantum theme the Qt apps use, and its kvantum.kvconfig (Light mode
-    # is a line in it - see apply_user_state).
+    # The Kvantum theme the Qt apps use, and its kvantum.kvconfig.
     "Kvantum"
     # MangoHud.conf is not just an overlay layout: fps_limit and vsync in it
     # actively cap and pace the game, so it is the panel tuning (48-75 Hz
@@ -759,9 +734,9 @@ for dir in "${config_dirs[@]}"; do
 done
 
 # The drop-in directories, file by file. Each repo file is compared with what
-# is there after apply_user_state has put the user's settings into a copy of it
-# (Light mode in kvantum.kvconfig), so a file that differs only by those is not
-# backed up; one that differs otherwise is kept beside it as a stamped backup.
+# is there after apply_user_state has put the user's settings into a copy of it,
+# so a file that differs only by those is not backed up; one that differs
+# otherwise is kept beside it as a stamped backup.
 # Files the repo does not have are not touched.
 for dir in "${dropin_dirs[@]}"; do
     [ -d "$SCRIPT_DIR/config/$dir" ] || continue
@@ -885,6 +860,23 @@ for _target in "${wallust_targets[@]}"; do
         echo "  ${ERROR} Failed to seed $_target"
     fi
 done
+
+# The icon theme in the palette just seeded or kept. gtk-3.0/settings.ini and
+# qt5ct/qt6ct name Flat-Remix-Wallust-Dark, which IconsWallust.py generates from
+# Flat-Remix-Blue-Dark; on a fresh install initial-boot.sh builds it at first
+# login, but a re-run never reaches initial-boot.sh again, and until the next
+# wallpaper change those files would name a theme that does not exist. Quiet
+# no-op when Flat-Remix-Blue-Dark is not installed yet (gtk_themes.sh).
+printf "\n${INFO} Building the wallust icon theme...\n"
+if "$HOME/.config/hypr/scripts/IconsWallust.py"; then
+    if [ -f "$HOME/.icons/Flat-Remix-Wallust-Dark/index.theme" ]; then
+        echo "  ${OK} Flat-Remix-Wallust-Dark is in the current palette"
+    else
+        echo "  ${NOTE} Flat-Remix-Blue-Dark not installed yet - initial-boot.sh builds it at first login"
+    fi
+else
+    echo "  ${WARN} IconsWallust.py failed - the icons follow the wallpaper from the next wallpaper change"
+fi
 
 # Deploy secrets.zsh, but only if the user does not already have one
 #
