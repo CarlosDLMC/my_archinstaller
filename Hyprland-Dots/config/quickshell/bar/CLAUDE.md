@@ -47,7 +47,7 @@ components/         # Modular widget components
   ├── WallpaperReveal.qml  # Its transition: slanted edges opening from the centre, under the windows
   ├── AgentWidget.qml      # Claude Code usage: session % in the bar, card on click
   ├── AgentPanel.qml       # Agents card body: plan, allowance meters, tokens by day/model
-  ├── VolumeSlider.qml     # Draggable level track, shared by every row of the audio card
+  ├── VolumeSlider.qml     # Segmented fader (SegmentGauge + cap), shared by every row of the audio card
   ├── WeatherStatItem.qml  # Reusable stat row for weather popup
   ├── WorkspaceBar.qml     # Hyprland workspaces with app icons (pill-shaped)
   ├── WindowInfo.qml       # Current window title
@@ -60,7 +60,8 @@ components/         # Modular widget components
   ├── BatteryPanel.qml     # Battery card body: health, cycles, packs, charge limit
   ├── ConsolePlate.qml     # Console cards: a recessed plate holding one group of readings
   ├── ConsoleLamp.qml      # Console cards: an indicator lamp, lit in colAccent (colAlert for a fault)
-  ├── ConsoleButton.qml    # Console cards: a chunky push button, lit in colAccent when current
+  ├── ConsoleButton.qml    # Console cards: a chunky push button (label, glyph, spinner), lit when current
+  ├── ConsoleRow.qml       # Console cards: a pickable list row - lamp, glyph, name, detail
   ├── ConsoleCaption.qml   # Console cards: the small-caps caption beside a control
   ├── SegmentGauge.qml     # Console cards: a segmented gauge with an optional marker tick
   ├── WifiWidget.qml       # WiFi status with network speeds (extends DropdownWidget)
@@ -751,10 +752,14 @@ singleton that the widgets render; only the rendering should be per-screen. See
    `VolumeWidget` opens on right-click while left-click still mutes.
 6. **Card bodies are a control console.** Group readings on `ConsolePlate`s
    (stacked, no dividers), show a level as a `SegmentGauge`, a state as a
-   `ConsoleLamp` beside its label, and a choice as a row of `ConsoleButton`s;
-   put a `ConsoleCaption` (small dim capitals) beside a control. Card text is
-   Russian. The card keeps `DropdownWidget`'s soft notch shape - no frame, no
-   title stamp. `BatteryPanel.qml` is the reference card.
+   `ConsoleLamp` beside its label, a choice as `ConsoleButton`s (lit = current,
+   also for on/off toggles), and a list to pick from as `ConsoleRow`s on a
+   plate (lamp lit on the one in use); put a `ConsoleCaption` (small dim
+   capitals) beside a control. Card text is Russian. The card keeps
+   `DropdownWidget`'s soft notch shape - no frame, no title stamp. Size the
+   popup from what the body measures (`cardHeight` + 28 for the stem and
+   padding), not from arithmetic over row heights. `BatteryPanel.qml` is the
+   reference card; every card in the bar follows it.
 - no need to restart quickshell, it hot reloads the config on save. **Except
   for a new inline component** (`component Foo: Text {...}`) added to a file
   that is already loaded: the hot reload fails with `Foo is not a type`, while

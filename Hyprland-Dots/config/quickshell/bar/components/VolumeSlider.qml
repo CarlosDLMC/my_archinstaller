@@ -1,9 +1,9 @@
 import QtQuick
 import ".."
 
-// A volume track, in the bar's idiom rather than a Qt Controls Slider: the
-// same white-at-low-alpha groove, filled bar and 130ms easing as ToggleRow's
-// switch, so the audio card reads as part of the same family.
+// A volume fader, in the console cards' idiom rather than a Qt Controls
+// Slider: the level is a SegmentGauge (the battery card's gauge), with a fader
+// cap standing on it where the level is.
 //
 // Drag or click anywhere on the track to set, wheel to nudge in 5% steps,
 // right-click to mute - the wheel and right-click match what the volume
@@ -24,42 +24,37 @@ Item {
     signal moved(real v)
     signal rightClicked()
 
-    implicitHeight: 18
+    implicitHeight: 20
     opacity: enabled ? 1.0 : 0.4
 
     readonly property real ratio: maximum > 0
         ? Math.max(0, Math.min(1, value / maximum))
         : 0
 
-    Rectangle {
-        id: track
+    // The scale. Streams run to 150%, so theirs carries a tick at 100% -
+    // everything past it is boost.
+    SegmentGauge {
         anchors.verticalCenter: parent.verticalCenter
         width: parent.width
-        height: slider.trackHeight
-        radius: height / 2
-        color: Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.10)
-
-        Rectangle {
-            width: track.width * slider.ratio
-            height: parent.height
-            radius: height / 2
-            // Muted is a state worth seeing, but it is not an alert - the
-            // reading simply drops to the inactive grey, the way an idle
-            // widget does in the bar.
-            color: slider.muted ? Theme.colMuted : Theme.colWhite
-            Behavior on color { ColorAnimation { duration: 130 } }
-        }
+        height: 10
+        segments: Math.max(12, Math.round(width / 12))
+        value: slider.ratio * 100
+        marker: slider.maximum > 1 ? 100 / slider.maximum * 100 : -1
+        // Muted is a state worth seeing, but it is not an alert - the
+        // reading simply drops to the inactive colour, the way an idle
+        // widget does in the bar.
+        tint: slider.muted ? Theme.colMuted : Theme.colAccent
     }
 
-    // The knob carries a background-coloured rim so it stays readable where it
-    // sits on top of the filled portion of its own track.
+    // The fader cap carries a background-coloured rim so it stays readable
+    // where it stands on the lit part of the scale.
     Rectangle {
-        width: 12
-        height: 12
-        radius: width / 2
+        width: 6
+        height: 20
+        radius: 2
         x: Math.round((slider.width - width) * slider.ratio)
         anchors.verticalCenter: parent.verticalCenter
-        color: slider.muted ? Theme.colMuted : Theme.colWhite
+        color: slider.muted ? Theme.colGrey : Theme.colWhite
         border.width: 1
         border.color: Theme.colBg
         Behavior on color { ColorAnimation { duration: 130 } }

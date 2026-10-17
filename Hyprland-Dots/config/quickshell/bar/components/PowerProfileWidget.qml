@@ -7,7 +7,7 @@ import ".."
 DropdownWidget {
     id: powerWidget
     popupWidth: 240
-    popupHeight: 180
+    popupHeight: Math.ceil(cardHeight) + 28
     popupXOffset: 200
 
     property string currentProfile: "balanced"
@@ -96,81 +96,36 @@ DropdownWidget {
         font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
     }
 
-    // Popup content
+    // The card: one push button per profile, the running one lit - the same
+    // vocabulary as the battery card's charge limit. The body reports its own
+    // height, so the card is sized to it rather than to a guess.
+    property real cardHeight: 170
+
     popupContent: Component {
         Column {
-            spacing: 6
+            spacing: 8
+            onImplicitHeightChanged: powerWidget.cardHeight = implicitHeight
+            Component.onCompleted: powerWidget.cardHeight = implicitHeight
 
-            // Header
-            Text {
-                text: "󰾅 Режим питания"
-                color: Theme.colFg
-                font.pixelSize: Theme.fontSize
-                font.family: Theme.fontFamily
-                font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
-                width: parent.width
-            }
+            ConsoleCaption { text: "РЕЖИМ ПИТАНИЯ" }
 
-            Rectangle {
-                width: parent.width
-                height: 1
-                color: Theme.colMuted
-            }
-
-            // Profile list
             Repeater {
                 model: powerWidget.availableProfiles
 
-                Rectangle {
+                ConsoleButton {
                     width: parent.width
-                    height: 32
-                    color: profileMouseArea.containsMouse ? Qt.rgba(255, 255, 255, 0.1) : "transparent"
-                    radius: 6
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.margins: 6
-                        spacing: 8
-
-                        Text {
-                            text: powerWidget.getProfileIcon(modelData)
-                            color: powerWidget.getProfileColor(modelData)
-                            font.pixelSize: Theme.fontSize
-                            font.family: Theme.fontFamily
+                    icon: powerWidget.getProfileIcon(modelData)
+                    label: (({ "performance": "Форсаж", "balanced": "Норма", "power-saver": "Экономия" })[modelData] || modelData).toUpperCase()
+                    current: modelData === powerWidget.currentProfile
+                    onPicked: {
+                        if (modelData !== powerWidget.currentProfile) {
+                            // Update UI immediately
+                            powerWidget.currentProfile = modelData
+                            // Then run the command
+                            profileSetProc.targetProfile = modelData
+                            profileSetProc.running = true
                         }
-
-                        Text {
-                            text: ({ "performance": "Форсаж", "balanced": "Норма", "power-saver": "Экономия" })[modelData] || modelData
-                            color: modelData === powerWidget.currentProfile ? powerWidget.getProfileColor(modelData) : Theme.colFg
-                            font.pixelSize: Theme.fontSize - 1
-                            font.family: Theme.fontFamily
-                            font.bold: modelData === powerWidget.currentProfile
-                            Layout.fillWidth: true
-                        }
-
-                        Text {
-                            text: modelData === powerWidget.currentProfile ? "󰄬" : ""
-                            color: powerWidget.getProfileColor(modelData)
-                            font.pixelSize: Theme.fontSize
-                            font.family: Theme.fontFamily
-                        }
-                    }
-
-                    MouseArea {
-                        id: profileMouseArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (modelData !== powerWidget.currentProfile) {
-                                // Update UI immediately
-                                powerWidget.currentProfile = modelData
-                                // Then run the command
-                                profileSetProc.targetProfile = modelData
-                                profileSetProc.running = true
-                            }
-                            powerWidget.dropdownOpen = false
-                        }
+                        powerWidget.dropdownOpen = false
                     }
                 }
             }
