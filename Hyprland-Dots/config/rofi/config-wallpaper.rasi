@@ -5,6 +5,8 @@
 /* ---- Configuration ---- */ 
 configuration {
   modi: "drun";
+  /* The thumbnails are icons; the launcher's theme switches icons off. */
+  show-icons: true;
 }
 
 window {
