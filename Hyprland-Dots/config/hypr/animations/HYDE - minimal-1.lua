@@ -6,9 +6,9 @@ hl.config({ animations = { enabled = true } })
 
 -- █▄▄ █▀▀ ▀█ █ █▀▀ █▀█   █▀▀ █░█ █▀█ █░█ █▀▀
 -- █▄█ ██▄ █▄ █ ██▄ █▀▄   █▄▄ █▄█ █▀▄ ▀▄▀ ██▄
-hl.curve("wind", { type = "bezier", points = { {0.05, 0.9}, {0.1, 1.05} } })
-hl.curve("winIn", { type = "bezier", points = { {0.1, 1.1}, {0.1, 1.1} } })
-hl.curve("winOut", { type = "bezier", points = { {0.3, -0.3}, {0, 1} } })
+hl.curve("wind", { type = "bezier", points = { {0.05, 0.9}, {0.1, 1} } })
+hl.curve("winIn", { type = "bezier", points = { {0.1, 1}, {0.1, 1} } })
+hl.curve("winOut", { type = "bezier", points = { {0.3, 0}, {0, 1} } })
 hl.curve("liner", { type = "bezier", points = { {1, 1}, {1, 1} } })
 
 
