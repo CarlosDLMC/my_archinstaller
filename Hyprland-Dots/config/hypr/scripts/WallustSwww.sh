@@ -59,6 +59,11 @@ esac
 # -s is used in this repo to keep things quiet and avoid extra prompts
 wallust run -s "$wallpaper_path" || true
 
+# btop reads its theme (btop/themes/wallust.theme, just rewritten) only at
+# startup; SIGUSR2 makes a running btop reload its config and theme. cava needs
+# nothing - it reloads its own config when the file changes.
+pkill -USR2 -x btop || true
+
 # wallust rewrites its template targets after its own hooks run, so the rofi
 # palette can only be conditioned once `wallust run` has exited - see
 # RofiContrast.py, which picks a readable text colour for each colour slot.

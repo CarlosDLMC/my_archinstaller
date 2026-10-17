@@ -47,6 +47,8 @@ no-effects() {
     wait $!
     wallust run "$wallpaper_current" -s &&
     wait $!
+    # a running btop reloads its theme - see WallustSwww.sh
+    pkill -USR2 -x btop || true
     # readable rofi text for this palette - after wallust, see RofiContrast.py
     "$HOME/.config/hypr/scripts/RofiContrast.py" || true
     # the icons in the new accent - see IconsWallust.py
@@ -93,6 +95,8 @@ main() {
             # after wallust has exited (see WallustSwww.sh). Backgrounded with a
             # 1 s sleep, a slower wallust run overwrote the rofi contrast fix.
             wallust run "$wallpaper_output" -s
+            # a running btop reloads its theme - see WallustSwww.sh
+            pkill -USR2 -x btop || true
             # readable rofi text for this palette - see RofiContrast.py
             "$HOME/.config/hypr/scripts/RofiContrast.py" || true
             # the icons in the new accent - see IconsWallust.py
