@@ -11,7 +11,7 @@ RowLayout {
 
     // Label
     Text {
-        text: "CPU "
+        text: "ЦП "
         color: Theme.colCpu
         font.pixelSize: Theme.fontSize
         font.family: Theme.fontFamily
