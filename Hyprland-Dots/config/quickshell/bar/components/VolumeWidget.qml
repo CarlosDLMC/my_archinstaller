@@ -223,7 +223,7 @@ DropdownWidget {
     // ------------------------------------------------------------------
 
     function nodeLabel(node) {
-        if (!node) return "Unknown"
+        if (!node) return "Неизвестно"
         var p = nodeProps(node)
         var nick = node.nickname || p["node.nick"] || p["device.profile.description"] || ""
         if (nick) return String(nick)
@@ -272,7 +272,7 @@ DropdownWidget {
     // An application's name, preferring what it calls itself over the raw
     // node name (which is often just "playback" or the binary).
     function streamLabel(node) {
-        if (!node) return "Stream"
+        if (!node) return "Поток"
         var p = nodeProps(node)
         var name = p["application.name"]
             || p["media.name"]

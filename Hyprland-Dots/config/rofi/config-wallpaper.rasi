@@ -20,7 +20,7 @@ mainbox {
 
 entry {
   expand: true;
-  placeholder: " 🎞️ Search / Choose Wallpaper";
+  placeholder: " Обои";
   horizontal-align: 0.5;
   horizontal-align: 0.5;
 }

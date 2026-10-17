@@ -580,7 +580,7 @@ PanelWindow {
 
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: "SEARCH"
+                        text: "ПОИСК"
                         font.letterSpacing: 2
                         font.pixelSize: osd.tabSize
                         font.family: Theme.fontFamily

@@ -47,7 +47,7 @@ components/         # Modular widget components
   ├── WallpaperReveal.qml  # Its transition: slanted edges opening from the centre, under the windows
   ├── AgentWidget.qml      # Claude Code usage: session % in the bar, card on click
   ├── AgentPanel.qml       # Agents card body: plan, allowance meters, tokens by day/model
-  ├── VolumeSlider.qml     # Draggable level track, shared by every row of the audio card
+  ├── VolumeSlider.qml     # Segmented fader (SegmentGauge + cap), shared by every row of the audio card
   ├── WeatherStatItem.qml  # Reusable stat row for weather popup
   ├── WorkspaceBar.qml     # Hyprland workspaces with app icons (pill-shaped)
   ├── WindowInfo.qml       # Current window title
@@ -58,14 +58,21 @@ components/         # Modular widget components
   ├── VolumeWidget.qml     # Volume with mute/sink detection (speaker/headphone/bluetooth/hdmi)
   ├── BatteryWidget.qml    # Battery level in the bar (renders BatteryState)
   ├── BatteryPanel.qml     # Battery card body: health, cycles, packs, charge limit
+  ├── ConsolePlate.qml     # Console cards: a recessed plate holding one group of readings
+  ├── ConsoleLamp.qml      # Console cards: an indicator lamp, lit in colAccent (colAlert for a fault)
+  ├── ConsoleButton.qml    # Console cards: a chunky push button (label, glyph, spinner), lit when current
+  ├── ConsoleRow.qml       # Console cards: a pickable list row - lamp, glyph, name, detail
+  ├── ConsoleCaption.qml   # Console cards: the small-caps caption beside a control
+  ├── ConsoleKeycap.qml    # Console dialogs: a key hint - the key on a small raised cap, its action beside it
+  ├── SegmentGauge.qml     # Console cards: a segmented gauge with an optional marker tick
   ├── WifiWidget.qml       # WiFi status with network speeds (extends DropdownWidget)
   ├── BluetoothWidget.qml  # Bluetooth status with dropdown (extends DropdownWidget)
   ├── PowerProfileWidget.qml # Power profile selector (extends DropdownWidget)
   ├── PowerWidget.qml      # Power menu: lock, logout, reboot, shutdown (extends DropdownWidget)
   ├── RecordOsd.qml        # Screen-recording dialog (centred box, big buttons, audio toggles)
   ├── ShotOsd.qml          # Screenshot dialog (same box, no audio row)
-  ├── BigButton.qml        # Big icon+label button, shared by both capture dialogs
-  ├── ToggleRow.qml        # Labelled switch, shared by both capture dialogs
+  ├── BigButton.qml        # Big console key (icon, label, key letter), shared by both capture dialogs
+  ├── ToggleRow.qml        # Lamp + label + latching ВКЛ/ВЫКЛ key, shared by both capture dialogs
   ├── SlackWidget.qml      # Slack indicator, click to focus app
   ├── WhatsAppWidget.qml   # WhatsApp indicator, click to focus app
   ├── Spinner.qml          # Ring of dots for indeterminate waits (drawn, not a glyph)
@@ -360,14 +367,14 @@ components/         # Modular widget components
   to a minute old.
 
   What the cost *does* rule out is paying it on the click path. That is why the
-  pills bind to **`effectiveLimit`**, not
+  limit buttons (and the gauge's limit tick) bind to **`effectiveLimit`**, not
   `limitEnd`. `setLimit()` records the click in `pendingLimit` straight away and
-  `effectiveLimit` prefers it, so the pill moves on the click. Waiting for the
+  `effectiveLimit` prefers it, so the button lights on the click. Waiting for the
   hardware meant sudo (~20ms) plus the helper (~14ms) plus that 4.3ms re-read
   before the 130ms fade could even start - about 170ms to confirmation, which is
   past the point a button stops feeling connected to the finger.
   `pendingLimit` is cleared when the re-read lands, so a value the firmware
-  clamped or refused moves the pill back rather than leaving it lying.
+  clamped or refused moves the light back rather than leaving it lying.
 
   Two labels are worth keeping honest. A threshold **only stops charging**; it
   discharges nothing, so a pack already above the limit sits there until the
@@ -553,7 +560,8 @@ good palette rather than rendering blank).
 | `colLabel` / `colDim` | `CPU`, `MEM` — the noun, and secondary info |
 | `colWhite` / `colGrey` | the brightness ramp: emphasis, then the step below it |
 | `colMuted` | separators, inactive, "off" states |
-| `colAccent` | active / connected / on |
+| `colAccent` | active / connected / on: lit lamps, gauge segments, pressed buttons |
+| `colPlate` | the recessed plates of the console cards (`palBg` pushed darker) |
 | `colAlert` | **needs attention**: muted, low battery, DND on, VPN down, storm |
 | `colWarn` | state unknown or degraded (e.g. `dunstctl` failed) |
 | `colOnAlert` | text sitting on an alert-filled shape |
@@ -612,7 +620,7 @@ singleton that the widgets render; only the rendering should be per-screen. See
    next tick. `blockAllReads` makes every read synchronous, which is what a
    polled file needs.
 
-   It bites hardest on a write-then-read: the limit pills in the battery card
+   It bites hardest on a write-then-read: the limit buttons in the battery card
    needed two clicks for exactly this reason - the write landed, the read after
    it returned the pre-write value, and the optimistic value was dropped in
    favour of it. `SystemStats` had the quiet version of the same bug: every CPU,
@@ -677,6 +685,12 @@ singleton that the widgets render; only the rendering should be per-screen. See
   added by `install-scripts/hackbgrt.sh`) so Windows shows the same boot logo, else to Windows Boot
   Manager, run through `sudo -n` under a rule for that helper alone. Optional: without it W falls
   back to `pkexec` and a password prompt (same entry choice, `PowerState.qml`)
+- `~/.config/hypr/scripts/CrtOff.sh` in front of the power menu's E, R, S, B and W (`crt` in
+  `PowerState.qml`): one frame per monitor (grim, PPM - a PNG took 658ms), then
+  `qs -c crt` (`config/quickshell/crt`, its own config, not this bar) folds the picture into a
+  line and a dot and stays black until the session ends; a failed command or 30s without the
+  machine going down give the desktop back. W runs it after the password step, never over a
+  prompt. Shown without a layer animation (`quickshell:crt` in `UserConfigs/WindowRules.lua`)
 - `dunstctl` for DND (Do Not Disturb) toggle
 - `wpctl` / `pactl` for volume control and audio sink detection
 - `hyprctl` for workspace/window data
@@ -737,4 +751,20 @@ singleton that the widgets render; only the rendering should be per-screen. See
    and the wheel as `onWheelMoved(deltaY)`, so a widget keeps its own gestures
    instead of having them swallowed by the card's hit area - that is how
    `VolumeWidget` opens on right-click while left-click still mutes.
-- no need to restart quickshell, it hot reloads the config on save.
+6. **Card bodies are a control console.** Group readings on `ConsolePlate`s
+   (stacked, no dividers), show a level as a `SegmentGauge`, a state as a
+   `ConsoleLamp` beside its label, a choice as `ConsoleButton`s (lit = current,
+   also for on/off toggles), and a list to pick from as `ConsoleRow`s on a
+   plate (lamp lit on the one in use); put a `ConsoleCaption` (small dim
+   capitals) beside a control. Card text is Russian. The card keeps
+   `DropdownWidget`'s soft notch shape - no frame, no title stamp. Size the
+   popup from what the body measures (`cardHeight` + 28 for the stem and
+   padding), not from arithmetic over row heights. `BatteryPanel.qml` is the
+   reference card; every card in the bar follows it.
+- no need to restart quickshell, it hot reloads the config on save. **Except
+  for a new inline component** (`component Foo: Text {...}`) added to a file
+  that is already loaded: the hot reload fails with `Foo is not a type`, while
+  the same file loads fine from a fresh start - the reload keeps the file's old
+  list of inline components. Put a new shared piece in its own file under
+  `components/` instead (that is why `ConsoleCaption.qml` exists), or restart
+  the bar.

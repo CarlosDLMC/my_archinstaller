@@ -6,8 +6,8 @@ import ".."
 
 DropdownWidget {
     id: powerWidget
-    popupWidth: 140
-    popupHeight: 165
+    popupWidth: 210   // was 140; fits «ПЕРЕЗАГРУЗКА» and «ВЫКЛЮЧЕНИЕ»
+    popupHeight: Math.ceil(cardHeight) + 28
     stemAlignment: "left"   // widget now sits at the bar's left edge
 
     // Power actions
@@ -16,19 +16,24 @@ DropdownWidget {
         command: ["loginctl", "lock-session"]
     }
 
-    Process {
-        id: logoutProc
-        command: ["hyprctl", "dispatch", "hl.dsp.exit()"]
+    // Logout, reboot and power-off end in the same CRT power-off as the
+    // «ПУСК · ПУЛЬТ» menu (PowerState.crt, hypr/scripts/CrtOff.sh): the picture
+    // collapses to a line and a dot, then the command runs. The card closes
+    // first and the command waits out the 250ms the menu also waits, so the
+    // frame CrtOff collapses is the desktop, not this card. Detached, so the
+    // session going down does not take the command with the bar.
+    property string pendingEnd: ""
+
+    function endSession(cmd) {
+        pendingEnd = cmd
+        dropdownOpen = false
+        endDelay.restart()
     }
 
-    Process {
-        id: rebootProc
-        command: ["systemctl", "reboot"]
-    }
-
-    Process {
-        id: shutdownProc
-        command: ["systemctl", "poweroff"]
+    Timer {
+        id: endDelay
+        interval: 250
+        onTriggered: Quickshell.execDetached(["sh", "-c", PowerState.crt + powerWidget.pendingEnd])
     }
 
     // Icon with spacing
@@ -62,164 +67,46 @@ DropdownWidget {
         }
     }
 
+    // The card: four push buttons, as on a console. Power-off carries the one
+    // alert glyph - it is the button not to press by accident.
+    property real cardHeight: 186
+
     popupContent: Component {
         Column {
-            spacing: 4
+            spacing: 6
+            onImplicitHeightChanged: powerWidget.cardHeight = implicitHeight
+            Component.onCompleted: powerWidget.cardHeight = implicitHeight
 
-            // Lock
-            Rectangle {
+            ConsoleButton {
                 width: parent.width
-                height: 32
-                color: lockMouse.containsMouse ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.1) : "transparent"
-                radius: 6
-
-                Row {
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.left: parent.left
-                    anchors.leftMargin: 8
-                    spacing: 10
-
-                    Text {
-                        text: "󰌾"
-                        color: Theme.colFg
-                        font.pixelSize: Theme.fontSize
-                        font.family: Theme.fontFamily
-                    }
-                    Text {
-                        text: "Lock"
-                        color: Theme.colWhite
-                        font.pixelSize: Theme.fontSize
-                        font.family: Theme.fontFamily
-                    }
-                }
-
-                MouseArea {
-                    id: lockMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        powerWidget.dropdownOpen = false
-                        lockProc.running = true
-                    }
+                icon: "󰌾"
+                label: "БЛОКИРОВКА"
+                onPicked: {
+                    powerWidget.dropdownOpen = false
+                    lockProc.running = true
                 }
             }
 
-            // Logout
-            Rectangle {
+            ConsoleButton {
                 width: parent.width
-                height: 32
-                color: logoutMouse.containsMouse ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.1) : "transparent"
-                radius: 6
-
-                Row {
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.left: parent.left
-                    anchors.leftMargin: 8
-                    spacing: 10
-
-                    Text {
-                        text: "󰍃"
-                        color: Theme.colFg
-                        font.pixelSize: Theme.fontSize
-                        font.family: Theme.fontFamily
-                    }
-                    Text {
-                        text: "Logout"
-                        color: Theme.colWhite
-                        font.pixelSize: Theme.fontSize
-                        font.family: Theme.fontFamily
-                    }
-                }
-
-                MouseArea {
-                    id: logoutMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        powerWidget.dropdownOpen = false
-                        logoutProc.running = true
-                    }
-                }
+                icon: "󰍃"
+                label: "ВЫХОД"
+                onPicked: powerWidget.endSession("hyprctl dispatch 'hl.dsp.exit()'")
             }
 
-            // Reboot
-            Rectangle {
+            ConsoleButton {
                 width: parent.width
-                height: 32
-                color: rebootMouse.containsMouse ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.1) : "transparent"
-                radius: 6
-
-                Row {
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.left: parent.left
-                    anchors.leftMargin: 8
-                    spacing: 10
-
-                    Text {
-                        text: "󰜉"
-                        color: "#ffb86c"
-                        font.pixelSize: Theme.fontSize
-                        font.family: Theme.fontFamily
-                    }
-                    Text {
-                        text: "Reboot"
-                        color: Theme.colWhite
-                        font.pixelSize: Theme.fontSize
-                        font.family: Theme.fontFamily
-                    }
-                }
-
-                MouseArea {
-                    id: rebootMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        powerWidget.dropdownOpen = false
-                        rebootProc.running = true
-                    }
-                }
+                icon: "󰜉"
+                label: "ПЕРЕЗАГРУЗКА"
+                onPicked: powerWidget.endSession("systemctl reboot")
             }
 
-            // Shutdown
-            Rectangle {
+            ConsoleButton {
                 width: parent.width
-                height: 32
-                color: shutdownMouse.containsMouse ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.1) : "transparent"
-                radius: 6
-
-                Row {
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.left: parent.left
-                    anchors.leftMargin: 8
-                    spacing: 10
-
-                    Text {
-                        text: "󰐥"
-                        color: "#ff5555"
-                        font.pixelSize: Theme.fontSize
-                        font.family: Theme.fontFamily
-                    }
-                    Text {
-                        text: "Shutdown"
-                        color: Theme.colWhite
-                        font.pixelSize: Theme.fontSize
-                        font.family: Theme.fontFamily
-                    }
-                }
-
-                MouseArea {
-                    id: shutdownMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        powerWidget.dropdownOpen = false
-                        shutdownProc.running = true
-                    }
-                }
+                icon: "󰐥"
+                iconColor: Theme.colAlert
+                label: "ВЫКЛЮЧЕНИЕ"
+                onPicked: powerWidget.endSession("systemctl poweroff")
             }
         }
     }

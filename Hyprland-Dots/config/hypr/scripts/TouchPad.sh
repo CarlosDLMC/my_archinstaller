@@ -41,13 +41,13 @@ set_touchpads() {
 
 enable_touchpad() {
     printf "true" >"$STATUS_FILE"
-    notify-send -t 1000 -u low -i $notif  " Enabling" " touchpad"
+    notify-send -t 1000 -u low -i $notif  "Сенсорная панель:" "включена"
     set_touchpads true
 }
 
 disable_touchpad() {
     printf "false" >"$STATUS_FILE"
-    notify-send -t 1000 -u low -i $notif " Disabling" " touchpad"
+    notify-send -t 1000 -u low -i $notif "Сенсорная панель:" "выключена"
     set_touchpads false
 }
 

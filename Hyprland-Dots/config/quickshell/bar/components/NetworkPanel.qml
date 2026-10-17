@@ -97,25 +97,25 @@ Item {
         if (bytesPerSec < 0 || isNaN(bytesPerSec)) return "—"
         var bits = bytesPerSec * 8
         if (bits >= 1000000000) return (bits / 1000000000).toFixed(1) + " Gb/s"
-        if (bits >= 1000000) return (bits / 1000000).toFixed(1) + " Mb/s"
+        if (bits >= 1000000) return (bits / 1000000).toFixed(1) + " Мбит/с"
         if (bits >= 1000) return (bits / 1000).toFixed(0) + " kb/s"
         return Math.round(bits) + " b/s"
     }
 
     function humanBytes(b) {
         if (isNaN(b)) return "—"
-        if (b >= 1073741824) return (b / 1073741824).toFixed(2) + " GB"
-        if (b >= 1048576) return (b / 1048576).toFixed(1) + " MB"
+        if (b >= 1073741824) return (b / 1073741824).toFixed(2) + " ГБ"
+        if (b >= 1048576) return (b / 1048576).toFixed(1) + " МБ"
         if (b >= 1024) return (b / 1024).toFixed(0) + " kB"
-        return b + " B"
+        return b + " Б"
     }
 
     function bandLabel() {
         var f = num("freq")
         if (isNaN(f)) return "—"
-        if (f >= 5925) return "6 GHz"
-        if (f >= 4900) return "5 GHz"
-        return "2.4 GHz"
+        if (f >= 5925) return "6 ГГц"
+        if (f >= 4900) return "5 ГГц"
+        return "2.4 ГГц"
     }
 
     Process {
@@ -456,42 +456,21 @@ Item {
     // ------------------------------------------------------------------
     //  Rendering
     // ------------------------------------------------------------------
-    //  Facts are laid out as label/value PAIRS, two pairs to a row, in a
-    //  4-column GridLayout - the same shape DHH uses. One pair per row read
-    //  as a very tall card for what is mostly short values: fifteen rows of
-    //  mostly-empty line became eight.
-
-    component SectionHeader: Item {
-        property string label: ""
-        width: parent ? parent.width : 0
-        height: Math.round(panel.headerSize * 1.9)
-
-        Text {
-            anchors.left: parent.left
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: 2
-            text: parent.label
-            color: Theme.colMuted
-            font.pixelSize: panel.headerSize
-            font.family: Theme.fontFamily
-            font.bold: true
-        }
-    }
-
-    component Divider: Rectangle {
-        width: parent ? parent.width : 0
-        height: 1
-        color: Theme.colMuted
-        opacity: 0.45
-    }
+    //  A control console, like the battery card: each group of readings on its
+    //  own recessed plate (ConsolePlate) under a caption, the radio and the
+    //  views as push buttons. Facts are laid out as label/value PAIRS, two
+    //  pairs to a row, in a 4-column GridLayout - the same shape DHH uses. One
+    //  pair per row read as a very tall card for what is mostly short values:
+    //  fifteen rows of mostly-empty line became eight.
 
     // Grid cells. The label sits at its natural width; the value takes the
     // slack and is right-aligned against it, so the two pairs in a row line
     // up as two clean label/value gutters.
     component GLabel: Text {
         color: Theme.colDim
-        font.pixelSize: panel.labelSize
+        font.pixelSize: panel.labelSize - 1
         font.family: Theme.fontFamily
+        font.letterSpacing: 1
         Layout.alignment: Qt.AlignVCenter
     }
 
@@ -513,79 +492,7 @@ Item {
         width: parent ? parent.width : 0
         columns: 4
         columnSpacing: 14
-        rowSpacing: 3
-    }
-
-    // A bare glyph that lights up on hover, for the header actions. Deliberately
-    // not a Pill: these are the card's primary actions and a row of outlined
-    // capsules at the top would out-shout the readings underneath them.
-    component IconButton: Rectangle {
-        property string glyph: ""
-        property bool current: false
-        signal picked()
-
-        implicitWidth: Math.round(panel.labelSize * 1.9)
-        implicitHeight: Math.round(panel.labelSize * 1.9)
-        radius: 6
-        color: current
-            ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.16)
-            : (iconMouse.containsMouse
-                ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.10)
-                : "transparent")
-        Behavior on color { ColorAnimation { duration: 130 } }
-
-        Text {
-            anchors.centerIn: parent
-            text: parent.glyph
-            color: parent.current || iconMouse.containsMouse ? Theme.colWhite : Theme.colGrey
-            font.pixelSize: panel.labelSize + 2
-            font.family: Theme.fontFamily
-        }
-
-        MouseArea {
-            id: iconMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: parent.picked()
-        }
-    }
-
-    component Pill: Rectangle {
-        property string label: ""
-        property bool current: false
-        signal picked()
-        implicitWidth: pillText.implicitWidth + 18
-        implicitHeight: Math.round(panel.labelSize * 1.9)
-        radius: height / 2
-        color: current
-            ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.85)
-            : (pillMouse.containsMouse
-                ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.14)
-                : Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.06))
-        border.width: 1
-        border.color: current
-            ? Theme.colWhite
-            : Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.22)
-        Behavior on color { ColorAnimation { duration: 130 } }
-
-        Text {
-            id: pillText
-            anchors.centerIn: parent
-            text: parent.label
-            color: parent.current ? Theme.colBg : Theme.colDim
-            font.pixelSize: panel.labelSize
-            font.family: Theme.fontFamily
-            font.bold: parent.current
-        }
-
-        MouseArea {
-            id: pillMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: parent.picked()
-        }
+        rowSpacing: 4
     }
 
     readonly property real contentHeight: body.implicitHeight
@@ -599,45 +506,43 @@ Item {
         Column {
             id: body
             width: parent.width
-            spacing: 3
+            spacing: 8
 
             // ------------------------------------------------------- header
             //  The connected network as the hero, with the card's actions to
             //  its right - the shape DHH uses. The SSID lives here rather than
-            //  as a "Network" row in LINK below, so the title and the actions
-            //  share one line instead of taking two.
+            //  as a "Network" row below, so the title and the actions share
+            //  one line instead of taking two.
             //
-            //  The wifi glyph on the left IS the radio toggle. It used to be a
-            //  static mark with the toggle sitting off on the right, which put
-            //  the control furthest from the thing it controls and left a dead
-            //  icon in the most prominent spot on the card.
+            //  The button on the left IS the radio toggle, lit while the radio
+            //  is on - the control sits next to the thing it controls.
             Item {
                 width: parent.width
-                height: Math.round(panel.labelSize * 2.2)
+                height: radioToggle.implicitHeight
 
-                IconButton {
+                ConsoleButton {
                     id: radioToggle
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
-                    glyph: panel.busy !== "" ? "󰔟" : (panel.wifiRadioOn ? "󰤨" : "󰤮")
-                    // No persistent fill here: at the head of the card that
-                    // reads as a selected tab rather than as "the radio is on",
-                    // which the glyph and its brightness already say.
-                    current: false
+                    fontSize: Theme.fontSize - 6
+                    minWidth: 0
+                    icon: panel.wifiRadioOn ? "󰤨" : "󰤮"
+                    busy: panel.busy !== ""
+                    current: panel.wifiRadioOn
                     onPicked: panel.toggleRadio()
                 }
 
                 Text {
                     anchors.left: radioToggle.right
-                    anchors.leftMargin: 4
+                    anchors.leftMargin: 10
                     anchors.right: headerActions.left
-                    anchors.rightMargin: 8
+                    anchors.rightMargin: 10
                     anchors.verticalCenter: parent.verticalCenter
                     // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
                     textFormat: Text.PlainText
-                    text: panel.field("ssid", "Not connected")
-                    color: panel.wifiRadioOn ? Theme.colWhite : Theme.colMuted
-                    font.pixelSize: panel.labelSize
+                    text: panel.field("ssid", "НЕТ ПОДКЛЮЧЕНИЯ")
+                    color: panel.wifiRadioOn ? Theme.colWhite : Theme.colGrey
+                    font.pixelSize: panel.labelSize + 1
                     font.family: Theme.fontFamily
                     font.bold: true
                     elide: Text.ElideMiddle
@@ -647,12 +552,14 @@ Item {
                     id: headerActions
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 2
+                    spacing: 6
 
-                    // Both toggle: pressing the icon of the view you are in
+                    // Both latch: pressing the button of the view you are in
                     // returns to the readings, so neither needs a Back button.
-                    IconButton {
-                        glyph: "󰐲"
+                    ConsoleButton {
+                        fontSize: Theme.fontSize - 6
+                        minWidth: 0
+                        icon: "󰐲"
                         current: panel.view === "qr"
                         onPicked: {
                             if (panel.view === "qr") panel.view = "info"
@@ -663,8 +570,10 @@ Item {
                     // Opens the view only. Running a test saturates the
                     // connection, so it waits for an explicit Start rather
                     // than firing the moment you look at the tab.
-                    IconButton {
-                        glyph: "󰓅"
+                    ConsoleButton {
+                        fontSize: Theme.fontSize - 6
+                        minWidth: 0
+                        icon: "󰓅"
                         current: panel.view === "speed"
                         onPicked: {
                             if (panel.view === "speed") { panel.stopSpeedTest(); panel.view = "info" }
@@ -674,47 +583,53 @@ Item {
                 }
             }
 
-            Divider {}
-
             // ------------------------------------------------------ captive
-            Rectangle {
-                width: parent.width
-                height: visible ? portalCol.implicitHeight + 16 : 0
+            ConsolePlate {
                 visible: panel.captive
-                radius: 6
-                color: Qt.rgba(Theme.colAlert.r, Theme.colAlert.g, Theme.colAlert.b, 0.18)
-                border.width: 1
-                border.color: Theme.colAlert
 
-                Column {
-                    id: portalCol
-                    anchors.centerIn: parent
-                    width: parent.width - 16
-                    spacing: 3
+                Item {
+                    width: parent.width
+                    height: portalTitle.implicitHeight
+
+                    ConsoleLamp {
+                        id: portalLamp
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        lit: true
+                        tint: Theme.colAlert
+                    }
 
                     Text {
+                        id: portalTitle
+                        anchors.left: portalLamp.right
+                        anchors.leftMargin: 10
+                        anchors.verticalCenter: parent.verticalCenter
                         text: panel.connectivity === "portal"
-                            ? "󰀪  Sign-in required"
-                            : "󰀪  Limited connectivity"
+                            ? "ТРЕБУЕТСЯ ВХОД"
+                            : "ОГРАНИЧЕННОЕ ПОДКЛЮЧЕНИЕ"
                         color: Theme.colAlert
                         font.pixelSize: panel.labelSize
                         font.family: Theme.fontFamily
                         font.bold: true
                     }
+                }
 
-                    Text {
-                        width: parent.width
-                        text: "This network wants you to sign in or accept its terms before it will pass traffic."
-                        color: Theme.colDim
-                        font.pixelSize: panel.headerSize
-                        font.family: Theme.fontFamily
-                        wrapMode: Text.WordWrap
-                    }
+                Text {
+                    width: parent.width
+                    text: "Сеть просит войти или принять условия, прежде чем пропустит трафик."
+                    color: Theme.colGrey
+                    font.pixelSize: panel.headerSize
+                    font.family: Theme.fontFamily
+                    wrapMode: Text.WordWrap
+                }
 
-                    Pill {
-                        label: "Open sign-in page"
-                        onPicked: panel.openPortal()
-                    }
+                ConsoleButton {
+                    fontSize: Theme.fontSize - 6
+                    icon: "󰖟"
+                    label: "ОТКРЫТЬ СТРАНИЦУ ВХОДА"
+                    current: true
+                    tint: Theme.colAlert
+                    onPicked: panel.openPortal()
                 }
             }
 
@@ -722,254 +637,266 @@ Item {
             Column {
                 id: infoView
                 width: parent.width
-                spacing: 3
+                spacing: 8
                 visible: panel.view === "info"
 
-            // --------------------------------------------------------- link
-            SectionHeader { label: "LINK" }
+                // --------------------------------------------------- link
+                ConsolePlate {
+                    ConsoleCaption { text: "КАНАЛ" }
 
-            InfoGrid {
-                // Band rides with the signal rather than taking a row of its
-                // own. It was tried next to the rate first, where the pair
-                // "5 GHz · 1170 Mbit/s" was too long for half a card and the
-                // rate elided; beside the percentage both halves fit.
-                GLabel { text: "Signal" }
-                GValue {
-                    text: {
-                        var pct = panel.num("signal_pct")
-                        var dbm = panel.num("signal_dbm")
-                        var band = panel.bandLabel()
-                        if (isNaN(pct)) return band === "—" ? "—" : band
-                        var v = isNaN(dbm) ? pct + "%" : pct + "% (" + dbm + ")"
-                        return band === "—" ? v : v + " · " + band
-                    }
+                    // The signal as a gauge, so its strength reads at a glance.
                     // Only a genuinely weak link earns the alert hue.
-                    color: {
-                        var pct = panel.num("signal_pct")
-                        return (!isNaN(pct) && pct < 30) ? Theme.colAlert : Theme.colWhite
+                    SegmentGauge {
+                        readonly property real pct: panel.num("signal_pct")
+                        visible: !isNaN(pct)
+                        width: parent.width
+                        value: isNaN(pct) ? 0 : pct
+                        tint: (!isNaN(pct) && pct < 30) ? Theme.colAlert : Theme.colAccent
                     }
-                }
-                GLabel { text: "Link" }
-                GValue { text: panel.field("bitrate") }
-            }
 
-            // --------------------------------------------------- connection
-            Divider {}
-            SectionHeader { label: "CONNECTION" }
-
-            InfoGrid {
-                GLabel { text: "Iface" }
-                GValue {
-                    text: panel.field("iface")
-                        + (panel.info["type"] === "vpn" ? " (vpn)" : "")
-                }
-                GLabel { text: "IP" }
-                GValue {
-                    text: panel.info["prefix"]
-                        ? panel.field("ip") + "/" + panel.field("prefix")
-                        : panel.field("ip")
-                }
-
-                GLabel { text: "Gateway" }
-                GValue { text: panel.field("gateway") }
-                GLabel { text: "Router" }
-                GValue {
-                    text: {
-                        var ms = panel.num("router_ping_ms")
-                        return isNaN(ms) ? "—" : ms.toFixed(0) + " ms"
+                    InfoGrid {
+                        // Band rides with the signal rather than taking a row of its
+                        // own. It was tried next to the rate first, where the pair
+                        // "5 GHz · 1170 Mbit/s" was too long for half a card and the
+                        // rate elided; beside the percentage both halves fit.
+                        GLabel { text: "СИГНАЛ" }
+                        GValue {
+                            text: {
+                                var pct = panel.num("signal_pct")
+                                var dbm = panel.num("signal_dbm")
+                                var band = panel.bandLabel()
+                                if (isNaN(pct)) return band === "—" ? "—" : band
+                                var v = isNaN(dbm) ? pct + "%" : pct + "% (" + dbm + ")"
+                                return band === "—" ? v : v + " · " + band
+                            }
+                            color: {
+                                var pct = panel.num("signal_pct")
+                                return (!isNaN(pct) && pct < 30) ? Theme.colAlert : Theme.colWhite
+                            }
+                        }
+                        GLabel { text: "СКОРОСТЬ" }
+                        GValue { text: panel.field("bitrate") }
                     }
                 }
 
-                // DNS runs the full width: two IPv4 servers do not fit in half
-                // a card, and eliding the second one hides which resolver is
-                // actually in force - the thing the picker below it changes.
-                GLabel { text: "DNS" }
-                GValue {
-                    text: panel.field("dns")
-                    Layout.columnSpan: 3
-                }
-            }
+                // --------------------------------------------- connection
+                ConsolePlate {
+                    ConsoleCaption { text: "ПОДКЛЮЧЕНИЕ" }
 
-            // --------------------------------------------------- throughput
-            Divider {}
-            SectionHeader { label: "TRAFFIC" }
+                    InfoGrid {
+                        GLabel { text: "ИНТЕРФЕЙС" }
+                        GValue {
+                            text: panel.field("iface")
+                                + (panel.info["type"] === "vpn" ? " (vpn)" : "")
+                        }
+                        GLabel { text: "IP" }
+                        GValue {
+                            text: panel.info["prefix"]
+                                ? panel.field("ip") + "/" + panel.field("prefix")
+                                : panel.field("ip")
+                        }
 
-            InfoGrid {
-                GLabel { text: "Down" }
-                GValue { text: panel.humanRate(panel.rxRate) }
-                GLabel { text: "Up" }
-                GValue { text: panel.humanRate(panel.txRate) }
+                        GLabel { text: "ШЛЮЗ" }
+                        GValue { text: panel.field("gateway") }
+                        GLabel { text: "РОУТЕР" }
+                        GValue {
+                            text: {
+                                var ms = panel.num("router_ping_ms")
+                                return isNaN(ms) ? "—" : ms.toFixed(0) + " мс"
+                            }
+                        }
 
-                GLabel { text: "Recv" }
-                GValue { text: panel.humanBytes(panel.num("rx_bytes")) }
-                GLabel { text: "Sent" }
-                GValue { text: panel.humanBytes(panel.num("tx_bytes")) }
-
-                GLabel { text: "Ping" }
-                GValue {
-                    text: {
-                        var ms = panel.num("internet_ping_ms")
-                        return isNaN(ms) ? "—" : ms.toFixed(0) + " ms"
-                    }
-                    color: {
-                        var ms = panel.num("internet_ping_ms")
-                        return (!isNaN(ms) && ms > 250) ? Theme.colAlert : Theme.colWhite
-                    }
-                }
-                GLabel { text: "Loss" }
-                GValue {
-                    text: {
-                        var l = panel.num("loss_pct")
-                        return isNaN(l) ? "—" : l + "%"
-                    }
-                    color: {
-                        var l = panel.num("loss_pct")
-                        return (!isNaN(l) && l > 0) ? Theme.colAlert : Theme.colWhite
-                    }
-                }
-            }
-
-            // ------------------------------------------------ dns and radio
-            Divider {}
-
-            Item {
-                width: parent.width
-                height: Math.round(panel.labelSize * 2.6)
-
-                Text {
-                    id: dnsHeader
-                    anchors.left: parent.left
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "DNS"
-                    color: Theme.colMuted
-                    font.pixelSize: panel.headerSize
-                    font.family: Theme.fontFamily
-                    font.bold: true
-                }
-
-                Row {
-                    anchors.left: dnsHeader.right
-                    anchors.leftMargin: 10
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: 6
-
-                    Repeater {
-                        model: panel.dnsChoices
-                        Pill {
-                            required property var modelData
-                            label: modelData.label
-                            current: panel.dnsIsActive(modelData)
-                            onPicked: panel.setDns(modelData)
+                        // DNS runs the full width: two IPv4 servers do not fit in half
+                        // a card, and eliding the second one hides which resolver is
+                        // actually in force - the thing the buttons below change.
+                        GLabel { text: "DNS" }
+                        GValue {
+                            text: panel.field("dns")
+                            Layout.columnSpan: 3
                         }
                     }
                 }
-            }
 
-            Text {
-                width: parent.width
-                visible: panel.activeConn === ""
-                text: "No active Wi-Fi profile to change"
-                color: Theme.colMuted
-                font.pixelSize: panel.headerSize
-                font.family: Theme.fontFamily
-            }
+                // --------------------------------------------- throughput
+                ConsolePlate {
+                    ConsoleCaption { text: "ТРАФИК" }
 
+                    InfoGrid {
+                        GLabel { text: "ПРИЁМ" }
+                        GValue { text: panel.humanRate(panel.rxRate) }
+                        GLabel { text: "ПЕРЕДАЧА" }
+                        GValue { text: panel.humanRate(panel.txRate) }
+
+                        GLabel { text: "ПОЛУЧЕНО" }
+                        GValue { text: panel.humanBytes(panel.num("rx_bytes")) }
+                        GLabel { text: "ОТПРАВЛЕНО" }
+                        GValue { text: panel.humanBytes(panel.num("tx_bytes")) }
+
+                        GLabel { text: "ПИНГ" }
+                        GValue {
+                            text: {
+                                var ms = panel.num("internet_ping_ms")
+                                return isNaN(ms) ? "—" : ms.toFixed(0) + " мс"
+                            }
+                            color: {
+                                var ms = panel.num("internet_ping_ms")
+                                return (!isNaN(ms) && ms > 250) ? Theme.colAlert : Theme.colWhite
+                            }
+                        }
+                        GLabel { text: "ПОТЕРИ" }
+                        GValue {
+                            text: {
+                                var l = panel.num("loss_pct")
+                                return isNaN(l) ? "—" : l + "%"
+                            }
+                            color: {
+                                var l = panel.num("loss_pct")
+                                return (!isNaN(l) && l > 0) ? Theme.colAlert : Theme.colWhite
+                            }
+                        }
+                    }
+                }
+
+                // -------------------------------------------------- dns
+                Item {
+                    width: parent.width
+                    height: dnsButtons.implicitHeight
+
+                    ConsoleCaption {
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "DNS"
+                    }
+
+                    Row {
+                        id: dnsButtons
+                        anchors.right: parent.right
+                        spacing: 6
+
+                        Repeater {
+                            model: panel.dnsChoices
+                            ConsoleButton {
+                                required property var modelData
+                                fontSize: Theme.fontSize - 6
+                                label: modelData.label.toUpperCase()
+                                current: panel.dnsIsActive(modelData)
+                                onPicked: panel.setDns(modelData)
+                            }
+                        }
+                    }
+                }
+
+                Text {
+                    width: parent.width
+                    visible: panel.activeConn === ""
+                    horizontalAlignment: Text.AlignRight
+                    text: "Нет активного профиля Wi-Fi"
+                    color: Theme.colGrey
+                    font.pixelSize: panel.headerSize
+                    font.family: Theme.fontFamily
+                }
             }   // end info view
 
             // ------------------------------------------------- speed view
             Column {
                 width: parent.width
-                spacing: 6
+                spacing: 8
                 visible: panel.view === "speed"
 
-                SectionHeader { label: "SPEED TEST" }
+                ConsolePlate {
+                    ConsoleCaption { text: "ТЕСТ СКОРОСТИ" }
 
-                InfoGrid {
-                    GLabel { text: "Down" }
-                    GValue {
-                        text: panel.speedDown > 0 ? panel.speedDown + " Mb/s" : "—"
-                        color: panel.speedPhase === "down" ? Theme.colAlert : Theme.colWhite
+                    InfoGrid {
+                        GLabel { text: "ПРИЁМ" }
+                        GValue {
+                            text: panel.speedDown > 0 ? panel.speedDown + " Мбит/с" : "—"
+                            color: panel.speedPhase === "down" ? Theme.colAlert : Theme.colWhite
+                        }
+                        GLabel { text: "ПЕРЕДАЧА" }
+                        GValue {
+                            text: panel.speedUp > 0 ? panel.speedUp + " Мбит/с" : "—"
+                            color: panel.speedPhase === "up" ? Theme.colAlert : Theme.colWhite
+                        }
                     }
-                    GLabel { text: "Up" }
-                    GValue {
-                        text: panel.speedUp > 0 ? panel.speedUp + " Mb/s" : "—"
-                        color: panel.speedPhase === "up" ? Theme.colAlert : Theme.colWhite
+
+                    Text {
+                        width: parent.width
+                        visible: panel.speedError === ""
+                        // "Starting" is a real state, not a cosmetic one: the
+                        // script spends its first moment asking fast.com for CDN
+                        // endpoints, and a restart additionally waits for the
+                        // previous run's workers to die. Both showed as
+                        // "Measuring… 0 Mb/s", which reads as broken.
+                        text: panel.speedPhase === ""
+                                ? (panel.speedDown > 0 || panel.speedUp > 0 ? "Остановлен" : "Готов")
+                            : panel.speedPhase === "done" ? "Готово - пик в каждую сторону"
+                            : panel.speedNow === 0
+                                ? "Запуск…"
+                            : panel.speedPhase === "down"
+                                ? "Измерение приёма…  " + panel.speedNow + " Мбит/с"
+                                : "Измерение передачи…  " + panel.speedNow + " Мбит/с"
+                        color: Theme.colGrey
+                        font.pixelSize: panel.headerSize
+                        font.family: Theme.fontFamily
                     }
-                }
 
-                Text {
-                    width: parent.width
-                    visible: panel.speedError === ""
-                    // "Starting" is a real state, not a cosmetic one: the
-                    // script spends its first moment asking fast.com for CDN
-                    // endpoints, and a restart additionally waits for the
-                    // previous run's workers to die. Both showed as
-                    // "Measuring… 0 Mb/s", which reads as broken.
-                    text: panel.speedPhase === ""
-                            ? (panel.speedDown > 0 || panel.speedUp > 0 ? "Stopped" : "Ready")
-                        : panel.speedPhase === "done" ? "Done - peak of each direction"
-                        : panel.speedNow === 0
-                            ? "Starting…"
-                        : panel.speedPhase === "down"
-                            ? "Measuring download…  " + panel.speedNow + " Mb/s"
-                            : "Measuring upload…  " + panel.speedNow + " Mb/s"
-                    color: Theme.colDim
-                    font.pixelSize: panel.headerSize
-                    font.family: Theme.fontFamily
-                }
+                    // Why it gave up, rather than a "Done" with two dashes.
+                    Text {
+                        width: parent.width
+                        visible: panel.speedError !== ""
+                        text: panel.speedError
+                        color: Theme.colAlert
+                        font.pixelSize: panel.headerSize
+                        font.family: Theme.fontFamily
+                        wrapMode: Text.WordWrap
+                    }
 
-                // Why it gave up, rather than a "Done" with two dashes.
-                Text {
-                    width: parent.width
-                    visible: panel.speedError !== ""
-                    text: panel.speedError
-                    color: Theme.colAlert
-                    font.pixelSize: panel.headerSize
-                    font.family: Theme.fontFamily
-                    wrapMode: Text.WordWrap
-                }
-
-                Text {
-                    width: parent.width
-                    visible: panel.speedPhase === "down" || panel.speedPhase === "up"
-                    text: "This saturates the connection while it runs."
-                    color: Theme.colMuted
-                    font.pixelSize: panel.headerSize
-                    font.family: Theme.fontFamily
+                    Text {
+                        width: parent.width
+                        visible: panel.speedPhase === "down" || panel.speedPhase === "up"
+                        text: "Пока идёт тест, канал занят полностью."
+                        color: Theme.colGrey
+                        font.pixelSize: panel.headerSize
+                        font.family: Theme.fontFamily
+                    }
                 }
 
                 // Start while idle, Stop while running. The speedometer in
                 // the header is what leaves the view again, so neither of
                 // these has to double as a Back.
                 Row {
+                    anchors.right: parent.right
                     spacing: 6
 
                     readonly property bool busy:
                         panel.speedPhase === "down" || panel.speedPhase === "up"
 
-                    Pill {
+                    ConsoleButton {
                         visible: !parent.busy
+                        fontSize: Theme.fontSize - 6
+                        icon: "󰐊"
                         label: panel.speedPhase === "done" || panel.speedDown > 0 || panel.speedUp > 0
-                            ? "Run again" : "Start"
+                            ? "ЕЩЁ РАЗ" : "СТАРТ"
                         current: true
                         onPicked: panel.startSpeedTest()
                     }
 
-                    Pill {
+                    ConsoleButton {
                         visible: parent.busy
-                        label: "Stop"
+                        fontSize: Theme.fontSize - 6
+                        icon: "󰓛"
+                        label: "СТОП"
                         onPicked: panel.stopSpeedTest()
                     }
                 }
             }
 
             // ---------------------------------------------------- qr view
-            Column {
-                width: parent.width
-                spacing: 6
+            ConsolePlate {
                 visible: panel.view === "qr"
+                spacing: 8
 
-                SectionHeader { label: "SHARE NETWORK" }
+                ConsoleCaption { text: "ПОДЕЛИТЬСЯ СЕТЬЮ" }
 
                 Text {
                     width: parent.width
@@ -986,7 +913,7 @@ Item {
                     visible: panel.qrRows.length > 0
                     // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
                     textFormat: Text.PlainText
-                    text: panel.qrSsid + (panel.qrSecurity === "nopass" ? "  (open)" : "")
+                    text: panel.qrSsid + (panel.qrSecurity === "nopass" ? "  (открытая)" : "")
                     color: Theme.colWhite
                     font.pixelSize: panel.labelSize
                     font.family: Theme.fontFamily
@@ -1040,14 +967,13 @@ Item {
                 Text {
                     width: parent.width
                     visible: panel.qrRows.length > 0
-                    text: "Scan to join"
-                    color: Theme.colMuted
+                    text: "Наведите камеру, чтобы подключиться"
+                    color: Theme.colGrey
                     font.pixelSize: panel.headerSize
                     font.family: Theme.fontFamily
                     horizontalAlignment: Text.AlignHCenter
                 }
             }
-
         }
     }
 }

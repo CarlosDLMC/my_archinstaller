@@ -632,8 +632,8 @@ Item {
         anchor.window: barWindow
         anchor.rect.x: (centerInfo.x + centerText.x + weatherPill.x + weatherPill.width/2) * barWindow.uiScale - width/2
         anchor.rect.y: barWindow.designHeight * barWindow.uiScale + 2
-        implicitWidth: 320
-        implicitHeight: contentColumn.implicitHeight + 12 + 32
+        implicitWidth: 340
+        implicitHeight: contentColumn.implicitHeight + 12 + 24
         color: "transparent"
 
         // Main card with notch corners
@@ -707,151 +707,179 @@ Item {
             anchors.fill: parent
         }
 
+        // A console, like the bar's other cards: the reading on one plate,
+        // the day's range on a second, the rain by the hour on a third. The
+        // temperatures and the sky keep their own hue ramp - the weather is
+        // the one place in the bar allowed one.
         Column {
             id: contentColumn
             anchors.fill: cardRect
-            anchors.topMargin: cardRect.stemHeight + 16
-            anchors.leftMargin: 16
-            anchors.rightMargin: 16
-            anchors.bottomMargin: 16
+            anchors.topMargin: cardRect.stemHeight + 12
+            anchors.leftMargin: 12
+            anchors.rightMargin: 12
+            anchors.bottomMargin: 12
             spacing: 8
 
-            // Large icon centered
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: centerInfo.weatherIcon || "󰖐"
-                color: getConditionColor(centerInfo.weatherCondition)
-                font.pixelSize: 56
-                font.family: Theme.fontFamily
-            }
+            // The sky's glyph and the temperature as the big readout, the
+            // condition and the place beside them.
+            ConsolePlate {
+                pad: 12
 
-            // Temperature large
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                property string temp: {
-                    var match = centerInfo.weatherText.match(/-?\d+/)
-                    return match ? match[0] + "°C" : ""
+                Item {
+                    width: parent.width
+                    height: Math.max(skyGlyph.implicitHeight, readout.implicitHeight)
+
+                    Text {
+                        id: skyGlyph
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: centerInfo.weatherIcon || "󰖐"
+                        color: getConditionColor(centerInfo.weatherCondition)
+                        font.pixelSize: 52
+                        font.family: Theme.fontFamily
+                    }
+
+                    Column {
+                        id: readout
+                        anchors.left: skyGlyph.right
+                        anchors.leftMargin: 16
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            property string temp: {
+                                var match = centerInfo.weatherText.match(/-?\d+/)
+                                return match ? match[0] + "°C" : ""
+                            }
+                            text: temp
+                            color: getTempColor(centerInfo.weatherText)
+                            font.pixelSize: 34
+                            font.family: Theme.fontFamily
+                            font.bold: true
+                        }
+
+                        Text {
+                            width: parent.width
+                            text: centerInfo.weatherConditionDisplay.toUpperCase()
+                            color: Theme.colWhite
+                            font.pixelSize: Theme.fontSize - 5
+                            font.family: Theme.fontFamily
+                            font.bold: true
+                            font.letterSpacing: 1
+                            wrapMode: Text.WordWrap
+                        }
+
+                        Text {
+                            width: parent.width
+                            // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
+                            textFormat: Text.PlainText
+                            text: centerInfo.weatherLocation || ""
+                            color: Theme.colGrey
+                            font.pixelSize: Theme.fontSize - 6
+                            font.family: Theme.fontFamily
+                            wrapMode: Text.WordWrap
+                            visible: centerInfo.weatherLocation !== ""
+                        }
+                    }
                 }
-                text: temp
-                color: getTempColor(centerInfo.weatherText)
-                font.pixelSize: 32
-                font.family: Theme.fontFamily
-                font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
             }
 
-            // Condition
-            Item {
-                width: parent.width
-                height: conditionText.implicitHeight
-
-                Text {
-                    id: conditionText
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: parent.width - 20
-                    horizontalAlignment: Text.AlignHCenter
-                    text: centerInfo.weatherConditionDisplay
-                    color: Theme.colMuted
-                    font.pixelSize: Theme.fontSize
-                    font.family: Theme.fontFamily
-                    wrapMode: Text.WordWrap
-                    elide: Text.ElideNone
-                }
-            }
-
-            // Location
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: parent.width
-                horizontalAlignment: Text.AlignHCenter
-                // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
-                textFormat: Text.PlainText
-                text: centerInfo.weatherLocation || ""
-                color: Qt.rgba(Theme.colMuted.r, Theme.colMuted.g, Theme.colMuted.b, 0.6)
-                font.pixelSize: Theme.fontSize - 2
-                font.family: Theme.fontFamily
-                wrapMode: Text.WordWrap
-                visible: centerInfo.weatherLocation !== ""
-            }
-
-            // Spacer
-            Item { width: 1; height: 4 }
-
-            // Min/Max row
-            Row {
-                anchors.horizontalCenter: parent.horizontalCenter
-                spacing: 16
+            // The day's range and how it feels, as three labelled readings.
+            ConsolePlate {
                 visible: centerInfo.weatherMinTemp !== "" || centerInfo.weatherMaxTemp !== ""
+                         || centerInfo.weatherFeelsLike !== ""
 
-                Text {
-                    text: " " + centerInfo.weatherMinTemp
-                    color: getTempColor(centerInfo.weatherMinTemp)
-                    font.pixelSize: Theme.fontSize
-                    font.family: Theme.fontFamily
-                }
-                Text {
-                    text: " " + centerInfo.weatherMaxTemp
-                    color: getTempColor(centerInfo.weatherMaxTemp)
-                    font.pixelSize: Theme.fontSize
-                    font.family: Theme.fontFamily
+                GridLayout {
+                    width: parent.width
+                    columns: 3
+                    rowSpacing: 2
+                    columnSpacing: 8
+
+                    ConsoleCaption { text: "МИН"; Layout.fillWidth: true; Layout.preferredWidth: 1; horizontalAlignment: Text.AlignHCenter }
+                    ConsoleCaption { text: "МАКС"; Layout.fillWidth: true; Layout.preferredWidth: 1; horizontalAlignment: Text.AlignHCenter }
+                    ConsoleCaption { text: "ОЩУЩАЕТСЯ"; Layout.fillWidth: true; Layout.preferredWidth: 1; horizontalAlignment: Text.AlignHCenter }
+
+                    Text {
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 1
+                        horizontalAlignment: Text.AlignHCenter
+                        text: centerInfo.weatherMinTemp || "—"
+                        color: getTempColor(centerInfo.weatherMinTemp)
+                        font.pixelSize: Theme.fontSize
+                        font.family: Theme.fontFamily
+                        font.bold: true
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 1
+                        horizontalAlignment: Text.AlignHCenter
+                        text: centerInfo.weatherMaxTemp || "—"
+                        color: getTempColor(centerInfo.weatherMaxTemp)
+                        font.pixelSize: Theme.fontSize
+                        font.family: Theme.fontFamily
+                        font.bold: true
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 1
+                        horizontalAlignment: Text.AlignHCenter
+                        text: centerInfo.weatherFeelsLike || "—"
+                        color: getTempColor(centerInfo.weatherFeelsLike)
+                        font.pixelSize: Theme.fontSize
+                        font.family: Theme.fontFamily
+                        font.bold: true
+                    }
                 }
             }
 
-            // Feels like
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: centerInfo.weatherFeelsLike ? "Ощущается " + centerInfo.weatherFeelsLike : ""
-                color: Theme.colMuted
-                font.pixelSize: Theme.fontSize - 2
-                font.family: Theme.fontFamily
-                visible: centerInfo.weatherFeelsLike !== ""
-            }
-
-            // Hourly rain forecast
-            Column {
-                width: parent.width
-                spacing: 6
+            // Hourly rain forecast: one segmented column per hour, lit from
+            // the bottom like a level meter, the chance written under it.
+            ConsolePlate {
                 visible: centerInfo.hourlyRain.length > 0
 
-                // Spacer
-                Item { width: 1; height: 4 }
-
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: " Дождь"
-                    color: Theme.colMuted
-                    font.pixelSize: Theme.fontSize - 2
-                    font.family: Theme.fontFamily
-                }
+                ConsoleCaption { text: " ДОЖДЬ" }
 
                 RowLayout {
                     width: parent.width
-                    spacing: 4
+                    spacing: 8
 
                     Repeater {
                         model: centerInfo.hourlyRain
 
-                        Rectangle {
+                        Column {
+                            id: rainHour
+                            required property int modelData
+                            readonly property int lit: Math.round(Math.max(0, Math.min(100, modelData)) / 100 * 6)
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 28
-                            color: Qt.rgba(Theme.colNetwork.r, Theme.colNetwork.g, Theme.colNetwork.b, 0.15)
-                            radius: 4
+                            Layout.preferredWidth: 1
+                            spacing: 4
 
-                            Rectangle {
-                                anchors.bottom: parent.bottom
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                height: parent.height * (modelData / 100)
-                                color: Qt.rgba(Theme.colNetwork.r, Theme.colNetwork.g, Theme.colNetwork.b, 0.4 + (modelData / 200))
-                                radius: 4
+                            Column {
+                                width: parent.width
+                                spacing: 2
+
+                                Repeater {
+                                    model: 6
+                                    Rectangle {
+                                        required property int index
+                                        width: parent.width
+                                        height: 5
+                                        radius: 1
+                                        color: (5 - index) < rainHour.lit
+                                            ? Theme.colAccent : Qt.rgba(1, 1, 1, 0.07)
+                                    }
+                                }
                             }
 
                             Text {
-                                anchors.centerIn: parent
-                                text: modelData + "%"
-                                color: Theme.colFg
-                                font.pixelSize: 9
+                                width: parent.width
+                                horizontalAlignment: Text.AlignHCenter
+                                text: rainHour.modelData + "%"
+                                color: rainHour.lit > 0 ? Theme.colWhite : Theme.colGrey
+                                font.pixelSize: Theme.fontSize - 8
                                 font.family: Theme.fontFamily
-                                font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
+                                font.bold: true
                             }
                         }
                     }

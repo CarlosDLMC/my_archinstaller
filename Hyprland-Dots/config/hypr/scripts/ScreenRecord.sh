@@ -68,10 +68,10 @@ stop_recording() {
         # Clean up any orphans
         pkill -x wf-recorder 2>/dev/null
         unload_mix
-        ${notify_cmd_rec} "Recording Stopped" "Saved to ${dir}"
+        ${notify_cmd_rec} "Запись остановлена" "Сохранено в ${dir}"
     else
         unload_mix
-        ${notify_cmd_NOT} "No Recording" "No active recording found"
+        ${notify_cmd_NOT} "Запись не идёт" "Активной записи нет"
     fi
 }
 
@@ -145,9 +145,9 @@ audio_args() {
 # Human-readable audio suffix for the notification.
 audio_label() {
     case "$audio_mode" in
-        system) echo " · system audio" ;;
-        mic)    echo " · mic" ;;
-        both)   echo " · system audio + mic" ;;
+        system) echo " · системный звук" ;;
+        mic)    echo " · микрофон" ;;
+        both)   echo " · системный звук + микрофон" ;;
         *)      echo "" ;;
     esac
 }
@@ -204,7 +204,7 @@ focused_output() {
 # laptop panel here), so the output is always passed explicitly.
 record_fullscreen() {
     if is_recording; then
-        ${notify_cmd_NOT} "Already Recording" "Stop current recording first"
+        ${notify_cmd_NOT} "Запись уже идёт" "Сначала остановите текущую запись"
         return
     fi
 
@@ -212,21 +212,21 @@ record_fullscreen() {
     [[ -z "$output" ]] && output=$(focused_output)
 
     if [[ -z "$output" ]]; then
-        ${notify_cmd_NOT} "Recording Failed" "Could not determine which monitor to record"
+        ${notify_cmd_NOT} "Ошибка записи" "Не удалось определить монитор"
         return
     fi
 
     if start_recorder -o "$output" -f "${dir}/${file}"; then
-        ${notify_cmd_rec} "Recording Started" "${output}$(audio_label)"
+        ${notify_cmd_rec} "Запись начата" "${output}$(audio_label)"
     else
-        ${notify_cmd_NOT} "Recording Failed" "wf-recorder exited immediately"
+        ${notify_cmd_NOT} "Ошибка записи" "wf-recorder сразу завершился"
     fi
 }
 
 # Record selected area
 record_area() {
     if is_recording; then
-        ${notify_cmd_NOT} "Already Recording" "Stop current recording first"
+        ${notify_cmd_NOT} "Запись уже идёт" "Сначала остановите текущую запись"
         return
     fi
 
@@ -234,7 +234,7 @@ record_area() {
     # records the correct monitor on multi-monitor setups.
     selection=$(slurp -f "%o %x,%y %wx%h")
     if [[ -z "$selection" ]]; then
-        ${notify_cmd_NOT} "Recording Cancelled" "No area selected"
+        ${notify_cmd_NOT} "Запись отменена" "Область не выбрана"
         return
     fi
 
@@ -242,9 +242,9 @@ record_area() {
     geometry=$(cut -d' ' -f2- <<< "$selection")
 
     if start_recorder -o "$output" -g "$geometry" -f "${dir}/${file}"; then
-        ${notify_cmd_rec} "Recording Started" "Region on ${output}$(audio_label)"
+        ${notify_cmd_rec} "Запись начата" "Область на ${output}$(audio_label)"
     else
-        ${notify_cmd_NOT} "Recording Failed" "wf-recorder exited immediately"
+        ${notify_cmd_NOT} "Ошибка записи" "wf-recorder сразу завершился"
     fi
 }
 
@@ -253,7 +253,7 @@ record_pick_monitor() {
     local output
     output=$(slurp -o -f "%o")
     if [[ -z "$output" ]]; then
-        ${notify_cmd_NOT} "Recording Cancelled" "No monitor selected"
+        ${notify_cmd_NOT} "Запись отменена" "Монитор не выбран"
         return
     fi
     record_fullscreen "$output"
@@ -262,7 +262,7 @@ record_pick_monitor() {
 # Record active window
 record_active() {
     if is_recording; then
-        ${notify_cmd_NOT} "Already Recording" "Stop current recording first"
+        ${notify_cmd_NOT} "Запись уже идёт" "Сначала остановите текущую запись"
         return
     fi
 
@@ -287,9 +287,9 @@ record_active() {
     fi
 
     if [[ $? -eq 0 ]]; then
-        ${notify_cmd_rec} "Recording Started" "${active_window_class}$(audio_label)"
+        ${notify_cmd_rec} "Запись начата" "${active_window_class}$(audio_label)"
     else
-        ${notify_cmd_NOT} "Recording Failed" "wf-recorder exited immediately"
+        ${notify_cmd_NOT} "Ошибка записи" "wf-recorder сразу завершился"
     fi
 }
 

@@ -250,7 +250,7 @@ def scan(root, cache):
 
 
 def notify(body):
-    subprocess.run(["notify-send", "-u", "low", "Wallpaper", body],
+    subprocess.run(["notify-send", "-u", "low", "Обои", body],
                    stdin=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
@@ -260,9 +260,9 @@ def apply(root, wanted):
             try:
                 os.execv(APPLY, [APPLY, path])
             except OSError as e:
-                notify(f"Cannot run WallpaperSelect.sh: {e.strerror}")
+                notify(f"Не удалось запустить WallpaperSelect.sh: {e.strerror}")
                 return 1
-    notify("That wallpaper is gone - it was moved or deleted.")
+    notify("Этих обоев больше нет: файл перемещён или удалён.")
     return 1
 
 

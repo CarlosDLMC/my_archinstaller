@@ -46,11 +46,11 @@ Item {
         var t = Date.parse(iso)
         if (isNaN(t)) return ""
         var s = Math.max(0, Math.round((t - Date.now()) / 1000))
-        if (s < 60) return "now"
+        if (s < 60) return "сейчас"
         var m = Math.floor(s / 60), h = Math.floor(m / 60), d = Math.floor(h / 24)
-        if (d >= 1) return d + "d " + (h % 24) + "h"
-        if (h >= 1) return h + "h " + (m % 60) + "m"
-        return m + "m"
+        if (d >= 1) return d + " дн " + (h % 24) + " ч"
+        if (h >= 1) return h + " ч " + (m % 60) + " мин"
+        return m + " мин"
     }
 
     // The date of the oldest record still on disk. Claude Code prunes its own
@@ -61,21 +61,21 @@ Item {
     // "SINCE 10 AUG" is unambiguous within the current year and shorter.
     readonly property string sinceLabel: {
         if (AgentUsage.oldestHour <= 0)
-            return "NO DATA"
+            return "НЕТ ДАННЫХ"
         var d = new Date(AgentUsage.oldestHour * 3600 * 1000)
         var fmt = d.getFullYear() === new Date().getFullYear() ? "d MMM" : "d MMM yyyy"
-        return "SINCE " + Qt.formatDateTime(d, fmt).toUpperCase()
+        return "С " + Qt.locale().toString(d, fmt).toUpperCase()
     }
 
     // "6m ago" for a cached reading, so a stale number is never mistaken for
     // a current one.
     function agoText(epochSeconds) {
         var s = Math.max(0, Math.round(Date.now() / 1000 - epochSeconds))
-        if (s < 90) return "just now"
+        if (s < 90) return "только что"
         var m = Math.round(s / 60)
-        if (m < 60) return m + "m ago"
+        if (m < 60) return m + " мин назад"
         var h = Math.round(m / 60)
-        return h < 48 ? h + "h ago" : Math.round(h / 24) + "d ago"
+        return h < 48 ? h + " ч назад" : Math.round(h / 24) + " дн назад"
     }
 
     // The one place hue is spent here: an allowance you are about to exhaust.
@@ -99,32 +99,16 @@ Item {
         onTriggered: panel.nowTick++
     }
 
-    component SectionHeader: Item {
+    // A plate's caption. Kept as its own type so the plates below read as
+    // "caption, rows" rather than repeating the font settings.
+    component SectionHeader: ConsoleCaption {
         property string label: ""
-        width: parent ? parent.width : 0
-        height: Math.round(panel.headerSize * 1.9)
-
-        Text {
-            anchors.left: parent.left
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: 2
-            text: parent.label
-            color: Theme.colMuted
-            font.pixelSize: panel.headerSize
-            font.family: Theme.fontFamily
-            font.bold: true
-        }
+        text: label
     }
 
-    component Divider: Rectangle {
-        width: parent ? parent.width : 0
-        height: 1
-        color: Theme.colMuted
-        opacity: 0.45
-    }
-
-    // A label, a track, and a value - used by both charts and the meters, so
-    // the three sections read as one family rather than three chart styles.
+    // A label, a segmented gauge, and a value - used by both charts and the
+    // meters, so the three sections read as one family rather than three
+    // chart styles.
     component MeterRow: Item {
         id: meterRow
         property string label: ""
@@ -135,7 +119,7 @@ Item {
         property bool emphasise: false
 
         width: parent ? parent.width : 0
-        height: Math.round(panel.labelSize * 2.0)
+        height: Math.round(panel.labelSize * 1.35)
 
         Text {
             id: rowLabel
@@ -143,43 +127,37 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             width: Math.round(panel.labelSize * 4.6)
             text: meterRow.label
-            color: meterRow.emphasise ? Theme.colWhite : Theme.colDim
-            font.pixelSize: panel.labelSize
+            color: meterRow.emphasise ? Theme.colWhite : Theme.colGrey
+            font.pixelSize: panel.labelSize - 1
             font.family: Theme.fontFamily
             font.bold: meterRow.emphasise
             elide: Text.ElideRight
         }
 
-        Rectangle {
+        SegmentGauge {
             id: track
             anchors.left: rowLabel.right
             anchors.leftMargin: 8
             anchors.right: rowValue.left
-            anchors.rightMargin: 8
+            anchors.rightMargin: 10
             anchors.verticalCenter: parent.verticalCenter
-            height: 8
-            radius: 4
-            color: Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.10)
-
-            Rectangle {
-                // Addressed through the component's own id rather than a
-                // parent chain - the chain is what broke the QR matrix.
-                // A non-zero reading always draws at least a sliver, so "a
-                // little" never looks identical to "none".
-                readonly property real f: Math.max(0, Math.min(1, meterRow.fraction))
-                width: f > 0 ? Math.max(parent.width * f, 2) : 0
-                height: parent.height
-                radius: parent.radius
-                color: meterRow.fill
-                Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-            }
+            height: 10
+            segments: Math.max(10, Math.round(width / 10))
+            // A non-zero reading always lights at least one segment, so "a
+            // little" never looks identical to "none".
+            readonly property real f: Math.max(0, Math.min(1, meterRow.fraction))
+            value: f > 0 ? Math.max(f * 100, 100 / segments) : 0
+            // White stays white (the day chart is a quantity, not a state);
+            // the allowance meters light in the accent, or the alert hue when
+            // nearly spent.
+            tint: Qt.colorEqual(meterRow.fill, Theme.colAlert) ? Theme.colAlert : Theme.colAccent
         }
 
         Text {
             id: rowValue
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            width: Math.round(panel.labelSize * 3.4)
+            width: Math.round(panel.labelSize * 3.0)
             horizontalAlignment: Text.AlignRight
             text: meterRow.value
             color: meterRow.fill
@@ -190,9 +168,10 @@ Item {
     }
 
     // The model chart is a different shape from the day chart, and deliberately
-    // so upstream: days are a label, a thin track and a value, while a model is
-    // one filled row with its name and total sitting inside the bar. Scaled to
-    // the heaviest model, so the top row is always full.
+    // so upstream: days are a label, a gauge and a value, while a model gets
+    // its name and total on a line of their own with the gauge across the
+    // full width under them. Scaled to the heaviest model, so the top row is
+    // always full.
     component ModelRow: Item {
         id: modelRow
         property string name: ""
@@ -201,25 +180,7 @@ Item {
         property real share: 0
 
         width: parent ? parent.width : 0
-        height: Math.round(panel.labelSize * 2.1)
-
-        Rectangle {
-            anchors.fill: parent
-            radius: 6
-            color: Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.05)
-        }
-
-        Rectangle {
-            anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            width: parent.width * Math.max(0, Math.min(1, modelRow.share))
-            radius: 6
-            color: Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.14)
-            Behavior on width {
-                NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
-            }
-        }
+        height: modelName.implicitHeight + 4 + 8
 
         Text {
             id: modelName
@@ -228,27 +189,34 @@ Item {
             // place the numbers can go without adding one.
             text: modelHover.containsMouse && modelRow.detail !== ""
                 ? modelRow.detail : modelRow.name
-            color: modelHover.containsMouse ? Theme.colDim : Theme.colWhite
-            font.pixelSize: modelHover.containsMouse ? panel.headerSize : panel.labelSize
+            color: modelHover.containsMouse ? Theme.colGrey : Theme.colWhite
+            font.pixelSize: panel.labelSize - 1
             font.family: Theme.fontFamily
             elide: Text.ElideRight
             anchors.left: parent.left
-            anchors.leftMargin: 8
             anchors.right: modelTotal.left
             anchors.rightMargin: 8
-            anchors.verticalCenter: parent.verticalCenter
+            anchors.top: parent.top
         }
 
         Text {
             id: modelTotal
             text: modelRow.total
-            color: Theme.colDim
-            font.pixelSize: panel.labelSize
+            color: Theme.colWhite
+            font.pixelSize: panel.labelSize - 1
             font.family: Theme.fontFamily
             font.bold: true
             anchors.right: parent.right
-            anchors.rightMargin: 8
-            anchors.verticalCenter: parent.verticalCenter
+            anchors.top: parent.top
+        }
+
+        SegmentGauge {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: 8
+            segments: Math.max(10, Math.round(width / 10))
+            value: Math.max(0, Math.min(1, modelRow.share)) * 100
         }
 
         MouseArea {
@@ -268,17 +236,18 @@ Item {
         Column {
             id: body
             width: parent.width
-            spacing: 3
+            spacing: 8
 
             // --------------------------------------------------------- hero
             Item {
                 width: parent.width
-                height: Math.round(panel.labelSize * 2.2)
+                height: Math.round(panel.labelSize * 1.8)
 
                 Row {
                     anchors.left: parent.left
+                    anchors.leftMargin: 4
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 8
+                    spacing: 10
 
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
@@ -290,157 +259,156 @@ Item {
 
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: "Claude Code"
+                        text: "CLAUDE CODE"
                         color: Theme.colWhite
                         font.pixelSize: panel.labelSize
                         font.family: Theme.fontFamily
                         font.bold: true
+                        font.letterSpacing: 1
                     }
                 }
 
-                Text {
+                ConsoleCaption {
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
-                    text: AgentUsage.plan
+                    text: AgentUsage.plan.toUpperCase()
                     visible: text !== ""
-                    color: Theme.colDim
-                    font.pixelSize: panel.labelSize
-                    font.family: Theme.fontFamily
                 }
             }
-
-            Divider {}
 
             // ------------------------------------------------------- limits
-            SectionHeader { label: "ALLOWANCE" }
+            ConsolePlate {
+                SectionHeader { label: "ЛИМИТЫ" }
 
-            Text {
-                width: parent.width
-                visible: AgentUsage.limitsError !== ""
-                text: {
-                    panel.nowTick
-                    if (AgentUsage.limits.length === 0) return AgentUsage.limitsError
-                    var age = AgentUsage.staleAt > 0
-                        ? " from " + panel.agoText(AgentUsage.staleAt) : ""
-                    return AgentUsage.limitsError + "  Showing the last reading" + age + "."
+                Text {
+                    width: parent.width
+                    visible: AgentUsage.limitsError !== ""
+                    text: {
+                        panel.nowTick
+                        if (AgentUsage.limits.length === 0) return AgentUsage.limitsError
+                        var age = AgentUsage.staleAt > 0
+                            ? " от " + panel.agoText(AgentUsage.staleAt) : ""
+                        return AgentUsage.limitsError + "  Показано последнее значение" + age + "."
+                    }
+                    color: Theme.colAlert
+                    font.pixelSize: panel.headerSize
+                    font.family: Theme.fontFamily
+                    wrapMode: Text.WordWrap
                 }
-                color: Theme.colAlert
-                font.pixelSize: panel.headerSize
-                font.family: Theme.fontFamily
-                wrapMode: Text.WordWrap
-            }
 
-            Repeater {
-                model: AgentUsage.limits
+                Repeater {
+                    model: AgentUsage.limits
 
-                MeterRow {
-                    required property var modelData
-                    // A model-scoped budget says which model it applies to;
-                    // the two headline ones speak for the whole plan.
-                    label: modelData.window === "7 days" && modelData.label !== "Weekly"
-                        ? modelData.label + " wk"
-                        : modelData.label
-                    value: Math.round(modelData.percent) + "%"
-                    fraction: modelData.percent / 100
-                    fill: panel.meterColor(modelData.severity, modelData.percent)
-                    // The server marks the limit currently binding you; that is
-                    // the row worth the extra weight, not a fixed one.
-                    emphasise: modelData.active === true
+                    MeterRow {
+                        required property var modelData
+                        // A model-scoped budget says which model it applies to;
+                        // the two headline ones speak for the whole plan.
+                        label: modelData.window === "7 days" && modelData.label !== "Weekly"
+                            ? modelData.label + " нед"
+                            : ({ "Session": "Сессия", "Weekly": "Неделя" })[modelData.label] || modelData.label
+                        value: Math.round(modelData.percent) + "%"
+                        fraction: modelData.percent / 100
+                        fill: panel.meterColor(modelData.severity, modelData.percent)
+                        // The server marks the limit currently binding you; that is
+                        // the row worth the extra weight, not a fixed one.
+                        emphasise: modelData.active === true
+                    }
                 }
-            }
 
-            // Reset countdowns, on one line rather than a row each.
-            Text {
-                width: parent.width
-                visible: AgentUsage.session !== null || AgentUsage.weekly !== null
-                text: {
-                    panel.nowTick        // re-evaluate on the tick
-                    var parts = []
-                    if (AgentUsage.session)
-                        parts.push("session " + panel.untilText(AgentUsage.session.resetsAt))
-                    if (AgentUsage.weekly)
-                        parts.push("weekly " + panel.untilText(AgentUsage.weekly.resetsAt))
-                    return parts.length ? "resets in  " + parts.join("  ·  ") : ""
+                // Reset countdowns, on one line rather than a row each.
+                Text {
+                    width: parent.width
+                    visible: AgentUsage.session !== null || AgentUsage.weekly !== null
+                    text: {
+                        panel.nowTick        // re-evaluate on the tick
+                        var parts = []
+                        if (AgentUsage.session)
+                            parts.push("сессия " + panel.untilText(AgentUsage.session.resetsAt))
+                        if (AgentUsage.weekly)
+                            parts.push("неделя " + panel.untilText(AgentUsage.weekly.resetsAt))
+                        return parts.length ? "сброс через  " + parts.join("  ·  ") : ""
+                    }
+                    color: Theme.colGrey
+                    font.pixelSize: panel.headerSize
+                    font.family: Theme.fontFamily
+                    wrapMode: Text.WordWrap
                 }
-                color: Theme.colMuted
-                font.pixelSize: panel.headerSize
-                font.family: Theme.fontFamily
-                wrapMode: Text.WordWrap
             }
 
             // ---------------------------------------------------- by day
-            Divider { visible: AgentUsage.byDay.length > 0 }
-            SectionHeader {
-                label: "TOKENS BY DAY · LAST 7 DAYS"
+            ConsolePlate {
                 visible: AgentUsage.byDay.length > 0
-            }
 
-            Repeater {
-                model: AgentUsage.byDay
+                SectionHeader { label: "ТОКЕНЫ ПО ДНЯМ · 7 ДНЕЙ" }
 
-                MeterRow {
-                    required property var modelData
-                    required property int index
-                    // Today is the last entry, and it is the one you are
-                    // actually spending, so it carries the weight.
-                    readonly property bool today: index === AgentUsage.byDay.length - 1
-                    label: {
-                        var d = new Date(modelData.day + "T00:00:00")
-                        return today ? "Today" : Qt.formatDateTime(d, "ddd")
+                Repeater {
+                    model: AgentUsage.byDay
+
+                    MeterRow {
+                        required property var modelData
+                        required property int index
+                        // Today is the last entry, and it is the one you are
+                        // actually spending, so it carries the weight.
+                        readonly property bool today: index === AgentUsage.byDay.length - 1
+                        label: {
+                            var d = new Date(modelData.day + "T00:00:00")
+                            return today ? "Сегодня" : Qt.locale().toString(d, "ddd")
+                        }
+                        value: panel.compact(modelData.tokens)
+                        fraction: panel.maxDay > 0 ? modelData.tokens / panel.maxDay : 0
+                        fill: Theme.colWhite
+                        emphasise: today
                     }
-                    value: panel.compact(modelData.tokens)
-                    fraction: panel.maxDay > 0 ? modelData.tokens / panel.maxDay : 0
-                    fill: Theme.colWhite
-                    emphasise: today
                 }
             }
 
             // -------------------------------------------------- by model
-            Divider { visible: AgentUsage.byModel.length > 0 }
-            SectionHeader {
+            ConsolePlate {
+                visible: AgentUsage.byModel.length > 0
+                spacing: 8
+
                 // Not "ALL TIME": Claude Code deletes transcripts older than
                 // cleanupPeriodDays, so the chart begins wherever the oldest
                 // survivor does. The date comes from the data, not from the
                 // retention setting, so it stays true whatever that is set to
                 // and moves forward on its own as old files are pruned.
-                label: "TOKENS BY MODEL · " + panel.sinceLabel
-                visible: AgentUsage.byModel.length > 0
-            }
+                //
+                // Prompt + completion only. Cache reads are two orders of
+                // magnitude larger (2,712M against 11.9M for opus-5 here) and
+                // would flatten every other bar to nothing.
+                SectionHeader { label: "ТОКЕНЫ ПО МОДЕЛЯМ · " + panel.sinceLabel }
 
-            // Prompt + completion only. Cache reads are two orders of magnitude
-            // larger (2,712M against 11.9M for opus-5 here) and would flatten
-            // every other bar to nothing.
-            Text {
-                width: parent.width
-                visible: AgentUsage.byModel.length > 0
-                text: "prompt + completion, excluding cache"
-                color: Theme.colMuted
-                font.pixelSize: panel.headerSize
-                font.family: Theme.fontFamily
-            }
+                Text {
+                    width: parent.width
+                    text: "запрос + ответ, без кэша"
+                    color: Theme.colGrey
+                    font.pixelSize: panel.headerSize
+                    font.family: Theme.fontFamily
+                }
 
-            Repeater {
-                model: AgentUsage.byModel
+                Repeater {
+                    model: AgentUsage.byModel
 
-                ModelRow {
-                    required property var modelData
-                    // "claude-opus-5" -> "opus-5"; the vendor prefix is the
-                    // same on every row and only costs width.
-                    name: String(modelData.model).replace(/^claude-/, "")
-                                                 .replace(/-\d{8}$/, "")
-                    total: panel.compact(modelData.tokens)
-                    detail: "in " + panel.compact(modelData.input)
-                          + " · out " + panel.compact(modelData.output)
-                          + " · cache " + panel.compact(modelData.cacheRead)
-                    share: panel.maxModel > 0 ? modelData.tokens / panel.maxModel : 0
+                    ModelRow {
+                        required property var modelData
+                        // "claude-opus-5" -> "opus-5"; the vendor prefix is the
+                        // same on every row and only costs width.
+                        name: String(modelData.model).replace(/^claude-/, "")
+                                                     .replace(/-\d{8}$/, "")
+                        total: panel.compact(modelData.tokens)
+                        detail: "ввод " + panel.compact(modelData.input)
+                              + " · вывод " + panel.compact(modelData.output)
+                              + " · кэш " + panel.compact(modelData.cacheRead)
+                        share: panel.maxModel > 0 ? modelData.tokens / panel.maxModel : 0
+                    }
                 }
             }
 
             Text {
                 width: parent.width
                 visible: AgentUsage.byDay.length === 0 && AgentUsage.limits.length === 0
-                text: AgentUsage.busy ? "Reading usage…" : "No Claude Code usage found"
-                color: Theme.colMuted
+                text: AgentUsage.busy ? "Чтение данных…" : "Данных Claude Code нет"
+                color: Theme.colGrey
                 font.pixelSize: panel.labelSize
                 font.family: Theme.fontFamily
             }

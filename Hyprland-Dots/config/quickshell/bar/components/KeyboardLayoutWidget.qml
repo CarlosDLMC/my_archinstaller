@@ -17,7 +17,8 @@ Rectangle {
     Text {
         id: kbText
         anchors.centerIn: parent
-        text: currentLayout.toUpperCase()
+        // Russian names for the layouts in use; anything else as its code.
+        text: ({ "us": "АНГ", "ru": "РУС", "es": "ИСП" })[currentLayout] || currentLayout.toUpperCase()
         color: Theme.colWhite
         font.pixelSize: Theme.fontSize
         font.family: Theme.fontFamily

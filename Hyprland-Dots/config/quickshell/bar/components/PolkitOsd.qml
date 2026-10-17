@@ -5,8 +5,10 @@ import Quickshell.Hyprland
 import ".."
 
 // The polkit password prompt (PolkitState holds the agent). A centred card in
-// the bar's own style, built like ClipboardOsd and ShotOsd: one per screen,
-// shown on the focused monitor, keyboard grabbed while it is up.
+// the console style of the bar's cards, built like ClipboardOsd and ShotOsd: one
+// per screen, shown on the focused monitor, keyboard grabbed while it is up.
+// A lamp lit in the alert colour and «ТРЕБУЕТСЯ ПАРОЛЬ», what is asking on a
+// recessed plate, the field another plate, and the keys as keycaps.
 //
 // Enter authenticates, Esc cancels. A click outside does NOT cancel - a stray
 // click should not throw away a half-typed password.
@@ -37,7 +39,7 @@ PanelWindow {
     readonly property int cardW: Math.round(560 * uiScale)
     readonly property int pad: Math.round(22 * uiScale)
     readonly property int gap: Math.round(12 * uiScale)
-    readonly property int radius: Math.round(18 * uiScale)
+    readonly property int radius: Math.round(12 * uiScale)
     readonly property int titleSize: Math.round(14 * uiScale)
     readonly property int bodySize: Math.round(13 * uiScale)
     readonly property int smallSize: Math.round(11 * uiScale)
@@ -89,8 +91,6 @@ PanelWindow {
         height: content.implicitHeight + 2 * osd.pad
         radius: osd.radius
         color: Theme.colBg
-        border.width: 1
-        border.color: Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.14)
 
         opacity: osd.shown ? 1.0 : 0.0
         scale: osd.shown ? 1.0 : 0.96
@@ -104,16 +104,28 @@ PanelWindow {
             width: card.width - 2 * osd.pad
             spacing: osd.gap
 
-            Text {
-                text: "AUTHENTICATION REQUIRED"
-                color: Theme.colDim
-                font.family: Theme.fontFamily
-                font.pixelSize: osd.titleSize
-                font.letterSpacing: 2
+            Row {
+                spacing: 12
+
+                ConsoleLamp {
+                    anchors.verticalCenter: parent.verticalCenter
+                    lit: true
+                    tint: Theme.colAlert
+                }
+
+                ConsoleCaption {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "ТРЕБУЕТСЯ ПАРОЛЬ"
+                    fontSize: osd.titleSize
+                }
             }
 
             // What is asking, in polkit's own words ("Authentication is
-            // needed to mount ...").
+            // needed to mount ..."), on a recessed plate.
+            ConsolePlate {
+                pad: osd.gap
+                spacing: Math.round(osd.gap * 0.5)
+
             Text {
                 width: parent.width
                 // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
@@ -136,16 +148,16 @@ PanelWindow {
                 font.family: Theme.fontFamilyContent
                 font.pixelSize: osd.smallSize
             }
+            }   // the plate
 
+            // The field: a recessed plate, rimmed in the accent while it has focus.
             Rectangle {
                 width: parent.width
                 height: osd.fieldH
-                radius: 8
-                color: Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.06)
+                radius: 5
+                color: Theme.colPlate
                 border.width: 1
-                border.color: field.activeFocus
-                    ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.35)
-                    : Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.12)
+                border.color: field.activeFocus ? Theme.colAccent : "transparent"
 
                 TextInput {
                     id: field
@@ -172,13 +184,15 @@ PanelWindow {
                     Keys.onEnterPressed: osd.accept()
                     Keys.onEscapePressed: PolkitState.cancel()
 
-                    // The prompt ("Password:") sits in the empty field.
+                    // The prompt ("Password:") sits in the empty field - in
+                    // Russian when it is PAM's plain "Password:".
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
                         visible: field.text === ""
-                        text: PolkitState.checking ? "Checking..."
-                            : osd.flow && osd.flow.inputPrompt !== ""
-                            ? osd.flow.inputPrompt.replace(/:\s*$/, "") : "Password"
+                        readonly property string prompt: osd.flow && osd.flow.inputPrompt !== ""
+                            ? osd.flow.inputPrompt.replace(/:\s*$/, "") : ""
+                        text: PolkitState.checking ? "Проверка…"
+                            : (prompt === "" || /^password$/i.test(prompt)) ? "Пароль" : prompt
                         color: Theme.colGrey
                         font.family: Theme.fontFamilyContent
                         font.pixelSize: osd.bodySize
@@ -201,11 +215,11 @@ PanelWindow {
                 font.pixelSize: osd.smallSize
             }
 
-            Text {
-                text: "Enter  authenticate    Esc  cancel"
-                color: Theme.colGrey
-                font.family: Theme.fontFamilyContent
-                font.pixelSize: osd.smallSize
+            Row {
+                spacing: osd.gap
+
+                ConsoleKeycap { keys: "ENTER"; label: "ПОДТВЕРДИТЬ"; fontSize: osd.smallSize }
+                ConsoleKeycap { keys: "ESC"; label: "ОТМЕНА"; fontSize: osd.smallSize }
             }
         }
     }

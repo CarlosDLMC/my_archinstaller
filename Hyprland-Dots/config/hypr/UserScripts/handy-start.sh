@@ -38,6 +38,6 @@ if [ -n "$selected_model" ]; then
     exec handy --start-hidden
 else
     notify-send -t 8000 -i audio-input-microphone "Handy" \
-        "Pick a model to enable speech-to-text (Parakeet V3 recommended)." 2>/dev/null
+        "Выберите модель, чтобы включить распознавание речи (рекомендуется Parakeet V3)." 2>/dev/null
     exec handy
 fi

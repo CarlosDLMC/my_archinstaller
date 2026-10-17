@@ -1,0 +1,8 @@
+/* GTK4 / libadwaita in the wallpaper's colours - wallust template, rendered
+   to ~/.config/gtk-4.0/wallust.css on every wallpaper change and @imported by
+   gtk-4.0/gtk.css. libadwaita takes its accent from these named colours; the
+   accent is color7, the bar cards' lit colour, with the background printed on
+   it. */
+@define-color accent_bg_color #D6A29C;
+@define-color accent_color #D6A29C;
+@define-color accent_fg_color #262625;

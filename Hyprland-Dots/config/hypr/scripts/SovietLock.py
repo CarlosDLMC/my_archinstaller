@@ -4,9 +4,12 @@
 # and assets/ly/lang/soviet.ini) so the login and lock screens match.
 #
 # Modes:
-#   --date    uppercase Russian date line
-#   --panel   the bordered status panel, refresh every 30s
-#   --footer  ly-style key hint row
+#   --date              uppercase Russian date line
+#   --panel [N]         the bordered status panel, refresh every 30s; N is
+#                       hyprlock's $ATTEMPTS (failed unlocks this lock)
+#   --footer            ly-style key hint row
+#   --watch-reports PID count the notifications that arrive while locked, for
+#                       the panel; LockRun.sh runs it beside hyprlock
 #
 # The bigclock is deliberately NOT here - it lives in SovietClock.sh, because
 # it is the one widget hyprlock re-runs every second per monitor and Python's
@@ -89,6 +92,17 @@ WEATHER_RU = {
     "Thunderstorm w/ hail": "ГРОЗА С ГРАДОМ",
     "Unknown": "НЕТ ДАННЫХ",
 }
+
+# The two rows that only light up when there is something to see: failed
+# unlocks in hyprlock.conf's fail_text red, notifications that arrived while
+# locked in its check_text gold - attention, not alarm.
+RED = "#C42B1C"
+GOLD = "#C7A017"
+
+# Written by --watch-reports while the screen is locked, removed by LockRun.sh
+# around every lock: {"count": N, "apps": ["SLACK", ...]}.
+REPORTS = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}",
+                       "soviet-lock-reports.json")
 
 BATTERY_RU = {
     "Full": "ПОЛОН",
@@ -335,6 +349,26 @@ def weather():
     return weather_qs() or weather_legacy()
 
 
+def failed_attempts():
+    """hyprlock's $ATTEMPTS, passed as --panel's argument. hyprlock substitutes
+    variables before it runs a cmd[] label, and re-runs labels marked
+    update:...:1 straight after every failed unlock (Auth.cpp, enqueueFail)."""
+    try:
+        return int(sys.argv[2])
+    except (IndexError, ValueError):
+        return 0
+
+
+def reports():
+    """(count, senders) of the notifications --watch-reports saw this lock."""
+    try:
+        with open(REPORTS) as fh:
+            data = json.load(fh)
+        return int(data.get("count", 0)), [str(a) for a in data.get("apps", [])]
+    except Exception:
+        return 0, []
+
+
 # -------------------------------------------------------------------- drawing
 
 
@@ -344,6 +378,15 @@ def line(text=""):
 
 def kv(label, value):
     return line("  " + label.ljust(LABEL) + str(value))
+
+
+def tinted(text, colour):
+    """A panel row whose text is in `colour` (hyprlock renders labels as Pango
+    markup). Padded and cut before escaping, so the width counts characters,
+    not entities; the borders stay in the panel's ink."""
+    inner = text.ljust(W)[:W]
+    inner = inner.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return f'║<span foreground="{colour}">{inner}</span>║'
 
 
 def top():
@@ -398,6 +441,19 @@ def mode_panel():
     out.append(kv("РАСКЛАДКА", ""))
     # The input-field widget is overlaid onto this row; leave the value blank.
     out.append(kv("КОД ДОСТУПА", ""))
+    # These two rows are always there, lit or not: SovietLockGen.py measures the
+    # panel once per lock and lays widgets over it, so a row appearing mid-lock
+    # would grow the centred panel and slide it out from under them.
+    attempts = failed_attempts()
+    if attempts:
+        out.append(tinted(f"  НЕСАНКЦИОНИРОВАННЫЕ ПОПЫТКИ: {attempts}", RED))
+    else:
+        out.append(kv("ПОПЫТКИ ВХОДА", "НЕТ"))
+    count, apps = reports()
+    if count:
+        out.append(tinted("  " + "ДОНЕСЕНИЯ".ljust(LABEL) + f"{count} · {', '.join(apps)}", GOLD))
+    else:
+        out.append(kv("ДОНЕСЕНИЯ", "НЕТ"))
 
     out.append(section("СОСТОЯНИЕ СИСТЕМЫ"))
     out.append(kv("ЯДРО", kernel()))
@@ -437,10 +493,101 @@ def mode_panel():
     print("\n".join(out))
 
 
+def mode_watch_reports():
+    """Count the notifications that arrive while the screen is locked.
+
+    LockRun.sh starts this beside hyprlock with its own PID. It reads every
+    Notify call off the session bus with dbus-monitor - nothing in dunst is
+    involved - and counts the ones worth reporting: normal or critical urgency
+    (a volume or brightness toast is low), and new rather than an update of one
+    already on screen (replaces_id 0). After each one it rewrites REPORTS and
+    sends hyprlock SIGUSR2, which re-runs the panel at once instead of at the
+    next 30s tick. (SIGUSR1 would unlock.) It exits when LockRun.sh is gone."""
+    import signal
+    import threading
+    import time
+
+    try:
+        owner = int(sys.argv[2])
+    except (IndexError, ValueError):
+        owner = None
+
+    def owner_alive():
+        if owner is None:
+            return True
+        try:
+            os.kill(owner, 0)
+            return True
+        except OSError:
+            return False
+
+    mon = subprocess.Popen(
+        ["dbus-monitor", "--session",
+         "type=method_call,interface=org.freedesktop.Notifications,member=Notify"],
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    count, apps = 0, []
+    call = None  # the Notify call being read
+
+    def quoted(s):
+        return s[s.find('"') + 1:s.rfind('"')]
+
+    def counted(c):
+        nonlocal count
+        count += 1
+        name = "СИСТЕМА" if c["app"] in ("", "notify-send") else c["app"].upper()
+        if name not in apps:
+            apps.append(name)
+        tmp = REPORTS + ".tmp"
+        with open(tmp, "w") as fh:
+            json.dump({"count": count, "apps": apps}, fh)
+        os.replace(tmp, REPORTS)
+        for pid in sh("pidof", "hyprlock").split():
+            try:
+                os.kill(int(pid), signal.SIGUSR2)
+            except (OSError, ValueError):
+                pass
+
+    # Lines are read blocking, in order. A select() on this buffered pipe would
+    # report nothing to read while a burst of lines sat in Python's buffer.
+    # The owner check runs beside it instead, and ends the read by ending
+    # dbus-monitor; a SIGTERM from LockRun.sh goes through the finally below.
+    def watchdog():
+        while owner_alive():
+            time.sleep(30)
+        mon.terminate()
+
+    threading.Thread(target=watchdog, daemon=True).start()
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    try:
+        for ln in mon.stdout:
+            # Top-level arguments are indented three spaces; the hints' values
+            # (an image-data struct has int32s of its own) sit deeper.
+            if ln.startswith("method call ") and "member=Notify" in ln:
+                call = {"app": None, "replaces": None, "urgency": 1, "next": None}
+            elif call is None:
+                continue
+            elif ln.startswith('   string "') and call["app"] is None:
+                call["app"] = quoted(ln)
+            elif ln.startswith("   uint32 ") and call["replaces"] is None:
+                call["replaces"] = ln.split()[1]
+            elif 'string "urgency"' in ln:
+                call["next"] = "urgency"
+            elif call["next"] == "urgency" and "byte " in ln:
+                call["urgency"] = int(ln.split("byte ")[1].split()[0])
+                call["next"] = None
+            elif ln.startswith("   int32 "):  # expire_timeout, the last argument
+                if call["urgency"] >= 1 and call["replaces"] == "0":
+                    counted(call)
+                call = None
+    finally:
+        mon.terminate()
+
+
 MODES = {
     "--date": mode_date,
     "--panel": mode_panel,
     "--footer": mode_footer,
+    "--watch-reports": mode_watch_reports,
 }
 
 if __name__ == "__main__":

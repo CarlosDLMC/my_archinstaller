@@ -26,7 +26,7 @@ apply_rofi_theme_to_config() {
   elif [[ -f "$ROFI_THEMES_DIR_LOCAL/$theme_name_to_apply" ]]; then
     theme_path="$ROFI_THEMES_DIR_LOCAL/$theme_name_to_apply"
   else
-    notify_user "$IDIR/error.png" "Error" "Theme file not found: $theme_name_to_apply"
+    notify_user "$IDIR/error.png" "Ошибка" "Файл темы не найден: $theme_name_to_apply"
     return 1
   fi
 
@@ -73,12 +73,12 @@ apply_rofi_theme_to_config() {
 
 # Check for required directories and files
 if [ ! -d "$ROFI_THEMES_DIR_CONFIG" ] && [ ! -d "$ROFI_THEMES_DIR_LOCAL" ]; then
-  notify_user "$IDIR/error.png" "E-R-R-O-R" "No Rofi themes directory found."
+  notify_user "$IDIR/error.png" "ОШИБКА" "Каталог тем rofi не найден."
   exit 1
 fi
 
 if [ ! -f "$ROFI_CONFIG_FILE" ]; then
-  notify_user "$IDIR/error.png" "E-R-R-O-R" "Rofi config file not found: $ROFI_CONFIG_FILE"
+  notify_user "$IDIR/error.png" "ОШИБКА" "Файл настроек rofi не найден: $ROFI_CONFIG_FILE"
   exit 1
 fi
 
@@ -92,7 +92,7 @@ mapfile -t available_theme_names < <((
 ) | sort -V -u)
 
 if [ ${#available_theme_names[@]} -eq 0 ]; then
-  notify_user "$IDIR/error.png" "No Rofi Themes" "No .rasi files found in theme directories."
+  notify_user "$IDIR/error.png" "Нет тем rofi" "В каталогах тем нет файлов .rasi."
   exit 1
 fi
 
@@ -116,7 +116,7 @@ while true; do
   # Apply the theme for preview
   if ! apply_rofi_theme_to_config "$theme_to_preview_now"; then
     echo "$original_rofi_config_content_backup" >"$ROFI_CONFIG_FILE"
-    notify_user "$IDIR/error.png" "Preview Error" "Failed to apply $theme_to_preview_now. Reverted."
+    notify_user "$IDIR/error.png" "Ошибка предпросмотра" "Не удалось применить $theme_to_preview_now, тема возвращена."
     exit 1
   fi
 
@@ -132,7 +132,7 @@ while true; do
     rofi -dmenu -i \
       -format 'i' \
       -p "Rofi Theme" \
-      -mesg "‼️ **note** ‼️ Enter: Preview || Ctrl+S: Apply &amp; Exit || Esc: Cancel" \
+      -mesg "Enter: предпросмотр · Ctrl+S: применить и выйти · Esc: отмена" \
       -config "$ROFI_THEME_FOR_THIS_SCRIPT" \
       -selected-row "$current_selection_index" \
       -kb-custom-1 "Control+s")
@@ -145,14 +145,14 @@ while true; do
       current_selection_index="$chosen_index_from_rofi"
     fi
   elif [ $rofi_exit_code -eq 1 ]; then # Escape
-    notify_user "$IDIR/note.png" "Rofi Theme" "Selection cancelled. Reverting to original theme."
+    notify_user "$IDIR/note.png" "Тема rofi" "Выбор отменён, возвращена прежняя тема."
     echo "$original_rofi_config_content_backup" >"$ROFI_CONFIG_FILE"
     break
   elif [ $rofi_exit_code -eq 10 ]; then # Custom bind 1 (Ctrl+S)
-    notify_user "$IDIR/ja.png" "Rofi Theme Applied" "$(basename "$theme_to_preview_now" .rasi)"
+    notify_user "$IDIR/ja.png" "Тема rofi применена:" "$(basename "$theme_to_preview_now" .rasi)"
     break
   else # Error or unexpected exit code
-    notify_user "$IDIR/error.png" "Rofi Error" "Unexpected Rofi exit ($rofi_exit_code). Reverting."
+    notify_user "$IDIR/error.png" "Ошибка rofi" "Неожиданный выход rofi ($rofi_exit_code), тема возвращена."
     echo "$original_rofi_config_content_backup" >"$ROFI_CONFIG_FILE"
     break
   fi

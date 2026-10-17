@@ -65,7 +65,7 @@ if [ "$RESET_TIME" -eq 1 ]; then
             echo "Timezone reset to $DEFAULT_TZ"
         else
             echo "Error: sudo refused timedatectl (no NOPASSWD rule for this user?)"
-            notify-send -u critical "VPN" "Could not reset the timezone: sudo needs a password." 2>/dev/null
+            notify-send -u critical "ВПН" "Не удалось вернуть часовой пояс: sudo просит пароль." 2>/dev/null
             FAILED=1
         fi
     fi

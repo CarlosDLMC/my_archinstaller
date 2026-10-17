@@ -31,7 +31,7 @@ music_playing() { pgrep -f -- "$MUSIC_MATCH" >/dev/null; }
 stop_music() {
   if music_playing; then
     pkill -f -- "$MUSIC_MATCH" || true
-    notification "Music stopped"
+    notification "Музыка остановлена"
   fi
 }
 
@@ -49,12 +49,12 @@ populate_local_music() {
 play_local_music() {
   populate_local_music
   choice=$(printf "%s\n" "${filenames[@]}" | rofi -i -dmenu -config "$rofi_theme" \
-    -theme-str 'entry { placeholder: "🎵 Choose Local Music"; }')
+    -theme-str 'entry { placeholder: " Музыка из папки"; }')
   [[ -z "$choice" ]] && exit 1
   for ((i = 0; i < "${#filenames[@]}"; ++i)); do
     if [ "${filenames[$i]}" = "$choice" ]; then
       music_playing && stop_music
-      notification "Now Playing:" "$choice"
+      notification "Сейчас играет:" "$choice"
       mpv "$MUSIC_MARK" --no-video --playlist-start="$i" --loop-playlist "${local_music[@]}"
       break
     fi
@@ -64,49 +64,49 @@ play_local_music() {
 # Shuffle and play all local music
 shuffle_local_music() {
   music_playing && stop_music
-  notification "Shuffle Play local music"
+  notification "Локальная музыка вперемешку"
   mpv "$MUSIC_MARK" --no-video --shuffle --loop-playlist "$mDIR"
 }
 
 # Play selected online music
 play_online_music() {
   if [ ! -s "$music_list" ]; then
-    notify-send -u low -i "$iDIR/music.png" "No online music found" "Add some with Manage Music"
+    notify-send -u low -i "$iDIR/music.png" "Нет онлайн-станций" "Добавьте их через «Список станций»"
     exit 0
   fi
   choice=$(awk -F'|' '{print $1}' "$music_list" | sort | rofi -i -dmenu -config "$rofi_theme" \
-    -theme-str 'entry { placeholder: "🌐 Choose Online Station"; }')
+    -theme-str 'entry { placeholder: " Онлайн-станция"; }')
   [[ -z "$choice" ]] && exit 1
   link=$(awk -F'|' -v name="$choice" '$1 == name {print $2; exit}' "$music_list")
   [[ -z "$link" ]] && {
-    notify-send -u low -i "$iDIR/music.png" "URL not found for" "$choice"
+    notify-send -u low -i "$iDIR/music.png" "Не найден адрес станции" "$choice"
     exit 1
   }
   music_playing && stop_music
-  notification "Now Playing:" "$choice"
+  notification "Сейчас играет:" "$choice"
   mpv "$MUSIC_MARK" --no-video --shuffle "$link"
 }
 
 # Manage online music list (add, remove, view)
 manage_music() {
-  sub_choice=$(printf "Add Music\nRemove Music\nView List" | rofi -dmenu \
+  sub_choice=$(printf "Добавить станцию\nУдалить станцию\nПоказать список" | rofi -dmenu \
     -config "$rofi_theme_menu" \
-    -theme-str 'entry { placeholder: "🛠️ Manage Music List"; }')
+    -theme-str 'entry { placeholder: " Список станций"; }')
 
   case "$sub_choice" in
-  "Add Music")
+  "Добавить станцию")
     name=$(rofi -dmenu -lines 0 -config "$rofi_theme_menu" \
-      -theme-str 'entry { placeholder: "🎼 Enter Music Title"; }')
+      -theme-str 'entry { placeholder: " Название станции"; }')
     [[ -z "$name" ]] && return
     url=$(rofi -dmenu -lines 0 -config "$rofi_theme_menu" \
-      -theme-str 'entry { placeholder: "🔗 Enter Music URL"; }')
+      -theme-str 'entry { placeholder: " Адрес (URL)"; }')
     [[ -z "$url" ]] && return
     echo "$name|$url" >>"$music_list"
-    notification "Added" "$name"
+    notification "Добавлено:" "$name"
     ;;
-  "Remove Music")
+  "Удалить станцию")
     entry=$(awk -F'|' '{print $1}' "$music_list" | rofi -dmenu -config "$rofi_theme_menu" \
-      -theme-str 'entry { placeholder: "🗑️ Select Music to Remove"; }')
+      -theme-str 'entry { placeholder: " Какую станцию удалить"; }')
     [[ -z "$entry" ]] && return
     # By the exact name field. `grep -vF ... && mv` skipped the mv when the last
     # station was removed (grep printed nothing and exited 1) while still saying
@@ -114,30 +114,30 @@ manage_music() {
     # the name. ENVIRON, not awk -v, so a backslash in the name stays as typed.
     E="$entry" awk -F'|' '$1 != ENVIRON["E"]' "$music_list" >"$music_list.tmp" \
       && mv "$music_list.tmp" "$music_list"
-    notification "Removed" "$entry"
+    notification "Удалено:" "$entry"
     ;;
-  "View List")
+  "Показать список")
     # Show only titles, not URLs
     awk -F'|' '{print $1}' "$music_list" | rofi -dmenu -config "$rofi_theme_menu" \
-      -theme-str 'entry { placeholder: "📜 Online Music List"; }' >/dev/null
+      -theme-str 'entry { placeholder: " Онлайн-станции"; }' >/dev/null
     ;;
   esac
 }
 
 # Main menu
 user_choice=$(printf "%s\n" \
-  "Play from Online Stations" \
-  "Play from Music directory" \
-  "Shuffle Play from Music directory" \
-  "Stop RofiBeats" \
-  "Manage Music List" |
+  "Онлайн-станции" \
+  "Музыка из папки" \
+  "Музыка из папки вперемешку" \
+  "Остановить RofiBeats" \
+  "Список станций" |
   rofi -dmenu -config "$rofi_theme_menu" \
-    -theme-str 'entry { placeholder: "🎧 RofiBeats Menu"; }')
+    -theme-str 'entry { placeholder: " RofiBeats"; }')
 
 case "$user_choice" in
-"Play from Online Stations") play_online_music ;;
-"Play from Music directory") play_local_music ;;
-"Shuffle Play from Music directory") shuffle_local_music ;;
-"Stop RofiBeats") music_playing && stop_music ;;
-"Manage Music List") manage_music ;;
+"Онлайн-станции") play_online_music ;;
+"Музыка из папки") play_local_music ;;
+"Музыка из папки вперемешку") shuffle_local_music ;;
+"Остановить RofiBeats") music_playing && stop_music ;;
+"Список станций") manage_music ;;
 esac

@@ -26,6 +26,6 @@ sudo wg-quick up "$to"
 rc=$?
 guard -D 2>/dev/null
 if [ "$rc" -ne 0 ]; then
-    notify-send -u critical "VPN" "Could not connect $to - no tunnel is up now. Pick a server again, or run vpn-recover." 2>/dev/null
+    notify-send -u critical "ВПН" "Не удалось подключиться к $to: ни один туннель не поднят. Выберите сервер ещё раз или запустите vpn-recover." 2>/dev/null
 fi
 exit "$rc"

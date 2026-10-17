@@ -37,7 +37,7 @@ Singleton {
     Connections {
         target: root.flow
         ignoreUnknownSignals: true
-        function onAuthenticationFailed() { root.error = "Wrong password - try again"; root.checking = false }
+        function onAuthenticationFailed() { root.error = "Неверный пароль - попробуйте ещё раз"; root.checking = false }
         function onAuthenticationSucceeded() { root.error = ""; root.checking = false }
         function onAuthenticationRequestCancelled() { root.error = ""; root.checking = false }
         function onIsResponseRequiredChanged() { if (root.flow.isResponseRequired) root.checking = false }
