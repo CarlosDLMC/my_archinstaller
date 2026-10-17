@@ -144,6 +144,14 @@ wallust_targets=(
     # seed the bar can load before the file exists and sit on its fallback
     # palette until it is restarted.
     "quickshell/bar/wallust-colors.json"
+    # btop's color_theme = "wallust" names this one; missing, btop quietly falls
+    # back to its built-in theme.
+    "btop/themes/wallust.theme"
+    # The @wal_* colours gtk-3.0/gtk.css imports, and libadwaita's accent names
+    # gtk-4.0/gtk.css imports. Missing, GTK warns and every rule that uses them
+    # is dropped - the apps fall back to plain Adwaita.
+    "gtk-3.0/wallust.css"
+    "gtk-4.0/wallust.css"
 )
 
 # Put hypr/'s machine state back from its backup: what the repo's copy either

@@ -1,0 +1,8 @@
+/* GTK3 in the wallpaper's colours - wallust template, rendered to
+   ~/.config/gtk-3.0/wallust.css on every wallpaper change and @imported by
+   gtk-3.0/gtk.css. The accent is color7, the bar cards' lit colour. */
+@define-color wal_accent #D6A29C;
+@define-color wal_alert #BE564A;
+@define-color wal_bg #262625;
+@define-color wal_fg #E8C4C0;
+@define-color wal_dim #96716D;

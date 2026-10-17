@@ -422,6 +422,15 @@ it steps the icon theme away and back so open GTK apps reload.
 `initial-boot.sh` builds it on the first login and `copy.sh` on a re-run;
 `settings.ini`, `qt5ct.conf`, `qt6ct.conf` and gsettings all name it.
 
+The GTK apps and btop follow the wallpaper too, through wallust templates:
+`gtk-3.0/gtk.css` and `gtk-4.0/gtk.css` import a generated `wallust.css`, so
+selections, focus rings, checked boxes and switches, sliders, highlighted
+buttons and links take the same accent (libadwaita apps through its own accent
+colour names); btop's `color_theme = "wallust"` is a generated theme in the
+same roles - dim frames, red highlighted keys, gauges running dim to accent to
+red. GTK reads its stylesheet when an app starts, so open apps change at their
+next launch.
+
 `gtk_themes.sh` also still installs the Flat-Remix GTK theme and the white
 `Bibata-Modern-Ice` cursor — they are simply no longer selected. The **cursor**
 is the black one Hyprland loads by itself: the XCursor theme `default` (the
