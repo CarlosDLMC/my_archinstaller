@@ -1,71 +1,59 @@
 # btop in the wallpaper's colours - wallust template, rendered to
 # ~/.config/btop/themes/wallust.theme on every wallpaper change (wallust.toml).
 #
-# Calm by default, like the bar: text and frames are neutral, keeping only a
-# whisper of the wallpaper's hue (saturate(-0.85), the bar's colWhite trick),
-# and colour is spent where it means something - the key letters, the selected
-# row, and a graph or meter as it fills. Straight wallust slots made btop a
-# wall of one colour on wallpapers whose palette is mostly a single saturated
-# hue (an all-green osaka-jade: foreground, frames, labels and graphs all green).
+# «Спектр»: each box in its own wallust colour. CPU and processes take the
+# accent (color7), memory the window border's slot (color12, lifted), network
+# the alert slot (color14) with upload in the accent's complementary colour,
+# so download and upload never blur together. Each box's frame is a dark tint
+# of its colour; the process box stays neutral.
 #
-# Load-type readings (CPU, temperature, used memory, processes) run grey ->
-# accent -> the alert hue, which only shows near the top. Readings that are
-# good when high (free, available, cached, network) stop at the accent.
+# The rest stays calm, like the bar: text and titles are the foreground with
+# saturate(-0.85) - a soft white with a whisper of the hue - labels a
+# desaturated color8, and graphs and meters start dark and rise to their colour
+# as they fill. Load-type readings (CPU, temperature, processes, used memory)
+# end in the alert hue; readings that are good when high (free, available,
+# cached) stop at their own colour. Straight wallust slots everywhere had made
+# btop a wall of one colour on single-hue palettes (an all-green osaka-jade).
 
-# Transparent: btop sits on the terminal's own black.
 theme[main_bg]=""
 theme[main_fg]="#E8E3E2"
 theme[title]="#E8E3E2"
-theme[hi_fg]="#D6AFAB"
-# Dark enough that the white text on it clears 4.5:1 (darken 0.42 gave 3.6-4.0:1).
-theme[selected_bg]="#564A49"
+theme[hi_fg]="#D6A29C"
+theme[selected_bg]="#564948"
 theme[selected_fg]="#E8E3E2"
 theme[inactive_fg]="#968B8A"
 theme[graph_text]="#968B8A"
 theme[meter_bg]="#3C3939"
-theme[proc_misc]="#D6AFAB"
-
-# Frames, dividers and meter tracks from color8 darkened, not color0: color0 is a
-# mid grey on some palettes and nearly black on others (Nordic-Blue_forest:
-# #000108, invisible on the terminal), while color8 is always a light grey.
-theme[cpu_box]="#5A5655"
-theme[mem_box]="#5A5655"
-theme[net_box]="#5A5655"
+theme[proc_misc]="#D6A29C"
+theme[cpu_box]="#6B5654"
+theme[mem_box]="#4A3F3E"
+theme[net_box]="#664440"
 theme[proc_box]="#5A5655"
 theme[div_line]="#4B4847"
-
-theme[temp_start]="#968B8A"
-theme[temp_mid]="#D6AFAB"
+theme[temp_start]="#6B5654"
+theme[temp_mid]="#D6A29C"
 theme[temp_end]="#BE564A"
-
-theme[cpu_start]="#968B8A"
-theme[cpu_mid]="#D6AFAB"
-theme[cpu_end]="#BE564A"
-
-theme[used_start]="#968B8A"
-theme[used_mid]="#D6AFAB"
+theme[cpu_start]="#604D4C"
+theme[cpu_mid]="#D6A29C"
+theme[cpu_end]="#EFDAD7"
+theme[process_start]="#604D4C"
+theme[process_mid]="#D6A29C"
+theme[process_end]="#EFDAD7"
+theme[used_start]="#4A3C3B"
+theme[used_mid]="#937876"
 theme[used_end]="#BE564A"
-
-theme[process_start]="#968B8A"
-theme[process_mid]="#D6AFAB"
-theme[process_end]="#BE564A"
-
-theme[free_start]="#968B8A"
-theme[free_mid]="#967E7B"
-theme[free_end]="#D6AFAB"
-
-theme[available_start]="#968B8A"
-theme[available_mid]="#967E7B"
-theme[available_end]="#D6AFAB"
-
-theme[cached_start]="#968B8A"
-theme[cached_mid]="#967E7B"
-theme[cached_end]="#D6AFAB"
-
-theme[download_start]="#968B8A"
-theme[download_mid]="#967E7B"
-theme[download_end]="#D6AFAB"
-
-theme[upload_start]="#968B8A"
-theme[upload_mid]="#967E7B"
-theme[upload_end]="#D6AFAB"
+theme[free_start]="#4A3C3B"
+theme[free_mid]="#76605E"
+theme[free_end]="#937876"
+theme[available_start]="#4A3C3B"
+theme[available_mid]="#76605E"
+theme[available_end]="#937876"
+theme[cached_start]="#4A3C3B"
+theme[cached_mid]="#76605E"
+theme[cached_end]="#937876"
+theme[download_start]="#663C37"
+theme[download_mid]="#CB786E"
+theme[download_end]="#E5BBB7"
+theme[upload_start]="#4E686B"
+theme[upload_mid]="#9CD0D6"
+theme[upload_end]="#D7ECEF"
