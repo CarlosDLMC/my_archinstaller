@@ -6,7 +6,7 @@ import ".."
 
 DropdownWidget {
     id: powerWidget
-    popupWidth: 140
+    popupWidth: 210   // was 140; fits «ПЕРЕЗАГРУЗКА» and «ВЫКЛЮЧЕНИЕ»
     popupHeight: 165
     stemAlignment: "left"   // widget now sits at the bar's left edge
 
@@ -86,7 +86,7 @@ DropdownWidget {
                         font.family: Theme.fontFamily
                     }
                     Text {
-                        text: "Lock"
+                        text: "БЛОКИРОВКА"
                         color: Theme.colWhite
                         font.pixelSize: Theme.fontSize
                         font.family: Theme.fontFamily
@@ -125,7 +125,7 @@ DropdownWidget {
                         font.family: Theme.fontFamily
                     }
                     Text {
-                        text: "Logout"
+                        text: "ВЫХОД"
                         color: Theme.colWhite
                         font.pixelSize: Theme.fontSize
                         font.family: Theme.fontFamily
@@ -164,7 +164,7 @@ DropdownWidget {
                         font.family: Theme.fontFamily
                     }
                     Text {
-                        text: "Reboot"
+                        text: "ПЕРЕЗАГРУЗКА"
                         color: Theme.colWhite
                         font.pixelSize: Theme.fontSize
                         font.family: Theme.fontFamily
@@ -203,7 +203,7 @@ DropdownWidget {
                         font.family: Theme.fontFamily
                     }
                     Text {
-                        text: "Shutdown"
+                        text: "ВЫКЛЮЧЕНИЕ"
                         color: Theme.colWhite
                         font.pixelSize: Theme.fontSize
                         font.family: Theme.fontFamily

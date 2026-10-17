@@ -46,11 +46,11 @@ Item {
         var t = Date.parse(iso)
         if (isNaN(t)) return ""
         var s = Math.max(0, Math.round((t - Date.now()) / 1000))
-        if (s < 60) return "now"
+        if (s < 60) return "сейчас"
         var m = Math.floor(s / 60), h = Math.floor(m / 60), d = Math.floor(h / 24)
-        if (d >= 1) return d + "d " + (h % 24) + "h"
-        if (h >= 1) return h + "h " + (m % 60) + "m"
-        return m + "m"
+        if (d >= 1) return d + " дн " + (h % 24) + " ч"
+        if (h >= 1) return h + " ч " + (m % 60) + " мин"
+        return m + " мин"
     }
 
     // The date of the oldest record still on disk. Claude Code prunes its own
@@ -61,21 +61,21 @@ Item {
     // "SINCE 10 AUG" is unambiguous within the current year and shorter.
     readonly property string sinceLabel: {
         if (AgentUsage.oldestHour <= 0)
-            return "NO DATA"
+            return "НЕТ ДАННЫХ"
         var d = new Date(AgentUsage.oldestHour * 3600 * 1000)
         var fmt = d.getFullYear() === new Date().getFullYear() ? "d MMM" : "d MMM yyyy"
-        return "SINCE " + Qt.formatDateTime(d, fmt).toUpperCase()
+        return "С " + Qt.locale().toString(d, fmt).toUpperCase()
     }
 
     // "6m ago" for a cached reading, so a stale number is never mistaken for
     // a current one.
     function agoText(epochSeconds) {
         var s = Math.max(0, Math.round(Date.now() / 1000 - epochSeconds))
-        if (s < 90) return "just now"
+        if (s < 90) return "только что"
         var m = Math.round(s / 60)
-        if (m < 60) return m + "m ago"
+        if (m < 60) return m + " мин назад"
         var h = Math.round(m / 60)
-        return h < 48 ? h + "h ago" : Math.round(h / 24) + "d ago"
+        return h < 48 ? h + " ч назад" : Math.round(h / 24) + " дн назад"
     }
 
     // The one place hue is spent here: an allowance you are about to exhaust.
@@ -312,7 +312,7 @@ Item {
             Divider {}
 
             // ------------------------------------------------------- limits
-            SectionHeader { label: "ALLOWANCE" }
+            SectionHeader { label: "ЛИМИТЫ" }
 
             Text {
                 width: parent.width
@@ -321,8 +321,8 @@ Item {
                     panel.nowTick
                     if (AgentUsage.limits.length === 0) return AgentUsage.limitsError
                     var age = AgentUsage.staleAt > 0
-                        ? " from " + panel.agoText(AgentUsage.staleAt) : ""
-                    return AgentUsage.limitsError + "  Showing the last reading" + age + "."
+                        ? " от " + panel.agoText(AgentUsage.staleAt) : ""
+                    return AgentUsage.limitsError + "  Показано последнее значение" + age + "."
                 }
                 color: Theme.colAlert
                 font.pixelSize: panel.headerSize
@@ -338,8 +338,8 @@ Item {
                     // A model-scoped budget says which model it applies to;
                     // the two headline ones speak for the whole plan.
                     label: modelData.window === "7 days" && modelData.label !== "Weekly"
-                        ? modelData.label + " wk"
-                        : modelData.label
+                        ? modelData.label + " нед"
+                        : ({ "Session": "Сессия", "Weekly": "Неделя" })[modelData.label] || modelData.label
                     value: Math.round(modelData.percent) + "%"
                     fraction: modelData.percent / 100
                     fill: panel.meterColor(modelData.severity, modelData.percent)
@@ -357,10 +357,10 @@ Item {
                     panel.nowTick        // re-evaluate on the tick
                     var parts = []
                     if (AgentUsage.session)
-                        parts.push("session " + panel.untilText(AgentUsage.session.resetsAt))
+                        parts.push("сессия " + panel.untilText(AgentUsage.session.resetsAt))
                     if (AgentUsage.weekly)
-                        parts.push("weekly " + panel.untilText(AgentUsage.weekly.resetsAt))
-                    return parts.length ? "resets in  " + parts.join("  ·  ") : ""
+                        parts.push("неделя " + panel.untilText(AgentUsage.weekly.resetsAt))
+                    return parts.length ? "сброс через  " + parts.join("  ·  ") : ""
                 }
                 color: Theme.colMuted
                 font.pixelSize: panel.headerSize
@@ -371,7 +371,7 @@ Item {
             // ---------------------------------------------------- by day
             Divider { visible: AgentUsage.byDay.length > 0 }
             SectionHeader {
-                label: "TOKENS BY DAY · LAST 7 DAYS"
+                label: "ТОКЕНЫ ПО ДНЯМ · 7 ДНЕЙ"
                 visible: AgentUsage.byDay.length > 0
             }
 
@@ -386,7 +386,7 @@ Item {
                     readonly property bool today: index === AgentUsage.byDay.length - 1
                     label: {
                         var d = new Date(modelData.day + "T00:00:00")
-                        return today ? "Today" : Qt.formatDateTime(d, "ddd")
+                        return today ? "Сегодня" : Qt.locale().toString(d, "ddd")
                     }
                     value: panel.compact(modelData.tokens)
                     fraction: panel.maxDay > 0 ? modelData.tokens / panel.maxDay : 0
@@ -403,7 +403,7 @@ Item {
                 // survivor does. The date comes from the data, not from the
                 // retention setting, so it stays true whatever that is set to
                 // and moves forward on its own as old files are pruned.
-                label: "TOKENS BY MODEL · " + panel.sinceLabel
+                label: "ТОКЕНЫ ПО МОДЕЛЯМ · " + panel.sinceLabel
                 visible: AgentUsage.byModel.length > 0
             }
 
@@ -413,7 +413,7 @@ Item {
             Text {
                 width: parent.width
                 visible: AgentUsage.byModel.length > 0
-                text: "prompt + completion, excluding cache"
+                text: "запрос + ответ, без кэша"
                 color: Theme.colMuted
                 font.pixelSize: panel.headerSize
                 font.family: Theme.fontFamily
@@ -429,9 +429,9 @@ Item {
                     name: String(modelData.model).replace(/^claude-/, "")
                                                  .replace(/-\d{8}$/, "")
                     total: panel.compact(modelData.tokens)
-                    detail: "in " + panel.compact(modelData.input)
-                          + " · out " + panel.compact(modelData.output)
-                          + " · cache " + panel.compact(modelData.cacheRead)
+                    detail: "ввод " + panel.compact(modelData.input)
+                          + " · вывод " + panel.compact(modelData.output)
+                          + " · кэш " + panel.compact(modelData.cacheRead)
                     share: panel.maxModel > 0 ? modelData.tokens / panel.maxModel : 0
                 }
             }
@@ -439,7 +439,7 @@ Item {
             Text {
                 width: parent.width
                 visible: AgentUsage.byDay.length === 0 && AgentUsage.limits.length === 0
-                text: AgentUsage.busy ? "Reading usage…" : "No Claude Code usage found"
+                text: AgentUsage.busy ? "Чтение данных…" : "Данных Claude Code нет"
                 color: Theme.colMuted
                 font.pixelSize: panel.labelSize
                 font.family: Theme.fontFamily

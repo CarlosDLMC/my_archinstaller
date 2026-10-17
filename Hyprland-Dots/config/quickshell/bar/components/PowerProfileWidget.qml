@@ -103,7 +103,7 @@ DropdownWidget {
 
             // Header
             Text {
-                text: "󰾅 Power Profile"
+                text: "󰾅 Режим питания"
                 color: Theme.colFg
                 font.pixelSize: Theme.fontSize
                 font.family: Theme.fontFamily
@@ -140,7 +140,7 @@ DropdownWidget {
                         }
 
                         Text {
-                            text: modelData.charAt(0).toUpperCase() + modelData.slice(1).replace("-", " ")
+                            text: ({ "performance": "Форсаж", "balanced": "Норма", "power-saver": "Экономия" })[modelData] || modelData
                             color: modelData === powerWidget.currentProfile ? powerWidget.getProfileColor(modelData) : Theme.colFg
                             font.pixelSize: Theme.fontSize - 1
                             font.family: Theme.fontFamily

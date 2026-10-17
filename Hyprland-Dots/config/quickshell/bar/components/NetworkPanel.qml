@@ -97,25 +97,25 @@ Item {
         if (bytesPerSec < 0 || isNaN(bytesPerSec)) return "—"
         var bits = bytesPerSec * 8
         if (bits >= 1000000000) return (bits / 1000000000).toFixed(1) + " Gb/s"
-        if (bits >= 1000000) return (bits / 1000000).toFixed(1) + " Mb/s"
+        if (bits >= 1000000) return (bits / 1000000).toFixed(1) + " Мбит/с"
         if (bits >= 1000) return (bits / 1000).toFixed(0) + " kb/s"
         return Math.round(bits) + " b/s"
     }
 
     function humanBytes(b) {
         if (isNaN(b)) return "—"
-        if (b >= 1073741824) return (b / 1073741824).toFixed(2) + " GB"
-        if (b >= 1048576) return (b / 1048576).toFixed(1) + " MB"
+        if (b >= 1073741824) return (b / 1073741824).toFixed(2) + " ГБ"
+        if (b >= 1048576) return (b / 1048576).toFixed(1) + " МБ"
         if (b >= 1024) return (b / 1024).toFixed(0) + " kB"
-        return b + " B"
+        return b + " Б"
     }
 
     function bandLabel() {
         var f = num("freq")
         if (isNaN(f)) return "—"
-        if (f >= 5925) return "6 GHz"
-        if (f >= 4900) return "5 GHz"
-        return "2.4 GHz"
+        if (f >= 5925) return "6 ГГц"
+        if (f >= 4900) return "5 ГГц"
+        return "2.4 ГГц"
     }
 
     Process {
@@ -635,7 +635,7 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
                     textFormat: Text.PlainText
-                    text: panel.field("ssid", "Not connected")
+                    text: panel.field("ssid", "Нет подключения")
                     color: panel.wifiRadioOn ? Theme.colWhite : Theme.colMuted
                     font.pixelSize: panel.labelSize
                     font.family: Theme.fontFamily
@@ -694,8 +694,8 @@ Item {
 
                     Text {
                         text: panel.connectivity === "portal"
-                            ? "󰀪  Sign-in required"
-                            : "󰀪  Limited connectivity"
+                            ? "󰀪  Требуется вход"
+                            : "󰀪  Ограниченное подключение"
                         color: Theme.colAlert
                         font.pixelSize: panel.labelSize
                         font.family: Theme.fontFamily
@@ -704,7 +704,7 @@ Item {
 
                     Text {
                         width: parent.width
-                        text: "This network wants you to sign in or accept its terms before it will pass traffic."
+                        text: "Сеть просит войти или принять условия, прежде чем пропустит трафик."
                         color: Theme.colDim
                         font.pixelSize: panel.headerSize
                         font.family: Theme.fontFamily
@@ -712,7 +712,7 @@ Item {
                     }
 
                     Pill {
-                        label: "Open sign-in page"
+                        label: "Открыть страницу входа"
                         onPicked: panel.openPortal()
                     }
                 }
@@ -726,14 +726,14 @@ Item {
                 visible: panel.view === "info"
 
             // --------------------------------------------------------- link
-            SectionHeader { label: "LINK" }
+            SectionHeader { label: "КАНАЛ" }
 
             InfoGrid {
                 // Band rides with the signal rather than taking a row of its
                 // own. It was tried next to the rate first, where the pair
                 // "5 GHz · 1170 Mbit/s" was too long for half a card and the
                 // rate elided; beside the percentage both halves fit.
-                GLabel { text: "Signal" }
+                GLabel { text: "Сигнал" }
                 GValue {
                     text: {
                         var pct = panel.num("signal_pct")
@@ -749,16 +749,16 @@ Item {
                         return (!isNaN(pct) && pct < 30) ? Theme.colAlert : Theme.colWhite
                     }
                 }
-                GLabel { text: "Link" }
+                GLabel { text: "Скорость" }
                 GValue { text: panel.field("bitrate") }
             }
 
             // --------------------------------------------------- connection
             Divider {}
-            SectionHeader { label: "CONNECTION" }
+            SectionHeader { label: "ПОДКЛЮЧЕНИЕ" }
 
             InfoGrid {
-                GLabel { text: "Iface" }
+                GLabel { text: "Интерфейс" }
                 GValue {
                     text: panel.field("iface")
                         + (panel.info["type"] === "vpn" ? " (vpn)" : "")
@@ -770,13 +770,13 @@ Item {
                         : panel.field("ip")
                 }
 
-                GLabel { text: "Gateway" }
+                GLabel { text: "Шлюз" }
                 GValue { text: panel.field("gateway") }
-                GLabel { text: "Router" }
+                GLabel { text: "Роутер" }
                 GValue {
                     text: {
                         var ms = panel.num("router_ping_ms")
-                        return isNaN(ms) ? "—" : ms.toFixed(0) + " ms"
+                        return isNaN(ms) ? "—" : ms.toFixed(0) + " мс"
                     }
                 }
 
@@ -792,31 +792,31 @@ Item {
 
             // --------------------------------------------------- throughput
             Divider {}
-            SectionHeader { label: "TRAFFIC" }
+            SectionHeader { label: "ТРАФИК" }
 
             InfoGrid {
-                GLabel { text: "Down" }
+                GLabel { text: "Приём" }
                 GValue { text: panel.humanRate(panel.rxRate) }
-                GLabel { text: "Up" }
+                GLabel { text: "Передача" }
                 GValue { text: panel.humanRate(panel.txRate) }
 
-                GLabel { text: "Recv" }
+                GLabel { text: "Получено" }
                 GValue { text: panel.humanBytes(panel.num("rx_bytes")) }
-                GLabel { text: "Sent" }
+                GLabel { text: "Отправлено" }
                 GValue { text: panel.humanBytes(panel.num("tx_bytes")) }
 
-                GLabel { text: "Ping" }
+                GLabel { text: "Пинг" }
                 GValue {
                     text: {
                         var ms = panel.num("internet_ping_ms")
-                        return isNaN(ms) ? "—" : ms.toFixed(0) + " ms"
+                        return isNaN(ms) ? "—" : ms.toFixed(0) + " мс"
                     }
                     color: {
                         var ms = panel.num("internet_ping_ms")
                         return (!isNaN(ms) && ms > 250) ? Theme.colAlert : Theme.colWhite
                     }
                 }
-                GLabel { text: "Loss" }
+                GLabel { text: "Потери" }
                 GValue {
                     text: {
                         var l = panel.num("loss_pct")
@@ -868,7 +868,7 @@ Item {
             Text {
                 width: parent.width
                 visible: panel.activeConn === ""
-                text: "No active Wi-Fi profile to change"
+                text: "Нет активного профиля Wi-Fi"
                 color: Theme.colMuted
                 font.pixelSize: panel.headerSize
                 font.family: Theme.fontFamily
@@ -882,17 +882,17 @@ Item {
                 spacing: 6
                 visible: panel.view === "speed"
 
-                SectionHeader { label: "SPEED TEST" }
+                SectionHeader { label: "ТЕСТ СКОРОСТИ" }
 
                 InfoGrid {
-                    GLabel { text: "Down" }
+                    GLabel { text: "Приём" }
                     GValue {
-                        text: panel.speedDown > 0 ? panel.speedDown + " Mb/s" : "—"
+                        text: panel.speedDown > 0 ? panel.speedDown + " Мбит/с" : "—"
                         color: panel.speedPhase === "down" ? Theme.colAlert : Theme.colWhite
                     }
-                    GLabel { text: "Up" }
+                    GLabel { text: "Передача" }
                     GValue {
-                        text: panel.speedUp > 0 ? panel.speedUp + " Mb/s" : "—"
+                        text: panel.speedUp > 0 ? panel.speedUp + " Мбит/с" : "—"
                         color: panel.speedPhase === "up" ? Theme.colAlert : Theme.colWhite
                     }
                 }
@@ -906,13 +906,13 @@ Item {
                     // previous run's workers to die. Both showed as
                     // "Measuring… 0 Mb/s", which reads as broken.
                     text: panel.speedPhase === ""
-                            ? (panel.speedDown > 0 || panel.speedUp > 0 ? "Stopped" : "Ready")
-                        : panel.speedPhase === "done" ? "Done - peak of each direction"
+                            ? (panel.speedDown > 0 || panel.speedUp > 0 ? "Остановлен" : "Готов")
+                        : panel.speedPhase === "done" ? "Готово - пик в каждую сторону"
                         : panel.speedNow === 0
-                            ? "Starting…"
+                            ? "Запуск…"
                         : panel.speedPhase === "down"
-                            ? "Measuring download…  " + panel.speedNow + " Mb/s"
-                            : "Measuring upload…  " + panel.speedNow + " Mb/s"
+                            ? "Измерение приёма…  " + panel.speedNow + " Мбит/с"
+                            : "Измерение передачи…  " + panel.speedNow + " Мбит/с"
                     color: Theme.colDim
                     font.pixelSize: panel.headerSize
                     font.family: Theme.fontFamily
@@ -932,7 +932,7 @@ Item {
                 Text {
                     width: parent.width
                     visible: panel.speedPhase === "down" || panel.speedPhase === "up"
-                    text: "This saturates the connection while it runs."
+                    text: "Пока идёт тест, канал занят полностью."
                     color: Theme.colMuted
                     font.pixelSize: panel.headerSize
                     font.family: Theme.fontFamily
@@ -950,14 +950,14 @@ Item {
                     Pill {
                         visible: !parent.busy
                         label: panel.speedPhase === "done" || panel.speedDown > 0 || panel.speedUp > 0
-                            ? "Run again" : "Start"
+                            ? "Ещё раз" : "Старт"
                         current: true
                         onPicked: panel.startSpeedTest()
                     }
 
                     Pill {
                         visible: parent.busy
-                        label: "Stop"
+                        label: "Стоп"
                         onPicked: panel.stopSpeedTest()
                     }
                 }
@@ -969,7 +969,7 @@ Item {
                 spacing: 6
                 visible: panel.view === "qr"
 
-                SectionHeader { label: "SHARE NETWORK" }
+                SectionHeader { label: "ПОДЕЛИТЬСЯ СЕТЬЮ" }
 
                 Text {
                     width: parent.width
@@ -986,7 +986,7 @@ Item {
                     visible: panel.qrRows.length > 0
                     // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
                     textFormat: Text.PlainText
-                    text: panel.qrSsid + (panel.qrSecurity === "nopass" ? "  (open)" : "")
+                    text: panel.qrSsid + (panel.qrSecurity === "nopass" ? "  (открытая)" : "")
                     color: Theme.colWhite
                     font.pixelSize: panel.labelSize
                     font.family: Theme.fontFamily
@@ -1040,7 +1040,7 @@ Item {
                 Text {
                     width: parent.width
                     visible: panel.qrRows.length > 0
-                    text: "Scan to join"
+                    text: "Наведите камеру, чтобы подключиться"
                     color: Theme.colMuted
                     font.pixelSize: panel.headerSize
                     font.family: Theme.fontFamily

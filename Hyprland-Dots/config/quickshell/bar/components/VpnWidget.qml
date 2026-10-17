@@ -320,7 +320,7 @@ DropdownWidget {
                 Text {
                     // From outside (names, titles, SSIDs): plain, never rich text - an <img> in it was fetched.
                     textFormat: Text.PlainText
-                    text: vpnWidget.activeVpn ? "󰖂 " + vpnWidget.activeVpn : "󰖂 Disconnected"
+                    text: vpnWidget.activeVpn ? "󰖂 " + vpnWidget.activeVpn : "󰖂 Отключено"
                     color: Theme.colFg
                     font.pixelSize: Theme.fontSize
                     font.family: Theme.fontFamily
@@ -384,8 +384,8 @@ DropdownWidget {
 
                 Repeater {
                     model: [
-                        { kind: "time",    icon: "󰥔", label: "Time" },
-                        { kind: "weather", icon: "󰖐", label: "Weather" }
+                        { kind: "time",    icon: "󰥔", label: "Время" },
+                        { kind: "weather", icon: "󰖐", label: "Погода" }
                     ]
 
                     delegate: Rectangle {

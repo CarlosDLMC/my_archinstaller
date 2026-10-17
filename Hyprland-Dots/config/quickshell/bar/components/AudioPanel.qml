@@ -134,7 +134,7 @@ Item {
 
             // ---------------------------------------------------------- output
             SectionHeader {
-                label: "OUTPUT"
+                label: "ВЫХОД"
                 detail: panel.ctl.sinkReady
                     ? Math.round(panel.ctl.sink.audio.volume * 100) + "%"
                     : "—"
@@ -193,7 +193,7 @@ Item {
                 visible: panel.ctl.displaySources.length > 0 || panel.ctl.sourceReady
 
                 SectionHeader {
-                    label: "INPUT"
+                    label: "ВХОД"
                     detail: panel.ctl.sourceReady
                         ? Math.round(panel.ctl.source.audio.volume * 100) + "%"
                         : "—"
@@ -252,7 +252,7 @@ Item {
                 spacing: 4
                 visible: panel.ctl.displayStreams.length > 0
 
-                SectionHeader { label: "APPS" }
+                SectionHeader { label: "ПРИЛОЖЕНИЯ" }
 
                 Repeater {
                     model: panel.ctl.displayStreams
@@ -333,7 +333,7 @@ Item {
                 visible: panel.ctl.displaySinks.length === 0
                     && panel.ctl.displayStreams.length === 0
                 width: parent.width
-                text: "No audio devices"
+                text: "Нет аудиоустройств"
                 color: Theme.colMuted
                 font.pixelSize: panel.labelSize
                 font.family: Theme.fontFamily
