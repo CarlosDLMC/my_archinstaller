@@ -2,6 +2,15 @@
 
 ## October 2026
 
+Added (2026-10-17) - herdr agents notify the desktop. An agent that finishes or
+is blocked while the herdr window is not focused sends a dunst notice stamped
+АГЕНТ (red when blocked) naming its workspace, tab and conversation, and it
+waits until clicked. Herdr's own `delivery = "system"` skips the tab it has
+open whatever Hyprland shows, so an agent finishing there while you were on
+another workspace told no one. A herdr plugin (`config/herdr/agent-notify`),
+registered by `install-scripts/herdr.sh` and checked by `02-Final-Check.sh`.
+See README "Herdr".
+
 Changed (2026-10-08) - the boot is text by default: the kernel and systemd
 `[  OK  ]` lines instead of a splash.
 

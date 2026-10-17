@@ -132,6 +132,15 @@
     appname = "^notify-send$"
     format = "<span font_desc='Terminess Nerd Font Bold 13' background='#C42B1C' foreground='#F2F2EC' letter_spacing='1024'> ТРЕВОГА </span>  <span foreground='#F2F2EC'><b>%s</b></span>  %b"
 
+# herdr's agent notices (~/.config/herdr/agent-notify) stamp themselves АГЕНТ,
+# boxed by the normal format above. A blocked agent is sent critical, and there
+# ТРЕВОГА followed by a bare red АГЕНТ reads as a stamp with a stray word after
+# it - so it keeps the one АГЕНТ box, turned red.
+[look_agent_blocked]
+    appname = "^Агент$"
+    msg_urgency = critical
+    format = "<span font_desc='Terminess Nerd Font Bold 13' background='#C42B1C' foreground='#F2F2EC' letter_spacing='1024' text_transform='uppercase'> %a </span>  <span foreground='#F2F2EC'><b>%s</b></span>\n%b"
+
 # ------------------------------------------------------------------
 # One second: the toasts that only confirm an action you just took.
 #
@@ -212,6 +221,13 @@
 # freedesktop categories, so a chat app not named above is still covered.
 [messages_by_category]
     category = "^(im|im\.received|email|email\.arrived)$"
+    override_dbus_timeout = 0
+    set_transient = no
+
+# herdr's agent notices: an agent that finished, or is waiting on you, is only
+# ever told to you this once, so it waits until it is clicked, like a message.
+[agent_notices]
+    appname = "^Агент$"
     override_dbus_timeout = 0
     set_transient = no
 

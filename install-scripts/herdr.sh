@@ -16,12 +16,14 @@
 #   - .local/bin/herdr-close-tab        ALT+C popup: close tab
 #   - .local/bin/herdr-sync-workspace-numbers   one-shot $num token stamp
 #   - .local/bin/herdr-watch-workspace-numbers  the daemon behind the unit below
+#   - config/herdr/agent-notify/        plugin: dunst notices for agents
 #   - config/hypr/UserConfigs/UserKeybinds.lua  unbinds ALT+Tab so herdr gets it
 #
-# This script owns three things the dotfiles cannot:
+# This script owns four things the dotfiles cannot:
 #   1. the binary itself
 #   2. the systemd --user unit (it names an absolute ExecStart)
 #   3. rewriting __HOME__ in the copied config.toml
+#   4. registering the agent-notify plugin with herdr
 #
 # On (3): herdr's [[keys.command]] entries take a command string, and a tracked
 # dotfile cannot contain this machine's $HOME. The dotfiles ship __HOME__ and
@@ -175,6 +177,27 @@ PY
 else
   echo "${WARN} $CFG not found - the dotfiles' herdr config did not arrive." | tee -a "$LOG"
   echo "${NOTE} Select the 'dots' option (or run install-scripts/dotfiles-main.sh)." | tee -a "$LOG"
+fi
+
+# ------------------------------------------------------ agent notifications
+# config/herdr/agent-notify is a herdr plugin: a hook herdr runs on every agent
+# status change, which sends a dunst notification when an agent finishes or is
+# blocked while the herdr window is not focused (see agent-notify.py for why
+# herdr's own popups cannot). copy.sh puts the files in place, but herdr only
+# runs a plugin it has registered. `plugin link` works with no server running
+# (unlink does not). Linked only when absent: linking again re-enables it, and
+# a re-run should not undo `herdr plugin disable agent-notify`.
+PLUGIN="$HOME/.config/herdr/agent-notify"
+if [ -f "$PLUGIN/herdr-plugin.toml" ]; then
+  if "$BIN" plugin list --json 2>/dev/null | grep -q '"plugin_id":"agent-notify"'; then
+    echo "${OK} Herdr agent-notify plugin already registered." | tee -a "$LOG"
+  elif "$BIN" plugin link "$PLUGIN" >>"$LOG" 2>&1; then
+    echo "${OK} Herdr agent-notify plugin linked (notices for finished/blocked agents)." | tee -a "$LOG"
+  else
+    echo "${WARN} Could not link the herdr agent-notify plugin - see $LOG" | tee -a "$LOG"
+  fi
+else
+  echo "${WARN} $PLUGIN missing (dotfiles); agent notifications not set up." | tee -a "$LOG"
 fi
 
 # --------------------------------------------- claude agent-state integration

@@ -402,6 +402,10 @@ if selected herdr; then
         bash -c '! grep -q "__HOME__" "$HOME/.config/herdr/config.toml"'
     check_outcome "herdr-workspace-numbers.service is not enabled - the sidebar's number column stops updating after a server restart (install-scripts/herdr.sh)" \
         systemctl --user is-enabled herdr-workspace-numbers.service
+    # A plugin herdr has not registered is files on disk and nothing else: no
+    # error anywhere, the notices just never come.
+    check_outcome "the herdr agent-notify plugin is not registered - no notice when an agent finishes or is blocked on another workspace (install-scripts/herdr.sh)" \
+        bash -c '"$HOME/.local/bin/herdr" plugin list --json 2>/dev/null | grep -q "\"plugin_id\":\"agent-notify\""'
     # Every [[keys.command]] entry names a helper script by absolute path, and a
     # binding whose script did not ship does nothing and reports nothing - the
     # same silent failure the __HOME__ check above exists to catch. Reading the

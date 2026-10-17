@@ -960,7 +960,8 @@ DEFAULT_WALLPAPER="sovietpunk/sovietpunk_2k_2560x1440.png"
 # monitor layout, the animation preset, the video wallpaper) was already put back
 # by restore_state, right after the loop above copied hypr/.
 
-# Deploy herdr's config and sounds INTO ~/.config/herdr, never replacing it.
+# Deploy herdr's config, sounds and agent-notify plugin INTO ~/.config/herdr,
+# never replacing it. (install-scripts/herdr.sh registers the plugin.)
 #
 # That directory is also where herdr keeps its runtime state (herdr.sock,
 # herdr-client.sock, session.json, logs), so the backup-and-replace loop above

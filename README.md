@@ -84,7 +84,7 @@ then continue with the [Installation Steps](#installation-steps) below.
 - **ly Display Manager** (lightweight TUI login screen with large font)
 - **Soviet TUI Lock Screen** matching ly, auto-sized to any display (720p → 4K)
 - **Offline Speech-to-Text** with Handy (toggle via SUPER + CTRL + F8)
-- **Herdr** terminal workspace manager for AI coding agents, with the sidebar, keybindings, theme and done/blocked sounds preconfigured
+- **Herdr** terminal workspace manager for AI coding agents, with the sidebar, keybindings, theme and done/blocked sounds preconfigured, and a desktop notice when an agent finishes or is blocked while you are on another workspace
 - **Dev layouts** (`hdl` / `hds` / `hdlm` / `hsl`) that build a whole editor + agent + terminal pane layout in one command
 - **Neovim with LazyVim**, which is where the file tree beside the agents comes from
 - **Hunk** review-first diff viewer, for reading what the agents actually wrote
@@ -1521,12 +1521,12 @@ past the end.
 - **A `claude`-specific row layout** that adds the stripped terminal title, so
   Claude Code sessions are identifiable by what they are working on rather than
   by tab number.
-- **Notifications are off by default.** `ui.toast.delivery = "off"` and
-  `ui.sound.enabled = false`. The done/blocked sounds are wired up and shipped
+- **Herdr's own notifications are off.** `ui.toast.delivery = "off"` and
+  `ui.sound.enabled = false`; the desktop notices come from the agent-notify
+  plugin below instead. The done/blocked sounds are wired up and shipped
   (`config/herdr/sounds/*.mp3`, freedesktop tones converted to mp3, which is the
-  format Herdr requires) — set `enabled = true` to turn them on, or
-  `delivery = "system"` to route toasts through dunst. `droid` is pinned off in
-  `[ui.sound.agents]` either way.
+  format Herdr requires) — set `enabled = true` to turn them on. `droid` is
+  pinned off in `[ui.sound.agents]` either way.
 
 #### The moving parts around it
 
@@ -1538,9 +1538,20 @@ past the end.
   `__HOME__/.local/bin`. Re-running is a no-op once no placeholders are left.
 - **`~/.config/herdr` is updated, never replaced.** It is also herdr's runtime
   directory — the running server's sockets, `session.json` and its logs sit
-  next to `config.toml` — so `copy.sh` copies the config and sounds into it
+  next to `config.toml` — so `copy.sh` copies the config, sounds and plugin into it
   instead of moving the directory aside like the others. A `config.toml` that
   differs from the repo is backed up next to itself first.
+- **The agent-notify plugin** (`~/.config/herdr/agent-notify`). When an agent
+  finishes or is blocked while the herdr window is not the focused Hyprland
+  window — you are on another workspace — it sends a dunst notice stamped
+  АГЕНТ: «Задание выполнено», or «Ждёт вашего решения» in red, with the
+  herdr workspace, tab and conversation title. Both wait until clicked
+  (`[agent_notices]` in dunstrc), and an agent shows one notice at a time.
+  Herdr's own `delivery = "system"` cannot do this: it skips the tab herdr
+  has open whatever Hyprland is showing, so an agent finishing there while you
+  were elsewhere told no one. It is a herdr event hook, so herdr runs it and
+  there is nothing to start; `herdr.sh` registers it with `herdr plugin link`.
+  Turn it off with `herdr plugin disable agent-notify`.
 - **`herdr-workspace-numbers.service`.** Herdr has no built-in workspace-number
   token, so the sidebar reads a custom `$num` written into workspace metadata —
   and that metadata does not survive a server restart. This user unit runs
