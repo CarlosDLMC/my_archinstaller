@@ -58,6 +58,11 @@ components/         # Modular widget components
   ├── VolumeWidget.qml     # Volume with mute/sink detection (speaker/headphone/bluetooth/hdmi)
   ├── BatteryWidget.qml    # Battery level in the bar (renders BatteryState)
   ├── BatteryPanel.qml     # Battery card body: health, cycles, packs, charge limit
+  ├── ConsolePlate.qml     # Console cards: a recessed plate holding one group of readings
+  ├── ConsoleLamp.qml      # Console cards: an indicator lamp, lit in colAccent (colAlert for a fault)
+  ├── ConsoleButton.qml    # Console cards: a chunky push button, lit in colAccent when current
+  ├── ConsoleCaption.qml   # Console cards: the small-caps caption beside a control
+  ├── SegmentGauge.qml     # Console cards: a segmented gauge with an optional marker tick
   ├── WifiWidget.qml       # WiFi status with network speeds (extends DropdownWidget)
   ├── BluetoothWidget.qml  # Bluetooth status with dropdown (extends DropdownWidget)
   ├── PowerProfileWidget.qml # Power profile selector (extends DropdownWidget)
@@ -360,14 +365,14 @@ components/         # Modular widget components
   to a minute old.
 
   What the cost *does* rule out is paying it on the click path. That is why the
-  pills bind to **`effectiveLimit`**, not
+  limit buttons (and the gauge's limit tick) bind to **`effectiveLimit`**, not
   `limitEnd`. `setLimit()` records the click in `pendingLimit` straight away and
-  `effectiveLimit` prefers it, so the pill moves on the click. Waiting for the
+  `effectiveLimit` prefers it, so the button lights on the click. Waiting for the
   hardware meant sudo (~20ms) plus the helper (~14ms) plus that 4.3ms re-read
   before the 130ms fade could even start - about 170ms to confirmation, which is
   past the point a button stops feeling connected to the finger.
   `pendingLimit` is cleared when the re-read lands, so a value the firmware
-  clamped or refused moves the pill back rather than leaving it lying.
+  clamped or refused moves the light back rather than leaving it lying.
 
   Two labels are worth keeping honest. A threshold **only stops charging**; it
   discharges nothing, so a pack already above the limit sits there until the
@@ -553,7 +558,8 @@ good palette rather than rendering blank).
 | `colLabel` / `colDim` | `CPU`, `MEM` — the noun, and secondary info |
 | `colWhite` / `colGrey` | the brightness ramp: emphasis, then the step below it |
 | `colMuted` | separators, inactive, "off" states |
-| `colAccent` | active / connected / on |
+| `colAccent` | active / connected / on: lit lamps, gauge segments, pressed buttons |
+| `colPlate` | the recessed plates of the console cards (`palBg` pushed darker) |
 | `colAlert` | **needs attention**: muted, low battery, DND on, VPN down, storm |
 | `colWarn` | state unknown or degraded (e.g. `dunstctl` failed) |
 | `colOnAlert` | text sitting on an alert-filled shape |
@@ -612,7 +618,7 @@ singleton that the widgets render; only the rendering should be per-screen. See
    next tick. `blockAllReads` makes every read synchronous, which is what a
    polled file needs.
 
-   It bites hardest on a write-then-read: the limit pills in the battery card
+   It bites hardest on a write-then-read: the limit buttons in the battery card
    needed two clicks for exactly this reason - the write landed, the read after
    it returned the pre-write value, and the optimistic value was dropped in
    favour of it. `SystemStats` had the quiet version of the same bug: every CPU,
@@ -743,4 +749,16 @@ singleton that the widgets render; only the rendering should be per-screen. See
    and the wheel as `onWheelMoved(deltaY)`, so a widget keeps its own gestures
    instead of having them swallowed by the card's hit area - that is how
    `VolumeWidget` opens on right-click while left-click still mutes.
-- no need to restart quickshell, it hot reloads the config on save.
+6. **Card bodies are a control console.** Group readings on `ConsolePlate`s
+   (stacked, no dividers), show a level as a `SegmentGauge`, a state as a
+   `ConsoleLamp` beside its label, and a choice as a row of `ConsoleButton`s;
+   put a `ConsoleCaption` (small dim capitals) beside a control. Card text is
+   Russian. The card keeps `DropdownWidget`'s soft notch shape - no frame, no
+   title stamp. `BatteryPanel.qml` is the reference card.
+- no need to restart quickshell, it hot reloads the config on save. **Except
+  for a new inline component** (`component Foo: Text {...}`) added to a file
+  that is already loaded: the hot reload fails with `Foo is not a type`, while
+  the same file loads fine from a fresh start - the reload keeps the file's old
+  list of inline components. Put a new shared piece in its own file under
+  `components/` instead (that is why `ConsoleCaption.qml` exists), or restart
+  the bar.
