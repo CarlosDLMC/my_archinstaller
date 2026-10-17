@@ -150,6 +150,13 @@ QtObject {
     // ------------------------------------------------------------------
 
     readonly property color colBg: palBg
+    //  The recessed plates of the console cards (ConsolePlate): the card's own
+    //  background pushed darker, so they read as set into it on any wallpaper.
+    readonly property color colPlate: Qt.darker(palBg, 1.55)
+    //  Active / connected / on - the lit lamps, gauge segments and pressed
+    //  buttons of the console cards. wallust's accent, floored like colAlert so
+    //  a dark slot still glows on the dark plates instead of sinking into them.
+    readonly property color colAccent: atLeast(palAccent, 0.62)
     readonly property color colBgTransparent: "transparent"
     //  Neutral black at 55% over the compositor blur - deliberately NOT tinted
     //  with the wallust background, so the bar reads as a dark translucent strip
