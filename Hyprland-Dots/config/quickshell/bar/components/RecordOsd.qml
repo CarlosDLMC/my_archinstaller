@@ -36,7 +36,7 @@ PanelWindow {
 
     readonly property int btnWidth:    Math.round(210 * uiScale)
     readonly property int btnHeight:   Math.round(150 * uiScale)
-    readonly property int btnRadius:   Math.round(14  * uiScale)
+    readonly property int btnRadius:   Math.round(5   * uiScale)
     readonly property int btnIconSize: Math.round(52  * uiScale)
     readonly property int btnTextSize: Math.round(17  * uiScale)
 
@@ -48,7 +48,7 @@ PanelWindow {
     readonly property int subSize:     Math.round(12 * uiScale)
 
     readonly property int panelPad:    Math.round(28 * uiScale)
-    readonly property int panelRadius: Math.round(18 * uiScale)
+    readonly property int panelRadius: Math.round(12 * uiScale)
     readonly property int gap:         Math.round(14 * uiScale)
 
     visible: windowVisible
@@ -113,8 +113,6 @@ PanelWindow {
             height: content.height + osd.panelPad * 2
             radius: osd.panelRadius
             color: Theme.colBg
-            border.width: 1
-            border.color: Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.14)
 
             opacity: osd.shown ? 1.0 : 0.0
             scale: osd.shown ? 1.0 : 0.96
@@ -129,12 +127,21 @@ PanelWindow {
                 anchors.centerIn: parent
                 spacing: osd.gap
 
-                Text {
-                    text: "SCREEN RECORDING"
-                    color: Theme.colDim
-                    font.family: Theme.fontFamily
-                    font.pixelSize: osd.titleSize
-                    font.letterSpacing: 2
+                // The console's title: a lamp and the caption.
+                Row {
+                    spacing: 12
+
+                    ConsoleLamp {
+                        anchors.verticalCenter: parent.verticalCenter
+                        lit: true
+                        tint: Theme.colAlert
+                    }
+
+                    ConsoleCaption {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "ЗАПИСЬ ЭКРАНА"
+                        fontSize: osd.titleSize
+                    }
                 }
 
                 // ---- the two big buttons ----
@@ -146,7 +153,8 @@ PanelWindow {
                         height: osd.btnHeight
                         radius: osd.btnRadius
                         icon: "󰍹"
-                        label: "Full screen"
+                        label: "ВЕСЬ ЭКРАН"
+                        keyHint: "F"
                         hint: Monitors.multiple ? RecordState.targetMonitor : ""
                         iconSize: osd.btnIconSize
                         textSize: osd.btnTextSize
@@ -159,8 +167,9 @@ PanelWindow {
                         height: osd.btnHeight
                         radius: osd.btnRadius
                         icon: "󰆞"
-                        label: "Select region"
-                        hint: "drag to choose"
+                        label: "ОБЛАСТЬ"
+                        hint: "выделите мышью"
+                        keyHint: "R"
                         iconSize: osd.btnIconSize
                         textSize: osd.btnTextSize
                         subTextSize: osd.subSize
@@ -173,12 +182,9 @@ PanelWindow {
                     spacing: Math.round(osd.gap * 0.5)
                     visible: Monitors.multiple
 
-                    Text {
-                        text: "MONITOR"
-                        color: Theme.colDim
-                        font.family: Theme.fontFamily
-                        font.pixelSize: osd.titleSize
-                        font.letterSpacing: 2
+                    ConsoleCaption {
+                        text: "МОНИТОР"
+                        fontSize: osd.titleSize
                     }
 
                     Row {
@@ -196,14 +202,9 @@ PanelWindow {
 
                                 width: osd.monTileW
                                 height: osd.monTileH
-                                radius: Math.round(osd.btnRadius * 0.7)
-                                color: isTarget
-                                    ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.14)
-                                    : "transparent"
-                                border.width: isTarget ? 2 : 1
-                                border.color: isTarget
-                                    ? Theme.colWhite
-                                    : Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.18)
+                                radius: osd.btnRadius
+                                // A key, like the mode buttons: the target one pushed in and lit.
+                                color: isTarget ? Theme.colAccent : Qt.lighter(Theme.colPlate, 1.25)
 
                                 Behavior on color { ColorAnimation { duration: 110 } }
 
@@ -214,8 +215,7 @@ PanelWindow {
                                     Text {
                                         anchors.horizontalCenter: parent.horizontalCenter
                                         text: monTile.modelData.name
-                                        color: Theme.colWhite
-                                        opacity: monTile.isTarget ? 1.0 : 0.6
+                                        color: monTile.isTarget ? Theme.colBg : Theme.colWhite
                                         font.family: Theme.fontFamily
                                         font.pixelSize: osd.subSize + 2
                                         font.bold: monTile.isTarget
@@ -224,9 +224,8 @@ PanelWindow {
                                     Text {
                                         anchors.horizontalCenter: parent.horizontalCenter
                                         text: monTile.modelData.width + "x" + monTile.modelData.height
-                                              + "  " + monTile.modelData.refresh + "Hz"
-                                        color: Theme.colWhite
-                                        opacity: monTile.isTarget ? 0.7 : 0.4
+                                              + "  " + monTile.modelData.refresh + " Гц"
+                                        color: monTile.isTarget ? Theme.colBg : Theme.colDim
                                         font.family: Theme.fontFamily
                                         font.pixelSize: osd.subSize
                                     }
@@ -257,7 +256,8 @@ PanelWindow {
                 ToggleRow {
                     width: content.width
                     icon: "󰕾"
-                    label: "System audio"
+                    label: "ЗВУК СИСТЕМЫ"
+                    keyHint: "S"
                     checked: RecordState.audioSystem
                     labelSize: osd.labelSize
                     onToggled: {
@@ -269,13 +269,22 @@ PanelWindow {
                 ToggleRow {
                     width: content.width
                     icon: "󰍬"
-                    label: "Microphone"
+                    label: "МИКРОФОН"
+                    keyHint: "M"
                     checked: RecordState.audioMic
                     labelSize: osd.labelSize
                     onToggled: {
                         RecordState.audioMic = !RecordState.audioMic
                         RecordState.persistAudio()
                     }
+                }
+
+                // The keys the dialog answers to, as keycaps.
+                Row {
+                    spacing: osd.gap
+
+                    ConsoleKeycap { keys: "W"; label: "АКТИВНОЕ ОКНО"; fontSize: osd.subSize }
+                    ConsoleKeycap { keys: "ESC"; label: "ОТМЕНА"; fontSize: osd.subSize }
                 }
             }
         }
