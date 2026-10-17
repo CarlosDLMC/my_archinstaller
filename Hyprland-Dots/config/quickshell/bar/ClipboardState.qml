@@ -89,7 +89,9 @@ Singleton {
 
     Process {
         id: listProc
-        command: ["cliphist", "list"]
+        // cliphist cuts each preview at 100 characters by default, which left the
+        // big preview pane showing a line and a half; 800 fills most of it.
+        command: ["cliphist", "-preview-width", "800", "list"]
         stdout: StdioCollector {
             waitForEnd: true
             onStreamFinished: {
