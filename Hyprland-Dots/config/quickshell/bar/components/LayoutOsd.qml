@@ -4,11 +4,13 @@ import Quickshell.Wayland
 import Quickshell.Hyprland
 import ".."
 
-// GNOME-style keyboard-layout switcher OSD.
+// GNOME-style keyboard-layout switcher OSD, dressed as a control console like
+// the bar's cards.
 //
-// Shows every configured layout in most-recently-used order, highlighting the
-// selected one, centred on the focused monitor. Each entry is a short code
-// above its display name, the same shape GNOME's InputSourceSwitcher uses.
+// Shows every configured layout in most-recently-used order, centred on the
+// focused monitor: one push-button key per layout on a recessed plate, the
+// selected one pushed in and lit in the wallpaper's accent, its Russian code
+// on the key (АНГ, РУС - the bar's names) and a lamp and its name under it.
 // The pointer can hover to preview and click to pick, and the popup holds
 // still for as long as the cursor is on it.
 PanelWindow {
@@ -28,14 +30,26 @@ PanelWindow {
     readonly property real uiScale: 1.4
 
     readonly property int tileSize:    Math.round(76 * uiScale)
-    readonly property int tileRadius:  Math.round(12 * uiScale)
-    readonly property int codeSize:    Math.round(34 * uiScale)
+    readonly property int tileRadius:  Math.round(5  * uiScale)
+    readonly property int codeSize:    Math.round(28 * uiScale)
     readonly property int nameSize:    Math.round(13 * uiScale)
     readonly property int nameWidth:   Math.round(96 * uiScale)
-    readonly property int itemSpacing: Math.round(6  * uiScale)
+    readonly property int itemSpacing: Math.round(8  * uiScale)
     readonly property int rowSpacing:  Math.round(10 * uiScale)
-    readonly property int panelPad:    Math.round(32 * uiScale)
-    readonly property int panelRadius: Math.round(18 * uiScale)
+    readonly property int platePad:    Math.round(12 * uiScale)
+    readonly property int panelPad:    Math.round(28 * uiScale)
+    readonly property int panelRadius: Math.round(12 * uiScale)
+
+    // The bar's names for the layouts (KeyboardLayoutWidget), and theirs in
+    // full. Anything not listed shows as xkb gives it.
+    function codeOf(item) {
+        return ({ "us": "АНГ", "ru": "РУС", "es": "ИСП" })[item.code]
+               || (item.short || "").toUpperCase()
+    }
+    function nameOf(item) {
+        return ({ "English (US)": "АНГЛИЙСКАЯ", "Russian": "РУССКАЯ", "Spanish": "ИСПАНСКАЯ" })[item.name]
+               || (item.name || "").toUpperCase()
+    }
 
     // Entry under the pointer, or -1. Hovering only previews the highlight;
     // the layout changes on click, as GNOME's switcher does.
@@ -97,73 +111,102 @@ PanelWindow {
     Rectangle {
         id: panel
         anchors.centerIn: parent
-        width: row.width + osd.panelPad
-        height: row.height + osd.panelPad
+        width: body.width + osd.panelPad
+        height: body.height + osd.panelPad
         radius: osd.panelRadius
-        color: Qt.rgba(Theme.colBg.r, Theme.colBg.g, Theme.colBg.b, 0.92)
-        border.width: 1
-        border.color: Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.12)
+        color: Qt.rgba(Theme.colBg.r, Theme.colBg.g, Theme.colBg.b, 0.96)
 
         opacity: osd.shown ? 1.0 : 0.0
         scale: osd.shown ? 1.0 : 0.94
         Behavior on opacity { NumberAnimation { duration: osd.fadeMs; easing.type: Easing.OutCubic } }
         Behavior on scale   { NumberAnimation { duration: osd.fadeMs; easing.type: Easing.OutCubic } }
 
-        Row {
-            id: row
+        Column {
+            id: body
             anchors.centerIn: parent
-            spacing: osd.rowSpacing
+            spacing: osd.itemSpacing
 
-            Repeater {
-                model: osd.items
+            ConsoleCaption {
+                text: "РАСКЛАДКА"
+                fontSize: osd.nameSize
+            }
 
-                Column {
-                    id: entry
-                    required property var modelData
-                    required property int index
+            ConsolePlate {
+                width: row.width + 2 * pad
+                pad: osd.platePad
 
-                    readonly property bool isSelected:
-                        index === (osd.hoveredPos >= 0 ? osd.hoveredPos : osd.selected)
+                Row {
+                    id: row
+                    spacing: osd.rowSpacing
 
-                    width: osd.nameWidth
-                    spacing: osd.itemSpacing
+                    Repeater {
+                        model: osd.items
 
-                    // Short code in a tile, like GNOME's styled bin.
-                    Rectangle {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        width: osd.tileSize
-                        height: osd.tileSize
-                        radius: osd.tileRadius
-                        color: entry.isSelected
-                               ? Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.16)
-                               : "transparent"
-                        border.width: entry.isSelected ? 2 : 1
-                        border.color: entry.isSelected
-                               ? Theme.colWhite
-                               : Qt.rgba(Theme.colWhite.r, Theme.colWhite.g, Theme.colWhite.b, 0.18)
+                        Column {
+                            id: entry
+                            required property var modelData
+                            required property int index
 
-                        Behavior on color { ColorAnimation { duration: 120 } }
+                            readonly property bool isSelected:
+                                index === (osd.hoveredPos >= 0 ? osd.hoveredPos : osd.selected)
 
-                        Text {
-                            anchors.centerIn: parent
-                            text: (entry.modelData.short || "").toUpperCase()
-                            color: Theme.colWhite
-                            opacity: entry.isSelected ? 1.0 : 0.55
-                            font.family: Theme.fontFamily
-                            font.pixelSize: osd.codeSize
-                            font.bold: true
+                            width: osd.nameWidth
+                            spacing: osd.itemSpacing
+
+                            // The key: up, it stands on the plate with a dark
+                            // lower edge; selected, it is pushed in and lit.
+                            Rectangle {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                width: osd.tileSize
+                                height: osd.tileSize
+                                radius: osd.tileRadius
+                                color: entry.isSelected ? Theme.colAccent : Qt.lighter(Theme.colPlate, 1.25)
+                                Behavior on color { ColorAnimation { duration: 120 } }
+
+                                Rectangle {
+                                    visible: !entry.isSelected
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.bottom: parent.bottom
+                                    height: Math.round(3 * osd.uiScale)
+                                    radius: parent.radius
+                                    color: Qt.rgba(0, 0, 0, 0.45)
+                                }
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    anchors.verticalCenterOffset: entry.isSelected ? 0 : -2
+                                    text: osd.codeOf(entry.modelData)
+                                    color: entry.isSelected ? Theme.colBg : Theme.colGrey
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: osd.codeSize
+                                    font.bold: true
+                                }
+                            }
+
+                            // A lamp and the layout's name under its key.
+                            Row {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                spacing: Math.round(5 * osd.uiScale)
+
+                                ConsoleLamp {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    lit: entry.isSelected
+                                }
+
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: Math.min(implicitWidth, osd.nameWidth - 20)
+                                    elide: Text.ElideRight
+                                    text: osd.nameOf(entry.modelData)
+                                    color: entry.isSelected ? Theme.colWhite : Theme.colGrey
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: osd.nameSize
+                                    font.bold: true
+                                    font.letterSpacing: 1
+                                }
+                            }
                         }
-                    }
-
-                    Text {
-                        width: osd.nameWidth
-                        horizontalAlignment: Text.AlignHCenter
-                        elide: Text.ElideRight
-                        text: entry.modelData.name || ""
-                        color: Theme.colWhite
-                        opacity: entry.isSelected ? 0.85 : 0.4
-                        font.family: Theme.fontFamily
-                        font.pixelSize: osd.nameSize
                     }
                 }
             }
@@ -184,7 +227,8 @@ PanelWindow {
             function posAt(mx) {
                 if (osd.items.length === 0) return -1
                 var step = osd.nameWidth + osd.rowSpacing
-                var i = Math.floor((mx - row.x) / step)
+                // The row sits inside the plate now, so map the x into it.
+                var i = Math.floor(row.mapFromItem(panelMouse, mx, 0).x / step)
                 return Math.max(0, Math.min(osd.items.length - 1, i))
             }
 
