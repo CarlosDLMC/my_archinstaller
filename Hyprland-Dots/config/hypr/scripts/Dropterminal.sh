@@ -25,10 +25,13 @@ WIDTH_PERCENT=65  # Width as percentage of screen width
 HEIGHT_PERCENT=65 # Height as percentage of screen height
 Y_PERCENT=10      # Y position as percentage from top (X is auto-centered)
 
-# Animation settings
-ANIMATION_DURATION=100 # milliseconds
-SLIDE_STEPS=5
-SLIDE_DELAY=5 # milliseconds between steps
+# The slide is Hyprland's own windowsMove animation (UserAnimations.lua): the
+# window waits above the screen and is moved in or out with ONE move. It used to
+# be stepped here - 7 moves 30 ms apart - and Hyprland animated every step, so
+# the steps fought each other. Seconds to let the slide out finish before the
+# window goes back to the scratchpad: windowsMove speed 3.79 = ~0.38 s.
+# (Off-screen moves that must not be seen go through park, with no animation.)
+SLIDE_OUT_WAIT=0.45
 
 # Parse arguments
 if [ "$1" = "-d" ]; then
@@ -68,61 +71,49 @@ get_window_geometry() {
   hyprctl clients -j | jq -r --arg ADDR "$addr" '.[] | select(.address == $ADDR) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"'
 }
 
-# Function to animate window slide down (show)
-animate_slide_down() {
-  local addr="$1"
-  local target_x="$2"
-  local target_y="$3"
-  local width="$4"
-  local height="$5"
-
-  debug_echo "Animating slide down for window $addr to position $target_x,$target_y"
-
-  # Start position (above screen)
-  local start_y=$((target_y - height - 50))
-
-  # Calculate step size
-  local step_y=$(((target_y - start_y) / SLIDE_STEPS))
-
-  # Move window to start position instantly (off-screen)
-  hyprctl dispatch "hl.dsp.window.move({ x = $target_x, y = $start_y, window = 'address:$addr' })" >/dev/null 2>&1
-  sleep 0.05
-
-  # Animate slide down
-  for i in $(seq 1 $SLIDE_STEPS); do
-    local current_y=$((start_y + (step_y * i)))
-    hyprctl dispatch "hl.dsp.window.move({ x = $target_x, y = $current_y, window = 'address:$addr' })" >/dev/null 2>&1
-    sleep 0.03
-  done
-
-  # Ensure final position is exact
-  hyprctl dispatch "hl.dsp.window.move({ x = $target_x, y = $target_y, window = 'address:$addr' })" >/dev/null 2>&1
+# Where the dropdown waits while hidden: same x, its own height (plus 50 px)
+# above its shown position - off the top of the screen.
+hidden_y() { # shown_y height
+  echo $(($1 - $2 - 50))
 }
 
-# Function to animate window slide up (hide)
-animate_slide_up() {
-  local addr="$1"
-  local start_x="$2"
-  local start_y="$3"
-  local width="$4"
-  local height="$5"
+# Put the window where it waits, instantly: with animations off for just this
+# window, so neither the move nor a workspace change is played on screen.
+park() { # addr x hidden_y
+  hyprctl dispatch "hl.dsp.window.set_prop({ prop = 'no_anim', value = '1', window = 'address:$1' })" >/dev/null 2>&1
+  hyprctl dispatch "hl.dsp.window.move({ x = $2, y = $3, window = 'address:$1' })" >/dev/null 2>&1
+  hyprctl dispatch "hl.dsp.window.set_prop({ prop = 'no_anim', value = '0', window = 'address:$1' })" >/dev/null 2>&1
+}
 
-  debug_echo "Animating slide up for window $addr from position $start_x,$start_y"
+# Show: the window is already waiting above the screen (see hidden_y), so moving
+# it onto this workspace happens out of sight, and one move brings it down.
+slide_down() { # addr x y width height
+  local addr="$1" x="$2" y="$3" width="$4" height="$5" hy at
+  hy=$(hidden_y "$y" "$height")
+  # Not where it should wait (a new size or monitor)? Put it there first,
+  # while it is still hidden - animated, it would appear mid-flight.
+  at=$(get_window_geometry "$addr" | cut -d' ' -f1,2)
+  [ "$at" != "$x $hy" ] && park "$addr" "$x" "$hy"
+  hyprctl dispatch "hl.dsp.window.move({ workspace = '$CURRENT_WS', follow = false, window = 'address:$addr' })" >/dev/null 2>&1
+  hyprctl dispatch "hl.dsp.window.pin({ window = 'address:$addr' })" >/dev/null 2>&1
+  hyprctl dispatch "hl.dsp.window.move({ x = $x, y = $y, window = 'address:$addr' })" >/dev/null 2>&1
+  debug_echo "Slid $addr down to $x,$y"
+}
 
-  # End position (above screen)
-  local end_y=$((start_y - height - 50))
-
-  # Calculate step size
-  local step_y=$(((start_y - end_y) / SLIDE_STEPS))
-
-  # Animate slide up
-  for i in $(seq 1 $SLIDE_STEPS); do
-    local current_y=$((start_y - (step_y * i)))
-    hyprctl dispatch "hl.dsp.window.move({ x = $start_x, y = $current_y, window = 'address:$addr' })" >/dev/null 2>&1
-    sleep 0.03
-  done
-
-  debug_echo "Slide up animation completed"
+# Hide: one move up off the screen, then back to the scratchpad with animations
+# off. Moving it there puts the window back on screen (Hyprland keeps a floating
+# window inside the monitor) and fades it out - a ghost of the terminal flashed
+# at the top. park then leaves it waiting above the screen for the next show.
+slide_up() { # addr x y height
+  local addr="$1" x="$2" y="$3" height="$4" hy
+  hy=$(hidden_y "$y" "$height")
+  hyprctl dispatch "hl.dsp.window.move({ x = $x, y = $hy, window = 'address:$addr' })" >/dev/null 2>&1
+  sleep "$SLIDE_OUT_WAIT"
+  hyprctl dispatch "hl.dsp.window.set_prop({ prop = 'no_anim', value = '1', window = 'address:$addr' })" >/dev/null 2>&1
+  hyprctl dispatch "hl.dsp.window.pin({ window = 'address:$addr' })" >/dev/null 2>&1 # unpin (toggle)
+  hyprctl dispatch "hl.dsp.window.move({ workspace = '$SPECIAL_WS', follow = false, window = 'address:$addr' })" >/dev/null 2>&1
+  park "$addr" "$x" "$hy"
+  debug_echo "Slid $addr up and into $SPECIAL_WS"
 }
 
 # Function to get monitor info including scale and name of focused monitor
@@ -269,7 +260,7 @@ spawn_terminal() {
   # Launch terminal directly in special workspace to avoid visible spawn
   # exec with window rules: float, size, and open silently on the scratchpad.
   # The command goes in a Lua long string so quotes inside $TERMINAL_CMD survive.
-  hyprctl dispatch "hl.dsp.exec_cmd([==[$TERMINAL_CMD]==], { float = true, size = '$width $height', workspace = 'special:scratchpad silent' })"
+  hyprctl dispatch "hl.dsp.exec_cmd([==[$TERMINAL_CMD]==], { float = true, size = '$width $height', move = '$target_x $(hidden_y "$target_y" "$height")', workspace = 'special:scratchpad silent' })"
 
   # Wait for the new window: compare the client list with the one taken before
   # the spawn, polling for up to ~2 s. It used to look once after 0.1 s and then
@@ -295,11 +286,8 @@ spawn_terminal() {
     # Small delay to ensure it's properly in special workspace
     sleep 0.2
 
-    # Now bring it back with the same animation as subsequent shows
-    # Use movetoworkspacesilent to avoid affecting workspace history
-    hyprctl dispatch "hl.dsp.window.move({ workspace = '$CURRENT_WS', follow = false, window = 'address:$new_addr' })"
-    hyprctl dispatch "hl.dsp.window.pin({ window = 'address:$new_addr' })"
-    animate_slide_down "$new_addr" "$target_x" "$target_y" "$width" "$height"
+    # Now bring it in the same way as every later show
+    slide_down "$new_addr" "$target_x" "$target_y" "$width" "$height"
 
     return 0
   fi
@@ -340,13 +328,9 @@ if terminal_exists; then
     width=$(echo $pos_info | cut -d' ' -f3)
     height=$(echo $pos_info | cut -d' ' -f4)
 
-    # Use movetoworkspacesilent to avoid affecting workspace history
-    hyprctl dispatch "hl.dsp.window.move({ workspace = '$CURRENT_WS', follow = false, window = 'address:$TERMINAL_ADDR' })"
-    hyprctl dispatch "hl.dsp.window.pin({ window = 'address:$TERMINAL_ADDR' })"
-
-    # Set size and animate slide down
+    # Size it while it is still hidden, then slide it down
     hyprctl dispatch "hl.dsp.window.resize({ x = $width, y = $height, window = 'address:$TERMINAL_ADDR' })"
-    animate_slide_down "$TERMINAL_ADDR" "$target_x" "$target_y" "$width" "$height"
+    slide_down "$TERMINAL_ADDR" "$target_x" "$target_y" "$width" "$height"
 
     hyprctl dispatch "hl.dsp.focus({ window = 'address:$TERMINAL_ADDR' })"
   else
@@ -362,13 +346,7 @@ if terminal_exists; then
 
       debug_echo "Current geometry: ${curr_x},${curr_y} ${curr_width}x${curr_height}"
 
-      # Animate slide up first
-      animate_slide_up "$TERMINAL_ADDR" "$curr_x" "$curr_y" "$curr_width" "$curr_height"
-
-      # Small delay then move to special workspace and unpin
-      sleep 0.1
-      hyprctl dispatch "hl.dsp.window.pin({ window = 'address:$TERMINAL_ADDR' })" # Unpin (toggle)
-      hyprctl dispatch "hl.dsp.window.move({ workspace = '$SPECIAL_WS', follow = false, window = 'address:$TERMINAL_ADDR' })"
+      slide_up "$TERMINAL_ADDR" "$curr_x" "$curr_y" "$curr_height"
     else
       debug_echo "Could not get window geometry, moving to scratchpad without animation"
       hyprctl dispatch "hl.dsp.window.pin({ window = 'address:$TERMINAL_ADDR' })"
