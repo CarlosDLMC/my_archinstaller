@@ -131,6 +131,9 @@ bind("CTRL + ALT + L",      exec(S .. "/LockScreen.sh"),            { descriptio
 -- nothing unless hyprlock is running.
 bind("F1", exec(S .. "/LockPower.sh key"), { description = "shutdown (on the lock screen, press twice)", locked = true, non_consuming = true })
 bind("CTRL + ALT + P",      hl.dsp.global("quickshell:powerMenu"),  { description = "powermenu" })
+-- Every notification on screen closed at once, none of their actions run (the
+-- same as a middle click on one).
+bind(M .. " + SHIFT + N",   exec("dunstctl close-all"),             { description = "close all notifications" })
 bind(M .. " + SHIFT + E",   exec(S .. "/Quick_Settings.sh"),   { description = "quick settings menu" })
 
 -- Master layout
