@@ -60,6 +60,11 @@ systemctl --user enable --now pipewire.service 2>&1 | tee -a "$LOG"
 # in the run, and a filter-chain started before that loads nothing until it
 # is restarted. The next login starts it with the config in place.
 systemctl --user enable filter-chain.service 2>&1 | tee -a "$LOG"
+# And pulled back up by PipeWire itself. The unit BindsTo pipewire.service, so
+# a PipeWire restart mid-session (a crash, an update) stops the filter, and
+# only default.target - i.e. the next login - would start it again; until then
+# every recording got the raw mic.
+systemctl --user add-wants pipewire.service filter-chain.service 2>&1 | tee -a "$LOG"
 
 echo -e "\n${OK} Pipewire Installation and services setup complete!" 2>&1 | tee -a "$LOG"
 
