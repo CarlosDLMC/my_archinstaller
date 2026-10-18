@@ -254,6 +254,9 @@ text_boot="OFF"
 # Transparent huge pages only for programs that ask for them, instead of the
 # CachyOS kernel's "always" - less memory for the same desktop (see thp.sh).
 thp_madvise="OFF"
+# Hold Caps Lock for vim's h/j/k/l as the arrow keys, everywhere (keyd; see
+# keyd.sh). Tapped alone, Caps Lock still toggles Caps Lock.
+keyd_nav="OFF"
 # "auto": only where a limine.conf exists (Limine is the bootloader).
 limine="auto"
 # "auto": only where limine.conf has a Windows entry and Secure Boot is off.
@@ -263,7 +266,7 @@ hackbgrt="auto"
 # its only job is to catch a preset key that no longer matches one - see below.
 known_options="ly nvidia nouveau input_group gtk_themes bluetooth thunar \
 quickshell xdph zsh pokemon rog dots handy nopasswd_sudo printing plymouth \
-text_boot limine hackbgrt docker herdr neovim hunk ly_flag thp_madvise"
+text_boot limine hackbgrt docker herdr neovim hunk ly_flag thp_madvise keyd_nav"
 # The ones that also take "auto" (resolved from the hardware further down).
 auto_options="nvidia nouveau rog bluetooth plymouth limine hackbgrt"
 # The ones that take a name instead of ON/OFF, checked on their own below.
@@ -787,6 +790,7 @@ options_command+=(
     "plymouth" "Plymouth boot splash with the repo logo? (wires it into boot if needed)" "OFF"
     "text_boot" "Text boot: show the kernel/systemd messages, no splash? (not with plymouth)" "ON"
     "thp_madvise" "Huge pages only on request (THP madvise)? less RAM, no feature lost" "ON"
+    "keyd_nav" "Hold Caps Lock for h/j/k/l arrows, vim-style? (keyd; a tap is still Caps Lock)" "ON"
     "limine" "Theme the Limine boot menu and disable its countdown? (edits limine.conf, backup kept)" "OFF"
     "hackbgrt" "Repo logo on Windows' boot screen too? (HackBGRT, Limine dual boot, Secure Boot off)" "OFF"
     "herdr" "Install Herdr terminal workspace manager for AI coding agents?" "OFF"
@@ -803,7 +807,7 @@ if [ "$preset_mode" == "true" ]; then
     selected_options=""
     for _opt in ly nvidia nouveau input_group gtk_themes bluetooth thunar \
                 quickshell xdph zsh pokemon rog dots handy nopasswd_sudo \
-                printing plymouth text_boot thp_madvise limine hackbgrt docker herdr neovim hunk; do
+                printing plymouth text_boot thp_madvise keyd_nav limine hackbgrt docker herdr neovim hunk; do
         [ "${!_opt}" == "ON" ] || continue
 
         # Respect the same conditions the interactive menu applies before it
@@ -1351,6 +1355,10 @@ for option in "${options[@]}"; do
         thp_madvise)
             echo "${INFO} Setting transparent huge pages to ${SKY_BLUE}madvise${RESET}..." | tee -a "$LOG"
             execute_script "thp.sh"
+            ;;
+        keyd_nav)
+            echo "${INFO} Putting ${SKY_BLUE}h/j/k/l arrows${RESET} on a held Caps Lock (keyd)..." | tee -a "$LOG"
+            execute_script "keyd.sh"
             ;;
         limine)
             echo "${INFO} Theming the ${SKY_BLUE}Limine boot menu${RESET}..." | tee -a "$LOG"

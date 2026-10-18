@@ -788,6 +788,23 @@ at every boot, and applies it at once - programs already running keep their huge
 pages until they restart. CachyOS's own `thp.conf` and `thp-shrinker.conf` stay
 as they are. Delete the file to go back to `always`.
 
+### vim arrows on Caps Lock (`keyd_nav`)
+
+Hold Caps Lock and `h` `j` `k` `l` are Left, Down, Up and Right - in every app,
+in the TTY and in all three layouts (keyd works on the physical keys, so Caps+р
+in Russian is still Left). Because they are real arrow keys, every arrow
+shortcut gets them too: SUPER+Caps+h focuses left, CTRL+ALT+Caps+l is the next
+workspace, and the bar's cards, the dialogs and rofi move with them. A tap on
+its own still toggles Caps Lock, and no existing bind changes - SUPER+H stays
+the cheat sheet.
+
+`install-scripts/keyd.sh` installs [keyd](https://github.com/rvaiya/keyd),
+writes `/etc/keyd/default.conf` (an existing one that differs is kept as a
+stamped backup), checks it with `keyd check` and enables the service. keyd
+types through its own virtual keyboard, which Hyprland gives the same layouts.
+If it ever misbehaves, Backspace+Escape+Enter together stops it;
+`sudo systemctl disable --now keyd` turns it off.
+
 ### Boot splash (Plymouth)
 
 The `plymouth` preset option installs a Plymouth theme (`assets/plymouth/soviet/`)
@@ -2118,7 +2135,7 @@ chmod +x install.sh
 - ✅ zsh (the shell the dotfiles are written for)
 - ✅ thunar (the file manager the binds and bookmarks expect)
 - and the rest as `custom-preset.conf` has them: herdr, neovim, hunk, docker and
-  text_boot and thp_madvise `ON`, plymouth `OFF`; nvidia, nouveau, rog, bluetooth, limine and hackbgrt are resolved from the
+  text_boot, thp_madvise and keyd_nav `ON`, plymouth `OFF`; nvidia, nouveau, rog, bluetooth, limine and hackbgrt are resolved from the
   hardware when you pick `auto` in a preset
 
 ## Verification

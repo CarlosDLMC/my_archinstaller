@@ -372,6 +372,13 @@ if selected thp_madvise; then
         grep -qx 'w! /sys/kernel/mm/transparent_hugepage/enabled - - - - madvise' /etc/tmpfiles.d/thp-madvise.conf
 fi
 
+if selected keyd_nav; then
+    check_outcome "keyd.service is not enabled - no h/j/k/l arrows on Caps Lock (install-scripts/keyd.sh)" \
+        systemctl is-enabled keyd.service
+    check_outcome "/etc/keyd/default.conf has no Caps Lock navigation layer (install-scripts/keyd.sh)" \
+        grep -qx 'capslock = overload(nav, capslock)' /etc/keyd/default.conf
+fi
+
 if selected docker; then
     check_outcome "docker.socket is not enabled (install-scripts/docker.sh)" \
         systemctl is-enabled docker.socket
