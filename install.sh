@@ -1175,6 +1175,11 @@ echo "${INFO} Installing ${SKY_BLUE}additional Hyprland packages...${RESET}" | t
 sleep 1
 execute_script "01-hypr-pkgs.sh"
 
+# After 01-hypr-pkgs.sh, which installs the stock rofi this replaces.
+echo "${INFO} Building ${SKY_BLUE}rofi with on-demand keyboard focus...${RESET}" | tee -a "$LOG"
+sleep 1
+execute_script "rofi-ondemand.sh"
+
 echo "${INFO} Installing ${SKY_BLUE}CPU microcode...${RESET}" | tee -a "$LOG"
 sleep 1
 execute_script "ucode.sh"

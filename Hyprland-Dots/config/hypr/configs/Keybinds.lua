@@ -21,7 +21,10 @@ local bind = hl.bind
 -- ФАЙЛЫ tab = RofiFiles.sh (fd under ~ or /). glob matching makes "*part*" a
 -- pattern; without a * it matches anywhere in the name, same as before.
 -- config-launcher.rasi adds the match count and the full-name line.
-bind(M .. " + D",      exec("pkill rofi || true && rofi -config ~/.config/rofi/config-launcher.rasi -show drun -modi drun,files:" .. S .. "/RofiFiles.sh,run,window -matching glob"), { description = "app launcher" })
+-- ROFI_KEYBOARD_ON_DEMAND: the patched rofi (pkgbuilds/rofi) lets a click on a
+-- window take the keyboard while the launcher stays open - a file opened beside
+-- it with Shift+Enter can be used. Stock rofi ignores it.
+bind(M .. " + D",      exec("pkill rofi || true && ROFI_KEYBOARD_ON_DEMAND=1 rofi -config ~/.config/rofi/config-launcher.rasi -show drun -modi drun,files:" .. S .. "/RofiFiles.sh,run,window -matching glob"), { description = "app launcher" })
 bind(M .. " + B",      exec("librewolf"),                  { description = "open browser" })
 bind(M .. " + A",      exec(S .. "/OverviewToggle.sh"),    { description = "desktop overview" }) -- quickshell overview, AGS fallback
 bind(M .. " + Return", exec(D.term),                       { description = "open terminal" })

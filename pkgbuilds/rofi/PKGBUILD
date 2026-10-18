@@ -1,0 +1,72 @@
+# Vendored from Arch's rofi package:
+#   https://gitlab.archlinux.org/archlinux/packaging/packages/rofi
+# with one patch, keyboard-on-demand.patch: when ROFI_KEYBOARD_ON_DEMAND is set
+# in its environment, rofi asks for on-demand keyboard focus instead of
+# exclusive. Stock rofi on Wayland always takes the keyboard exclusively (a
+# layer-shell overlay), so nothing else can be typed into or clicked while it
+# is open. The launcher (SUPER D) sets the variable: a file opened with
+# Shift+Enter in its ФАЙЛЫ tab floats beside rofi, and a click on that window
+# gives it the keyboard (seek, speed up a video) while rofi stays open; a click
+# on rofi takes it back. Every other rofi menu is unchanged.
+#
+# install-scripts/rofi-ondemand.sh builds this with makepkg. pkgrel is above
+# the repos' (1, CachyOS 1.1), so `pacman -Syu` keeps it - until the repos ship
+# a newer rofi, which replaces it with the stock build: the launcher then works
+# as before, without the click-to-focus. To follow, set the new pkgver, the
+# sha256 of its release tarball, and re-apply the patch.
+#
+# Also changed from Arch's copy: the source is the release tarball rather than
+# the git tag - it bundles libgwater/libnkutils (no submodules) and ships the
+# man pages prebuilt, which a git checkout can only make with pandoc (built
+# without it, rofi had no man pages at all). So makedepends drops git and
+# pandoc, and check, which only the test suite needs (check() is gone).
+#
+# Maintainer: Morten Linderud <foxboron@archlinux.org>
+# Maintainer: Robin Candau <antiz@archlinux.org>
+# Contributor: Maxim Baz <$pkgname at maximbaz dot com>
+# Contributor: Anatol Pomozov
+# Contributor: Benjamin Chrétien <chretien + aur [at] lirmm [dot] fr>
+# Contributor: Eric Engestrom <aur [at] engestrom [dot] ch>
+# Contributor: Rasi <rasi@xssn.at>
+# Contributor: Sean Pringle <sean.pringle@gmail.com>
+# Contributor: SanskritFritz (gmail)
+
+pkgname=rofi
+pkgver=2.0.0
+pkgrel=2
+pkgdesc="A window switcher, application launcher and dmenu replacement (on-demand keyboard focus patch)"
+url="https://davatorium.github.io/rofi"
+arch=('x86_64')
+license=('MIT')
+depends=('bash' 'cairo' 'gdk-pixbuf2' 'glib2' 'glibc' 'hicolor-icon-theme' 'libxcb' 'libxkbcommon' 'libxkbcommon-x11'
+         'pango' 'startup-notification' 'wayland' 'xcb-imdkit' 'xcb-util' 'xcb-util-cursor' 'xcb-util-keysyms' 'xcb-util-wm')
+makedepends=('meson' 'wayland-protocols')
+provides=('rofi-wayland')
+replaces=('rofi-wayland')
+source=("https://github.com/davatorium/rofi/releases/download/${pkgver}/rofi-${pkgver}.tar.gz"
+        'fix_xfce4-terminal_binary_name.patch'
+        'keyboard-on-demand.patch')
+sha256sums=('f81659b175306ff487e35d88d6b36128e85a793bfb56b64fa22c62eb54c4abd0'
+            '0cd6f1360580f49647ceb7d169ab015f4998e778fd750ce3ad2e861f333824e3'
+            'b5b459b4334b0e529010539cfaaf35cd5da5a80d40a03bea42126714bd8a1b2c')
+
+prepare() {
+	cd "${pkgname}-${pkgver}"
+
+	# xfce4-terminal.wrapper is a Debian specific script that Arch does not provide
+	patch -Np1 -i "${srcdir}/fix_xfce4-terminal_binary_name.patch"
+	patch -Np1 -i "${srcdir}/keyboard-on-demand.patch"
+}
+
+build() {
+	arch-meson "${pkgname}-${pkgver}" build -Dcheck=disabled
+	meson compile -C build
+}
+
+package() {
+	meson install -C build --destdir "${pkgdir}"
+
+	cd "${pkgname}-${pkgver}"
+	install -Dm 644 COPYING "${pkgdir}/usr/share/licenses/${pkgname}/COPYING"
+	install -Dm 755 Examples/*.sh -t "${pkgdir}/usr/share/doc/${pkgname}/examples"
+}

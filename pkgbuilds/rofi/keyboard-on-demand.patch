@@ -1,0 +1,38 @@
+diff --git a/include/wayland-internal.h b/include/wayland-internal.h
+index b4d2f84..b1e55ca 100644
+--- a/include/wayland-internal.h
++++ b/include/wayland-internal.h
+@@ -129,7 +129,8 @@ struct _wayland_seat {
+ #define WL_SEAT_INTERFACE_MAX_VERSION 8
+ #define WL_OUTPUT_INTERFACE_MIN_VERSION 2
+ #define WL_OUTPUT_INTERFACE_MAX_VERSION 4
+-#define WL_LAYER_SHELL_INTERFACE_VERSION 1
++/* 4 for on-demand keyboard interactivity (ROFI_KEYBOARD_ON_DEMAND). */
++#define WL_LAYER_SHELL_INTERFACE_VERSION 4
+ #define WL_KEYBOARD_SHORTCUTS_INHIBITOR_INTERFACE_VERSION 1
+ 
+ extern wayland_stuff *wayland;
+diff --git a/source/wayland/display.c b/source/wayland/display.c
+index b730298..2ea013f 100644
+--- a/source/wayland/display.c
++++ b/source/wayland/display.c
+@@ -1623,7 +1623,18 @@ static gboolean wayland_display_late_setup(void) {
+                                        ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT |
+                                        ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
+   zwlr_layer_surface_v1_set_size(wayland->wlr_surface, 0, 0);
+-  zwlr_layer_surface_v1_set_keyboard_interactivity(wayland->wlr_surface, 1);
++  /* ROFI_KEYBOARD_ON_DEMAND set: on-demand keyboard focus instead of
++   * exclusive, so a click on a window gives that window the keyboard while
++   * rofi stays open, and a click on rofi takes it back. Needs layer-shell 4. */
++  uint32_t interactivity =
++      ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE;
++  if (g_getenv("ROFI_KEYBOARD_ON_DEMAND") != NULL &&
++      zwlr_layer_shell_v1_get_version(wayland->layer_shell) >=
++          ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND_SINCE_VERSION) {
++    interactivity = ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND;
++  }
++  zwlr_layer_surface_v1_set_keyboard_interactivity(wayland->wlr_surface,
++                                                   interactivity);
+   zwlr_layer_surface_v1_add_listener(
+       wayland->wlr_surface, &wayland_layer_shell_surface_listener, NULL);
+ 
