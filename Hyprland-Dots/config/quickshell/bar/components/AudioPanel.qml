@@ -145,6 +145,16 @@ Item {
                     }
                 }
 
+                // The live signal on the input in use, set under its fader:
+                // speak and it moves, so a dead or wrong microphone shows here
+                // before it shows in a call.
+                LevelMeter {
+                    x: inMute.width + 10
+                    width: parent.width - inMute.width - 10
+                    node: panel.ctl.sourceReady ? panel.ctl.source : null
+                    muted: panel.ctl.sourceMuted
+                }
+
                 Repeater {
                     model: panel.ctl.displaySources
                     ConsoleRow {
