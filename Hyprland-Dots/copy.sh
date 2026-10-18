@@ -145,8 +145,10 @@ wallust_targets=(
     # palette until it is restarted.
     "quickshell/bar/wallust-colors.json"
     # btop's color_theme = "wallust" names this one; missing, btop quietly falls
-    # back to its built-in theme.
+    # back to its built-in theme. hypr/scripts/BtopTheme.py rebuilds it from the
+    # palette below after every wallust run.
     "btop/themes/wallust.theme"
+    "btop/themes/wallust-palette.json"
     # The @wal_* colours gtk-3.0/gtk.css imports, and libadwaita's accent names
     # gtk-4.0/gtk.css imports. Missing, GTK warns and every rule that uses them
     # is dropped - the apps fall back to plain Adwaita.

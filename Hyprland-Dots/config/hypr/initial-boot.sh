@@ -56,6 +56,9 @@ if [ ! -f "$HOME/.config/hypr/.initial_startup_done" ]; then
 		# Builds the wallust icon theme from the palette just written. In the
 		# foreground: it has to exist before gsettings is pointed at it.
 		"$HOME/.config/hypr/scripts/IconsWallust.py" || true
+		# btop's theme from the palette just written (omarchy's layout) - see
+		# BtopTheme.py.
+		"$HOME/.config/hypr/scripts/BtopTheme.py" || true
 		# awww-daemon does not fork: `query || daemon && img` would block here forever
 		# when the daemon is not up yet. Start it in the background, then set the image.
 		awww query >/dev/null 2>&1 || { awww-daemon --format argb >/dev/null 2>&1 & sleep 0.5; }

@@ -53,9 +53,11 @@ waybar.target = '~/.config/wallust/output/colors-waybar.css'
 bar.template = 'bar-colors.json'
 bar.target = '~/.config/quickshell/bar/wallust-colors.json'
 
-# btop: its own theme file, picked by color_theme = "wallust" in btop.conf.
-btop.template = 'colors-btop.theme'
-btop.target = '~/.config/btop/themes/wallust.theme'
+# btop: the palette only. hypr/scripts/BtopTheme.py, run after wallust, turns it
+# into btop/themes/wallust.theme (picked by color_theme = "wallust") in
+# omarchy's layout: a hue per box, gradients across hues.
+btop.template = 'btop-palette.json'
+btop.target = '~/.config/btop/themes/wallust-palette.json'
 
 # GTK3 and GTK4: colour names that gtk-3.0/gtk.css and gtk-4.0/gtk.css import.
 gtk3.template = 'gtk3-colors.css'

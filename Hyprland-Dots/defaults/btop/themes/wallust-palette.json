@@ -1,0 +1,20 @@
+{
+  "_comment": "wallust template - the palette hypr/scripts/BtopTheme.py turns into btop/themes/wallust.theme (omarchy-style).",
+  "background": "#262625", "foreground": "#E8C4C0",
+  "color0": "#4C4C4B",
+  "color1": "#1D1D1A",
+  "color2": "#1D1D1A",
+  "color3": "#201D1B",
+  "color4": "#432422",
+  "color5": "#524B47",
+  "color6": "#8E4137",
+  "color7": "#D6A29C",
+  "color8": "#96716D",
+  "color9": "#272623",
+  "color10": "#272623",
+  "color11": "#2A2724",
+  "color12": "#59302D",
+  "color13": "#6D645F",
+  "color14": "#BE564A",
+  "color15": "#D6A29C"
+}

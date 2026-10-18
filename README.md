@@ -431,9 +431,20 @@ GTK3 apps get the `Wallust-A` theme (`Hyprland-Dots/themes/`, installed into
 switches, sliders, highlighted buttons and links take the same accent. Its
 selectors end in `:not(#wallust)`, which outranks Adwaita's own rules inside a
 theme. GTK4 apps import a `wallust.css` from `gtk-4.0/gtk.css` (libadwaita
-through its own accent colour names); btop's `color_theme = "wallust"` is a
-generated theme in the same roles - dim frames, red highlighted keys, gauges
-running dim to accent to red, reloaded in a running btop with `SIGUSR2`.
+through its own accent colour names).
+
+btop's `color_theme = "wallust"` is laid out the way omarchy themes btop: every
+box in a hue of its own (CPU magenta, memory green, network red, processes the
+accent) and the meters and graphs running across hues. wallust only writes the
+palette (`btop/themes/wallust-palette.json`); `scripts/BtopTheme.py` builds the
+theme from it after every `wallust run` and reloads a running btop with
+`SIGUSR2`. A wallpaper rarely has omarchy's hand-picked hues - a green one gives
+greens only - so the six are real hues at the lightness and saturation of the
+palette's vivid colours, each tinted at most 12 degrees toward a palette colour
+near it. The text is mixed most of the way to white, and the process list
+(program names, threads, memory) runs in the wallpaper's accent lifted toward
+white instead of omarchy's cyan-blue-magenta. The background is empty, so btop
+stays on the terminal's translucency.
 
 GTK3 re-reads its theme only when the theme's *name* changes, never
 `~/.config/gtk-3.0/gtk.css` (which is why that file is now empty: a rule there

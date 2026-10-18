@@ -47,8 +47,8 @@ no-effects() {
     wait $!
     wallust run "$wallpaper_current" -s &&
     wait $!
-    # a running btop reloads its theme, open GTK3 apps theirs - see WallustSwww.sh
-    pkill -USR2 -x btop || true
+    # btop's theme rebuilt and reloaded, open GTK3 apps reload theirs - see WallustSwww.sh
+    "$HOME/.config/hypr/scripts/BtopTheme.py" || true
     "$HOME/.config/hypr/scripts/GtkReload.sh" || true
     # readable rofi text for this palette - after wallust, see RofiContrast.py
     "$HOME/.config/hypr/scripts/RofiContrast.py" || true
@@ -96,8 +96,8 @@ main() {
             # after wallust has exited (see WallustSwww.sh). Backgrounded with a
             # 1 s sleep, a slower wallust run overwrote the rofi contrast fix.
             wallust run "$wallpaper_output" -s
-            # a running btop reloads its theme, open GTK3 apps theirs - see WallustSwww.sh
-            pkill -USR2 -x btop || true
+            # btop's theme rebuilt and reloaded, open GTK3 apps reload theirs - see WallustSwww.sh
+            "$HOME/.config/hypr/scripts/BtopTheme.py" || true
             "$HOME/.config/hypr/scripts/GtkReload.sh" || true
             # readable rofi text for this palette - see RofiContrast.py
             "$HOME/.config/hypr/scripts/RofiContrast.py" || true
