@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=X-GNOME-Metatheme
+Name=Wallust-B
+Comment=Dark Adwaita in the wallpaper's colours (my_archinstaller)
+Encoding=UTF-8
+
+[X-GNOME-Metatheme]
+GtkTheme=Wallust-B

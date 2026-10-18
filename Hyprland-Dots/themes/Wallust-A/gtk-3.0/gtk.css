@@ -1,0 +1,99 @@
+/* Wallust - GTK3's own dark Adwaita in the wallpaper's colours.
+
+   A theme rather than ~/.config/gtk-3.0/gtk.css because GTK3 reads that file
+   once, when an app starts, so a wallpaper change never reached a Thunar
+   already open. A theme is re-read whenever the theme NAME changes, so this
+   one exists twice: Wallust-B only loads this file, and hypr/scripts/
+   GtkReload.sh flips gsettings between the two after every wallust run -
+   every open GTK3 app reloads with the new colours.
+
+   The colours are wallust's: ~/.config/gtk-3.0/wallust.css (template
+   gtk3-colors.css), read straight from there - the path is relative to this
+   file, ~/.themes/Wallust-A/gtk-3.0/. Only what Adwaita paints in its own
+   blue changes: selections, focus rings, checked boxes and switches, sliders
+   and progress bars, the highlighted button and links take the accent the
+   bar's console cards light up in. */
+@import url("resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained-dark.css");
+@import url("../../../.config/gtk-3.0/wallust.css");
+
+/* Every selector below ends in :not(#wallust). In ~/.config/gtk-3.0/gtk.css
+   these rules outranked the theme whatever their selectors; inside a theme
+   they are ordinary rules, and Adwaita's more specific ones (a focused
+   selected row: treeview.view:selected:focus) won - the selection stayed
+   Adwaita blue. :not(#wallust) matches every widget (none has that name) but
+   counts as an id, which outranks Adwaita's class-based selectors. */
+
+*:selected:not(#wallust),
+selection:not(#wallust),
+row:selected:not(#wallust),
+treeview.view:selected:not(#wallust),
+iconview:selected:not(#wallust),
+.view:selected:not(#wallust),
+flowboxchild:selected:not(#wallust),
+menuitem:hover:not(#wallust),
+menu menuitem:hover:not(#wallust) {
+    background-color: @wal_accent;
+    color: @wal_bg;
+}
+
+entry:focus:not(#wallust) {
+    border-color: @wal_accent;
+    box-shadow: inset 0 0 0 1px @wal_accent;
+}
+
+check:checked:not(#wallust),
+check:indeterminate:not(#wallust),
+radio:checked:not(#wallust),
+radio:indeterminate:not(#wallust) {
+    background-image: none;
+    background-color: @wal_accent;
+    border-color: @wal_accent;
+    color: @wal_bg;
+}
+
+switch:checked:not(#wallust) {
+    background-image: none;
+    background-color: @wal_accent;
+    border-color: @wal_accent;
+}
+
+scale highlight:not(#wallust),
+progressbar progress:not(#wallust),
+levelbar block.filled:not(#wallust) {
+    background-image: none;
+    background-color: @wal_accent;
+    border-color: @wal_accent;
+}
+
+button.suggested-action:not(#wallust) {
+    background-image: none;
+    background-color: @wal_accent;
+    border-color: @wal_accent;
+    color: @wal_bg;
+    text-shadow: none;
+    -gtk-icon-shadow: none;
+}
+button.suggested-action:hover:not(#wallust) {
+    background-color: shade(@wal_accent, 1.08);
+}
+
+button.destructive-action:not(#wallust) {
+    background-image: none;
+    background-color: @wal_alert;
+    border-color: @wal_alert;
+    color: @wal_bg;
+    text-shadow: none;
+}
+
+/* A link's label is coloured on its own (button:link > label), so it needs
+   naming as well as the link itself. */
+*:link:not(#wallust),
+*:visited:not(#wallust),
+button:link:not(#wallust),
+button:visited:not(#wallust),
+button:link > label:not(#wallust),
+button:visited > label:not(#wallust),
+button.link > label:not(#wallust),
+link:not(#wallust) {
+    color: @wal_accent;
+}

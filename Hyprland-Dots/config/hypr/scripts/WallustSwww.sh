@@ -63,6 +63,9 @@ wallust run -s "$wallpaper_path" || true
 # startup; SIGUSR2 makes a running btop reload its config and theme. cava needs
 # nothing - it reloads its own config when the file changes.
 pkill -USR2 -x btop || true
+# GTK3 apps already open (Thunar, file pickers) re-read their Wallust theme -
+# see GtkReload.sh. They repaint with it when next focused.
+"$HOME/.config/hypr/scripts/GtkReload.sh" || true
 
 # wallust rewrites its template targets after its own hooks run, so the rofi
 # palette can only be conditioned once `wallust run` has exited - see

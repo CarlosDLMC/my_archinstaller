@@ -384,7 +384,8 @@ install broke. (The quickshell overview takes its fonts from
 
 ### GTK theme
 
-The GTK theme is **Adwaita**, set in two places that have to agree:
+The GTK theme is **Wallust-A**: GTK3's own dark Adwaita in the wallpaper's
+colours (see below). It is set in two places that have to agree:
 
 - `Hyprland-Dots/config/gtk-3.0/settings.ini` — `gtk-theme-name`
 - `Hyprland-Dots/config/hypr/initial-boot.sh` — `gtk_theme`, applied over `gsettings`
@@ -394,12 +395,13 @@ depending on how they were launched, so a mismatch means some windows are
 themed and others are not. That is exactly what happened here before: the
 `settings.ini` copy on this machine named `Andromeda-dark`, which was never
 installed, so those applications silently fell back to Adwaita while everything
-reading `gsettings` got `Flat-Remix-GTK-Blue-Dark`. Adwaita is now set in both.
+reading `gsettings` got `Flat-Remix-GTK-Blue-Dark`. The same theme is now set
+in both.
 
-Adwaita is built into `gtk3` itself, so unlike a downloaded theme it needs no
-package and can never go missing. Dark mode comes from
-`gtk-application-prefer-dark-theme=1` plus `color-scheme=prefer-dark`, not from
-a separate dark theme name.
+The theme is a few lines of CSS on top of Adwaita, which is built into `gtk3`
+itself, so it needs no package; `initial-boot.sh` falls back to plain Adwaita
+if it is missing. It is always dark (`gtk-application-prefer-dark-theme=1` plus
+`color-scheme=prefer-dark` as well).
 
 The GTK **application font** (`JetBrainsMono Nerd Font 16`, monospace
 `JetBrainsMono Nerd Font Mono 16`) is set by `initial-boot.sh` over `gsettings`
@@ -422,14 +424,27 @@ it steps the icon theme away and back so open GTK apps reload.
 `initial-boot.sh` builds it on the first login and `copy.sh` on a re-run;
 `settings.ini`, `qt5ct.conf`, `qt6ct.conf` and gsettings all name it.
 
-The GTK apps and btop follow the wallpaper too, through wallust templates:
-`gtk-3.0/gtk.css` and `gtk-4.0/gtk.css` import a generated `wallust.css`, so
-selections, focus rings, checked boxes and switches, sliders, highlighted
-buttons and links take the same accent (libadwaita apps through its own accent
-colour names); btop's `color_theme = "wallust"` is a generated theme in the
-same roles - dim frames, red highlighted keys, gauges running dim to accent to
-red. GTK reads its stylesheet when an app starts, so open apps change at their
-next launch.
+The GTK apps and btop follow the wallpaper too, through wallust templates.
+GTK3 apps get the `Wallust-A` theme (`Hyprland-Dots/themes/`, installed into
+`~/.themes` by `copy.sh`), which imports wallust's generated
+`~/.config/gtk-3.0/wallust.css`: selections, focus rings, checked boxes and
+switches, sliders, highlighted buttons and links take the same accent. Its
+selectors end in `:not(#wallust)`, which outranks Adwaita's own rules inside a
+theme. GTK4 apps import a `wallust.css` from `gtk-4.0/gtk.css` (libadwaita
+through its own accent colour names); btop's `color_theme = "wallust"` is a
+generated theme in the same roles - dim frames, red highlighted keys, gauges
+running dim to accent to red, reloaded in a running btop with `SIGUSR2`.
+
+GTK3 re-reads its theme only when the theme's *name* changes, never
+`~/.config/gtk-3.0/gtk.css` (which is why that file is now empty: a rule there
+would outrank the theme and keep an old wallpaper's colour). So the theme
+exists twice - `Wallust-B` only loads `Wallust-A` - and `scripts/GtkReload.sh`
+switches gsettings to the one not in use after every `wallust run`. Open GTK3
+windows (Thunar, file pickers) take the new colours, and repaint with them when
+they are next focused. Apps that hold a GTK3 process across windows, like
+`Thunar --daemon`, keep whatever they loaded at startup until then - restart
+one that predates this theme once (`Thunar -q`). GTK4 apps still change at
+their next launch.
 
 `gtk_themes.sh` also still installs the Flat-Remix GTK theme and the white
 `Bibata-Modern-Ice` cursor — they are simply no longer selected. The **cursor**

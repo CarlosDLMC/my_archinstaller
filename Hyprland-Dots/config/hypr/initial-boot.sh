@@ -12,11 +12,14 @@ wallpaper=$HOME/.config/hypr/wallpaper_effects/.wallpaper_current
 #waybar_style="$HOME/.config/waybar/style/[Extra] Neon Circuit.css"
 kvantum_theme="catppuccin-mocha-blue"
 color_scheme="prefer-dark"
-# Adwaita is gtk3's built-in theme, so it needs no package and can never go
-# missing. It must match gtk-3.0/settings.ini: GTK3 apps read the theme from
-# gsettings or from settings.ini depending on how they are launched, so a
-# mismatch between the two means some windows are themed and others are not.
-gtk_theme="Adwaita"
+# GTK3's own dark Adwaita in the wallust colours (~/.themes/Wallust-A, put there
+# by copy.sh); Wallust-B is the same theme under the name GtkReload.sh switches
+# to after a wallpaper change, so open GTK3 apps reload. Falls back to plain
+# Adwaita, built into gtk3, if the theme is missing. It must match
+# gtk-3.0/settings.ini: GTK3 apps read the theme from gsettings or from
+# settings.ini depending on how they are launched, so a mismatch between the two
+# means some windows are themed and others are not.
+gtk_theme="Wallust-A"
 # Flat-Remix recoloured with the wallpaper's accent - generated from
 # Flat-Remix-Blue-Dark by IconsWallust.py below, which falls back to the blue
 # one if it could not be built.
@@ -70,6 +73,7 @@ if [ ! -f "$HOME/.config/hypr/.initial_startup_done" ]; then
         sleep 1
     done
     _gs color-scheme "$color_scheme" || setup_ok=false
+    [ -f "$HOME/.themes/$gtk_theme/gtk-3.0/gtk.css" ] || gtk_theme="Adwaita"
     _gs gtk-theme "$gtk_theme" || setup_ok=false
     [ -f "$HOME/.icons/$icon_theme/index.theme" ] || icon_theme="Flat-Remix-Blue-Dark"
     _gs icon-theme "$icon_theme" || setup_ok=false

@@ -886,6 +886,29 @@ else
     echo "  ${WARN} IconsWallust.py failed - the icons follow the wallpaper from the next wallpaper change"
 fi
 
+# The GTK3 theme: dark Adwaita in the wallust colours, under two names -
+# Wallust-A and Wallust-B - so that a wallpaper change can switch between them
+# and every open GTK3 app reloads (hypr/scripts/GtkReload.sh). In ~/.themes
+# because the theme reads ~/.config/gtk-3.0/wallust.css by a path relative to
+# ~/.themes/Wallust-A/gtk-3.0. Copied over in place (cp -rT), never deleted first.
+printf "\n${INFO} Installing the Wallust GTK theme...\n"
+for _t in Wallust-A Wallust-B; do
+    if mkdir -p "$HOME/.themes/$_t" && cp -rT "$SCRIPT_DIR/themes/$_t" "$HOME/.themes/$_t"; then
+        echo "  ${OK} ~/.themes/$_t"
+    else
+        echo "  ${ERROR} Failed to install ~/.themes/$_t"
+    fi
+done
+# initial-boot.sh selects it at the first login, but a re-run never gets there
+# again: a session still on plain Adwaita (or on nothing) is moved over here.
+# Quietly does nothing without a session bus.
+case "$(gsettings get org.gnome.desktop.interface gtk-theme 2>/dev/null)" in
+    "'Adwaita'"|"''")
+        gsettings set org.gnome.desktop.interface gtk-theme Wallust-A 2>/dev/null \
+            && echo "  ${OK} GTK theme set to Wallust-A"
+        ;;
+esac
+
 # Deploy secrets.zsh, but only if the user does not already have one
 #
 # Two things here are load-bearing:

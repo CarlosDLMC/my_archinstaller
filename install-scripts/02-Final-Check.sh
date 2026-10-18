@@ -218,6 +218,9 @@ if selected dots; then
         test -f "$HOME/.config/hypr/hyprland.lua"
     check_outcome "dotfiles not deployed: ~/.config/quickshell/bar/shell.qml is missing (install-scripts/dotfiles-main.sh)" \
         test -f "$HOME/.config/quickshell/bar/shell.qml"
+    # Both names: GtkReload.sh switches between them after every wallpaper change.
+    check_outcome "the Wallust GTK theme is missing from ~/.themes - GTK apps lose the wallpaper colours (Hyprland-Dots/copy.sh)" \
+        test -f "$HOME/.themes/Wallust-A/gtk-3.0/gtk.css" -a -f "$HOME/.themes/Wallust-B/gtk-3.0/gtk.css"
     check_outcome "dotfiles not deployed: ~/.zshrc is missing (install-scripts/dotfiles-main.sh)" \
         test -f "$HOME/.zshrc"
     check_outcome "wallpaper not seeded: ~/.config/hypr/wallpaper_effects/.wallpaper_current is missing (Hyprland-Dots/copy.sh)" \
