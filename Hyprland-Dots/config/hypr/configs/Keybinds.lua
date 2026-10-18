@@ -96,7 +96,8 @@ bind(M .. " + ALT + mouse_down", V.zoom_by(0.5), { description = "zoom out" })
 bind(M .. " + CTRL + ALT + B", exec(S .. "/ToggleQuickshellBar.sh"), { description = "toggle quickshell bar on/off" })
 
 -- Night light toggle (Hyprsunset)
--- Freed for gamescope, which hard-binds SUPER + N to toggle nearest-neighbour filtering.
+-- Was freed for gamescope (SUPER + N toggles its nearest-neighbour filtering); SUPER + N
+-- now closes all notifications instead, so that gamescope toggle no longer reaches it.
 -- bind(M .. " + N", exec(S .. "/Hyprsunset.sh toggle"), { description = "toggle night light" })
 
 -- FEATURES / EXTRAS (UserScripts)
@@ -143,7 +144,7 @@ bind("F1", exec(S .. "/LockPower.sh key"), { description = "shutdown (on the loc
 bind("CTRL + ALT + P",      hl.dsp.global("quickshell:powerMenu"),  { description = "powermenu" })
 -- Every notification on screen closed at once, none of their actions run (the
 -- same as a middle click on one).
-bind(M .. " + SHIFT + N",   exec("dunstctl close-all"),             { description = "close all notifications" })
+bind(M .. " + N",           exec("dunstctl close-all"),             { description = "close all notifications" })
 bind(M .. " + SHIFT + E",   exec(S .. "/Quick_Settings.sh"),   { description = "quick settings menu" })
 
 -- Master layout
