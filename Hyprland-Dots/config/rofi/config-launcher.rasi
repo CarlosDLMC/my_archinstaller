@@ -7,6 +7,22 @@
 
 @import "~/.config/rofi/config.rasi"
 
+/* Keys for the ФАЙЛЫ tab (hypr/scripts/RofiFiles.sh): Shift+Enter opens the
+   file and keeps rofi open, Ctrl+E shows it in Thunar, Ctrl+C copies its path.
+   Their rofi defaults (accept-alt, cursor to the end of the input, copy the
+   input) are cleared first, since rofi refuses a key bound twice. Slots 2, 6
+   and 10 on purpose: in the other tabs rofi turns custom key N into "switch to
+   tab (N-1) mod 4", and all three land on ФАЙЛЫ, the second tab in SUPER D's
+   -modi. */
+configuration {
+    kb-accept-alt:               "";
+    kb-move-end:                 "";
+    kb-secondary-copy:           "";
+    kb-custom-2:                 "Shift+Return";
+    kb-custom-6:                 "Control+e";
+    kb-custom-10:                "Control+c";
+}
+
 /* 452px + 26px for the full-name line, so the list keeps its 7 rows. */
 window {
     height:                      478px;
