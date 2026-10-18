@@ -141,6 +141,32 @@ rule({ match = { class = "^(jetbrains-.*)$", title = "^(win[0-9]+)$" }, no_initi
 -- rule({ match = { fullscreen = true }, border_color = "rgb(EE4B55) rgb(880808)" })
 -- rule({ match = { float = true },      border_color = "rgb(282737) rgb(1E1D2D)" })
 
+---- LAUNCHER: Shift+Enter in the ФАЙЛЫ tab ----
+-- rofi is an overlay that keeps the keyboard, so no window can open on top of
+-- it. Shift+Enter (scripts/RofiFiles.sh: open the file, keep rofi open) runs
+-- `hyprctl eval 'RofiFilesBeside()'`, which switches this rule on: the next
+-- window floats in the left third of the screen, beside the launcher (34% wide
+-- and centred, soviet-teletype.rasi). The first window to open switches it off
+-- again, and so does a 10 s timer, for a file that opens no window (a new tab
+-- in a browser that is already running). Last window rule, so it wins.
+local beside = rule({
+    name    = "rofi-files-beside",
+    enabled = false,
+    match   = { class = ".*" },
+    float   = true,
+    size    = "monitor_w*0.31 monitor_h*0.6",
+    -- window_h here is the app's own starting height, not the size above, so
+    -- the 60%-tall window is centred with a fixed 20%.
+    move    = "monitor_w*0.01 monitor_h*0.2",
+})
+local beside_timer
+function RofiFilesBeside()
+    beside:set_enabled(true)
+    if beside_timer then beside_timer:set_enabled(false) end
+    beside_timer = hl.timer(function() beside:set_enabled(false) end, { timeout = 10000, type = "oneshot" })
+end
+hl.on("window.open", function() beside:set_enabled(false) end)
+
 ---- LAYER RULES ----
 hl.layer_rule({ match = { namespace = "rofi" },                blur = true, ignore_alpha = 1 })
 hl.layer_rule({ match = { namespace = "notifications" },       blur = true, ignore_alpha = 1 })

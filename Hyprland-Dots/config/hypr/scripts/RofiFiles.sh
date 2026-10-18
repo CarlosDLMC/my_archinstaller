@@ -7,7 +7,7 @@
 # back to the ~ / choice.
 #
 # Keys on a file (bound in config-launcher.rasi, which numbers them):
-#   Shift+Enter  open it and keep rofi open (ROFI_RETV 11)
+#   Shift+Enter  open it beside rofi and keep rofi open (ROFI_RETV 11)
 #   Ctrl+E       show it in Thunar, selected in its folder (ROFI_RETV 15)
 #   Ctrl+C       copy its full path to the clipboard (ROFI_RETV 19)
 
@@ -131,6 +131,9 @@ case ${ROFI_RETV:-0} in
                 ;;
             ?*)    list_tree "$ROFI_INFO" ;;
             *)
+                # Shift+Enter: rofi stays on top of every window, so the app's
+                # window floats beside it instead (configs/WindowRules.lua).
+                [[ $ROFI_RETV == 11 ]] && hyprctl eval 'RofiFilesBeside()' >/dev/null 2>&1
                 open_path "$1"
                 # Enter: no output, which closes rofi. Shift+Enter: the list
                 # again, the opened row first with the cursor on it.
