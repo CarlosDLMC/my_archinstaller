@@ -16,6 +16,15 @@
 @import url("resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained-dark.css");
 @import url("../../../.config/gtk-3.0/wallust.css");
 
+/* The selection colours apps look up by name rather than through the rules
+   below. Thunar's file view (exo's icon view) paints a selected file with
+   @theme_selected_bg_color, which Adwaita leaves blue (#15539e) - the
+   sidebar was in the accent, the selected file was not. */
+@define-color theme_selected_bg_color @wal_accent;
+@define-color theme_selected_fg_color @wal_bg;
+@define-color theme_unfocused_selected_bg_color @wal_accent;
+@define-color theme_unfocused_selected_fg_color @wal_bg;
+
 /* Every selector below ends in :not(#wallust). In ~/.config/gtk-3.0/gtk.css
    these rules outranked the theme whatever their selectors; inside a theme
    they are ordinary rules, and Adwaita's more specific ones (a focused
