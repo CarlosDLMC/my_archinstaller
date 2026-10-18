@@ -1,0 +1,43 @@
+diff --git a/include/view-internal.h b/include/view-internal.h
+index 3697f95..b553eda 100644
+--- a/include/view-internal.h
++++ b/include/view-internal.h
+@@ -119,6 +119,8 @@ struct RofiViewState {
+   textbox *tb_total_rows;
+   /** filtered rows */
+   textbox *tb_filtered_rows;
++  /** Position of the selected row among the filtered rows (num-current-row). */
++  textbox *tb_current_row;
+ 
+   /** Extra icon widget that shows the current selected entries text. */
+   textbox *tb_current_entry;
+diff --git a/source/view.c b/source/view.c
+index 28d6fb0..292f132 100644
+--- a/source/view.c
++++ b/source/view.c
+@@ -660,6 +660,12 @@ static void selection_changed_callback(G_GNUC_UNUSED listview *lv,
+       state->previous_line = state->line_map[index];
+     }
+   }
++  if (state->tb_current_row) {
++    char *r = g_strdup_printf(
++        "%u", index < state->filtered_lines ? index + 1 : 0);
++    textbox_text(state->tb_current_row, r);
++    g_free(r);
++  }
+   if (state->tb_current_entry) {
+     if (index < state->filtered_lines) {
+       int fstate = 0;
+@@ -1640,6 +1646,12 @@ static void rofi_view_add_widget(RofiViewState *state, widget *parent_widget,
+                        TB_AUTOWIDTH | TB_AUTOHEIGHT, NORMAL, "", 0, 0);
+     box_add((box *)parent_widget, WIDGET(state->tb_filtered_rows), FALSE);
+     defaults = NULL;
++  } else if (strcmp(name, "num-current-row") == 0) {
++    state->tb_current_row =
++        textbox_create(parent_widget, WIDGET_TYPE_TEXTBOX_TEXT, name,
++                       TB_AUTOWIDTH | TB_AUTOHEIGHT, NORMAL, "", 0, 0);
++    box_add((box *)parent_widget, WIDGET(state->tb_current_row), FALSE);
++    defaults = NULL;
+   } else if (strcmp(name, "textbox-current-entry") == 0) {
+     state->tb_current_entry =
+         textbox_create(parent_widget, WIDGET_TYPE_TEXTBOX_TEXT, name,

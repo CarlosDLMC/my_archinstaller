@@ -38,17 +38,19 @@ mainbox {
     children:                    [ "titlebar", "inputbar", "message", "listview", "textbox-current-entry", "mode-switcher" ];
 }
 
-/* Matches / total, at the right end of the prompt line. */
+/* Position / matches / total, at the right end of the prompt line. The
+   position (num-current-row) comes from the patched rofi, pkgbuilds/rofi;
+   stock rofi turns the unknown name into an empty box, which takes no room. */
 inputbar {
-    children:                    [ "textbox-prompt-colon", "entry", "num-filtered-rows", "textbox-num-sep", "num-rows" ];
+    children:                    [ "textbox-prompt-colon", "entry", "num-current-row", "textbox-num-sep", "num-filtered-rows", "textbox-num-sep2", "num-rows" ];
 }
-num-filtered-rows, num-rows, textbox-num-sep {
+num-current-row, num-filtered-rows, num-rows, textbox-num-sep, textbox-num-sep2 {
     expand:                      false;
     vertical-align:              0.5;
     font:                        "Terminess Nerd Font 16";
     text-color:                  @tty-dim;
 }
-textbox-num-sep {
+textbox-num-sep, textbox-num-sep2 {
     str:                         "/";
 }
 

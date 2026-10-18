@@ -108,6 +108,9 @@ entry {
     cursor-width:                15px;
     cursor-color:                @tty-mark;
     blink:                       true;
+    /* ms between the cursor's on and off - a terminal's pace. Stock rofi
+       hard-codes 1200 and ignores this; pkgbuilds/rofi adds it. */
+    blink-interval:              600;
     placeholder:                 "";
     placeholder-color:           @tty-dim;
 }

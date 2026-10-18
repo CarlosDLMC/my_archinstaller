@@ -1,7 +1,7 @@
 # Vendored from Arch's rofi package:
 #   https://gitlab.archlinux.org/archlinux/packaging/packages/rofi
-# with one patch, keyboard-on-demand.patch: when ROFI_KEYBOARD_ON_DEMAND is set
-# in its environment, rofi asks for on-demand keyboard focus instead of
+# with three patches. keyboard-on-demand.patch: when ROFI_KEYBOARD_ON_DEMAND is
+# set in its environment, rofi asks for on-demand keyboard focus instead of
 # exclusive. Stock rofi on Wayland always takes the keyboard exclusively (a
 # layer-shell overlay), so nothing else can be typed into or clicked while it
 # is open. The launcher (SUPER D) sets the variable: a file opened with
@@ -9,11 +9,18 @@
 # gives it the keyboard (seek, speed up a video) while rofi stays open; a click
 # on rofi takes it back. Every other rofi menu is unchanged.
 #
+# num-current-row.patch: a num-current-row widget, the position of the selected
+# row among the filtered ones - next to rofi's own num-filtered-rows and
+# num-rows the launcher's prompt line reads "2 / 23 / 84721".
+#
+# blink-interval.patch: a blink-interval theme property, the ms between the
+# input cursor's on and off (rofi hard-codes 1200; still the default).
+#
 # install-scripts/rofi-ondemand.sh builds this with makepkg. pkgrel is above
 # the repos' (1, CachyOS 1.1), so `pacman -Syu` keeps it - until the repos ship
 # a newer rofi, which replaces it with the stock build: the launcher then works
 # as before, without the click-to-focus. To follow, set the new pkgver, the
-# sha256 of its release tarball, and re-apply the patch.
+# sha256 of its release tarball, and re-apply the patches.
 #
 # Also changed from Arch's copy: the source is the release tarball rather than
 # the git tag - it bundles libgwater/libnkutils (no submodules) and ships the
@@ -33,8 +40,8 @@
 
 pkgname=rofi
 pkgver=2.0.0
-pkgrel=2
-pkgdesc="A window switcher, application launcher and dmenu replacement (on-demand keyboard focus patch)"
+pkgrel=3
+pkgdesc="A window switcher, application launcher and dmenu replacement (on-demand focus, current-row and blink-interval patches)"
 url="https://davatorium.github.io/rofi"
 arch=('x86_64')
 license=('MIT')
@@ -45,10 +52,14 @@ provides=('rofi-wayland')
 replaces=('rofi-wayland')
 source=("https://github.com/davatorium/rofi/releases/download/${pkgver}/rofi-${pkgver}.tar.gz"
         'fix_xfce4-terminal_binary_name.patch'
-        'keyboard-on-demand.patch')
+        'keyboard-on-demand.patch'
+        'num-current-row.patch'
+        'blink-interval.patch')
 sha256sums=('f81659b175306ff487e35d88d6b36128e85a793bfb56b64fa22c62eb54c4abd0'
             '0cd6f1360580f49647ceb7d169ab015f4998e778fd750ce3ad2e861f333824e3'
-            'b5b459b4334b0e529010539cfaaf35cd5da5a80d40a03bea42126714bd8a1b2c')
+            'b5b459b4334b0e529010539cfaaf35cd5da5a80d40a03bea42126714bd8a1b2c'
+            'ad9ce33e470a21daf5435b16770502f2a035cdad30f7ded0bc02b6b1984dff38'
+            '16a23289dfe7b53cb16e46462dc6e0f28041eb68016e530eadfe85a47d9689db')
 
 prepare() {
 	cd "${pkgname}-${pkgver}"
@@ -56,6 +67,8 @@ prepare() {
 	# xfce4-terminal.wrapper is a Debian specific script that Arch does not provide
 	patch -Np1 -i "${srcdir}/fix_xfce4-terminal_binary_name.patch"
 	patch -Np1 -i "${srcdir}/keyboard-on-demand.patch"
+	patch -Np1 -i "${srcdir}/num-current-row.patch"
+	patch -Np1 -i "${srcdir}/blink-interval.patch"
 }
 
 build() {
