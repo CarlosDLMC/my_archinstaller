@@ -70,7 +70,10 @@ hl.config({
     misc = {
         disable_hyprland_logo    = true,
         disable_splash_rendering = true,
-        vrr = 2,
+        -- 1 = VRR always on. 2 (fullscreen only) switched the monitor's
+        -- FreeSync at every fullscreen toggle, and the Samsung on DP-3 went
+        -- black for ~2 s each time.
+        vrr = 1,
         mouse_move_enables_dpms = true,
         enable_swallow = false,
         swallow_regex  = "^(foot)$",
