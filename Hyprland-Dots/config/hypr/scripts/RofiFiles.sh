@@ -39,7 +39,8 @@ root=${ROFI_DATA#*;}
 
 # Preview mode. $PV holds the PID of the rofi it is on for (ROFI_OUTSIDE is
 # that PID in script mode); $PV.last the file on screen, $PV.hover the row the
-# cursor last moved to, $PV.mpv the preview mpv's IPC socket.
+# cursor last moved to, $PV.mpv the preview mpv's IPC socket, $PV.imv the
+# preview imv's PID, $PV.img* the symlink imv was last handed.
 # configs/WindowRules.lua does the window side: while RofiFilesPreview(true) is
 # on, every new window floats beside the launcher without taking its keyboard
 # or animating, and closes the one before; the mode ends when rofi closes.
@@ -172,11 +173,37 @@ preview_open() {
     # a browser window the next preview would close.
     [[ $app ]] || return
     is_browser "$app" && return
-    if [[ $app == mpv.desktop ]]; then
-        mpv_preview "$1"
-    else
-        setsid -f xdg-open "$1" >/dev/null 2>&1
+    case $app in
+        mpv.desktop) mpv_preview "$1" ;;
+        imv.desktop) imv_preview "$1" ;;
+        *)           setsid -f xdg-open "$1" >/dev/null 2>&1 ;;
+    esac
+}
+
+# Images share one imv the same way: imv-msg (imv's IPC, by PID) opens the
+# next image, selects it and closes the one before, so imv holds one image and
+# its window stays. A new imv only when the saved PID is no imv any more (the
+# first image, or its window was replaced by another app's). The imv launcher
+# execs imv-wayland, so the PID started here is imv's own.
+imv_preview() {
+    local pid link f
+    pid=$(cat "$PV.imv" 2>/dev/null)
+    if [[ $pid && $(cat "/proc/$pid/comm" 2>/dev/null) == imv* ]]; then
+        # imv splits a command at every space, quotes or not, and expands each
+        # piece like a shell. So it is given a symlink with a plain name, never
+        # the path: spaces, quotes and $(...) in file names stay inert.
+        # Then "close" closes the current (old) image and imv moves on to the
+        # new one. Not "goto -1" + "close 1": closing an image before the
+        # current one leaves imv on an index past its list, showing nothing.
+        link=$PV.img$RANDOM
+        if ln -sfn -- "$1" "$link" && imv-msg "$pid" "open $link" &&
+                imv-msg "$pid" "close"; then
+            for f in "$PV".img*; do [[ $f == "$link" ]] || rm -f "$f"; done
+            return
+        fi
     fi
+    setsid imv -- "$1" >/dev/null 2>&1 &
+    printf '%s' "$!" > "$PV.imv"
 }
 
 # Sounds and videos share one mpv while its window is the preview: the next
@@ -200,7 +227,7 @@ EOF
 toggle_preview() {
     local p
     if preview_here; then
-        rm -f "$PV" "$PV.last" "$PV.hover" "$PV.mpv"
+        rm -f "$PV" "$PV.last" "$PV.hover" "$PV.mpv" "$PV.imv" "$PV".img*
         hyprctl eval 'RofiFilesPreview(false)' >/dev/null 2>&1
     else
         printf '%s' "$ROFI_OUTSIDE" > "$PV"
@@ -262,7 +289,7 @@ case ${ROFI_RETV:-0} in
     19) if [[ $ROFI_INFO ]]; then relist; else copy_path "$1"; fi ;;
     0)
         # A new launcher: preview mode left by an earlier one is gone with it.
-        preview_here || rm -f "$PV" "$PV.last" "$PV.hover" "$PV.mpv"
+        preview_here || rm -f "$PV" "$PV.last" "$PV.hover" "$PV.mpv" "$PV.imv" "$PV".img*
         list_roots
         ;;
     # rofi's other custom keys (Alt+1 and so on) do nothing here.
