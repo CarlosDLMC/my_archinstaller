@@ -1,0 +1,148 @@
+diff '--color=never' -ru a/src/backend.cpp b/src/backend.cpp
+--- a/src/backend.cpp	2026-10-18 16:28:11.760005758 +0200
++++ b/src/backend.cpp	2026-10-18 16:28:40.905720509 +0200
+@@ -82,6 +82,17 @@
+                             from.blueF() + (to.blueF() - from.blueF()) * amount);
+ }
+ 
++// my_archinstaller patch: the editor keeps omawrite's own colours whatever the
++// theme file says - only the dialogs take the theme, through the theme*
++// properties. These are the same defaults loadOmarchyTheme() starts from.
++void setDefaultHighlighterTheme(MarkdownHighlighter *highlighter, bool dark) {
++    const QColor page(dark ? QStringLiteral("#101010") : QStringLiteral("#ffffff"));
++    const QColor text(dark ? QStringLiteral("#eeeeee") : QStringLiteral("#222324"));
++    highlighter->setTheme(dark, page.name(), text.name(),
++                          dark ? QStringLiteral("#5584aa") : QStringLiteral("#2077b2"),
++                          blend(page, text, 0.06).name());
++}
++
+ }
+ 
+ QString Backend::normalizedLinkUrl(const QString &clipboardText) {
+@@ -270,8 +281,7 @@
+     m_document = quickDocument->textDocument();
+     m_lastDocumentText = m_document->toPlainText();
+     m_highlighter = new MarkdownHighlighter(m_document);
+-    m_highlighter->setTheme(m_darkMode, m_themeBackground, m_themeForeground, m_themeAccent,
+-                            m_themeCodeBackground);
++    setDefaultHighlighterTheme(m_highlighter, m_darkMode);
+     m_highlighter->setCaret(m_caretPosition);
+ 
+     connect(m_document, &QTextDocument::contentsChange, this,
+@@ -1160,10 +1170,8 @@
+                                  ? lighter
+                                  : blend(page, QColor(m_themeForeground), 0.06)).name();
+ 
+-    if (m_highlighter) {
+-        m_highlighter->setTheme(m_darkMode, m_themeBackground, m_themeForeground,
+-                                m_themeAccent, m_themeCodeBackground);
+-    }
++    if (m_highlighter)
++        setDefaultHighlighterTheme(m_highlighter, m_darkMode);
+ 
+     if (m_darkMode != wasDark)
+         emit darkModeChanged();
+diff '--color=never' -ru a/src/ExternalChangeDialog.qml b/src/ExternalChangeDialog.qml
+--- a/src/ExternalChangeDialog.qml	2026-10-18 16:28:11.759910168 +0200
++++ b/src/ExternalChangeDialog.qml	2026-10-18 16:28:40.906494172 +0200
+@@ -21,6 +21,9 @@
+     signal reloadRequested()
+ 
+     modal: true
++    // my_archinstaller patch: see modalDimColor in Main.qml.
++    property color dimColor: "#99000000"
++    Overlay.modal: Rectangle { color: root.dimColor }
+     focus: true
+     closePolicy: Popup.CloseOnEscape
+     width: Math.min(520, containerWidth - 48)
+diff '--color=never' -ru a/src/Main.qml b/src/Main.qml
+--- a/src/Main.qml	2026-10-18 16:28:11.760818138 +0200
++++ b/src/Main.qml	2026-10-18 16:28:40.906414632 +0200
+@@ -16,11 +16,18 @@
+     title: (backend.modified ? "* " : "") + backend.fileName + " - Omawrite"
+ 
+     readonly property bool darkMode: backend.darkMode
+-    readonly property color pageColor: backend.themeBackground
+-    readonly property color textColor: backend.themeForeground
++    // my_archinstaller patch: the window keeps omawrite's own colours (the
++    // defaults in Backend::loadOmarchyTheme). Only the dialogs below take the
++    // theme file's, through backend.theme*.
++    readonly property color pageColor: darkMode ? "#101010" : "#ffffff"
++    readonly property color textColor: darkMode ? "#eeeeee" : "#222324"
+     readonly property color mutedColor: darkMode ? "#909191" : "#aeb1b5"
+-    readonly property color selectionFill: backend.themeSelection
+-    readonly property color selectionTextColor: backend.themeSelectionForeground
++    readonly property color selectionFill: darkMode ? "#186a9a" : "#2077b2"
++    readonly property color selectionTextColor: textColor
++    readonly property color accentColor: darkMode ? "#5584aa" : "#2077b2"
++    // Qt 6.12's Material style dims behind a modal dialog with #99fafafa in
++    // dark mode too - a near-white sheet over the page. A dark one instead.
++    readonly property color modalDimColor: darkMode ? "#99000000" : "#99fafafa"
+     // The desktop's text size knob (GNOME's text-scaling-factor, which
+     // `omarchy display text size` drives) anchored so its 12px default leaves
+     // the app at the sizes it was designed around, times the user's own
+@@ -45,7 +52,7 @@
+     property bool awaitingPendingSave: false
+ 
+     Material.theme: darkMode ? Material.Dark : Material.Light
+-    Material.accent: backend.themeAccent
++    Material.accent: accentColor
+     color: pageColor
+ 
+     onClosing: function(close) {
+@@ -323,9 +330,10 @@
+         fileName: backend.fileName
+         darkMode: win.darkMode
+         textScale: win.textScale
+-        textColor: win.textColor
+-        strongTextColor: win.textColor
++        textColor: backend.themeForeground
++        strongTextColor: backend.themeForeground
+         activeButtonColor: backend.themeAccent
++        dimColor: win.modalDimColor
+         containerWidth: win.width
+         containerHeight: win.height
+ 
+@@ -350,9 +358,10 @@
+         id: externalChangeDialog
+         darkMode: win.darkMode
+         textScale: win.textScale
+-        textColor: win.textColor
+-        strongTextColor: win.textColor
++        textColor: backend.themeForeground
++        strongTextColor: backend.themeForeground
+         activeButtonColor: backend.themeAccent
++        dimColor: win.modalDimColor
+         containerWidth: win.width
+         containerHeight: win.height
+ 
+@@ -367,6 +376,7 @@
+         title: "Keyboard shortcuts"
+         standardButtons: Dialog.Close
+         anchors.centerIn: parent
++        Overlay.modal: Rectangle { color: win.modalDimColor }
+         // A bare Label as contentItem trips a Popup implicitWidth binding loop
+         // (Material Dialog.qml:14); as a child, the default content item sizes
+         // to it without the feedback.
+@@ -1027,7 +1037,7 @@
+             textScale: win.textScale
+             textColor: win.textColor
+             mutedColor: win.mutedColor
+-            highlightColor: backend.themeAccent
++            highlightColor: win.accentColor
+             onFontChosen: function(family) { backend.editorFont = family; }
+             onClosed: editor.forceActiveFocus()
+         }
+diff '--color=never' -ru a/src/UnsavedChangesDialog.qml b/src/UnsavedChangesDialog.qml
+--- a/src/UnsavedChangesDialog.qml	2026-10-18 16:28:11.759993548 +0200
++++ b/src/UnsavedChangesDialog.qml	2026-10-18 16:28:40.906464072 +0200
+@@ -18,6 +18,9 @@
+     signal cancelRequested()
+ 
+     modal: true
++    // my_archinstaller patch: see modalDimColor in Main.qml.
++    property color dimColor: "#99000000"
++    Overlay.modal: Rectangle { color: root.dimColor }
+     focus: true
+     closePolicy: Popup.CloseOnEscape
+     onRejected: cancelRequested()

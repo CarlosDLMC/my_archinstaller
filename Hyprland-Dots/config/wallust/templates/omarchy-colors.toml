@@ -1,0 +1,13 @@
+# wallust template - omacut's accent and omawrite's dialogs in the wallpaper's
+# colours (omawrite is patched to keep its own colours elsewhere - see
+# pkgbuilds/omawrite/PKGBUILD). Rendered to
+# ~/.local/state/omarchy/current/theme/colors.toml on every wallpaper change:
+# the omarchy theme file both apps read and watch, so open windows recolour
+# live. Same mapping as the GTK theme and the bar: accent color7, panels color0.
+background = "{{background}}"
+foreground = "{{foreground}}"
+accent = "{{color7}}"
+selection_background = "{{color12}}"
+selection_foreground = "{{color15}}"
+bright_foreground = "{{color15}}"
+lighter_background = "{{color0}}"

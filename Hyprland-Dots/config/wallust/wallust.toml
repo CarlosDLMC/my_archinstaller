@@ -63,6 +63,12 @@ gtk3.target = '~/.config/gtk-3.0/wallust.css'
 gtk4.template = 'gtk4-colors.css'
 gtk4.target = '~/.config/gtk-4.0/wallust.css'
 
+# omawrite and omacut: the omarchy theme file they read and watch (background,
+# text, accent, selection, code panel). Outside ~/.config because that is where
+# the apps look.
+omarchy.template = 'omarchy-colors.toml'
+omarchy.target = '~/.local/state/omarchy/current/theme/colors.toml'
+
 #macchina.template = 'colors-macchina.toml'
 #macchina.target = '~/.config/macchina/themes/wallust.toml'
 

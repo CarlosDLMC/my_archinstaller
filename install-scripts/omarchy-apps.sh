@@ -10,9 +10,12 @@
 # They become real pacman packages, so `pacman -R` removes them cleanly - but
 # nothing updates them: bump the vendored PKGBUILD and re-run this script.
 #
-# On omarchy both apps take their accent colour from
-# ~/.local/state/omarchy/current/theme/colors.toml. That file does not exist
-# here, so they run with their built-in default accent.
+# Both apps colour themselves from omarchy's theme file,
+# ~/.local/state/omarchy/current/theme/colors.toml, and watch it. Here wallust
+# writes it on every wallpaper change (config/wallust/templates/
+# omarchy-colors.toml), so omacut's accent follows the wallpaper. omawrite is
+# patched to use it only in its Unsaved changes / Changed on disk dialogs - see
+# pkgbuilds/omawrite/PKGBUILD.
 
 # Built from pkgbuilds/<name>/.
 omarchy_apps_vendored=(

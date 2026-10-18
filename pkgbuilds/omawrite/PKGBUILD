@@ -11,13 +11,26 @@
 # sets qt6ct, which does not, so Qt drew its own unthemed Material fallback.
 # Through the portal the dialog is xdg-desktop-portal-gtk's GTK chooser, which
 # follows the wallust GTK theme. omawrite itself already does this switch for
-# omarchy's "gtk3" (src/main.cpp) - just not for qt6ct. pkgrel is bumped for it.
+# omarchy's "gtk3" (src/main.cpp) - just not for qt6ct.
+#
+# And two patches:
+#  - single-line-return.patch: Return ends a paragraph with one line break
+#    instead of two (lists and code fences behave as before), and Shift+Return
+#    gives the blank-line paragraph break that Return used to. Backspace then
+#    takes back one break, not the pair.
+#  - theme-only-dialogs.patch: omawrite colours itself from omarchy's theme
+#    file, which wallust writes here (omarchy-colors.toml). Only the Unsaved
+#    changes and Changed-on-disk dialogs keep those colours; the window and
+#    the Markdown highlighting use omawrite's own. Also gives modal dialogs a
+#    dark dim layer - Qt 6.12's Material style dims with #99fafafa even in
+#    dark mode, a near-white sheet over the page.
+# pkgrel is bumped for these.
 #
 # Maintainer: David Heinemeier Hansson <david@hey.com>
 
 pkgname=omawrite
 pkgver=0.7.1
-pkgrel=2
+pkgrel=4
 pkgdesc='Dead-simple Markdown writing app built with Qt Quick'
 arch=('x86_64' 'aarch64')
 url='https://github.com/omacom/omawrite'
@@ -36,8 +49,18 @@ makedepends=(
   'qt6-base'
   'qt6-declarative'
 )
-source=("$pkgname-$pkgver.tar.gz::https://github.com/omacom/omawrite/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('a8742839163d69cd8dbd2d7eb116caba4c0dc941d017e54598e796d900aea68f')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/omacom/omawrite/archive/refs/tags/v$pkgver.tar.gz"
+        'single-line-return.patch'
+        'theme-only-dialogs.patch')
+sha256sums=('a8742839163d69cd8dbd2d7eb116caba4c0dc941d017e54598e796d900aea68f'
+            '424c5e57ddb02e6f221d9844e222429c5166f801315b27a845c54225c026bbd3'
+            '047f7eaafb8ed8f0ee15805ac048917c2bbbd3c8e8efb124d84082659e633503')
+
+prepare() {
+  cd "$srcdir/$pkgname-$pkgver"
+  patch -Np1 -i "$srcdir/single-line-return.patch"
+  patch -Np1 -i "$srcdir/theme-only-dialogs.patch"
+}
 
 build() {
   cd "$srcdir/$pkgname-$pkgver"

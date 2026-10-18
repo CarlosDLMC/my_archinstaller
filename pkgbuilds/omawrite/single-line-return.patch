@@ -1,0 +1,41 @@
+--- a/src/Main.qml	2026-10-18 16:21:51.814636245 +0200
++++ b/src/Main.qml	2026-10-18 16:21:51.822532483 +0200
+@@ -676,7 +676,9 @@
+                     }
+                 }
+ 
+-                function smartReturn(softBreak) {
++                // singleBreak: plain Return ends a paragraph with one break,
++                // Shift+Return with the blank line (my_archinstaller patch).
++                function smartReturn(softBreak, singleBreak) {
+                     if (softBreak) {
+                         replaceSelectionWith("\n");
+                         return;
+@@ -716,7 +718,7 @@
+                         replaceSelectionWith("\n");
+                         return;
+                     }
+-                    replaceSelectionWith("\n\n");
++                    replaceSelectionWith(singleBreak ? "\n" : "\n\n");
+                 }
+ 
+                 function escapeMarkdownLinkText(linkText) {
+@@ -787,6 +789,9 @@
+                 }
+ 
+                 function deleteParagraphBreakBehindCursor() {
++                    // Return writes one break here (my_archinstaller patch), so
++                    // Backspace takes one back, like any editor.
++                    return false;
+                     if (selectionStart !== selectionEnd || cursorPosition < 2)
+                         return false;
+ 
+@@ -856,7 +861,7 @@
+                     var returnKey = event.key === Qt.Key_Return || event.key === Qt.Key_Enter;
+                     var commandModifier = event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier);
+                     if (returnKey && !commandModifier) {
+-                        smartReturn(event.modifiers & Qt.ShiftModifier);
++                        smartReturn(false, !(event.modifiers & Qt.ShiftModifier));
+                         event.accepted = true;
+                     } else if (!commandModifier && event.key === Qt.Key_Backspace
+                                && deleteParagraphBreakBehindCursor()) {
