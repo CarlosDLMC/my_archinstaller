@@ -151,12 +151,17 @@ rule({ match = { class = "^(jetbrains-.*)$", title = "^(win[0-9]+)$" }, no_initi
 -- one before, so there is one preview at a time. A click on it gives it the
 -- keyboard (the patched rofi's on-demand focus). The mode and its window end
 -- with Shift+Enter again or when rofi closes. Last window rule, so it wins.
+-- No animations, and the old window closes only once the new one is mapped:
+-- the preview looks like one window whose content changes, not a window
+-- popping out and in. (Sounds and videos even stay in one mpv window -
+-- RofiFiles.sh loads the next file into it.)
 local preview = rule({
     name             = "rofi-files-preview",
     enabled          = false,
     match            = { class = ".*" },
     float            = true,
     no_initial_focus = true,
+    no_anim          = true,
     size             = "monitor_w*0.31 monitor_h*0.6",
     -- window_h here is the app's own starting height, not the size above, so
     -- the 60%-tall window is centred with a fixed 20%.

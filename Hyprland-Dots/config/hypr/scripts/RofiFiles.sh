@@ -39,10 +39,10 @@ root=${ROFI_DATA#*;}
 
 # Preview mode. $PV holds the PID of the rofi it is on for (ROFI_OUTSIDE is
 # that PID in script mode); $PV.last the file on screen, $PV.hover the row the
-# cursor last moved to. configs/WindowRules.lua does the window side: while
-# RofiFilesPreview(true) is on, every new window floats beside the launcher
-# without taking its keyboard and closes the one before, and the mode ends
-# when rofi closes.
+# cursor last moved to, $PV.mpv the preview mpv's IPC socket.
+# configs/WindowRules.lua does the window side: while RofiFilesPreview(true) is
+# on, every new window floats beside the launcher without taking its keyboard
+# or animating, and closes the one before; the mode ends when rofi closes.
 PV=${XDG_RUNTIME_DIR:-/tmp}/rofi-files-preview
 
 header() {
@@ -173,20 +173,34 @@ preview_open() {
     [[ $app ]] || return
     is_browser "$app" && return
     if [[ $app == mpv.desktop ]]; then
-        # mpv.desktop's own command plus --keep-open: a sound or video stays on
-        # its last frame instead of closing at the end. A window that closes
-        # hands the keyboard to another one - away from the launcher (on-demand
-        # focus) - and the arrow keys stop reaching rofi.
-        setsid -f mpv --player-operation-mode=pseudo-gui --keep-open=yes -- "$1" >/dev/null 2>&1
+        mpv_preview "$1"
     else
         setsid -f xdg-open "$1" >/dev/null 2>&1
     fi
 }
 
+# Sounds and videos share one mpv while its window is the preview: the next
+# file goes into it over its IPC socket, $PV.mpv, so the window stays and mpv
+# does not start up again. Only when nothing answers there - the first one, or
+# its window was replaced by another app's and it quit - is mpv started:
+# mpv.desktop's own command plus the socket and --keep-open. That keeps a file
+# that ends on its last frame instead of closing the window, which would hand
+# the keyboard to another window, away from the launcher (on-demand focus).
+mpv_preview() {
+    python3 - "$PV.mpv" "$1" 2>/dev/null <<'EOF' && return
+import json, socket, sys
+s = socket.socket(socket.AF_UNIX)
+s.connect(sys.argv[1])
+s.sendall((json.dumps({"command": ["loadfile", sys.argv[2]]}) + "\n").encode())
+EOF
+    setsid -f mpv --player-operation-mode=pseudo-gui --keep-open=yes \
+        --input-ipc-server="$PV.mpv" -- "$1" >/dev/null 2>&1
+}
+
 toggle_preview() {
     local p
     if preview_here; then
-        rm -f "$PV" "$PV.last" "$PV.hover"
+        rm -f "$PV" "$PV.last" "$PV.hover" "$PV.mpv"
         hyprctl eval 'RofiFilesPreview(false)' >/dev/null 2>&1
     else
         printf '%s' "$ROFI_OUTSIDE" > "$PV"
@@ -248,7 +262,7 @@ case ${ROFI_RETV:-0} in
     19) if [[ $ROFI_INFO ]]; then relist; else copy_path "$1"; fi ;;
     0)
         # A new launcher: preview mode left by an earlier one is gone with it.
-        preview_here || rm -f "$PV" "$PV.last" "$PV.hover"
+        preview_here || rm -f "$PV" "$PV.last" "$PV.hover" "$PV.mpv"
         list_roots
         ;;
     # rofi's other custom keys (Alt+1 and so on) do nothing here.
