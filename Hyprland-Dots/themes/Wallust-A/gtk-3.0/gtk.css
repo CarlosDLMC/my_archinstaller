@@ -16,14 +16,21 @@
 @import url("resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained-dark.css");
 @import url("../../../.config/gtk-3.0/wallust.css");
 
-/* The selection colours apps look up by name rather than through the rules
-   below. Thunar's file view (exo's icon view) paints a selected file with
-   @theme_selected_bg_color, which Adwaita leaves blue (#15539e) - the
-   sidebar was in the accent, the selected file was not. */
-@define-color theme_selected_bg_color @wal_accent;
-@define-color theme_selected_fg_color @wal_bg;
-@define-color theme_unfocused_selected_bg_color @wal_accent;
-@define-color theme_unfocused_selected_fg_color @wal_bg;
+/* Selection colours, used by the rules below and by the colour names apps
+   look up instead: a faint tint of the accent under the normal light text.
+   A solid accent block was glaring on the dark background, and the folder
+   icons, accent-coloured too, disappeared into it. */
+@define-color wal_sel_bg alpha(@wal_accent, 0.22);
+@define-color wal_sel_fg @wal_fg;
+
+/* Thunar's file view (exo's icon view) paints a selected file with
+   @theme_selected_bg_color rather than through the rules below, and Adwaita
+   leaves it blue (#15539e) - the sidebar was in the accent, the selected
+   file was not. */
+@define-color theme_selected_bg_color @wal_sel_bg;
+@define-color theme_selected_fg_color @wal_sel_fg;
+@define-color theme_unfocused_selected_bg_color @wal_sel_bg;
+@define-color theme_unfocused_selected_fg_color @wal_sel_fg;
 
 /* Every selector below ends in :not(#wallust). In ~/.config/gtk-3.0/gtk.css
    these rules outranked the theme whatever their selectors; inside a theme
@@ -41,8 +48,8 @@ iconview:selected:not(#wallust),
 flowboxchild:selected:not(#wallust),
 menuitem:hover:not(#wallust),
 menu menuitem:hover:not(#wallust) {
-    background-color: @wal_accent;
-    color: @wal_bg;
+    background-color: @wal_sel_bg;
+    color: @wal_sel_fg;
 }
 
 entry:focus:not(#wallust) {
