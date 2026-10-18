@@ -33,7 +33,7 @@ root_excludes=(/proc /sys /dev /run /tmp /.snapshots)
 # (Steam games and their soundtracks, Trash, flatpak apps: ~85k entries under
 # ~ become ~410k); it holds while the launcher is open and is off again the
 # next time. The root is the folder being listed, empty on the first screen;
-# Shift+Enter needs it to list the same folder again.
+# Shift+Enter needs it for the list's message, other keys to list it again.
 share=${ROFI_DATA%%;*}
 root=${ROFI_DATA#*;}
 
@@ -63,8 +63,21 @@ list_roots() {
     printf '[%s] + .local/share\0info\x1fshare\x1fpermanent\x1ftrue\n' "$mark"
 }
 
-# list_tree ROOT [ROW]: ROW is the entry Shift+Enter was pressed on, to keep
-# the cursor on.
+# The options of a file list, everything but its rows.
+tree_header() {
+    header
+    # rofi reads keep-filter from the list on screen when a key is pressed:
+    # set here, the typed filter outlives a reload of the list.
+    printf '\0keep-filter\x1ftrue\n'
+    if preview_here; then
+        printf '\0message\x1f%s%s  ·  ПРОСМОТР  ·  Shift+Enter выключает\n' \
+            "${root/#$HOME/\~}" "${share:+ + .local/share}"
+    else
+        printf '\0message\x1f%s%s  ·  *часть* или *.pdf  ·  Enter открывает\n' \
+            "${root/#$HOME/\~}" "${share:+ + .local/share}"
+    fi
+}
+
 list_tree() {
     root=$1
     local x args=(--hidden --color never --absolute-path)
@@ -75,30 +88,18 @@ list_tree() {
     if [[ $root == / ]]; then
         for x in "${root_excludes[@]}"; do args+=(--exclude "$x"); done
     fi
-    header
-    # rofi reads keep-filter from the list on screen when a key is pressed, so
-    # it is set here: after Shift+Enter the typed filter stays.
-    printf '\0keep-filter\x1ftrue\n'
-    if preview_here; then
-        printf '\0message\x1f%s%s  ·  ПРОСМОТР  ·  Shift+Enter выключает\n' \
-            "${root/#$HOME/\~}" "${share:+ + .local/share}"
-    else
-        printf '\0message\x1f%s%s  ·  *часть* или *.pdf  ·  Enter открывает\n' \
-            "${root/#$HOME/\~}" "${share:+ + .local/share}"
-    fi
-    # After Shift+Enter that row comes first. rofi puts the cursor on the
-    # first match of the new list, and this row matches the filter, so the
-    # cursor stays on it. (keep-selection/new-selection can't do it: rofi maps
-    # them through the old list, and fd's order changes from run to run.)
-    [[ $2 ]] && printf '%s\n' "$2"
+    tree_header
     printf '..   НАЗАД\0info\x1fback\n'
     # Paths under home are shown as ~/..., shorter to read and to type.
-    if [[ -z $2 ]]; then
-        fd "${args[@]}" . "$root" 2>/dev/null | sed "s|^$HOME/|~/|"
-    else
-        fd "${args[@]}" . "$root" 2>/dev/null | sed "s|^$HOME/|~/|" |
-            LC_ALL=C grep -vxF -- "$2"
-    fi
+    fd "${args[@]}" . "$root" 2>/dev/null | sed "s|^$HOME/|~/|"
+}
+
+# The file list stays as it is - same rows, filter and cursor - and only its
+# message changes. keep-list is the patched rofi's (pkgbuilds/rofi); without
+# it, an answer with no rows would close rofi.
+keep_tree() {
+    tree_header
+    printf '\0keep-list\x1ftrue\n'
 }
 
 # A row's path as the shell needs it: ~/ expanded, no trailing / on folders.
@@ -141,11 +142,28 @@ preview_here() {
     [[ $(cat "$PV" 2>/dev/null) == "$ROFI_OUTSIDE" ]]
 }
 
+# A file's default app is a web browser - or it has none, and xdg-open would
+# fall back to one. Never previewed: it lands as a tab in the running browser,
+# or as a browser window the next preview would close.
+opens_in_browser() {
+    local app d
+    app=$(xdg-mime query default "$(xdg-mime query filetype "$1" 2>/dev/null)" 2>/dev/null)
+    [[ $app ]] || return 0
+    for d in "${XDG_DATA_HOME:-$HOME/.local/share}" /usr/local/share /usr/share \
+             /var/lib/flatpak/exports/share; do
+        if [[ -f $d/applications/$app ]]; then
+            grep -q '^Categories=.*WebBrowser' "$d/applications/$app"
+            return
+        fi
+    done
+}
+
 # Open a file (full path) as the preview, unless it is already on screen. The
 # window it opens replaces the previous preview (WindowRules.lua).
 preview_open() {
     [[ $(cat "$PV.last" 2>/dev/null) == "$1" ]] && return
     printf '%s' "$1" > "$PV.last"
+    opens_in_browser "$1" && return
     setsid -f xdg-open "$1" >/dev/null 2>&1
 }
 
@@ -199,10 +217,9 @@ case ${ROFI_RETV:-0} in
             ?*)    list_tree "$ROFI_INFO" ;;
             *)
                 if [[ $ROFI_RETV == 11 ]]; then
-                    # Shift+Enter: preview mode on/off, then the list again,
-                    # this row first with the cursor on it.
+                    # Shift+Enter: preview mode on/off, list left as it is.
                     toggle_preview "$1"
-                    list_tree "$root" "$1"
+                    keep_tree
                 else
                     # Enter: no output, which closes rofi (and with it the
                     # preview).

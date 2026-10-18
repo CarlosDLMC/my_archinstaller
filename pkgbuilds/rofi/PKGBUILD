@@ -1,6 +1,6 @@
 # Vendored from Arch's rofi package:
 #   https://gitlab.archlinux.org/archlinux/packaging/packages/rofi
-# with three patches. keyboard-on-demand.patch: when ROFI_KEYBOARD_ON_DEMAND is
+# with four patches. keyboard-on-demand.patch: when ROFI_KEYBOARD_ON_DEMAND is
 # set in its environment, rofi asks for on-demand keyboard focus instead of
 # exclusive. Stock rofi on Wayland always takes the keyboard exclusively (a
 # layer-shell overlay), so nothing else can be typed into or clicked while it
@@ -15,6 +15,13 @@
 #
 # blink-interval.patch: a blink-interval theme property, the ms between the
 # input cursor's on and off (rofi hard-codes 1200; still the default).
+#
+# keep-list.patch: a keep-list script-mode option. A script answering an action
+# with it (and no rows) keeps the rows on screen - the filter and the selected
+# row stay, only the message and other options change. Shift+Enter in ФАЙЛЫ
+# toggles the preview with it; before, rofi needed a fresh list to stay open,
+# and the row Shift+Enter was pressed on had to move to the top to keep the
+# cursor.
 #
 # install-scripts/rofi-ondemand.sh builds this with makepkg. pkgrel is above
 # the repos' (1, CachyOS 1.1), so `pacman -Syu` keeps it - until the repos ship
@@ -40,8 +47,8 @@
 
 pkgname=rofi
 pkgver=2.0.0
-pkgrel=3
-pkgdesc="A window switcher, application launcher and dmenu replacement (on-demand focus, current-row and blink-interval patches)"
+pkgrel=4
+pkgdesc="A window switcher, application launcher and dmenu replacement (on-demand focus, current-row, blink-interval and keep-list patches)"
 url="https://davatorium.github.io/rofi"
 arch=('x86_64')
 license=('MIT')
@@ -54,12 +61,14 @@ source=("https://github.com/davatorium/rofi/releases/download/${pkgver}/rofi-${p
         'fix_xfce4-terminal_binary_name.patch'
         'keyboard-on-demand.patch'
         'num-current-row.patch'
-        'blink-interval.patch')
+        'blink-interval.patch'
+        'keep-list.patch')
 sha256sums=('f81659b175306ff487e35d88d6b36128e85a793bfb56b64fa22c62eb54c4abd0'
             '0cd6f1360580f49647ceb7d169ab015f4998e778fd750ce3ad2e861f333824e3'
             'b5b459b4334b0e529010539cfaaf35cd5da5a80d40a03bea42126714bd8a1b2c'
             'ad9ce33e470a21daf5435b16770502f2a035cdad30f7ded0bc02b6b1984dff38'
-            '16a23289dfe7b53cb16e46462dc6e0f28041eb68016e530eadfe85a47d9689db')
+            '16a23289dfe7b53cb16e46462dc6e0f28041eb68016e530eadfe85a47d9689db'
+            '2e0cdd44c7c465e68fb4b545f29f98b4bf92d6401adc85ac84571bd515fc1ada')
 
 prepare() {
 	cd "${pkgname}-${pkgver}"
@@ -69,6 +78,7 @@ prepare() {
 	patch -Np1 -i "${srcdir}/keyboard-on-demand.patch"
 	patch -Np1 -i "${srcdir}/num-current-row.patch"
 	patch -Np1 -i "${srcdir}/blink-interval.patch"
+	patch -Np1 -i "${srcdir}/keep-list.patch"
 }
 
 build() {

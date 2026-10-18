@@ -6,8 +6,9 @@
 # rofi plus keyboard-on-demand.patch: with ROFI_KEYBOARD_ON_DEMAND set (the
 # SUPER D bind sets it), a click on a window gives that window the keyboard
 # while the launcher stays open - a file opened beside it with Shift+Enter in
-# the ФАЙЛЫ tab can be used. Two smaller patches ride along: the launcher's
-# row-position counter (num-current-row) and the cursor's blink-interval. See
+# the ФАЙЛЫ tab can be used. Three smaller patches ride along: the launcher's
+# row-position counter (num-current-row), the cursor's blink-interval, and
+# keep-list (Shift+Enter toggles the preview without reloading the list). See
 # pkgbuilds/rofi/PKGBUILD.
 #
 # Runs after 01-hypr-pkgs.sh, which installs the stock rofi. If this build

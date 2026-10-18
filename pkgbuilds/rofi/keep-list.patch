@@ -1,0 +1,62 @@
+diff --git a/source/modes/script.c b/source/modes/script.c
+index 1db6d87..adb404f 100644
+--- a/source/modes/script.c
++++ b/source/modes/script.c
+@@ -75,6 +75,8 @@ typedef struct {
+   gboolean no_custom;
+   /** keep filter */
+   gboolean keep_filter;
++  /** keep list: the rows on screen stay, only the options change. */
++  gboolean keep_list;
+ 
+   gboolean use_hot_keys;
+ } ScriptModePrivateData;
+@@ -162,6 +164,8 @@ static void parse_header_entry(Mode *sw, char *line, ssize_t length) {
+       pd->keep_selection = (strcasecmp(value, "true") == 0);
+     } else if (strcasecmp(line, "keep-filter") == 0) {
+       pd->keep_filter = (strcasecmp(value, "true") == 0);
++    } else if (strcasecmp(line, "keep-list") == 0) {
++      pd->keep_list = (strcasecmp(value, "true") == 0);
+     } else if (strcasecmp(line, "new-selection") == 0) {
+       pd->new_selection = (int64_t)g_ascii_strtoll(value, NULL, 0);
+     } else if (strcasecmp(line, "data") == 0) {
+@@ -190,6 +194,7 @@ static DmenuScriptEntry *execute_executor(Mode *sw, char *arg,
+   pd->new_selection = -1;
+   pd->keep_selection = 0;
+   pd->keep_filter = 0;
++  pd->keep_list = 0;
+   // Environment
+   char **env = g_get_environ();
+ 
+@@ -330,6 +335,9 @@ static ModeMode script_mode_result(Mode *sw, int mretv, char **input,
+   // store them as they might be different on next executor and reset.
+   gboolean keep_filter = rmpd->keep_filter;
+   gboolean keep_selection = rmpd->keep_selection;
++  // Only an answer to this very action may keep the list (see below): a
++  // keep-list left over from the last run must not stop, say, Esc closing rofi.
++  rmpd->keep_list = FALSE;
+ 
+   if ((mretv & MENU_CUSTOM_COMMAND)) {
+     if (rmpd->use_hot_keys) {
+@@ -371,6 +379,21 @@ static ModeMode script_mode_result(Mode *sw, int mretv, char **input,
+     }
+   }
+ 
++  // keep-list: the script changed only its options (message, data, ...) and
++  // asks to keep the rows on screen - no new list, and the filter and the
++  // selected row stay as they are.
++  if (rmpd->keep_list) {
++    for (unsigned int i = 0; i < new_length; i++) {
++      g_free(new_list[i].entry);
++      g_free(new_list[i].icon_name);
++      g_free(new_list[i].display);
++      g_free(new_list[i].meta);
++      g_free(new_list[i].info);
++    }
++    g_free(new_list);
++    return RELOAD_DIALOG;
++  }
++
+   // If a new list was generated, use that an loop around.
+   if (new_list != NULL) {
+     for (unsigned int i = 0; i < rmpd->cmd_list_length; i++) {
