@@ -142,29 +142,45 @@ preview_here() {
     [[ $(cat "$PV" 2>/dev/null) == "$ROFI_OUTSIDE" ]]
 }
 
-# A file's default app is a web browser - or it has none, and xdg-open would
-# fall back to one. Never previewed: it lands as a tab in the running browser,
-# or as a browser window the next preview would close.
-opens_in_browser() {
-    local app d
-    app=$(xdg-mime query default "$(xdg-mime query filetype "$1" 2>/dev/null)" 2>/dev/null)
-    [[ $app ]] || return 0
+# The desktop file a file opens with, empty if it has none.
+default_app() {
+    xdg-mime query default "$(xdg-mime query filetype "$1" 2>/dev/null)" 2>/dev/null
+}
+
+# A desktop file (by id) is a web browser.
+is_browser() {
+    local d
     for d in "${XDG_DATA_HOME:-$HOME/.local/share}" /usr/local/share /usr/share \
              /var/lib/flatpak/exports/share; do
-        if [[ -f $d/applications/$app ]]; then
-            grep -q '^Categories=.*WebBrowser' "$d/applications/$app"
+        if [[ -f $d/applications/$1 ]]; then
+            grep -q '^Categories=.*WebBrowser' "$d/applications/$1"
             return
         fi
     done
+    return 1
 }
 
 # Open a file (full path) as the preview, unless it is already on screen. The
 # window it opens replaces the previous preview (WindowRules.lua).
 preview_open() {
+    local app
     [[ $(cat "$PV.last" 2>/dev/null) == "$1" ]] && return
     printf '%s' "$1" > "$PV.last"
-    opens_in_browser "$1" && return
-    setsid -f xdg-open "$1" >/dev/null 2>&1
+    app=$(default_app "$1")
+    # Never previewed in a web browser, nor with no default app (xdg-open
+    # would fall back to one): it lands as a tab in the running browser, or as
+    # a browser window the next preview would close.
+    [[ $app ]] || return
+    is_browser "$app" && return
+    if [[ $app == mpv.desktop ]]; then
+        # mpv.desktop's own command plus --keep-open: a sound or video stays on
+        # its last frame instead of closing at the end. A window that closes
+        # hands the keyboard to another one - away from the launcher (on-demand
+        # focus) - and the arrow keys stop reaching rofi.
+        setsid -f mpv --player-operation-mode=pseudo-gui --keep-open=yes -- "$1" >/dev/null 2>&1
+    else
+        setsid -f xdg-open "$1" >/dev/null 2>&1
+    fi
 }
 
 toggle_preview() {
