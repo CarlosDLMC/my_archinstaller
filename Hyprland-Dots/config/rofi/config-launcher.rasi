@@ -28,6 +28,12 @@ window {
     height:                      478px;
 }
 
+/* Down on the last match (and Up on the first) stays put instead of wrapping
+   round to the other end. */
+listview {
+    cycle:                       false;
+}
+
 mainbox {
     children:                    [ "titlebar", "inputbar", "message", "listview", "textbox-current-entry", "mode-switcher" ];
 }
