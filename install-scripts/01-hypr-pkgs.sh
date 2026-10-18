@@ -71,6 +71,9 @@ hypr_package=(
   qt6ct
   qt6-svg
   rofi
+  # The launcher's ФАЙЛЫ tab (hypr/scripts/RofiFiles.sh) lists files with fd.
+  # neovim.sh also installs it, but that option is off by default.
+  fd
   slurp
   satty
   dunst

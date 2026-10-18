@@ -18,7 +18,9 @@ local exec = hl.dsp.exec_cmd
 local bind = hl.bind
 
 ---- STANDARD ----
-bind(M .. " + D",      exec("pkill rofi || true && rofi -show drun -modi drun,filebrowser,run,window"), { description = "app launcher" })
+-- ФАЙЛЫ tab = RofiFiles.sh (fd under ~ or /). glob matching makes "*part*" a
+-- pattern; without a * it matches anywhere in the name, same as before.
+bind(M .. " + D",      exec("pkill rofi || true && rofi -show drun -modi drun,files:" .. S .. "/RofiFiles.sh,run,window -matching glob"), { description = "app launcher" })
 bind(M .. " + B",      exec("librewolf"),                  { description = "open browser" })
 bind(M .. " + A",      exec(S .. "/OverviewToggle.sh"),    { description = "desktop overview" }) -- quickshell overview, AGS fallback
 bind(M .. " + Return", exec(D.term),                       { description = "open terminal" })

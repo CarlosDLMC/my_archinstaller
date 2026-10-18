@@ -18,6 +18,7 @@ configuration {
     display-drun:               "ПРОГРАММЫ";
     display-run:                "КОМАНДЫ";
     display-filebrowser:        "ФАЙЛЫ";
+    display-files:              "ФАЙЛЫ";
     display-window:             "ОКНА";
     drun-display-format:        "{name}";
     window-format:              "{c} · {t}";
