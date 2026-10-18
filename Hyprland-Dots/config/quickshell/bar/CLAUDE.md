@@ -50,6 +50,7 @@ components/         # Modular widget components
   ├── AgentWidget.qml      # Claude Code usage: session % in the bar, card on click
   ├── AgentPanel.qml       # Agents card body: plan, allowance meters, tokens by day/model
   ├── VolumeSlider.qml     # Segmented fader (SegmentGauge + cap), shared by every row of the audio card
+  ├── LevelMeter.qml       # Live mic signal under the audio card's input fader (PwNodePeakMonitor, dB scale, peak hold)
   ├── WeatherStatItem.qml  # Reusable stat row for weather popup
   ├── WorkspaceBar.qml     # Hyprland workspaces with app icons (pill-shaped)
   ├── WindowInfo.qml       # Current window title

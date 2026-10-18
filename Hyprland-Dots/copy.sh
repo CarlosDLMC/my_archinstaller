@@ -517,6 +517,11 @@ dropin_dirs=(
     # FreeSync window, cap 3 under the 75 Hz ceiling) in file form. Inert
     # unless a game is launched with `mangohud %command%` - see GAMES_README.md.
     "MangoHud"
+    # filter-chain.conf.d/99-mic-denoise.conf: RNNoise in front of the default
+    # mic, run by filter-chain.service (install-scripts/pipewire.sh enables it
+    # and installs the plugin). A drop-in dir because ~/.config/pipewire is
+    # where every other PipeWire/WirePlumber tweak of the user's lives too.
+    "pipewire"
 )
 
 # Where each directory's backup ended up, keyed by directory name. The wallust

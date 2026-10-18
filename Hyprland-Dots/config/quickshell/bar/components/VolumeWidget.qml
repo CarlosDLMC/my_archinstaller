@@ -156,6 +156,13 @@ DropdownWidget {
             // The bar's own PipeWire client shows up as a node; it is not a
             // microphone anyone wants to pick.
             if ((n.name || "") === "quickshell") continue
+            // Nor is the mic noise suppression (pipewire/filter-chain.conf.d/
+            // 99-mic-denoise.conf): a smart filter, already sitting in front
+            // of whichever mic is picked here - picking it as the input would
+            // point it at itself. Matched by name because the filter node
+            // never reports `ready`, so its `filter.smart` property is never
+            // readable from here.
+            if ((n.name || "") === "mic_denoise") continue
             out.push(n)
         }
         if (source && out.indexOf(source) < 0) out.unshift(source)

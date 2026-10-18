@@ -13,6 +13,9 @@ pipewire=(
     pipewire-jack
     lib32-pipewire-jack
     sof-firmware
+    # RNNoise, for the mic noise suppression filter-chain.service runs from
+    # ~/.config/pipewire/filter-chain.conf.d/99-mic-denoise.conf.
+    noise-suppression-for-voice
 )
 
 ############## WARNING: DO NOT EDIT BEYOND THIS LINE IF YOU DON'T KNOW WHAT YOU ARE DOING! ##############
@@ -52,6 +55,11 @@ echo -e "${NOTE} Activating Pipewire Services..."
 # Redirect systemctl output to log file
 systemctl --user enable --now pipewire.socket pipewire-pulse.socket wireplumber.service 2>&1 | tee -a "$LOG"
 systemctl --user enable --now pipewire.service 2>&1 | tee -a "$LOG"
+# Mic noise suppression: a WirePlumber smart filter every recording goes
+# through. Enabled, not started - its config arrives with the dotfiles later
+# in the run, and a filter-chain started before that loads nothing until it
+# is restarted. The next login starts it with the config in place.
+systemctl --user enable filter-chain.service 2>&1 | tee -a "$LOG"
 
 echo -e "\n${OK} Pipewire Installation and services setup complete!" 2>&1 | tee -a "$LOG"
 
