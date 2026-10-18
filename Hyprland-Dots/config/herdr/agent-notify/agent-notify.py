@@ -9,11 +9,17 @@ sends a dunst notification when an agent
     counts as seen, and
   - is blocked: waiting on an approval or a question,
 
-but only while the herdr window is NOT the focused Hyprland window. Herdr's own
-popups ([ui.toast]) cannot do this: they are skipped for herdr's active tab
-whatever Hyprland is showing, so an agent finishing in the tab herdr has open
-while you are on another workspace never told anyone. While herdr is focused,
-its sidebar already shows every agent's state, so nothing is sent.
+always - also while herdr is the focused window. Herdr's own popups
+([ui.toast]) cannot do this: they are skipped for herdr's active tab whatever
+Hyprland is showing, so an agent finishing in the tab herdr has open while you
+are on another workspace never told anyone.
+
+Clicking a notice takes you to that agent: herdr switches to its pane
+(`herdr agent focus`) and Hyprland focuses the herdr window - on whatever
+workspace it is - or, with no terminal attached to herdr, opens one first. The
+hook does not wait for that click (herdr would be held up): it hands the notice
+to a detached copy of itself (--notice), which waits on notify-send's default
+action. Left click runs it (dunstrc: mouse_left_click = do_action, ...).
 
 Both stay until clicked (dunstrc [agent_notices]); a blocked one is sent
 critical, so it has the red frame and a red АГЕНТ stamp ([look_agent_blocked]).
@@ -26,6 +32,7 @@ import html
 import json
 import os
 import subprocess
+import sys
 import time
 
 HERDR = os.environ.get("HERDR_BIN_PATH") or "herdr"
@@ -40,8 +47,8 @@ APP = "Агент"
 TEXT = {"done": "Задание выполнено", "blocked": "Ждёт вашего решения"}
 
 
-def herdr_window_focused():
-    """True when the focused Hyprland window has a herdr process under it."""
+def herdr_window():
+    """The address of the Hyprland window with a herdr client in it, or None."""
     sig = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")
     run = os.environ.get("XDG_RUNTIME_DIR", "/run/user/%d" % os.getuid())
     if sig and not os.path.isdir(os.path.join(run, "hypr", sig)):
@@ -49,13 +56,11 @@ def herdr_window_focused():
         # find the running instance instead of the dead one.
         os.environ.pop("HYPRLAND_INSTANCE_SIGNATURE")
     try:
-        out = subprocess.run(["hyprctl", "activewindow", "-j"],
+        out = subprocess.run(["hyprctl", "clients", "-j"],
                              capture_output=True, text=True, timeout=3)
-        win = json.loads(out.stdout).get("pid", -1)
-    except (OSError, ValueError, subprocess.SubprocessError):
-        return False
-    if win <= 1:
-        return False
+        wins = {c["pid"]: c["address"] for c in json.loads(out.stdout) if c.get("pid", -1) > 1}
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+        return None
     procs = {}
     for d in os.listdir("/proc"):
         if not d.isdigit():
@@ -72,10 +77,54 @@ def herdr_window_focused():
         if comm != "herdr":
             continue
         while ppid > 1:
-            if ppid == win:
-                return True
+            if ppid in wins:
+                return wins[ppid]
             ppid = procs.get(ppid, (0, ""))[0]
-    return False
+    return None
+
+
+def log(msg):
+    """What a click did (STATE_DIR/clicks.log), for when it does not do what it
+    should. Kept to its last 32KB once it passes 64KB."""
+    path = os.path.join(STATE_DIR, "clicks.log")
+    try:
+        if os.path.getsize(path) > 65536:
+            with open(path, "rb") as f:
+                f.seek(-32768, os.SEEK_END)
+                tail = f.read()
+            with open(path, "wb") as f:
+                f.write(tail[tail.find(b"\n") + 1:])
+    except OSError:
+        pass
+    try:
+        with open(path, "a") as f:
+            f.write("%s %s\n" % (time.strftime("%F %T"), msg))
+    except OSError:
+        pass
+
+
+def run(cmd):
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+    log("%s -> rc=%s out=%r err=%r" % (cmd, r.returncode, r.stdout.strip()[:200], r.stderr.strip()[:200]))
+    return r
+
+
+def go_to(pane):
+    """Show this agent: its pane in herdr, and the herdr window in Hyprland."""
+    addr = herdr_window()
+    log("go_to %s: herdr window %s" % (pane, addr))
+    if addr is None:
+        # No terminal attached to herdr (the server runs on without one).
+        subprocess.run(["hyprctl", "dispatch", 'hl.dsp.exec_cmd("foot herdr")'],
+                       capture_output=True, timeout=5)
+        for _ in range(50):
+            time.sleep(0.1)
+            addr = herdr_window()
+            if addr:
+                break
+    run([HERDR, "agent", "focus", pane])
+    if addr:
+        run(["hyprctl", "dispatch", "hl.dsp.focus({ window = 'address:%s' })" % addr])
 
 
 def where(snap, pane_id):
@@ -91,10 +140,44 @@ def where(snap, pane_id):
     return html.escape(text), pane.get("agent_status")
 
 
-def notify(tag, urgency, summary, body):
-    subprocess.run(["notify-send", "-a", APP, "-u", urgency,
-                    "-h", "string:x-dunst-stack-tag:" + tag, summary, body],
-                   capture_output=True, timeout=5)
+def notify(tag, urgency, summary, body, pane):
+    """Hand the notice to a detached copy of this script that waits for its click."""
+    subprocess.Popen([sys.executable, os.path.abspath(__file__), "--notice",
+                      tag, urgency, summary, body, pane],
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL, start_new_session=True)
+
+
+def hypr_env():
+    """Point hyprctl at the running Hyprland, whatever environment herdr gave us."""
+    run_dir = os.environ.get("XDG_RUNTIME_DIR") or "/run/user/%d" % os.getuid()
+    os.environ["XDG_RUNTIME_DIR"] = run_dir
+    sig = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")
+    hypr = os.path.join(run_dir, "hypr")
+    if sig and os.path.exists(os.path.join(hypr, sig, ".socket.sock")):
+        return
+    try:
+        live = [d for d in os.listdir(hypr) if os.path.exists(os.path.join(hypr, d, ".socket.sock"))]
+    except OSError:
+        live = []
+    if live:
+        live.sort(key=lambda d: os.path.getmtime(os.path.join(hypr, d)))
+        os.environ["HYPRLAND_INSTANCE_SIGNATURE"] = live[-1]
+    log("hypr_env: signature %r was not usable, now %r" % (sig, os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")))
+
+
+def notice(tag, urgency, summary, body, pane):
+    """Show the notice and wait: clicked, go to the agent. Ends without a click
+    when the notice is closed or replaced (same stack tag)."""
+    log("notice %s waiting (pid %s)" % (tag, os.getpid()))
+    hypr_env()
+    out = subprocess.run(["notify-send", "-a", APP, "-u", urgency,
+                          "-h", "string:x-dunst-stack-tag:" + tag,
+                          "-A", "default=Открыть", summary, body],
+                         capture_output=True, text=True)
+    log("notice %s ended: rc=%s action=%r" % (tag, out.returncode, out.stdout.strip()))
+    if out.stdout.strip() == "default":
+        go_to(pane)
 
 
 def main():
@@ -133,9 +216,8 @@ def main():
     # Superseded while settling: the newer event's run handles it.
     if now != status:
         return
-    if not herdr_window_focused():
-        notify("herdr-%s-%s" % (SESSION, pane),
-               "critical" if kind == "blocked" else "normal", TEXT[kind], body)
+    notify("herdr-%s-%s" % (SESSION, pane),
+           "critical" if kind == "blocked" else "normal", TEXT[kind], body, pane)
 
     # Pane ids are never reused, so state for panes long gone is dead weight.
     cutoff = time.time() - 3 * 86400
@@ -149,4 +231,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) == 7 and sys.argv[1] == "--notice":
+        notice(*sys.argv[2:])
+    else:
+        main()

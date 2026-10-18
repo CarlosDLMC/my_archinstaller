@@ -88,6 +88,7 @@ then continue with the [Installation Steps](#installation-steps) below.
 - **Dev layouts** (`hdl` / `hds` / `hdlm` / `hsl`) that build a whole editor + agent + terminal pane layout in one command
 - **Neovim with LazyVim**, which is where the file tree beside the agents comes from
 - **Hunk** review-first diff viewer, for reading what the agents actually wrote
+- **omarchy's small apps**: **omawrite** (distraction-free Markdown writer), **omacut** (video trimmer and cutter) and **cliamp** (Winamp-style terminal music player), with `omarchy_apps="ON"`
 - **Whole-Workspace Move** with SUPER + ALT + number, rebuilding the tiling layout window for window
 - **Text Boot**: the kernel and systemd `[  OK  ]` lines on screen instead of the CachyOS splash - or, with `plymouth="ON"`, a **Boot Splash** with the repo logo (Plymouth, wired into boot where the distro did not set it up)
 - **All Essential Packages** pre-configured
@@ -321,6 +322,9 @@ first prompt.
   (see [Neovim and the file explorer](#neovim-and-the-file-explorer))
 - Hunk (terminal diff viewer for agent changesets — also an out-of-band binary,
   see [Hunk](#hunk-reading-what-the-agents-wrote))
+- omawrite, omacut, cliamp (omarchy's apps — cliamp from the AUR, omawrite and
+  omacut built from the PKGBUILDs vendored in `pkgbuilds/`, see
+  `install-scripts/omarchy-apps.sh`)
 
 ## Configuration
 
@@ -1583,12 +1587,19 @@ past the end.
   next to `config.toml` — so `copy.sh` copies the config, sounds and plugin into it
   instead of moving the directory aside like the others. A `config.toml` that
   differs from the repo is backed up next to itself first.
-- **The agent-notify plugin** (`~/.config/herdr/agent-notify`). When an agent
-  finishes or is blocked while the herdr window is not the focused Hyprland
-  window — you are on another workspace — it sends a dunst notice stamped
-  АГЕНТ: «Задание выполнено», or «Ждёт вашего решения» in red, with the
-  herdr workspace, tab and conversation title. Both wait until clicked
-  (`[agent_notices]` in dunstrc), and an agent shows one notice at a time.
+- **The agent-notify plugin** (`~/.config/herdr/agent-notify`). Whenever an
+  agent finishes or is blocked — also while herdr is the focused window — it
+  sends a dunst notice stamped АГЕНТ: «Задание выполнено», or «Ждёт вашего
+  решения» in red, with the herdr workspace, tab and conversation title. Both
+  wait until clicked (`[agent_notices]` in dunstrc), and an agent shows one
+  notice at a time. Clicking a notice takes you to that agent: herdr switches
+  to its pane (`herdr agent focus`) and Hyprland focuses the herdr window on
+  whatever workspace it is, or opens `foot herdr` if no terminal is attached.
+  The hook hands each notice to a detached copy of itself that waits for the
+  click, so herdr is never held up; what a click did is logged to
+  `~/.local/state/herdr/plugins/agent-notify/clicks.log`. A left click runs a
+  notification's action because dunstrc has `mouse_left_click = do_action,
+  close_current` (so a chat notice that offers "open" opens the chat too).
   Herdr's own `delivery = "system"` cannot do this: it skips the tab herdr
   has open whatever Hyprland is showing, so an agent finishing there while you
   were elsewhere told no one. It is a herdr event hook, so herdr runs it and

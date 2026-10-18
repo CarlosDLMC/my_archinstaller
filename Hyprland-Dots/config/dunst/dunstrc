@@ -68,7 +68,10 @@
     layer = overlay
 
     # Mouse actions. Left click is the dismiss gesture.
-    mouse_left_click = close_current
+    # Left click runs a notification's default action first - opens the chat of
+    # a message, takes you to the agent of a herdr notice (agent-notify.py) -
+    # then closes it. A notification without actions just closes, as before.
+    mouse_left_click = do_action, close_current
     mouse_middle_click = close_all
     mouse_right_click = do_action
 
