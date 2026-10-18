@@ -122,9 +122,20 @@ def go_to(pane):
             addr = herdr_window()
             if addr:
                 break
-    run([HERDR, "agent", "focus", pane])
+    # The window first, then the pane: focusing the herdr terminal makes the
+    # herdr client restore the pane it was showing, which undid a pane switch
+    # made before it - you landed on herdr, but on whatever was open there.
     if addr:
         run(["hyprctl", "dispatch", "hl.dsp.focus({ window = 'address:%s' })" % addr])
+        time.sleep(0.3)
+    run([HERDR, "agent", "focus", pane])
+    try:
+        time.sleep(0.3)
+        snap = json.loads(subprocess.run([HERDR, "api", "snapshot"], capture_output=True,
+                                         text=True, timeout=5).stdout)["result"]["snapshot"]
+        log("herdr now shows pane %s" % snap.get("focused_pane_id"))
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+        pass
 
 
 def where(snap, pane_id):
