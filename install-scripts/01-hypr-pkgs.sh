@@ -107,6 +107,10 @@ hypr_package_2=(
   btop
   cava
   loupe
+  # The default image and PDF viewers in mimeapps.list. Without them xdg-open
+  # fell back to whatever the system cache picked: Chromium for both.
+  imv
+  papers
   fastfetch
   gnome-system-monitor
   # librewolf, not librewolf-bin: the -bin package left the AUR when LibreWolf

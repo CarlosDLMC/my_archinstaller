@@ -10,6 +10,27 @@ x-scheme-handler/unknown=librewolf.desktop
 x-scheme-handler/viber=viber.desktop
 x-scheme-handler/claude-cli=claude-code-url-handler.desktop
 x-scheme-handler/jetbrains=jetbrainsd.desktop
+text/plain=omawrite.desktop
+text/markdown=omawrite.desktop
+text/x-markdown=omawrite.desktop
+application/pdf=org.gnome.Papers.desktop
+image/x-farbfeld=imv.desktop
+image/tiff=imv.desktop
+image/tiff-fx=imv.desktop
+image/png=imv.desktop
+image/x-png=imv.desktop
+image/jpeg=imv.desktop
+image/jpg=imv.desktop
+image/pjpeg=imv.desktop
+image/svg+xml=imv.desktop
+image/gif=imv.desktop
+image/bmp=imv.desktop
+image/x-bmp=imv.desktop
+image/heif=imv.desktop
+image/avif=imv.desktop
+image/jxl=imv.desktop
+image/webp=imv.desktop
+image/qoi=imv.desktop
 
 [Added Associations]
 text/csv=libreoffice-calc.desktop;
