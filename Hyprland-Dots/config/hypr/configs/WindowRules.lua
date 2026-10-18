@@ -141,31 +141,51 @@ rule({ match = { class = "^(jetbrains-.*)$", title = "^(win[0-9]+)$" }, no_initi
 -- rule({ match = { fullscreen = true }, border_color = "rgb(EE4B55) rgb(880808)" })
 -- rule({ match = { float = true },      border_color = "rgb(282737) rgb(1E1D2D)" })
 
----- LAUNCHER: Shift+Enter in the ФАЙЛЫ tab ----
--- rofi is an overlay that keeps the keyboard, so no window can open on top of
--- it. Shift+Enter (scripts/RofiFiles.sh: open the file, keep rofi open) runs
--- `hyprctl eval 'RofiFilesBeside()'`, which switches this rule on: the next
--- window floats in the left third of the screen, beside the launcher (34% wide
--- and centred, soviet-teletype.rasi). The first window to open switches it off
--- again, and so does a 10 s timer, for a file that opens no window (a new tab
--- in a browser that is already running). Last window rule, so it wins.
-local beside = rule({
-    name    = "rofi-files-beside",
-    enabled = false,
-    match   = { class = ".*" },
-    float   = true,
-    size    = "monitor_w*0.31 monitor_h*0.6",
+---- LAUNCHER: preview in the ФАЙЛЫ tab ----
+-- rofi is an overlay, so no window can open on top of it. Shift+Enter in the
+-- ФАЙЛЫ tab (scripts/RofiFiles.sh) toggles a preview mode through
+-- `hyprctl eval 'RofiFilesPreview(true|false)'`: while it is on, the file under
+-- the cursor is opened, and every window that opens floats in the left third
+-- of the screen, beside the launcher (34% wide and centred,
+-- soviet-teletype.rasi), without taking the keyboard from it - and closes the
+-- one before, so there is one preview at a time. A click on it gives it the
+-- keyboard (the patched rofi's on-demand focus). The mode and its window end
+-- with Shift+Enter again or when rofi closes. Last window rule, so it wins.
+local preview = rule({
+    name             = "rofi-files-preview",
+    enabled          = false,
+    match            = { class = ".*" },
+    float            = true,
+    no_initial_focus = true,
+    size             = "monitor_w*0.31 monitor_h*0.6",
     -- window_h here is the app's own starting height, not the size above, so
     -- the 60%-tall window is centred with a fixed 20%.
-    move    = "monitor_w*0.01 monitor_h*0.2",
+    move             = "monitor_w*0.01 monitor_h*0.2",
 })
-local beside_timer
-function RofiFilesBeside()
-    beside:set_enabled(true)
-    if beside_timer then beside_timer:set_enabled(false) end
-    beside_timer = hl.timer(function() beside:set_enabled(false) end, { timeout = 10000, type = "oneshot" })
+local preview_on, preview_win = false, nil
+local function close_preview()
+    if preview_win then
+        hl.dispatch(hl.dsp.window.close({ window = "address:" .. preview_win }))
+        preview_win = nil
+    end
 end
-hl.on("window.open", function() beside:set_enabled(false) end)
+function RofiFilesPreview(on)
+    preview_on = on
+    preview:set_enabled(on)
+    if not on then close_preview() end
+end
+hl.on("window.open", function(w)
+    if preview_on then
+        close_preview()
+        preview_win = w.address
+    end
+end)
+hl.on("window.destroy", function(w)
+    if preview_win and w.address == preview_win then preview_win = nil end
+end)
+hl.on("layer.closed", function(l)
+    if preview_on and l.namespace == "rofi" then RofiFilesPreview(false) end
+end)
 
 ---- LAYER RULES ----
 hl.layer_rule({ match = { namespace = "rofi" },                blur = true, ignore_alpha = 1 })

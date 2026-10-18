@@ -7,9 +7,13 @@
 # back to the ~ / choice.
 #
 # Keys on a file (bound in config-launcher.rasi, which numbers them):
-#   Shift+Enter  open it beside rofi and keep rofi open (ROFI_RETV 11)
+#   Shift+Enter  preview mode on/off (ROFI_RETV 11): while on, the file under
+#                the cursor opens beside rofi, one at a time - see preview below
 #   Ctrl+E       show it in Thunar, selected in its folder (ROFI_RETV 15)
 #   Ctrl+C       copy its full path to the clipboard (ROFI_RETV 19)
+#
+# Also run as `RofiFiles.sh --hover ENTRY` by rofi's on-selection-changed hook
+# (the SUPER D bind), for the preview.
 
 # Cache, toolchain and app-data folders, skipped in both searches. They hold
 # most of the files under ~ (over a million) and nothing worth opening; delete
@@ -33,6 +37,14 @@ root_excludes=(/proc /sys /dev /run /tmp /.snapshots)
 share=${ROFI_DATA%%;*}
 root=${ROFI_DATA#*;}
 
+# Preview mode. $PV holds the PID of the rofi it is on for (ROFI_OUTSIDE is
+# that PID in script mode); $PV.last the file on screen, $PV.hover the row the
+# cursor last moved to. configs/WindowRules.lua does the window side: while
+# RofiFilesPreview(true) is on, every new window floats beside the launcher
+# without taking its keyboard and closes the one before, and the mode ends
+# when rofi closes.
+PV=${XDG_RUNTIME_DIR:-/tmp}/rofi-files-preview
+
 header() {
     printf '\0prompt\x1fФАЙЛЫ\n\0no-custom\x1ftrue\n\0use-hot-keys\x1ftrue\n'
     printf '\0data\x1f%s;%s\n' "$share" "$root"
@@ -51,8 +63,8 @@ list_roots() {
     printf '[%s] + .local/share\0info\x1fshare\x1fpermanent\x1ftrue\n' "$mark"
 }
 
-# list_tree ROOT [ROW]: ROW is the entry Shift+Enter just opened, to keep the
-# cursor on.
+# list_tree ROOT [ROW]: ROW is the entry Shift+Enter was pressed on, to keep
+# the cursor on.
 list_tree() {
     root=$1
     local x args=(--hidden --color never --absolute-path)
@@ -67,12 +79,17 @@ list_tree() {
     # rofi reads keep-filter from the list on screen when a key is pressed, so
     # it is set here: after Shift+Enter the typed filter stays.
     printf '\0keep-filter\x1ftrue\n'
-    printf '\0message\x1f%s%s  ·  *часть* или *.pdf  ·  Enter открывает\n' \
-        "${root/#$HOME/\~}" "${share:+ + .local/share}"
-    # After Shift+Enter the opened row comes first. rofi puts the cursor on
-    # the first match of the new list, and this row matches the filter, so
-    # the cursor stays on it. (keep-selection/new-selection can't do it: rofi
-    # maps them through the old list, and fd's order changes from run to run.)
+    if preview_here; then
+        printf '\0message\x1f%s%s  ·  ПРОСМОТР  ·  Shift+Enter выключает\n' \
+            "${root/#$HOME/\~}" "${share:+ + .local/share}"
+    else
+        printf '\0message\x1f%s%s  ·  *часть* или *.pdf  ·  Enter открывает\n' \
+            "${root/#$HOME/\~}" "${share:+ + .local/share}"
+    fi
+    # After Shift+Enter that row comes first. rofi puts the cursor on the
+    # first match of the new list, and this row matches the filter, so the
+    # cursor stays on it. (keep-selection/new-selection can't do it: rofi maps
+    # them through the old list, and fd's order changes from run to run.)
     [[ $2 ]] && printf '%s\n' "$2"
     printf '..   НАЗАД\0info\x1fback\n'
     # Paths under home are shown as ~/..., shorter to read and to type.
@@ -119,6 +136,56 @@ relist() {
     if [[ $root ]]; then list_tree "$root"; else list_roots; fi
 }
 
+# Preview mode is on for the rofi this script runs in.
+preview_here() {
+    [[ $(cat "$PV" 2>/dev/null) == "$ROFI_OUTSIDE" ]]
+}
+
+# Open a file (full path) as the preview, unless it is already on screen. The
+# window it opens replaces the previous preview (WindowRules.lua).
+preview_open() {
+    [[ $(cat "$PV.last" 2>/dev/null) == "$1" ]] && return
+    printf '%s' "$1" > "$PV.last"
+    setsid -f xdg-open "$1" >/dev/null 2>&1
+}
+
+toggle_preview() {
+    local p
+    if preview_here; then
+        rm -f "$PV" "$PV.last" "$PV.hover"
+        hyprctl eval 'RofiFilesPreview(false)' >/dev/null 2>&1
+    else
+        printf '%s' "$ROFI_OUTSIDE" > "$PV"
+        rm -f "$PV.last"
+        hyprctl eval 'RofiFilesPreview(true)' >/dev/null 2>&1
+        p=$(path_of "$1")
+        [[ -f $p ]] && preview_open "$p"
+    fi
+}
+
+# rofi's on-selection-changed hook: the row the cursor moved to, in any tab.
+# rofi runs it detached (its parent is PID 1), so the rofi it belongs to is
+# the one $PV names, if that is still a running rofi.
+hover() {
+    local pid p
+    pid=$(cat "$PV" 2>/dev/null) || return
+    [[ $pid && $(cat "/proc/$pid/comm" 2>/dev/null) == rofi ]] || return
+    p=$(path_of "$1")
+    # Only files: not folders, "..", the first screen's rows or app names.
+    [[ $p == /* && -f $p ]] || return
+    # Holding an arrow key runs through many rows; only the one the cursor
+    # rests on for 250 ms is opened.
+    printf '%s' "$p" > "$PV.hover"
+    sleep 0.25
+    [[ $(cat "$PV.hover" 2>/dev/null) == "$p" ]] || return
+    preview_open "$p"
+}
+
+if [[ $1 == --hover ]]; then
+    hover "$2"
+    exit 0
+fi
+
 case ${ROFI_RETV:-0} in
     1|11)
         case $ROFI_INFO in
@@ -131,19 +198,26 @@ case ${ROFI_RETV:-0} in
                 ;;
             ?*)    list_tree "$ROFI_INFO" ;;
             *)
-                # Shift+Enter: rofi stays on top of every window, so the app's
-                # window floats beside it instead (configs/WindowRules.lua).
-                [[ $ROFI_RETV == 11 ]] && hyprctl eval 'RofiFilesBeside()' >/dev/null 2>&1
-                open_path "$1"
-                # Enter: no output, which closes rofi. Shift+Enter: the list
-                # again, the opened row first with the cursor on it.
-                [[ $ROFI_RETV == 11 ]] && list_tree "$root" "$1"
+                if [[ $ROFI_RETV == 11 ]]; then
+                    # Shift+Enter: preview mode on/off, then the list again,
+                    # this row first with the cursor on it.
+                    toggle_preview "$1"
+                    list_tree "$root" "$1"
+                else
+                    # Enter: no output, which closes rofi (and with it the
+                    # preview).
+                    open_path "$1"
+                fi
                 ;;
         esac
         ;;
     15) if [[ $ROFI_INFO ]]; then relist; else show_in_folder "$1"; fi ;;
     19) if [[ $ROFI_INFO ]]; then relist; else copy_path "$1"; fi ;;
-    0)  list_roots ;;
+    0)
+        # A new launcher: preview mode left by an earlier one is gone with it.
+        preview_here || rm -f "$PV" "$PV.last" "$PV.hover"
+        list_roots
+        ;;
     # rofi's other custom keys (Alt+1 and so on) do nothing here.
     *)  relist ;;
 esac

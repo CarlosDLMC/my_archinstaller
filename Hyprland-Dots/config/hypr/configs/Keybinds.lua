@@ -22,9 +22,13 @@ local bind = hl.bind
 -- pattern; without a * it matches anywhere in the name, same as before.
 -- config-launcher.rasi adds the match count and the full-name line.
 -- ROFI_KEYBOARD_ON_DEMAND: the patched rofi (pkgbuilds/rofi) lets a click on a
--- window take the keyboard while the launcher stays open - a file opened beside
--- it with Shift+Enter can be used. Stock rofi ignores it.
-bind(M .. " + D",      exec("pkill rofi || true && ROFI_KEYBOARD_ON_DEMAND=1 rofi -config ~/.config/rofi/config-launcher.rasi -show drun -modi drun,files:" .. S .. "/RofiFiles.sh,run,window -matching glob"), { description = "app launcher" })
+-- window take the keyboard while the launcher stays open - the preview beside
+-- it (Shift+Enter in ФАЙЛЫ) can be used. Stock rofi ignores it.
+-- -on-selection-changed hands every row the cursor moves to to RofiFiles.sh
+-- --hover, which opens it while preview mode is on. rofi pastes {entry} into
+-- the command before splitting it, hence the quotes: a name containing " or \
+-- is not previewed.
+bind(M .. " + D",      exec("pkill rofi || true && ROFI_KEYBOARD_ON_DEMAND=1 rofi -config ~/.config/rofi/config-launcher.rasi -show drun -modi drun,files:" .. S .. "/RofiFiles.sh,run,window -matching glob -on-selection-changed '" .. S .. "/RofiFiles.sh --hover \"{entry}\"'"), { description = "app launcher" })
 bind(M .. " + B",      exec("librewolf"),                  { description = "open browser" })
 bind(M .. " + A",      exec(S .. "/OverviewToggle.sh"),    { description = "desktop overview" }) -- quickshell overview, AGS fallback
 bind(M .. " + Return", exec(D.term),                       { description = "open terminal" })
