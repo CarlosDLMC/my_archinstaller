@@ -260,12 +260,16 @@ keyd_nav="OFF"
 limine="auto"
 # "auto": only where limine.conf has a Windows entry and Secure Boot is off.
 hackbgrt="auto"
+# omawrite and omacut - omarchy's writing app and video trimmer (see
+# install-scripts/omarchy-apps.sh).
+omarchy_apps="OFF"
 
 # Every option name the installer acts on. Kept next to load_preset() because
 # its only job is to catch a preset key that no longer matches one - see below.
 known_options="ly nvidia nouveau gtk_themes bluetooth thunar \
 quickshell xdph zsh pokemon rog dots handy nopasswd_sudo printing plymouth \
-text_boot limine hackbgrt docker herdr neovim hunk ly_flag thp_madvise keyd_nav"
+text_boot limine hackbgrt docker herdr neovim hunk ly_flag thp_madvise keyd_nav \
+omarchy_apps"
 # The ones that also take "auto" (resolved from the hardware further down).
 auto_options="nvidia nouveau rog bluetooth plymouth limine hackbgrt"
 # The ones that take a name instead of ON/OFF, checked on their own below.
@@ -777,6 +781,7 @@ options_command+=(
     "herdr" "Install Herdr terminal workspace manager for AI coding agents?" "OFF"
     "neovim" "Install Neovim with LazyVim? (the file explorer beside the agents)" "OFF"
     "hunk" "Install Hunk diff viewer? (review what the agents wrote)" "OFF"
+    "omarchy_apps" "Install omarchy's omawrite and omacut? (Markdown writer, video trimmer)" "OFF"
 )
 
 # With a preset, skip the menu entirely and derive the selection from the
@@ -788,7 +793,8 @@ if [ "$preset_mode" == "true" ]; then
     selected_options=""
     for _opt in ly nvidia nouveau gtk_themes bluetooth thunar \
                 quickshell xdph zsh pokemon rog dots handy nopasswd_sudo \
-                printing plymouth text_boot thp_madvise keyd_nav limine hackbgrt docker herdr neovim hunk; do
+                printing plymouth text_boot thp_madvise keyd_nav limine hackbgrt docker herdr neovim hunk \
+                omarchy_apps; do
         [ "${!_opt}" == "ON" ] || continue
 
         # Respect the same conditions the interactive menu applies before it
@@ -1306,6 +1312,10 @@ for option in "${options[@]}"; do
         handy)
             echo "${INFO} Installing ${SKY_BLUE}Handy speech-to-text...${RESET}" | tee -a "$LOG"
             execute_script "handy.sh"
+            ;;
+        omarchy_apps)
+            echo "${INFO} Installing ${SKY_BLUE}omawrite and omacut...${RESET}" | tee -a "$LOG"
+            execute_script "omarchy-apps.sh"
             ;;
         nopasswd_sudo)
             # Already done at the top of the run, before the first package

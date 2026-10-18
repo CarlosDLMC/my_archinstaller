@@ -396,6 +396,13 @@ if selected handy; then
         command -v handy
 fi
 
+if selected omarchy_apps; then
+    for _app in omawrite omacut; do
+        check_outcome "$_app is not installed (install-scripts/omarchy-apps.sh)" \
+            pacman -Q "$_app"
+    done
+fi
+
 # herdr and hunk install into ~/.local/bin, which is NOT on PATH during the
 # install - nothing in the installer puts it there, and the .zshrc guard only
 # applies to shells started afterwards. So these test the path directly; a

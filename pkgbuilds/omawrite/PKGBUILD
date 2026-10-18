@@ -1,0 +1,61 @@
+# Vendored from omarchy's package repo:
+#   https://github.com/omacom/omarchy-pkgs/tree/master/pkgbuilds/omawrite
+# The AUR's omawrite is stale (0.5.0, under the old omacom-io org), so
+# install-scripts/omarchy-apps.sh builds this copy with makepkg. To update,
+# take pkgver and sha256sums from that file again and keep the change below.
+#
+# One change from omarchy's copy: /usr/bin/omawrite is a wrapper that runs the
+# real binary (moved to /usr/lib/omawrite/) with QT_QPA_PLATFORMTHEME=
+# xdgdesktopportal. omawrite's Open/Save use Qt Quick's FileDialog, which is
+# only a real system dialog when the platform theme provides one. This session
+# sets qt6ct, which does not, so Qt drew its own unthemed Material fallback.
+# Through the portal the dialog is xdg-desktop-portal-gtk's GTK chooser, which
+# follows the wallust GTK theme. omawrite itself already does this switch for
+# omarchy's "gtk3" (src/main.cpp) - just not for qt6ct. pkgrel is bumped for it.
+#
+# Maintainer: David Heinemeier Hansson <david@hey.com>
+
+pkgname=omawrite
+pkgver=0.7.1
+pkgrel=2
+pkgdesc='Dead-simple Markdown writing app built with Qt Quick'
+arch=('x86_64' 'aarch64')
+url='https://github.com/omacom/omawrite'
+license=('MIT' 'OFL-1.1')
+install='omawrite.install'
+options=('!debug')
+depends=(
+  'hicolor-icon-theme'
+  'qt6-base'
+  'qt6-declarative'
+  'xdg-desktop-portal'
+)
+makedepends=(
+  'gcc'
+  'make'
+  'qt6-base'
+  'qt6-declarative'
+)
+source=("$pkgname-$pkgver.tar.gz::https://github.com/omacom/omawrite/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('a8742839163d69cd8dbd2d7eb116caba4c0dc941d017e54598e796d900aea68f')
+
+build() {
+  cd "$srcdir/$pkgname-$pkgver"
+  ./bin/build
+}
+
+package() {
+  cd "$srcdir/$pkgname-$pkgver"
+
+  install -Dm755 build/omawrite "$pkgdir/usr/lib/omawrite/omawrite"
+  install -dm755 "$pkgdir/usr/bin"
+  printf '%s\n' '#!/bin/sh' \
+    '# Portal file dialogs instead of Qt Quick'"'"'s fallback - see the PKGBUILD.' \
+    'QT_QPA_PLATFORMTHEME=xdgdesktopportal exec /usr/lib/omawrite/omawrite "$@"' \
+    > "$pkgdir/usr/bin/omawrite"
+  chmod 755 "$pkgdir/usr/bin/omawrite"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 fonts/OFL.txt "$pkgdir/usr/share/licenses/$pkgname/OFL.txt"
+  install -Dm644 pkgbuild/omawrite.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/omawrite.svg"
+  install -Dm644 pkgbuild/omawrite.desktop "$pkgdir/usr/share/applications/omawrite.desktop"
+}

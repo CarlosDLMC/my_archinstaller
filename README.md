@@ -88,7 +88,7 @@ then continue with the [Installation Steps](#installation-steps) below.
 - **Dev layouts** (`hdl` / `hds` / `hdlm` / `hsl`) that build a whole editor + agent + terminal pane layout in one command
 - **Neovim with LazyVim**, which is where the file tree beside the agents comes from
 - **Hunk** review-first diff viewer, for reading what the agents actually wrote
-- **omarchy's small apps**: **omawrite** (distraction-free Markdown writer), **omacut** (video trimmer and cutter) and **cliamp** (Winamp-style terminal music player), with `omarchy_apps="ON"`
+- **omarchy's small apps**: **omawrite** (distraction-free Markdown writer) and **omacut** (video trimmer and cutter), with `omarchy_apps="ON"`
 - **Whole-Workspace Move** with SUPER + ALT + number, rebuilding the tiling layout window for window
 - **Text Boot**: the kernel and systemd `[  OK  ]` lines on screen instead of the CachyOS splash - or, with `plymouth="ON"`, a **Boot Splash** with the repo logo (Plymouth, wired into boot where the distro did not set it up)
 - **All Essential Packages** pre-configured
@@ -322,9 +322,8 @@ first prompt.
   (see [Neovim and the file explorer](#neovim-and-the-file-explorer))
 - Hunk (terminal diff viewer for agent changesets — also an out-of-band binary,
   see [Hunk](#hunk-reading-what-the-agents-wrote))
-- omawrite, omacut, cliamp (omarchy's apps — cliamp from the AUR, omawrite and
-  omacut built from the PKGBUILDs vendored in `pkgbuilds/`, see
-  `install-scripts/omarchy-apps.sh`)
+- omawrite, omacut (omarchy's apps — built from the PKGBUILDs vendored in
+  `pkgbuilds/`, see `install-scripts/omarchy-apps.sh`)
 
 ## Configuration
 
