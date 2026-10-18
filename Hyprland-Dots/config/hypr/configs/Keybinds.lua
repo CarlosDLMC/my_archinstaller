@@ -256,12 +256,12 @@ bind(M .. " + SHIFT + bracketright", hl.dsp.window.move({ workspace = "+1" }),  
 bind(M .. " + CTRL + bracketleft",   hl.dsp.window.move({ workspace = "-1", follow = false }), { description = "move silently to previous workspace" })
 bind(M .. " + CTRL + bracketright",  hl.dsp.window.move({ workspace = "+1", follow = false }), { description = "move silently to next workspace" })
 
--- Scroll through existing workspaces
-bind(M .. " + mouse_down", hl.dsp.focus({ workspace = "e+1" }), { description = "next workspace" })
-bind(M .. " + mouse_up",   hl.dsp.focus({ workspace = "e-1" }), { description = "previous workspace" })
+-- Step through workspaces: SUPER + wheel, SUPER + , / .
 -- r+1/r-1, like CTRL+ALT+arrows: the next number even when that workspace is
 -- empty (from 3 to 4), where e+1 skipped to the next one with windows and
--- wrapped round to 1.
+-- wrapped round to 1. The wheel and the keys step the same way.
+bind(M .. " + mouse_down", hl.dsp.focus({ workspace = "r+1" }), { description = "next workspace" })
+bind(M .. " + mouse_up",   hl.dsp.focus({ workspace = "r-1" }), { description = "previous workspace" })
 bind(M .. " + period",     hl.dsp.focus({ workspace = "r+1" }), { description = "next workspace" })
 bind(M .. " + comma",      hl.dsp.focus({ workspace = "r-1" }), { description = "previous workspace" })
 
