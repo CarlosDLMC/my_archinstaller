@@ -1,0 +1,40 @@
+/* The launcher (SUPER + D): the soviet-teletype theme plus two lines only the
+   launcher has. The ФАЙЛЫ tab lists long file paths, which rows cut off with
+   "…" (Alt+. moves the cut to the start or the middle), so the picked row is
+   repeated in full under the list, and the prompt line counts the matches.
+   They live here rather than in the theme because every other rofi menu
+   imports config.rasi too. */
+
+@import "~/.config/rofi/config.rasi"
+
+/* 452px + 26px for the full-name line, so the list keeps its 7 rows. */
+window {
+    height:                      478px;
+}
+
+mainbox {
+    children:                    [ "titlebar", "inputbar", "message", "listview", "textbox-current-entry", "mode-switcher" ];
+}
+
+/* Matches / total, at the right end of the prompt line. */
+inputbar {
+    children:                    [ "textbox-prompt-colon", "entry", "num-filtered-rows", "textbox-num-sep", "num-rows" ];
+}
+num-filtered-rows, num-rows, textbox-num-sep {
+    expand:                      false;
+    vertical-align:              0.5;
+    font:                        "Terminess Nerd Font 16";
+    text-color:                  @tty-dim;
+}
+textbox-num-sep {
+    str:                         "/";
+}
+
+/* The picked row in full, as a status line under the screen. rofi has no
+   tooltips, and this follows the mouse too (hover-select). Small so ~100
+   characters fit; rofi cannot wrap it. */
+textbox-current-entry {
+    font:                        "Terminess Nerd Font 12";
+    text-color:                  @tty-dim;
+    markup:                      false;
+}
