@@ -259,8 +259,11 @@ bind(M .. " + CTRL + bracketright",  hl.dsp.window.move({ workspace = "+1", foll
 -- Scroll through existing workspaces
 bind(M .. " + mouse_down", hl.dsp.focus({ workspace = "e+1" }), { description = "next workspace" })
 bind(M .. " + mouse_up",   hl.dsp.focus({ workspace = "e-1" }), { description = "previous workspace" })
-bind(M .. " + period",     hl.dsp.focus({ workspace = "e+1" }), { description = "next workspace" })
-bind(M .. " + comma",      hl.dsp.focus({ workspace = "e-1" }), { description = "previous workspace" })
+-- r+1/r-1, like CTRL+ALT+arrows: the next number even when that workspace is
+-- empty (from 3 to 4), where e+1 skipped to the next one with windows and
+-- wrapped round to 1.
+bind(M .. " + period",     hl.dsp.focus({ workspace = "r+1" }), { description = "next workspace" })
+bind(M .. " + comma",      hl.dsp.focus({ workspace = "r-1" }), { description = "previous workspace" })
 
 -- Move/resize windows with SUPER + LMB/RMB and dragging (mouse:272 = left, 273 = right)
 bind(M .. " + mouse:272", hl.dsp.window.drag(),   { mouse = true, description = "move window" })
