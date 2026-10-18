@@ -1598,7 +1598,8 @@ past the end.
   click, so herdr is never held up; what a click did is logged to
   `~/.local/state/herdr/plugins/agent-notify/clicks.log`. A left click runs a
   notification's action because dunstrc has `mouse_left_click = do_action,
-  close_current` (so a chat notice that offers "open" opens the chat too).
+  close_current` (so a chat notice that offers "open" opens the chat too); a
+  right click (`close_current`) dismisses it without, a middle click all of them.
   Herdr's own `delivery = "system"` cannot do this: it skips the tab herdr
   has open whatever Hyprland is showing, so an agent finishing there while you
   were elsewhere told no one. It is a herdr event hook, so herdr runs it and
