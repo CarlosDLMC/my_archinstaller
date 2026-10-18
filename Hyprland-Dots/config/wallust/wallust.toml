@@ -42,9 +42,6 @@ hypr.target = '~/.config/hypr/wallust/wallust-hyprland.lua'
 rofi.template = 'colors-rofi.rasi'
 rofi.target = '~/.config/rofi/wallust/colors-rofi.rasi'
 
-waybar.template = 'colors-waybar.css'
-waybar.target = '~/.config/wallust/output/colors-waybar.css'
-
 # kitty removed from this machine 2025-12-20; the target was still being
 # regenerated on every wallust run. Uncomment if kitty comes back.
 #kitty.template = 'colors-kitty.conf'
@@ -65,9 +62,6 @@ gtk3.target = '~/.config/gtk-3.0/wallust.css'
 
 gtk4.template = 'gtk4-colors.css'
 gtk4.target = '~/.config/gtk-4.0/wallust.css'
-
-#swaync.template = 'colors-swaync.css'
-#swaync.target = '~/.config/swaync/wallust/colors-wallust.css'
 
 #macchina.template = 'colors-macchina.toml'
 #macchina.target = '~/.config/macchina/themes/wallust.toml'

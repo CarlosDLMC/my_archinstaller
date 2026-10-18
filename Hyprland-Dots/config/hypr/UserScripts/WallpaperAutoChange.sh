@@ -6,7 +6,7 @@
 #
 # NOTE: this script uses bash (not POSIX shell) for the RANDOM variable
 
-wallust_refresh=$HOME/.config/hypr/scripts/RefreshNoWaybar.sh
+wallust_refresh=$HOME/.config/hypr/scripts/RefreshColors.sh
 
 
 if [[ $# -lt 1 ]] || [[ ! -d $1   ]]; then

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Script for keyboard backlights (if supported) using brightnessctl
 
-iDIR="$HOME/.config/swaync/icons"
+iDIR="$HOME/.config/hypr/notify/icons"
 
 # Get keyboard brightness
 get_kbd_backlight() {
@@ -25,7 +25,7 @@ get_icon() {
 }
 # Notify
 notify_user() {
-	notify-send -t 1000 -e -h string:x-canonical-private-synchronous:brightness_notif -h int:value:$current -h boolean:SWAYNC_BYPASS_DND:true -u low -i "$icon" "Подсветка клавиатуры:" "$current%"
+	notify-send -t 1000 -e -h string:x-canonical-private-synchronous:brightness_notif -h int:value:$current -u low -i "$icon" "Подсветка клавиатуры:" "$current%"
 }
 
 # Change brightness

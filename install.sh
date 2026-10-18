@@ -224,7 +224,6 @@ pokemon="OFF"
 # want to decide (keeping nouveau, or skipping the proprietary driver).
 rog="auto"
 dots="OFF"
-input_group="OFF"
 nvidia="auto"
 nouveau="auto"
 handy="OFF"
@@ -264,7 +263,7 @@ hackbgrt="auto"
 
 # Every option name the installer acts on. Kept next to load_preset() because
 # its only job is to catch a preset key that no longer matches one - see below.
-known_options="ly nvidia nouveau input_group gtk_themes bluetooth thunar \
+known_options="ly nvidia nouveau gtk_themes bluetooth thunar \
 quickshell xdph zsh pokemon rog dots handy nopasswd_sudo printing plymouth \
 text_boot limine hackbgrt docker herdr neovim hunk ly_flag thp_madvise keyd_nav"
 # The ones that also take "auto" (resolved from the hardware further down).
@@ -747,24 +746,6 @@ if [ "$nvidia_supported" == "true" ]; then
     )
 fi
 
-# Add 'input_group' option if user is not in input group
-input_group_detected=false
-if ! groups "$(whoami)" | grep -q '\binput\b'; then
-    input_group_detected=true
-    if [ "$preset_mode" == "true" ]; then
-        echo "${NOTE} You are not in the 'input' group. Added only if the preset sets input_group=\"ON\"." | tee -a "$LOG"
-    else
-        whiptail --title "Input Group" --msgbox "You are not currently in the input group.\n\nAdding you to the input group might be necessary for the Waybar keyboard-state functionality." 12 60
-    fi
-fi
-
-# Add 'input_group' option if necessary
-if [ "$input_group_detected" == "true" ]; then
-    options_command+=(
-        "input_group" "Add your USER to input group for some waybar functionality?" "OFF"
-    )
-fi
-
 # Conditionally add ly display manager option if no active login manager is found
 if ! check_services_running; then
     options_command+=(
@@ -805,7 +786,7 @@ options_command+=(
 # unless the user re-selected everything by hand.
 if [ "$preset_mode" == "true" ]; then
     selected_options=""
-    for _opt in ly nvidia nouveau input_group gtk_themes bluetooth thunar \
+    for _opt in ly nvidia nouveau gtk_themes bluetooth thunar \
                 quickshell xdph zsh pokemon rog dots handy nopasswd_sudo \
                 printing plymouth text_boot thp_madvise keyd_nav limine hackbgrt docker herdr neovim hunk; do
         [ "${!_opt}" == "ON" ] || continue
@@ -835,12 +816,6 @@ if [ "$preset_mode" == "true" ]; then
                 # No gate: "auto" already resolved to OFF when nothing was detected, so an
                 # ON that reaches this point is an explicit force-on (e.g. a Bluetooth
                 # controller whose firmware is not loaded yet, or lsusb not installed).
-                ;;
-            input_group)
-                if [ "$input_group_detected" != "true" ]; then
-                    echo "${NOTE} Preset asks for 'input_group' but you are already in it. Skipping." | tee -a "$LOG"
-                    continue
-                fi
                 ;;
             ly)
                 if check_services_running; then
@@ -1292,10 +1267,6 @@ for option in "${options[@]}"; do
         gtk_themes)
             echo "${INFO} Installing ${SKY_BLUE}GTK themes...${RESET}" | tee -a "$LOG"
             execute_script "gtk_themes.sh"
-            ;;
-        input_group)
-            echo "${INFO} Adding user into ${SKY_BLUE}input group...${RESET}" | tee -a "$LOG"
-            execute_script "InputGroup.sh"
             ;;
         quickshell)
             echo "${INFO} Installing ${SKY_BLUE}quickshell for Desktop Overview...${RESET}" | tee -a "$LOG"

@@ -43,7 +43,6 @@ hl.on("hyprland.start", function()
     -- run("ags")
     -- run("blueman-applet")
     -- run("rog-control-center")
-    -- run("waybar")
     -- Quickshell bar. ~/.cache/quickshell first: the bar watches its timezone and
     -- weather files there, and a watch on a file whose folder does not exist yet
     -- never attaches - so on a fresh install the first session ignored them.

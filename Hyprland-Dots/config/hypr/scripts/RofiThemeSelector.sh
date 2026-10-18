@@ -6,7 +6,7 @@ ROFI_THEMES_DIR_CONFIG="$HOME/.config/rofi/themes"
 ROFI_THEMES_DIR_LOCAL="$HOME/.local/share/rofi/themes"
 ROFI_CONFIG_FILE="$HOME/.config/rofi/config.rasi"
 ROFI_THEME_FOR_THIS_SCRIPT="$HOME/.config/rofi/config-rofi-theme.rasi" # A separate rofi theme for the picker itself
-IDIR="$HOME/.config/swaync/images"                                     # For notifications
+IDIR="$HOME/.config/hypr/notify/images"                                     # For notifications
 
 # --- Helper Functions ---
 

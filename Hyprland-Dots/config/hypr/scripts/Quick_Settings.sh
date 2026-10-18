@@ -14,13 +14,13 @@ configs="$HOME/.config/hypr/configs"
 UserConfigs="$HOME/.config/hypr/UserConfigs"
 rofi_theme="$HOME/.config/rofi/config-edit.rasi"
 msg='Выберите действие'
-iDIR="$HOME/.config/swaync/images"
+iDIR="$HOME/.config/hypr/notify/images"
 scriptsDir="$HOME/.config/hypr/scripts"
 UserScripts="$HOME/.config/hypr/UserScripts"
 
 # Function to show info notification
 show_info() {
-    # note.png, not info.png: $iDIR is swaync/images here and there is no
+    # note.png, not info.png: $iDIR is hypr/notify/images here and there is no
     # info.png in it (nor anywhere in the repo), so every one of these
     # notifications rendered without an icon. note.png is what ScreenShot.sh
     # and ScreenRecord.sh already use for their informational notifications.

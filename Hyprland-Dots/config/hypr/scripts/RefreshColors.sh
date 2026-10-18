@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 
-# Modified version of Refresh.sh but waybar wont refresh
-# Used by automatic wallpaper change
-# Modified inorder to refresh rofi background, Wallust, dunst only
+# Refresh after the colours change without a menu in front: re-runs wallust
+# (synchronously, so the palette is ready) and refreshes rofi and dunst.
+# Used by the automatic wallpaper change, the animations menu and monitor
+# profiles; Refresh.sh is the full one behind SUPER+ALT+R.
 
 SCRIPTSDIR=$HOME/.config/hypr/scripts
 UserScripts=$HOME/.config/hypr/UserScripts

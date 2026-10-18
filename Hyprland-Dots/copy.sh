@@ -138,7 +138,6 @@ wallust_targets=(
     "cava/config"
     "hypr/wallust/wallust-hyprland.lua"
     "rofi/wallust/colors-rofi.rasi"
-    "wallust/output/colors-waybar.css"
     # bar/Theme.qml reads this through a FileView. The bar and initial-boot.sh's
     # first `wallust run` start in parallel from hyprland.start, so without a
     # seed the bar can load before the file exists and sit on its fallback
@@ -288,7 +287,7 @@ restore_state() { # dir backup
             cp "$_bak/accels.scm" "$HOME/.config/Thunar/accels.scm" && echo "  ${OK} Kept your Thunar keyboard shortcuts (accels.scm)"
         fi
         ;;
-    gtk-3.0|wallust|Kvantum|qt5ct|qt6ct|swaync)
+    gtk-3.0|wallust|Kvantum|qt5ct|qt6ct)
         apply_user_state "$_dir" "$_bak" "$HOME/.config/$_dir"
         ;;
     nwg-displays)
@@ -476,10 +475,6 @@ config_dirs=(
     "foot"
     "rofi"
     "dunst"
-    # swaync is NOT the notification daemon here (dunst is), but ~/.config/swaync
-    # is the icon/image asset store that 25 of the hypr scripts point at
-    # (iDIR="$HOME/.config/swaync/icons"). Dropping it kills notification icons.
-    "swaync"
     "fastfetch"
     "btop"
     "cava"
@@ -627,7 +622,7 @@ for dir in "${config_dirs[@]}"; do
         # The settings apply_user_state carries over, already in the comparison
         # copy - and, when that is all that differs, in what gets copied.
         case "$dir" in
-        rofi|gtk-3.0|wallust|Kvantum|qt5ct|qt6ct|swaync)
+        rofi|gtk-3.0|wallust|Kvantum|qt5ct|qt6ct)
             if [ -d "$HOME/.config/$dir" ]; then
                 if [ -z "$_cmp_tmp" ]; then
                     _cmp_tmp=$(mktemp -d)

@@ -3,7 +3,7 @@
 
 layout_file="$HOME/.cache/kb_layout"
 settings_file="$HOME/.config/hypr/configs/SystemSettings.lua"
-notif_icon="$HOME/.config/swaync/images/ja.png"
+notif_icon="$HOME/.config/hypr/notify/images/ja.png"
 
 # Refined ignore list with patterns or specific device names
 ignore_patterns=(

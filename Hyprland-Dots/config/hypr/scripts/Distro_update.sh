@@ -2,7 +2,7 @@
 # Simple bash script to check and will try to update your system
 
 # Local Paths
-iDIR="$HOME/.config/swaync/images"
+iDIR="$HOME/.config/hypr/notify/images"
 
 # Check for required tools (foot)
 if ! command -v foot &> /dev/null; then

@@ -47,7 +47,6 @@ GTK-themes-icons/*.log
 Hyprland-Dots/config/cava/config
 Hyprland-Dots/config/hypr/wallust/wallust-hyprland.lua
 Hyprland-Dots/config/rofi/wallust/colors-rofi.rasi
-Hyprland-Dots/config/wallust/output/colors-waybar.css
 Hyprland-Dots/config/quickshell/bar/wallust-colors.json
 Hyprland-Dots/config/btop/themes/wallust.theme
 Hyprland-Dots/config/btop/themes/wallust-palette.json

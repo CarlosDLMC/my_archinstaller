@@ -17,7 +17,6 @@ local class_tags = {
                         "^(Brave-browser(-beta|-dev|-unstable)?)$",
                         "^([Tt]horium-browser|[Cc]achy-browser)$",
                         "^(zen-alpha|zen)$" },
-    notif           = { "^(swaync-control-center|swaync-notification-window|swaync-client|class)$" },
     ["Hypr-Settings"] = { "^(nwg-displays|nwg-look)$" },
     terminal        = { "^(Alacritty|foot)$" },
     email           = { "^([Tt]hunderbird|org.gnome.Evolution)$", "^(eu.betterbird.Betterbird)$" },

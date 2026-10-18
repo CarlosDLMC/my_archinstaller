@@ -28,7 +28,7 @@
 # relied on (TemperatureValue, wxPhrase, CurrentConditions--*), so PyQuery
 # selectors silently returned empty strings and the widget rendered blank.
 #
-# Output is Waybar-compatible JSON whose `text`/`alt`/`tooltip` are shaped to
+# Output is JSON whose `text`/`alt`/`tooltip` are shaped to
 # match the regex parsing in ../components/CenterInfo.qml. Keep that contract
 # in sync if you edit the tooltip layout.
 
@@ -617,7 +617,7 @@ aqi_text = str(aqi) if aqi is not None else ""
 
 location_short = location.split(",")[0].strip() or location
 
-# ---- build Waybar JSON (format consumed by CenterInfo.qml) ---------------
+# ---- build the JSON (format consumed by CenterInfo.qml) -----------------
 # Bar text: "<icon>  <temp>° <location>"  (CenterInfo splits icon/temp/location)
 text = f"{icon}  {temp}° {location_short}"
 

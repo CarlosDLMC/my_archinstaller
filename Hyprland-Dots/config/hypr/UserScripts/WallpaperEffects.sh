@@ -8,9 +8,9 @@ wallpaper_output="$HOME/.config/hypr/wallpaper_effects/.wallpaper_modified"
 SCRIPTSDIR="$HOME/.config/hypr/scripts"
 rofi_theme="$HOME/.config/rofi/config-wallpaper-effect.rasi"
 
-# Directory for swaync
-iDIR="$HOME/.config/swaync/images"
-iDIRi="$HOME/.config/swaync/icons"
+# Notification icons
+iDIR="$HOME/.config/hypr/notify/images"
+iDIRi="$HOME/.config/hypr/notify/icons"
 
 # awww transition config
 FPS=60

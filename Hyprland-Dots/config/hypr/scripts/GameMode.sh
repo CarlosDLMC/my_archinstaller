@@ -3,7 +3,7 @@
 # every window opaque. `hyprctl reload` undoes all of it (the runtime values and
 # the extra window rule only live until the next reload).
 
-notif="$HOME/.config/swaync/images/ja.png"
+notif="$HOME/.config/hypr/notify/images/ja.png"
 SCRIPTSDIR="$HOME/.config/hypr/scripts"
 # On while this file exists. Animations being off could not tell: the
 # "03- Disable Animation" preset turns them off too, and then every press took

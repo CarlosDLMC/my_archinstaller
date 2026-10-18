@@ -9,7 +9,6 @@
 # Variables
 scriptsDir=$HOME/.config/hypr/scripts
 wallpaper=$HOME/.config/hypr/wallpaper_effects/.wallpaper_current
-#waybar_style="$HOME/.config/waybar/style/[Extra] Neon Circuit.css"
 kvantum_theme="catppuccin-mocha-blue"
 color_scheme="prefer-dark"
 # GTK3's own dark Adwaita in the wallust colours (~/.themes/Wallust-A, put there

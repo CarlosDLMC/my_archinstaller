@@ -4,7 +4,7 @@
 # Only the layout changes: togglesplit has its own key (SUPER + SHIFT + I), and
 # SUPER + O is "move window out of its group" in both layouts.
 
-notif="$HOME/.config/swaync/images/ja.png"
+notif="$HOME/.config/hypr/notify/images/ja.png"
 
 LAYOUT=$(hyprctl -j getoption general.layout | jq -r '.str')
 

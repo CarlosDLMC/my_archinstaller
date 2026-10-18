@@ -10,7 +10,7 @@
 # contain "touchpad" (this ThinkPad's is "synaptics-tm3276-022"), so a name
 # match alone is not enough; it is only the fallback.
 
-notif="$HOME/.config/swaync/images/ja.png"
+notif="$HOME/.config/hypr/notify/images/ja.png"
 
 export STATUS_FILE="$XDG_RUNTIME_DIR/touchpad.status"
 # The touchpads found below, for Laptops.lua to put the state back on after a

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # for rainbow borders animation. Rename to RainbowBorders.sh to turn it on
-# (Startup_Apps.lua and RefreshNoWaybar.sh run it under that name), and set
+# (Startup_Apps.lua and RefreshColors.sh run it under that name), and set
 # borderangle back to style "loop" in UserAnimations.lua to make it turn.
 #
 # Through `hyprctl eval 'hl.config(...)'`: the Lua config has no

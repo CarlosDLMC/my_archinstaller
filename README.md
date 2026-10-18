@@ -1271,8 +1271,7 @@ These are machine-specific, so a fresh install starts without them:
   toolchains). The installer builds the Hyprland environment, not the full
   workstation.
 - **The wallust colour files** — `cava/config`,
-  `hypr/wallust/wallust-hyprland.lua`, `rofi/wallust/colors-rofi.rasi`,
-  `wallust/output/colors-waybar.css` and
+  `hypr/wallust/wallust-hyprland.lua`, `rofi/wallust/colors-rofi.rasi` and
   `quickshell/bar/wallust-colors.json`. Every one is a `target` in
   `wallust.toml`, rewritten in full each time the wallpaper changes, so they are
   runtime state and are gitignored — otherwise whichever palette happened to be

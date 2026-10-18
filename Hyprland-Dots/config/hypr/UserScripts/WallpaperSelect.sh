@@ -12,9 +12,9 @@ wallDIR="$HOME/Pictures/wallpapers"
 SCRIPTSDIR="$HOME/.config/hypr/scripts"
 wallpaper_current="$HOME/.config/hypr/wallpaper_effects/.wallpaper_current"
 
-# Directory for swaync
-iDIR="$HOME/.config/swaync/images"
-iDIRi="$HOME/.config/swaync/icons"
+# Notification icons
+iDIR="$HOME/.config/hypr/notify/images"
+iDIRi="$HOME/.config/hypr/notify/icons"
 
 # awww transition config. "center" grows the new wallpaper as a circle from
 # the middle of the screen out to the edges; "any" grew it from a random point.

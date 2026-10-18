@@ -29,11 +29,11 @@ mixsink="wfrec_mix"
 audio_state_file="$HOME/.cache/screenrecord_audio"
 audio_mode="none"
 
-iDIR="$HOME/.config/swaync/icons"
-iDoR="$HOME/.config/swaync/images"
+iDIR="$HOME/.config/hypr/notify/icons"
+iDoR="$HOME/.config/hypr/notify/images"
 
 notify_cmd_base="notify-send -t 5000 -h string:x-canonical-private-synchronous:record-notify"
-# picture.png, not video.png: $iDIR is swaync/icons and it has never contained
+# picture.png, not video.png: $iDIR is hypr/notify/icons and it has never contained
 # a video.png - no video or record icon exists anywhere in the repo - so every
 # "Recording Started"/"Recording Stopped" notification rendered without an icon.
 # ScreenShot.sh, which this script mirrors, uses icons/picture.png for exactly
