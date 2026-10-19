@@ -1446,6 +1446,7 @@ those three commands — the VPN widget is the only thing here that depends on i
 - `SUPER + CTRL + F8` - Handy: toggle speech-to-text (press once to start recording, press again to stop and transcribe into the focused field)
 - `SUPER + ALT + <1-0>` - Move *every* window of the current workspace to that workspace, keeping the tiling layout intact (`SUPER + CTRL + <1-0>` still moves one window silently)
 - `CTRL + ALT + L` - Lock screen (Soviet TUI)
+- `SUPER + CTRL + ALT + L` - Screensaver, then lock screen (see [Screensaver](#screensaver-ascii-art))
 - `CTRL + ALT + P` - Power menu («ПУСК · ПУЛЬТ» in the quickshell bar; also the Arch logo)
 - `ALT + Tab` - **nothing, on purpose.** Hyprland's default cycle-window bind is
   removed in `UserKeybinds.lua` so the key reaches Herdr, which cycles terminal
@@ -1851,11 +1852,25 @@ Output is byte-identical to the Python version it replaced.
 
 Text art drawn by [ttfx](https://github.com/omacom/ttfx) (omarchy's terminal text
 effects) in a fullscreen black `foot`: one random effect after another — 22 of ttfx's 37,
-picked by hand (decrypt, burn, rain, fireworks, vhstape...) — until you come back. It
-starts after 9 minutes idle (`hypridle.conf`), or by hand with
-`~/.config/hypr/scripts/Screensaver.sh`.
+picked by hand (decrypt, burn, rain, fireworks, vhstape...) — until you come back.
+
+| Start | Coming back |
+|---|---|
+| After 9 minutes idle (`hypridle.conf`) | the lock screen |
+| `SUPER + CTRL + ALT + L` | the lock screen |
+| `~/.config/hypr/scripts/Screensaver.sh --lock` | the lock screen |
+| `~/.config/hypr/scripts/Screensaver.sh` | straight back to the desktop |
+
+`CTRL + ALT + L` still locks straight away, without the screensaver.
 
 - Any key, mouse movement or click, or the window losing focus ends it.
+- With `--lock` it locks first and closes second: its last frame stays up until the
+  lock screen has started (at most 3 s), so the desktop never shows in between.
+- It never runs behind the lock screen, where nothing can show: idle does not start it
+  while locked, and it quits within a second if the screen locks while it runs.
+- Leaving it goes straight to your windows. Its window floats with no close animation,
+  and the windows' fade back in (`fadeIn`) is switched off for that moment and restored
+  half a second later — otherwise the bare wallpaper showed for ~0.3 s.
 - The mouse cursor is hidden, and notifications are held while it runs and shown when
   it ends (Do Not Disturb stays on if it was on).
 - 60 fps, not omarchy's 120: `foot` draws on the CPU, and measured fullscreen at
@@ -1930,15 +1945,16 @@ each character shows two of them, one above the other: `█` both on, `▀` the 
    ```
 
 7. **Idle.** It already starts on idle: the 9-minute listener in
-   `~/.config/hypr/hypridle.conf` runs it.
+   `~/.config/hypr/hypridle.conf` runs it, unless the screen is already locked, and
+   with `--lock` so coming back ends on the lock screen.
    ```
    listener {
        timeout = 540                     # 9 min
-       on-timeout = $HOME/.config/hypr/scripts/Screensaver.sh
+       on-timeout = pidof hyprlock || $HOME/.config/hypr/scripts/Screensaver.sh --lock
    }
    ```
-   No `on-resume` is needed: the screensaver closes itself on any key or mouse
-   movement. To change the delay, edit `timeout` (seconds); hypridle reads its config
+   Drop `--lock` to come back straight to the desktop. No `on-resume` is needed: the
+   screensaver closes itself on any key or mouse movement. To change the delay, edit `timeout` (seconds); hypridle reads its config
    only at start, so restart it with `pkill -x hypridle; setsid -f hypridle`. Apps that
    inhibit idle (a browser playing video, mpv) still keep it from starting.
 
