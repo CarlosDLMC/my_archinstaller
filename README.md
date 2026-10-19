@@ -1902,7 +1902,8 @@ each character shows two of them, one above the other: `█` both on, `▀` the 
    ```bash
    ttfx -i art.txt --canvas-width 0 --canvas-height 0 --anchor-canvas c --anchor-text c --frame-rate 60 burn
    ```
-   All 37 in turn, each name shown first (`matrix` and `thunderstorm` run until Ctrl+C):
+   All 37 in turn, each name shown first (`matrix` and `thunderstorm` take longest,
+   about 15 and 12 seconds before the art appears):
    ```bash
    for e in $(ttfx --help | awk '/^Commands:/{f=1;next} f && /^  [a-z]/{print $1}' | grep -v '^help$'); do
      clear; echo "$e"; sleep 1.5
