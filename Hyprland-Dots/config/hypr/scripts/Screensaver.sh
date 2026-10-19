@@ -60,7 +60,12 @@ while true; do
     ttfx -i "$art" --frame-rate 60 \
         --canvas-width 0 --canvas-height 0 --reuse-canvas \
         --anchor-canvas c --anchor-text c \
-        --random-effect --no-eol --no-restore-cursor &
+        --random-effect --no-eol --no-restore-cursor \
+        `# 23 of ttfx's 37, picked by watching each one on the art` \
+        --include-effects beams binarypath blackhole bouncyballs burn decrypt \
+            expand fireworks highlight middleout orbittingvolley pour rain \
+            scattered slice slide spray swarm sweep synthgrid thunderstorm \
+            unstable vhstape &
     pid=$!
     while kill -0 "$pid" 2>/dev/null; do
         if read -rsn1 -t 1 || ! focused; then
