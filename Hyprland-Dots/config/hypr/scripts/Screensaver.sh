@@ -61,8 +61,8 @@ while true; do
         --canvas-width 0 --canvas-height 0 --reuse-canvas \
         --anchor-canvas c --anchor-text c \
         --random-effect --no-eol --no-restore-cursor \
-        `# 23 of ttfx's 37, picked by watching each one on the art` \
-        --include-effects beams binarypath blackhole bouncyballs burn decrypt \
+        `# 22 of ttfx's 37, picked by watching each one on the art` \
+        --include-effects binarypath blackhole bouncyballs burn decrypt \
             expand fireworks highlight middleout orbittingvolley pour rain \
             scattered slice slide spray swarm sweep synthgrid thunderstorm \
             unstable vhstape &
