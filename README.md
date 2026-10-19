@@ -1849,10 +1849,11 @@ Output is byte-identical to the Python version it replaced.
 
 ### Screensaver (ASCII art)
 
-Your own text art, drawn by [ttfx](https://github.com/omacom/ttfx) (omarchy's terminal
-text effects) in a fullscreen black `foot`: one random effect after another — decrypt,
-burn, rain, fireworks and 33 more — until you come back. Start it with
-`~/.config/hypr/scripts/Screensaver.sh`; it does not start on idle yet.
+Text art drawn by [ttfx](https://github.com/omacom/ttfx) (omarchy's terminal text
+effects) in a fullscreen black `foot`: one random effect after another — 22 of ttfx's 37,
+picked by hand (decrypt, burn, rain, fireworks, vhstape...) — until you come back. It
+starts after 9 minutes idle (`hypridle.conf`), or by hand with
+`~/.config/hypr/scripts/Screensaver.sh`.
 
 - Any key, mouse movement or click, or the window losing focus ends it.
 - The mouse cursor is hidden, and notifications are held while it runs and shown when
@@ -1861,10 +1862,14 @@ burn, rain, fireworks and 33 more — until you come back. Start it with
   2560×1440 the whole screensaver took ~75% of one core at 120 fps and ~59% at 60.
   ttfx itself is 3–5% of that; the terminal redrawing is the rest.
 
-No art ships with the repo: the screensaver draws `~/.local/share/screensaver/art.txt`,
-which you make from any image with `~/.config/hypr/scripts/ImgToText.py` (below). It
-lives outside `~/.config/hypr` because an installer re-run replaces that folder with the
-repo's copy. `ttfx` comes from the AUR and is built without its tests (see
+The art is the Mosfilm logo — Mukhina's *Worker and Kolkhoz Woman* over МОСФИЛЬМ, 216×58
+characters, sized for 2560×1440 (a 1920×1080 screen's terminal is about 192×45, too small
+for it: make a smaller one with `--rows`, below). The repo ships it as
+`Hyprland-Dots/.local/share/screensaver/art.txt` and `copy.sh` puts it at
+`~/.local/share/screensaver/art.txt`, where the screensaver reads it. Replace it with your
+own from any image with `~/.config/hypr/scripts/ImgToText.py` (below). An installer
+re-run puts the repo's art back and keeps yours as `art.txt.backup-<date-time>`. It lives
+outside `~/.config/hypr` because a re-run replaces that whole folder. `ttfx` comes from the AUR and is built without its tests (see
 `install-scripts/01-hypr-pkgs.sh`): on CachyOS one bit-exact test fails by a last-bit
 rounding difference in glibc, so an update through yay there needs
 `yay -S ttfx --mflags --nocheck`.
@@ -1920,9 +1925,8 @@ each character shows two of them, one above the other: `█` both on, `▀` the 
    ~/.config/hypr/scripts/Screensaver.sh
    ```
 
-7. **Start it on idle.** In `~/.config/hypr/hypridle.conf`, the 9-minute listener only
-   sends "You are idle!" and "Oh! you're Back" notifications. Make it start the
-   screensaver instead:
+7. **Idle.** It already starts on idle: the 9-minute listener in
+   `~/.config/hypr/hypridle.conf` runs it.
    ```
    listener {
        timeout = 540                     # 9 min
@@ -1930,10 +1934,9 @@ each character shows two of them, one above the other: `█` both on, `▀` the 
    }
    ```
    No `on-resume` is needed: the screensaver closes itself on any key or mouse
-   movement. hypridle reads its config only at start, so restart it with
-   `pkill -x hypridle; setsid -f hypridle`. Apps that inhibit idle (a browser playing
-   video, mpv) still keep it from starting. This edits your machine only: an installer
-   re-run puts the repo's `hypridle.conf` back.
+   movement. To change the delay, edit `timeout` (seconds); hypridle reads its config
+   only at start, so restart it with `pkill -x hypridle; setsid -f hypridle`. Apps that
+   inhibit idle (a browser playing video, mpv) still keep it from starting.
 
 ## Customization
 
