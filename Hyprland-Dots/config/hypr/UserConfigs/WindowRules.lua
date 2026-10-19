@@ -41,6 +41,12 @@ rule({ match = { class = "^([Tt]hunar)$", title = "negative:(.* - Thunar$)" }, f
 -- adds only the focus differential: 0.85 x 0.82 = 0.70.
 rule({ match = { tag = "terminal*" }, opacity = "1.0 0.82" })
 
+-- omawrite (the omarchy_apps option), built the same way as the terminals: its
+-- page is 90% opaque with crisp text (translucent-page.patch in
+-- pkgbuilds/omawrite), and this rule adds only the focus differential:
+-- 0.90 focused, 0.90 x 0.89 = 0.80 unfocused.
+rule({ match = { class = "^(omawrite)$" }, opacity = "1.0 0.89" })
+
 -- From omarchy (default/hypr/windows.lua): apps may not maximize themselves.
 rule({ match = { class = ".*" }, suppress_event = "maximize" })
 -- Fix some dragging issues with XWayland.

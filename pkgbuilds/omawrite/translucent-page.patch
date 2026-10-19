@@ -1,0 +1,35 @@
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -6,6 +6,7 @@
+ #include <QQmlContext>
+ #include <QQmlError>
+ #include <QQuickStyle>
++#include <QQuickWindow>
+ #include <QUrl>
+ #include <QWindow>
+ #include <QFile>
+@@ -43,6 +44,9 @@
+     app.setOrganizationDomain(QStringLiteral("omacom.io"));
+ 
+     QQuickStyle::setStyle(QStringLiteral("Material"));
++    // my_archinstaller patch: without an alpha channel the page colour's alpha
++    // (Main.qml, pageOpacity) is dropped and the window stays solid.
++    QQuickWindow::setDefaultAlphaBuffer(true);
+ 
+     Backend backend(&app);
+     SystemTheme systemTheme(&app);
+--- a/src/Main.qml
++++ b/src/Main.qml
+@@ -53,7 +53,11 @@
+ 
+     Material.theme: darkMode ? Material.Dark : Material.Light
+     Material.accent: accentColor
+-    color: pageColor
++    // my_archinstaller patch: only the page is translucent, the way foot's
++    // alpha works - text and dialogs stay opaque. The window rule in
++    // hypr/UserConfigs/WindowRules.lua adds the dimming when it loses focus.
++    readonly property real pageOpacity: 0.90
++    color: Qt.rgba(pageColor.r, pageColor.g, pageColor.b, pageOpacity)
+ 
+     onClosing: function(close) {
+         if (closeConfirmed || !backend.modified)

@@ -13,7 +13,7 @@
 # follows the wallust GTK theme. omawrite itself already does this switch for
 # omarchy's "gtk3" (src/main.cpp) - just not for qt6ct.
 #
-# And two patches:
+# And five patches:
 #  - single-line-return.patch: Return ends a paragraph with one line break
 #    instead of two (lists and code fences behave as before), and Shift+Return
 #    gives the blank-line paragraph break that Return used to. Backspace then
@@ -24,13 +24,25 @@
 #    the Markdown highlighting use omawrite's own. Also gives modal dialogs a
 #    dark dim layer - Qt 6.12's Material style dims with #99fafafa even in
 #    dark mode, a near-white sheet over the page.
+#  - dialog-button-contrast.patch: the highlighted dialog button (Reload, and
+#    Keep Mine for a deleted file) is filled with the theme accent but had a
+#    fixed white label, unreadable on the near-white accents wallust can
+#    produce. The label is now dark or white, whichever contrasts more;
+#    hover/press/border shades follow the accent too.
+#  - unsaved-dialog-look.patch: in the Unsaved changes dialog Save is a plain
+#    button like Cancel and Discard, every text is 4px larger, and the dialog
+#    is 520px wide instead of 420 so the question still fits on one line.
+#  - translucent-page.patch: the page background is 90% opaque and the text
+#    fully opaque, the way foot's alpha works, so omawrite matches the
+#    terminals. The hypr window rule for omawrite (UserConfigs/WindowRules.lua)
+#    only adds the drop to ~80% when it loses focus.
 # pkgrel is bumped for these.
 #
 # Maintainer: David Heinemeier Hansson <david@hey.com>
 
 pkgname=omawrite
 pkgver=0.7.1
-pkgrel=4
+pkgrel=8
 pkgdesc='Dead-simple Markdown writing app built with Qt Quick'
 arch=('x86_64' 'aarch64')
 url='https://github.com/omacom/omawrite'
@@ -51,15 +63,24 @@ makedepends=(
 )
 source=("$pkgname-$pkgver.tar.gz::https://github.com/omacom/omawrite/archive/refs/tags/v$pkgver.tar.gz"
         'single-line-return.patch'
-        'theme-only-dialogs.patch')
+        'theme-only-dialogs.patch'
+        'dialog-button-contrast.patch'
+        'unsaved-dialog-look.patch'
+        'translucent-page.patch')
 sha256sums=('a8742839163d69cd8dbd2d7eb116caba4c0dc941d017e54598e796d900aea68f'
             '424c5e57ddb02e6f221d9844e222429c5166f801315b27a845c54225c026bbd3'
-            '047f7eaafb8ed8f0ee15805ac048917c2bbbd3c8e8efb124d84082659e633503')
+            '047f7eaafb8ed8f0ee15805ac048917c2bbbd3c8e8efb124d84082659e633503'
+            'bca13f419463fff82d52ea3c4b3eb305fb211795735ffc4a5760e9a30423533b'
+            '104104fe4a45afbdfa1def522028cc52efde6a9369ca2e0591523feb0bdd6b12'
+            '37b6037537488ee4f2f11a0b0b4c13a454fe4a55f55c84c5389e60473bb71c21')
 
 prepare() {
   cd "$srcdir/$pkgname-$pkgver"
   patch -Np1 -i "$srcdir/single-line-return.patch"
   patch -Np1 -i "$srcdir/theme-only-dialogs.patch"
+  patch -Np1 -i "$srcdir/dialog-button-contrast.patch"
+  patch -Np1 -i "$srcdir/unsaved-dialog-look.patch"
+  patch -Np1 -i "$srcdir/translucent-page.patch"
 }
 
 build() {
