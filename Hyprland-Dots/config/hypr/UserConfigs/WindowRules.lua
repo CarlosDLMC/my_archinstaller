@@ -66,3 +66,10 @@ rule({
     match = { class = "^$", title = "^$", xwayland = true, float = true, fullscreen = false, pin = false },
     no_focus = true,
 })
+-- The screensaver (scripts/Screensaver.sh): no close animation, and floating.
+-- Leaving it showed the bare wallpaper for a moment: shrinking away (windowsOut,
+-- popin 87%) uncovered it, and as a tiled window it had taken a slot in the
+-- layout, so the other windows grew back into place behind it. Floating, it
+-- never moves them (fullscreen still covers everything). The windows' fade back
+-- in - they are faded out under a fullscreen window - is handled by the script.
+rule({ match = { class = "^(screensaver)$" }, no_anim = true, float = true })

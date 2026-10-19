@@ -78,6 +78,16 @@ finish() {
   hyprctl eval 'hl.config({ cursor = { invisible = false } })' >/dev/null 2>&1
   # Notifications back - unless Do Not Disturb was already on
   [[ ${was_paused:-} == false ]] && dunstctl set-paused false
+  # The windows under a fullscreen window are faded out, and fade back in
+  # (fadeIn) once it closes - the bare wallpaper showed first. fadeIn off for
+  # that moment, and back to exactly what it was half a second later.
+  local f_on f_speed f_bezier
+  read -r f_on f_speed f_bezier < <(hyprctl animations -j 2>/dev/null |
+    jq -r '.[0][] | select(.name == "fadeIn") | "\(.enabled) \(.speed) \(.bezier)"')
+  if [[ $f_on == true && -n $f_speed && -n $f_bezier ]]; then
+    hyprctl eval 'hl.animation({ leaf = "fadeIn", enabled = false })' >/dev/null 2>&1
+    setsid -f bash -c "sleep 0.5; hyprctl eval 'hl.animation({ leaf = \"fadeIn\", enabled = true, speed = $f_speed, bezier = \"$f_bezier\" })'" >/dev/null 2>&1
+  fi
   exit 0
 }
 trap finish INT TERM HUP QUIT
