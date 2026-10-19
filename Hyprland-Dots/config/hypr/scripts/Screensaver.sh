@@ -3,12 +3,15 @@
 # ImgToText.py - see the README's Screensaver section) drawn by ttfx effects,
 # one random effect after another, in a fullscreen foot.
 #
-#   Screensaver.sh         open it on the focused monitor
-#   Screensaver.sh --run   the loop inside that terminal
+#   Screensaver.sh          open it on the focused monitor; ending it goes
+#                           straight back to the desktop
+#   Screensaver.sh --lock   the same, but ending it locks the screen, the way
+#                           CTRL+ALT+L does
+#   Screensaver.sh --run    the loop inside that terminal (passed on by the above)
 #
 # Any key, mouse movement or click, focus leaving the window, or the screen
 # locking ends it - nothing shows above the lock screen, so it would only run
-# unseen. Ending it locks the screen, the way CTRL+ALT+L does.
+# unseen.
 # Notifications are held while it runs.
 # 60 fps, not 120: foot draws on the CPU, and measured fullscreen on this
 # machine 120 fps cost ~75% of a core against ~59% at 60.
@@ -18,7 +21,20 @@
 art="$HOME/.local/share/screensaver/art.txt"
 app_id="screensaver"
 
-if [[ ${1:-} != --run ]]; then
+run=false
+lock=false
+for arg in "$@"; do
+  case $arg in
+    --run) run=true ;;
+    --lock) lock=true ;;
+    *)
+      echo "usage: Screensaver.sh [--lock]" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if ! $run; then
   command -v ttfx >/dev/null || {
     notify-send "Screensaver" "ttfx is not installed"
     exit 1
@@ -29,8 +45,10 @@ if [[ ${1:-} != --run ]]; then
   }
   # Already up
   hyprctl clients -j | jq -e --arg id "$app_id" 'any(.class == $id)' >/dev/null && exit 0
+  args=(--run)
+  $lock && args+=(--lock)
   # Opaque, whatever alpha foot.ini gives normal terminals
-  exec foot --fullscreen --app-id "$app_id" -o colors-dark.alpha=1.0 "$0" --run
+  exec foot --fullscreen --app-id "$app_id" -o colors-dark.alpha=1.0 "$0" "${args[@]}"
 fi
 
 focused() {
@@ -40,14 +58,14 @@ focused() {
 finish() {
   trap '' INT TERM HUP QUIT # once is enough
   [[ -n ${pid:-} ]] && kill "$pid" 2>/dev/null
-  # Lock, as CTRL+ALT+L does - unless it already is, which is also why it can
-  # be ending. Lock first, close second: the window (its last frame still on
-  # it) stays up until hyprlock runs, plus a moment for it to draw, so the
-  # lock screen covers the screensaver directly. Closing first showed the
-  # desktop while LockScreen.sh and hyprlock started. At most 3 s, so a lock
-  # that never comes cannot keep it up. Detached: this terminal closes when
-  # the script exits.
-  if ! pidof hyprlock >/dev/null; then
+  # With --lock: lock, as CTRL+ALT+L does - unless it already is, which is
+  # also why it can be ending. Lock first, close second: the window (its last
+  # frame still on it) stays up until hyprlock runs, plus a moment for it to
+  # draw, so the lock screen covers the screensaver directly. Closing first
+  # showed the desktop while LockScreen.sh and hyprlock started. At most 3 s,
+  # so a lock that never comes cannot keep it up. Detached: this terminal
+  # closes when the script exits.
+  if $lock && ! pidof hyprlock >/dev/null; then
     setsid -f "$HOME/.config/hypr/scripts/LockScreen.sh" >/dev/null 2>&1
     for _ in {1..27}; do
       pidof hyprlock >/dev/null && break
