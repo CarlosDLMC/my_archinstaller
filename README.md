@@ -1920,6 +1920,21 @@ each character shows two of them, one above the other: `█` both on, `▀` the 
    ~/.config/hypr/scripts/Screensaver.sh
    ```
 
+7. **Start it on idle.** In `~/.config/hypr/hypridle.conf`, the 9-minute listener only
+   sends "You are idle!" and "Oh! you're Back" notifications. Make it start the
+   screensaver instead:
+   ```
+   listener {
+       timeout = 540                     # 9 min
+       on-timeout = $HOME/.config/hypr/scripts/Screensaver.sh
+   }
+   ```
+   No `on-resume` is needed: the screensaver closes itself on any key or mouse
+   movement. hypridle reads its config only at start, so restart it with
+   `pkill -x hypridle; setsid -f hypridle`. Apps that inhibit idle (a browser playing
+   video, mpv) still keep it from starting. This edits your machine only: an installer
+   re-run puts the repo's `hypridle.conf` back.
+
 ## Customization
 
 ### Before Installation
