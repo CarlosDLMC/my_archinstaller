@@ -137,6 +137,7 @@ bind("CTRL + ALT + Delete", hl.dsp.exit(),                          { descriptio
 bind(M .. " + Q",           hl.dsp.window.close(),                  { description = "close active window" })
 bind(M .. " + SHIFT + Q",   exec(S .. "/KillActiveProcess.sh"),     { description = "kill active window process (force)" })
 bind("CTRL + ALT + L",      exec(S .. "/LockScreen.sh"),            { description = "lock screen" })
+bind(M .. " + CTRL + ALT + L", exec(S .. "/Screensaver.sh --lock"),   { description = "screensaver, then lock screen" })
 -- Shutdown from the lock screen (press twice). Locked binds fire while working
 -- too, so it is non-consuming - apps still get F1 - and LockPower.sh does
 -- nothing unless hyprlock is running.
