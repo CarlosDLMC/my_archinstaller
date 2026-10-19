@@ -49,6 +49,18 @@ rule({ match = { class = "^(omawrite)$" }, opacity = "1.0 0.89" })
 
 -- From omarchy (default/hypr/windows.lua): apps may not maximize themselves.
 rule({ match = { class = ".*" }, suppress_event = "maximize" })
+
+-- Telegram's media viewer stays out of tab groups. It is its own fullscreen
+-- window, and with group:auto_group it joined the group Telegram sits in (with
+-- Slack and ZapZap on workspace 1). Closing a fullscreen window hands its
+-- fullscreen to the next window of the same group - Hyprland does this whatever
+-- misc:exit_window_retains_fullscreen says - so leaving a video left the whole
+-- Telegram window fullscreen until SUPER+SHIFT+F. "barred": not added to the
+-- focused group when it opens; it still opens fullscreen.
+rule({
+    match = { class = "^(org.telegram.desktop|io.github.tdesktop_x64.TDesktop)$", title = "^(Media viewer)$" },
+    group = "barred",
+})
 -- Fix some dragging issues with XWayland.
 rule({
     match = { class = "^$", title = "^$", xwayland = true, float = true, fullscreen = false, pin = false },
