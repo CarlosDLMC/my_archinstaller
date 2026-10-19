@@ -103,6 +103,13 @@ if [ ! -f "$HOME/.config/hypr/.initial_startup_done" ]; then
     # Spanish at first login. Hyprland already starts on the first layout; the bar's
     # SUPER+SPACE (quickshell:layoutNext) owns switching.
 
+    # Screensaver art sized for this machine's screen: ScreensaverArt.sh opens a
+    # fullscreen foot for a moment to measure it and writes
+    # ~/.local/share/screensaver/art.txt from the image beside it. After a few
+    # seconds, once the session has settled; in the background, and not a reason
+    # to retry the whole first boot if it fails.
+    (sleep 5; "$scriptsDir/ScreensaverArt.sh") > /dev/null 2>&1 &
+
 
     # Create a marker file to indicate that the script has been executed - only
     # if it worked, so a failed first login is retried at the next one.

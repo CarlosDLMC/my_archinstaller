@@ -1862,14 +1862,18 @@ starts after 9 minutes idle (`hypridle.conf`), or by hand with
   2560×1440 the whole screensaver took ~75% of one core at 120 fps and ~59% at 60.
   ttfx itself is 3–5% of that; the terminal redrawing is the rest.
 
-The art is the Mosfilm logo — Mukhina's *Worker and Kolkhoz Woman* over МОСФИЛЬМ, 216×58
-characters, sized for 2560×1440 (a 1920×1080 screen's terminal is about 192×45, too small
-for it: make a smaller one with `--rows`, below). The repo ships it as
-`Hyprland-Dots/.local/share/screensaver/art.txt` and `copy.sh` puts it at
-`~/.local/share/screensaver/art.txt`, where the screensaver reads it. Replace it with your
-own from any image with `~/.config/hypr/scripts/ImgToText.py` (below). An installer
-re-run puts the repo's art back and keeps yours as `art.txt.backup-<date-time>`. It lives
-outside `~/.config/hypr` because a re-run replaces that whole folder. `ttfx` comes from the AUR and is built without its tests (see
+The art is the Mosfilm logo — Mukhina's *Worker and Kolkhoz Woman* over МОСФИЛЬМ — made
+for each machine's own screen. The repo ships only the image,
+`Hyprland-Dots/.local/share/screensaver/mosfilm_logo.png`, which `copy.sh` puts in
+`~/.local/share/screensaver/`. At the first login `initial-boot.sh` runs
+`~/.config/hypr/scripts/ScreensaverArt.sh`: it opens a fullscreen `foot` for a moment to
+measure it, and writes `~/.local/share/screensaver/art.txt` two rows shorter than the
+terminal (narrower too, if it would come within two columns of the sides) — 216×58 for
+a 256×60 terminal at 2560×1440, 160×43 for 192×45 at 1920×1080. Run it again by hand after
+changing monitors or the `foot` font, or with another image: `ScreensaverArt.sh some.png`.
+A different `art.txt` already there is kept as `art.txt.backup-<date-time>`. The art
+lives outside `~/.config/hypr` because an installer re-run replaces that whole folder;
+the repo has no `art.txt`, so a re-run never overwrites yours. `ttfx` comes from the AUR and is built without its tests (see
 `install-scripts/01-hypr-pkgs.sh`): on CachyOS one bit-exact test fails by a last-bit
 rounding difference in glibc, so an update through yay there needs
 `yay -S ttfx --mflags --nocheck`.
