@@ -73,6 +73,15 @@ fi
 # -s is used in this repo to keep things quiet and avoid extra prompts
 wallust run -s "$wallpaper_path" || true
 
+# One reload now that both files Hyprland reads are final. Each write above
+# makes Hyprland reload on its own, and the second can land while it is still
+# reloading for the first: it then kept the old palette - borders in the last
+# wallpaper's colours - with the new tab tint. Not in game mode, which a
+# reload undoes (GameMode.sh reloads itself when it turns off).
+if [[ ! -e "${XDG_RUNTIME_DIR:-/run/user/$UID}/hypr/${HYPRLAND_INSTANCE_SIGNATURE:-}/gamemode" ]]; then
+  hyprctl reload >/dev/null 2>&1 || true
+fi
+
 # btop: BtopTheme.py turns the palette wallust just wrote into
 # btop/themes/wallust.theme (omarchy's layout) and makes a running btop reload
 # it with SIGUSR2 - btop reads its theme only at startup otherwise. cava needs
