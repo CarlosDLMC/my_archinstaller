@@ -12,10 +12,10 @@ if not ok or type(c) ~= "table" then
 end
 
 -- The group tabs' black tint follows the wallpaper's brightness, which
--- WallustSwww.sh measures on every wallpaper change: omarchy's 25% / 12.5% up
--- to a brightness of 0.30, rising evenly to 60% / 45% at 0.70 and above, so
--- the white titles stay readable on snow as well as on night scenes. No
--- measurement yet (a fresh machine) = omarchy's values.
+-- WallustSwww.sh measures on every wallpaper change: 25% / 12.5% up to a
+-- brightness of 0.30, rising evenly to 60% / 45% at 0.70 and above, so the
+-- white titles stay readable on snow as well as on night scenes. No
+-- measurement yet (a fresh machine) = 25% / 12.5%.
 local tone_ok, tone = pcall(require, "wallust.wallpaper-tone")
 local brightness = tone_ok and type(tone) == "table" and tonumber(tone.brightness) or 0
 local t = math.max(0, math.min(1, (brightness - 0.30) / 0.40))
@@ -63,24 +63,27 @@ hl.config({
     },
 
     group = {
+        -- The same borders as every other window. It used to be color15, the
+        -- brightest colour of the palette - near-white, a hard line under the
+        -- tabs - with Hyprland's olive default when the group was unfocused.
+        -- The tabs already mark a group.
         col = {
-            border_active = c.color15,
+            border_active   = c.color12,
+            border_inactive = c.color10,
         },
-        -- Omarchy's tabs (omacom/omarchy, default/hypr/looknfeel.lua): a faint
-        -- black tint over the wallpaper, heavy white text, a 1 px underline
-        -- set 5 px below it, square. The tabs used to be solid blocks -
-        -- color15 with dark text, near-white on most wallpapers.
-        -- Text is 18 in Sans instead of omarchy's 12 in monospace: Hyprland
-        -- sizes the title box font_size + 2 * 2 px, so 18 fills the 22 px tab.
+        -- Tabs: a faint black tint over the wallpaper, white titles, a 1 px
+        -- underline, square, sitting directly on the window. They used to be
+        -- solid blocks - color15 with dark text, near-white on most wallpapers.
+        -- Hyprland sizes the title box font_size + 2 * 2 px, so 18 fills the
+        -- 22 px tab.
         groupbar = {
             font_size            = 18,
             font_family          = "Sans",
-            -- Bold, not omarchy's ultraheavy: that is Noto Sans Black here,
-            -- too heavy at 18.
-            font_weight_active   = "bold",
+            -- Medium: ultraheavy (Noto Sans Black) and bold were both too
+            -- heavy at 18.
+            font_weight_active   = "medium",
             font_weight_inactive = "normal",
             indicator_height     = 1,
-            -- 0, not omarchy's 5: the tab sits directly on the window.
             indicator_gap        = 0,
             height               = 22,
             gaps_in              = 5,
