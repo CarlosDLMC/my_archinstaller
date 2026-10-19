@@ -241,4 +241,28 @@ for PKG1 in "${hypr_package[@]}" "${hypr_package_2[@]}" "${Extra[@]}"; do
   install_package "$PKG1" "$LOG"
 done
 
+# ttfx draws the screensaver (hypr/scripts/Screensaver.sh). AUR only, and not in
+# the lists above because it is built without its tests: one of them compares
+# the animation curves with Python-made values bit for bit, and on CachyOS's
+# CPU-tuned glibc one sample of ~34,000 differs in the last bits, so the build
+# failed. Harmless - the effects snap to whole cells and colours. An update
+# through the AUR helper runs the tests again; on CachyOS that is
+# `yay -S ttfx --mflags --nocheck`.
+if pacman -Q ttfx &>/dev/null; then
+  echo -e "${INFO} ${MAGENTA}ttfx${RESET} is already installed. Skipping..."
+else
+  (
+    stdbuf -oL env --default-signal=INT $AUR_ENV $ISAUR -S --noconfirm --mflags --nocheck ttfx 2>&1
+  ) >> "$LOG" 2>&1 &
+  PID=$!
+  show_progress $PID "ttfx"
+  if pacman -Q ttfx &>/dev/null; then
+    echo -e "${OK} Package ${YELLOW}ttfx${RESET} has been successfully installed!"
+    clear_package_failure ttfx
+  else
+    echo -e "\n${ERROR} ${YELLOW}ttfx${RESET} failed to install - the screensaver will not start. See $LOG."
+    record_package_failure ttfx
+  fi
+fi
+
 printf "\n%.0s" {1..2}

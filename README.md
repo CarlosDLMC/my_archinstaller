@@ -324,6 +324,8 @@ first prompt.
   see [Hunk](#hunk-reading-what-the-agents-wrote))
 - omawrite, omacut (omarchy's apps — built from the PKGBUILDs vendored in
   `pkgbuilds/`, see `install-scripts/omarchy-apps.sh`)
+- ttfx (terminal text effects, the screensaver's animations — AUR, built without
+  its tests, see [Screensaver](#screensaver-ascii-art))
 
 ## Configuration
 
@@ -1844,6 +1846,78 @@ Output is byte-identical to the Python version it replaced.
 `$dim` in `hyprlock.conf`; sizing via `HEIGHT_BUDGET` / `WIDTH_BUDGET` in
 `SovietLockGen.py`. Set `hide_cursor = true` for a keyboard-only, ly-pure screen
 (layout switching still works from the keyboard).
+
+### Screensaver (ASCII art)
+
+Your own text art, drawn by [ttfx](https://github.com/omacom/ttfx) (omarchy's terminal
+text effects) in a fullscreen black `foot`: one random effect after another — decrypt,
+burn, rain, fireworks and 33 more — until you come back. Start it with
+`~/.config/hypr/scripts/Screensaver.sh`; it does not start on idle yet.
+
+- Any key, mouse movement or click, or the window losing focus ends it.
+- The mouse cursor is hidden, and notifications are held while it runs and shown when
+  it ends (Do Not Disturb stays on if it was on).
+- 60 fps, not omarchy's 120: `foot` draws on the CPU, and measured fullscreen at
+  2560×1440 the whole screensaver took ~75% of one core at 120 fps and ~59% at 60.
+  ttfx itself is 3–5% of that; the terminal redrawing is the rest.
+
+No art ships with the repo: the screensaver draws `~/.local/share/screensaver/art.txt`,
+which you make from any image with `~/.config/hypr/scripts/ImgToText.py` (below). It
+lives outside `~/.config/hypr` because an installer re-run replaces that folder with the
+repo's copy. `ttfx` comes from the AUR and is built without its tests (see
+`install-scripts/01-hypr-pkgs.sh`): on CachyOS one bit-exact test fails by a last-bit
+rounding difference in glibc, so an update through yay there needs
+`yay -S ttfx --mflags --nocheck`.
+
+#### Making your own art
+
+A terminal can only show characters, so the image becomes a grid of on/off pixels and
+each character shows two of them, one above the other: `█` both on, `▀` the top one,
+`▄` the bottom one, a space neither.
+
+1. **Pick an image.** A silhouette works best: one dark shape on a light background, no
+   shading or photo detail. A light shape on a dark background works too, with `--invert`.
+
+2. **Find your terminal's grid.** In a fullscreen `foot`, run `stty size`. On 2560×1440
+   with the default font it prints `60 256`: 60 rows and 256 columns, so a cell is
+   2560 ÷ 256 = 10 px wide and 1440 ÷ 60 = 24 px tall. Your **cell aspect** is
+   24 ÷ 10 = **2.4** (without it the shape comes out stretched). Pick a height that leaves
+   a margin, e.g. **50** rows.
+
+3. **Convert it.**
+   ```bash
+   ~/.config/hypr/scripts/ImgToText.py logo.png art.txt --rows 50 --mode block --cell-aspect 2.4
+   ```
+   ImageMagick turns the image greyscale and inverts it (the shape becomes white),
+   thresholds it at 50% so every pixel is pure black or white (this also drops an
+   off-white background), trims the empty border, scales it to 100 px tall (50 rows × 2)
+   and 20% wider (2.4 ÷ 2), and thresholds again, since scaling blurs the edges. The
+   script then walks the bitmap two rows at a time and writes the characters.
+   `--mode braille` packs 2×4 dots per character instead: finer detail, lighter look.
+
+4. **Check it.** `cat art.txt` in a terminal. Too tall or too wide: adjust
+   `--cell-aspect`. Thin parts breaking up: try `--threshold 40` or `60`.
+
+5. **Try the effects on it.** One:
+   ```bash
+   ttfx -i art.txt --canvas-width 0 --canvas-height 0 --anchor-canvas c --anchor-text c --frame-rate 60 burn
+   ```
+   All 37 in turn, each name shown first (`matrix` and `thunderstorm` run until Ctrl+C):
+   ```bash
+   for e in $(ttfx --help | awk '/^Commands:/{f=1;next} f && /^  [a-z]/{print $1}' | grep -v '^help$'); do
+     clear; echo "$e"; sleep 1.5
+     ttfx -i art.txt --canvas-width 0 --canvas-height 0 --anchor-canvas c --anchor-text c --frame-rate 60 "$e"
+   done
+   ```
+   To keep an effect out of the screensaver, add `--exclude-effects <name>...` to the
+   `ttfx` line in `Screensaver.sh`.
+
+6. **Use it.**
+   ```bash
+   mkdir -p ~/.local/share/screensaver
+   cp art.txt ~/.local/share/screensaver/art.txt
+   ~/.config/hypr/scripts/Screensaver.sh
+   ```
 
 ## Customization
 
