@@ -11,6 +11,18 @@ if not ok or type(c) ~= "table" then
     c = { color0 = "rgb(474D4D)", color10 = "rgb(033530)", color12 = "rgb(067263)", color15 = "rgb(7BD3C6)" }
 end
 
+-- The group tabs' black tint follows the wallpaper's brightness, which
+-- WallustSwww.sh measures on every wallpaper change: omarchy's 25% / 12.5% up
+-- to a brightness of 0.30, rising evenly to 60% / 45% at 0.70 and above, so
+-- the white titles stay readable on snow as well as on night scenes. No
+-- measurement yet (a fresh machine) = omarchy's values.
+local tone_ok, tone = pcall(require, "wallust.wallpaper-tone")
+local brightness = tone_ok and type(tone) == "table" and tonumber(tone.brightness) or 0
+local t = math.max(0, math.min(1, (brightness - 0.30) / 0.40))
+local function black(a)
+    return string.format("rgba(000000%02x)", math.floor(a * 255 + 0.5))
+end
+
 hl.config({
     general = {
         border_size = 1,
@@ -54,18 +66,34 @@ hl.config({
         col = {
             border_active = c.color15,
         },
-        -- Tabs are filled blocks (gradients) so the active one stands out:
-        -- bright accent with dark text, the rest dark and see-through.
+        -- Omarchy's tabs (omacom/omarchy, default/hypr/looknfeel.lua): a faint
+        -- black tint over the wallpaper, heavy white text, a 1 px underline
+        -- set 5 px below it, square. The tabs used to be solid blocks -
+        -- color15 with dark text, near-white on most wallpapers.
+        -- Text is 18 in Sans instead of omarchy's 12 in monospace: Hyprland
+        -- sizes the title box font_size + 2 * 2 px, so 18 fills the 22 px tab.
         groupbar = {
-            gradients   = true,
-            height      = 24,
-            font_size   = 18,
-            text_color          = c.color0,
-            text_color_inactive = c.color15,
+            font_size            = 18,
+            font_family          = "Sans",
+            -- Bold, not omarchy's ultraheavy: that is Noto Sans Black here,
+            -- too heavy at 18.
+            font_weight_active   = "bold",
+            font_weight_inactive = "normal",
+            indicator_height     = 1,
+            -- 0, not omarchy's 5: the tab sits directly on the window.
+            indicator_gap        = 0,
+            height               = 22,
+            gaps_in              = 5,
+            gaps_out             = 0,
+            text_color           = "rgb(ffffff)",
+            text_color_inactive  = "rgba(ffffff90)",
             col = {
-                active   = c.color15,
-                inactive = c.color0:gsub("^rgb%((%x+)%)$", "rgba(%1cc)"),
+                active   = black(0.25 + 0.35 * t),
+                inactive = black(0.125 + 0.325 * t),
             },
+            gradients                 = true,
+            gradient_rounding         = 0,
+            gradient_round_only_edges = false,
         },
     },
 })

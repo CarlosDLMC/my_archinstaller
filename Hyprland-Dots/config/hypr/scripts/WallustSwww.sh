@@ -55,6 +55,20 @@ case "$wallpaper_path" in
     ;;
 esac
 
+# How bright the wallpaper is (0 black .. 1 white), for the group tabs:
+# UserDecorations.lua deepens their see-through black tint on bright wallpapers
+# so the white titles stay readable. wallust cannot say this - its dark16
+# palette is dark whatever the picture. Written before wallust runs, so the
+# reload its own Hyprland colours trigger picks this up as well; through a
+# temp file, so Hyprland never reads it half-written.
+tone_file="$HOME/.config/hypr/wallust/wallpaper-tone.lua"
+if brightness="$(LC_ALL=C magick "${wallpaper_path}[0]" -resize 200x -colorspace Gray -format '%[fx:mean]' info: 2>/dev/null)" \
+  && [[ "$brightness" =~ ^[0-9]*\.?[0-9]+$ ]]; then
+  mkdir -p "$(dirname "$tone_file")"
+  printf -- '-- Written by WallustSwww.sh on every wallpaper change.\nreturn { brightness = %s }\n' "$brightness" \
+    > "$tone_file.tmp" && mv -f "$tone_file.tmp" "$tone_file" || true
+fi
+
 # Run wallust (silent) to regenerate templates defined in ~/.config/wallust/wallust.toml
 # -s is used in this repo to keep things quiet and avoid extra prompts
 wallust run -s "$wallpaper_path" || true

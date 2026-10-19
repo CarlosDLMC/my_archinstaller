@@ -168,9 +168,12 @@ restore_hypr_state() { # backup
         echo "  ${NOTE} $(basename "$_bak") is not this setup's (no hyprland.lua) - nothing in it is carried over"
         return 0
     fi
-    # Not in the repo at all: the first-boot marker, the active wallpaper, and
-    # the monitors.conf / workspaces.conf nwg-displays writes next to the .lua.
-    for _state in .initial_startup_done wallpaper_effects/.wallpaper_current wallpaper_effects/.wallpaper_modified monitors.conf workspaces.conf; do
+    # Not in the repo at all: the first-boot marker, the active wallpaper, the
+    # monitors.conf / workspaces.conf nwg-displays writes next to the .lua, and
+    # the wallpaper brightness WallustSwww.sh measured for the group tabs'
+    # tint (without it they fall back to the dark-wallpaper tint until the
+    # wallpaper next changes).
+    for _state in .initial_startup_done wallpaper_effects/.wallpaper_current wallpaper_effects/.wallpaper_modified monitors.conf workspaces.conf wallust/wallpaper-tone.lua; do
         if [ -f "$_bak/$_state" ] && [ ! -e "$HOME/.config/hypr/$_state" ]; then
             mkdir -p "$(dirname "$HOME/.config/hypr/$_state")"
             cp "$_bak/$_state" "$HOME/.config/hypr/$_state" && echo "  ${OK} Kept your $_state from the previous install"
