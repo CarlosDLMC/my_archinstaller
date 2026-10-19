@@ -1608,6 +1608,16 @@ past the end.
   were elsewhere told no one. It is a herdr event hook, so herdr runs it and
   there is nothing to start; `herdr.sh` registers it with `herdr plugin link`.
   Turn it off with `herdr plugin disable agent-notify`.
+- **The agent-awake plugin** (`~/.config/herdr/agent-awake`). While any agent is
+  working, it holds an idle inhibitor (`systemd-inhibit --what=idle`), the kind a
+  video player holds, so hypridle does not count the time: no screensaver and no lock
+  in the middle of a long task. Started on the first "working" status change; a
+  watcher under it asks `herdr agent list` every 15 seconds and releases it once no
+  agent is working, or herdr is gone, so it cannot be left holding the screen awake.
+  Only `working` counts - a blocked or finished agent lets the screen go idle.
+  `systemd-inhibit --list` shows it as "herdr … An agent is working"; starts and
+  releases are logged to `~/.local/state/herdr/plugins/agent-awake/awake.log`. Turn it
+  off with `herdr plugin disable agent-awake`.
 - **`herdr-workspace-numbers.service`.** Herdr has no built-in workspace-number
   token, so the sidebar reads a custom `$num` written into workspace metadata —
   and that metadata does not survive a server restart. This user unit runs
@@ -1868,6 +1878,8 @@ picked by hand (decrypt, burn, rain, fireworks, vhstape...) — until you come b
   lock screen has started (at most 3 s), so the desktop never shows in between.
 - It never runs behind the lock screen, where nothing can show: idle does not start it
   while locked, and it quits within a second if the screen locks while it runs.
+- Idle does not start it while a herdr agent is working, as while a video plays: see
+  the agent-awake plugin under [Herdr](#herdr-terminal-workspace-manager).
 - Leaving it goes straight to your windows. Its window floats with no close animation,
   and the windows' fade back in (`fadeIn`) is switched off for that moment and restored
   half a second later — otherwise the bare wallpaper showed for ~0.3 s.

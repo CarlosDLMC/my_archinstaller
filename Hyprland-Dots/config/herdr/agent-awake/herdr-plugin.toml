@@ -1,0 +1,13 @@
+# Keeps the screen from going idle while an agent is working, the way a video
+# player does - see agent-awake.py. Linked by install-scripts/herdr.sh
+# (herdr plugin link ~/.config/herdr/agent-awake).
+id = "agent-awake"
+name = "Agent awake"
+description = "Hold an idle inhibitor while any agent is working, so the screensaver waits"
+version = "0.1.0"
+min_herdr_version = "0.9.0"
+platforms = ["linux"]
+
+[[events]]
+on = "pane.agent_status_changed"
+command = ["python3", "agent-awake.py"]
