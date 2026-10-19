@@ -8,7 +8,7 @@
 #
 # Any key, mouse movement or click, focus leaving the window, or the screen
 # locking ends it - nothing shows above the lock screen, so it would only run
-# unseen.
+# unseen. Ending it locks the screen, the way CTRL+ALT+L does.
 # Notifications are held while it runs.
 # 60 fps, not 120: foot draws on the CPU, and measured fullscreen on this
 # machine 120 fps cost ~75% of a core against ~59% at 60.
@@ -38,7 +38,23 @@ focused() {
 }
 
 finish() {
+  trap '' INT TERM HUP QUIT # once is enough
   [[ -n ${pid:-} ]] && kill "$pid" 2>/dev/null
+  # Lock, as CTRL+ALT+L does - unless it already is, which is also why it can
+  # be ending. Lock first, close second: the window (its last frame still on
+  # it) stays up until hyprlock runs, plus a moment for it to draw, so the
+  # lock screen covers the screensaver directly. Closing first showed the
+  # desktop while LockScreen.sh and hyprlock started. At most 3 s, so a lock
+  # that never comes cannot keep it up. Detached: this terminal closes when
+  # the script exits.
+  if ! pidof hyprlock >/dev/null; then
+    setsid -f "$HOME/.config/hypr/scripts/LockScreen.sh" >/dev/null 2>&1
+    for _ in {1..27}; do
+      pidof hyprlock >/dev/null && break
+      sleep 0.1
+    done
+    sleep 0.3
+  fi
   printf '\033[?1003l\033[?1006l\033[?25h' # mouse reporting off, cursor back
   stty echo 2>/dev/null
   hyprctl eval 'hl.config({ cursor = { invisible = false } })' >/dev/null 2>&1
