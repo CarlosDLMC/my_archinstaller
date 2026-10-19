@@ -23,6 +23,10 @@ hypr_package=(
   gvfs-smb
   gvfs-nfs
   gvfs-dnssd
+  # WS-Discovery for Thunar's Network view (network:///): how Windows PCs and
+  # current Samba servers announce themselves, now that NetBIOS browsing is
+  # gone. gvfs-dnssd + avahi cover the mDNS half. Pulls in wsdd.
+  gvfs-wsdd
   hyprsunset
   hyprpolkitagent
   imagemagick
