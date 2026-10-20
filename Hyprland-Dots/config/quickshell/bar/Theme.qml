@@ -31,7 +31,7 @@ QtObject {
     property color palMuted: "#524B47"   // separators, inactive
     property color palFaint: "#4C4C4B"   // hairlines
     property color palAccent: "#D6A29C"  // active / connected
-    property color palAlert: "#BE564A"   // needs attention
+    readonly property color palAlert: "#C42B1C"  // needs attention - fixed, not wallust (see colAlert)
     property color palWarn: "#8E4137"    // degraded or unknown state
     property color palBorder: "#59302D"  // popup borders
 
@@ -100,7 +100,6 @@ QtObject {
             if (j.muted)  theme.palMuted  = j.muted
             if (j.faint)  theme.palFaint  = j.faint
             if (j.accent) theme.palAccent = j.accent
-            if (j.alert)  theme.palAlert  = j.alert
             if (j.warn)   theme.palWarn   = j.warn
             if (j.border) theme.palBorder = j.border
         } catch (e) {
@@ -174,6 +173,12 @@ QtObject {
     readonly property color colFaint: atLeast(palFaint, 0.56)
     readonly property color colSeparator: colGrey             // neutral, same grey as idle widgets
 
+    //  The alarm is the one colour the wallpaper does not choose. It was
+    //  wallust's color14, which came out red on 3 of 23 wallpapers - the
+    //  bar's alarm was blue or green on the rest, and never the red that
+    //  dunst's ТРЕВОГА, the lock screen and the power menu use. Now it is
+    //  that red, #C42B1C, on every wallpaper.
+    //
     //  Floored to 0.62 rather than to AAA: pushing the alert hue any lighter
     //  washes it out until it no longer reads as "coloured", which is the
     //  entire job it has on a monochrome bar.

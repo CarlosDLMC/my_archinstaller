@@ -293,13 +293,16 @@ DropdownWidget {
     Text {
         id: vpnText
         anchors.verticalCenter: parent.verticalCenter
-        text: vpnWidget.activeVpn ? "󰖂" : "󰖂"
-        // Colour is the only on/off signal, so the two ends differ in both
-        // hue and lightness: neutral grey when down, the one saturated
-        // colour in the palette when up. This is the single place the alert
-        // hue is used for something that is not a problem - a live tunnel is
-        // worth seeing at a glance.
-        color: vpnWidget.activeVpn ? Theme.colAlert : Theme.colFaint
+        // Up and down differ in shape as well as colour: the VPN knot in the
+        // alarm red when a tunnel is up, a crossed-out shield in the grey
+        // every idle widget rests in when it is down. Down used to be the
+        // same knot in colFaint - wallust's darkest slot lifted to a readable
+        // lightness, which on some wallpapers came out vivid blue or yellow
+        // and looked lit. This is the single place the alert hue is used for
+        // something that is not a problem - a live tunnel is worth seeing at
+        // a glance.
+        text: vpnWidget.activeVpn ? "󰖂" : "󰦜"
+        color: vpnWidget.activeVpn ? Theme.colAlert : Theme.colGrey
         font.pixelSize: Theme.fontSize + 4
         font.family: Theme.fontFamily
         font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow

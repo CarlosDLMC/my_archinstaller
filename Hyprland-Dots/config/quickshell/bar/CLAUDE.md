@@ -565,15 +565,22 @@ good palette rather than rendering blank).
 | `colMuted` | separators, inactive, "off" states |
 | `colAccent` | active / connected / on: lit lamps, gauge segments, pressed buttons |
 | `colPlate` | the recessed plates of the console cards (`palBg` pushed darker) |
-| `colAlert` | **needs attention**: muted, low battery, DND on, VPN down, storm |
+| `colAlert` | **needs attention**: muted, low battery, DND on, storm - and a live VPN tunnel, the one non-problem it marks |
 | `colWarn` | state unknown or degraded (e.g. `dunstctl` failed) |
 | `colOnAlert` | text sitting on an alert-filled shape |
 
 `colAlert` is the only real hue in the bar. Spend it only on states worth
-looking at — if everything is an alert, nothing is.
+looking at — if everything is an alert, nothing is. It is also the one colour
+the wallpaper does not choose: `palAlert` is fixed at `#C42B1C`, the red of
+dunst's ТРЕВОГА, the lock screen and the power menu. It used to be wallust's
+`color14`, which was red on only 3 of 23 wallpapers.
 
 **`colDim`, `colMuted` and `colFaint` carry the wallpaper's hue at full
 saturation** — `atLeast()` only floors their lightness, it does not desaturate.
+`colFaint` is the worst: wallust's `color0` is near-black, and near-black
+colours often have a high HSL saturation that the floor brings out - on 6 of 23
+wallpapers it came out vivid blue, purple or yellow. The VPN icon's "off" state
+used it and looked lit; nothing uses it now. An off or idle state is `colGrey`.
 `colWhite` and `colGrey` are the desaturated pair (`desat()`). On a few short bar
 labels that whisper of hue is the point. On a **large surface** it is not: the
 clipboard picker used `colDim`/`colMuted` for its rows and chrome and read as
