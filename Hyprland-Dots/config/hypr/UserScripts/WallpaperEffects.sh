@@ -54,6 +54,8 @@ no-effects() {
     "$HOME/.config/hypr/scripts/RofiContrast.py" || true
     # the icons in the new accent - see IconsWallust.py
     "$HOME/.config/hypr/scripts/IconsWallust.py" >/dev/null 2>&1 &
+    # and the Qt apps' Kvantum theme - see KvantumWallust.py
+    "$HOME/.config/hypr/scripts/KvantumWallust.py" || true
     # Refresh rofi, quickshell, wallust palettes
 	sleep 2
 	"$SCRIPTSDIR/Refresh.sh"
@@ -103,6 +105,8 @@ main() {
             "$HOME/.config/hypr/scripts/RofiContrast.py" || true
             # the icons in the new accent - see IconsWallust.py
             "$HOME/.config/hypr/scripts/IconsWallust.py" >/dev/null 2>&1 &
+            # and the Qt apps' Kvantum theme - see KvantumWallust.py
+            "$HOME/.config/hypr/scripts/KvantumWallust.py" || true
             # Refresh rofi, quickshell, wallust palettes
             "${SCRIPTSDIR}/Refresh.sh"
             notify-send -u low -i "$iDIR/ja.png" "Эффект применён:" "$choice"

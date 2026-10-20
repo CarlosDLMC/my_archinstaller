@@ -430,6 +430,16 @@ it steps the icon theme away and back so open GTK apps reload.
 `initial-boot.sh` builds it on the first login and `copy.sh` on a re-run;
 `settings.ini`, `qt5ct.conf`, `qt6ct.conf` and gsettings all name it.
 
+The **Qt** apps follow it the same way. `kvantum.kvconfig` selects the Kvantum
+theme `Wallust`, which `scripts/KvantumWallust.py` makes from Kvantum's own
+`KvGnomeDark` - the dark Adwaita the GTK side is built on, so Qt and GTK apps
+share their greys. Every blue in it (selections, pressed and toggled items,
+focus frames, progress bars, sliders, links) takes the accent's hue and
+saturation at its own lightness, and the selection is held at 4.5:1 against
+its white text. It runs after every `wallust run` (about 15 ms), from
+`initial-boot.sh` on the first login and from `copy.sh` on a re-run. Qt apps
+read their theme when they start, so an open one changes at its next start.
+
 The GTK apps and btop follow the wallpaper too, through wallust templates.
 GTK3 apps get the `Wallust-A` theme (`Hyprland-Dots/themes/`, installed into
 `~/.themes` by `copy.sh`), which imports wallust's generated

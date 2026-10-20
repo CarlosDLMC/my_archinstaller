@@ -9,7 +9,9 @@
 # Variables
 scriptsDir=$HOME/.config/hypr/scripts
 wallpaper=$HOME/.config/hypr/wallpaper_effects/.wallpaper_current
-kvantum_theme="catppuccin-mocha-blue"
+# Kvantum's dark Adwaita (KvGnomeDark) in the wallust colours - generated into
+# ~/.config/Kvantum/Wallust by KvantumWallust.py below.
+kvantum_theme="Wallust"
 color_scheme="prefer-dark"
 # GTK3's own dark Adwaita in the wallust colours (~/.themes/Wallust-A, put there
 # by copy.sh); Wallust-B is the same theme under the name GtkReload.sh switches
@@ -55,6 +57,9 @@ if [ ! -f "$HOME/.config/hypr/.initial_startup_done" ]; then
 		# Builds the wallust icon theme from the palette just written. In the
 		# foreground: it has to exist before gsettings is pointed at it.
 		"$HOME/.config/hypr/scripts/IconsWallust.py" || true
+		# The Qt apps' Kvantum theme in the same accent, before kvantummanager
+		# selects it below - see KvantumWallust.py.
+		"$HOME/.config/hypr/scripts/KvantumWallust.py" || true
 		# btop's theme from the palette just written (omarchy's layout) - see
 		# BtopTheme.py.
 		"$HOME/.config/hypr/scripts/BtopTheme.py" || true

@@ -100,3 +100,7 @@ fi
 # the accent wallust just wrote. In the background - about a second, and
 # nothing waits on it.
 "$HOME/.config/hypr/scripts/IconsWallust.py" >/dev/null 2>&1 &
+
+# And the Qt apps: KvantumWallust.py gives the Kvantum theme the same accent.
+# Qt apps opened from now on use it; open ones keep the last colours.
+"$HOME/.config/hypr/scripts/KvantumWallust.py" || true

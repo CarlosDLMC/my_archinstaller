@@ -891,6 +891,20 @@ else
     echo "  ${WARN} IconsWallust.py failed - the icons follow the wallpaper from the next wallpaper change"
 fi
 
+# The Kvantum theme, for the same reason: kvantum.kvconfig names Wallust, which
+# KvantumWallust.py generates from KvGnomeDark (shipped by kvantum) and the
+# palette. Until it exists, Qt apps fall back to Kvantum's default theme.
+printf "\n${INFO} Building the wallust Kvantum theme...\n"
+if "$HOME/.config/hypr/scripts/KvantumWallust.py"; then
+    if [ -f "$HOME/.config/Kvantum/Wallust/Wallust.kvconfig" ]; then
+        echo "  ${OK} Kvantum theme Wallust is in the current palette"
+    else
+        echo "  ${NOTE} kvantum not installed yet - initial-boot.sh builds the theme at first login"
+    fi
+else
+    echo "  ${WARN} KvantumWallust.py failed - the Qt apps follow the wallpaper from the next wallpaper change"
+fi
+
 # The GTK3 theme: dark Adwaita in the wallust colours, under two names -
 # Wallust-A and Wallust-B - so that a wallpaper change can switch between them
 # and every open GTK3 app reloads (hypr/scripts/GtkReload.sh). In ~/.themes
