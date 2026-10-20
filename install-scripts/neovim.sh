@@ -193,6 +193,21 @@ if [ -d "$NVIM_CFG" ]; then
   fi
 fi
 
+# ---------------------------------------------------------- Ctrl+Delete (foot)
+# foot sends Ctrl+Delete as Alt+D (config/foot/foot.ini, [text-bindings]), and an
+# unmapped Alt+D in nvim is Esc then d: insert mode ended with a delete pending,
+# so the next keys ran as commands. plugin/foot-keys.lua maps it to "delete the
+# next word" in every mode. Ours, overwritten every run like pycharm-dark.lua;
+# plugin/ is sourced at startup by nvim (and lazy.nvim) on its own.
+if [ -d "$NVIM_CFG" ]; then
+  mkdir -p "$NVIM_CFG/plugin"
+  if cp "$PARENT_DIR/assets/nvim/foot-keys.lua" "$NVIM_CFG/plugin/foot-keys.lua"; then
+    echo "${OK} Mapped Ctrl+Delete (Alt+D from foot) to delete the next word in nvim." | tee -a "$LOG"
+  else
+    echo "${WARN} Could not install plugin/foot-keys.lua - see $LOG" | tee -a "$LOG"
+  fi
+fi
+
 # ------------------------------------------------------------- LazyVim extras
 # lazyvim.json is where :LazyExtras records what you turned on. The starter ships
 # without one and LazyVim writes it on first launch, so on a fresh machine it is
