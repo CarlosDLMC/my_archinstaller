@@ -43,8 +43,10 @@ Rectangle {
     // In a list that scrolls (more networks, devices or tunnels than fit), the
     // keys walk the rows here: a ListView only builds the rows in view, so the
     // card's focus chain (CardKeys) never reached the ones below. The list
-    // scrolls to the next pickable row and it takes the focus; past either
-    // end, the key goes on to CardKeys as before.
+    // scrolls to the next pickable row and it takes the focus. Past either end
+    // the focus goes to the nearest control outside the list - not to the
+    // row's neighbour in the focus chain, which can be another row once the
+    // list has scrolled (it builds and drops rows as it goes).
     function stepInList(step) {
         var v = ListView.view
         if (!v)
@@ -57,12 +59,53 @@ Rectangle {
                 return true
             }
         }
+        var out = row
+        for (var i = 0; i < 1000; i++) {
+            out = out.nextItemInFocusChain(step > 0)
+            if (!out || out === row)
+                return false
+            if (!row.inList(out, v)) {
+                // Straight into the next list, if that is what comes after.
+                if (typeof out.entryRow === "function") {
+                    var r = out.entryRow(step > 0)
+                    if (r)
+                        out = r
+                }
+                out.forceActiveFocus(step > 0 ? Qt.TabFocusReason : Qt.BacktabFocusReason)
+                return true
+            }
+        }
         return false
     }
-    // Reached another way (Shift+Tab round the end, a click), still in view.
+    // The row the keys land on coming into this list from outside it: its
+    // first pickable row going forward, its last going back (CardKeys.qml).
+    function entryRow(forward) {
+        var v = ListView.view
+        if (!v)
+            return null
+        var step = forward ? 1 : -1
+        for (var n = forward ? 0 : v.count - 1; n >= 0 && n < v.count; n += step) {
+            v.positionViewAtIndex(n, ListView.Contain)
+            var it = v.itemAtIndex(n)
+            if (it && it.activeFocusOnTab)
+                return it
+        }
+        return null
+    }
+    function inList(item, v) {
+        for (var p = item; p; p = p.parent)
+            if (p === v)
+                return true
+        return false
+    }
+    // However the focus got here, the row is scrolled into view, and the
+    // list's current row follows it: the ListView's own Up/Down (a key no row
+    // takes) starts from there, not from wherever it was left.
     onActiveFocusChanged: {
-        if (activeFocus && ListView.view)
+        if (activeFocus && ListView.view) {
+            ListView.view.currentIndex = index
             ListView.view.positionViewAtIndex(index, ListView.Contain)
+        }
     }
 
     width: parent ? parent.width : 0
