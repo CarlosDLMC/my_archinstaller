@@ -31,7 +31,7 @@ QtObject {
     property color palMuted: "#524B47"   // separators, inactive
     property color palFaint: "#4C4C4B"   // hairlines
     property color palAccent: "#D6A29C"  // active / connected
-    readonly property color palAlert: "#C42B1C"  // needs attention - fixed, not wallust (see colAlert)
+    property color palAlert: "#D1887F"   // needs attention - picked from the hues, see alertFrom()
     property color palWarn: "#8E4137"    // degraded or unknown state
     property color palBorder: "#59302D"  // popup borders
 
@@ -88,6 +88,25 @@ QtObject {
         return Qt.hsla(c.hslHue, c.hslSaturation, 0.95, c.a)
     }
 
+    //  The alarm colour: the most colourful of wallust's twelve hue slots
+    //  (color1-6, color9-14), softened - lightness 0.66, saturation held
+    //  between 0.35 and 0.55. It follows the wallpaper and always reads as a
+    //  colour next to the white ramp, but never glares; the fixed #C42B1C it
+    //  replaced did (saturation 0.75). Paler (0.76 / 0.30-0.45) read as grey.
+    //  A palette with no colour in it (every slot within 0.06 of grey) gets
+    //  the same treatment in a soft red.
+    function alertFrom(hues) {
+        var best = null, bestChroma = -1
+        for (var i = 0; i < hues.length; i++) {
+            var c = Qt.color(hues[i])
+            var chroma = Math.max(c.r, c.g, c.b) - Math.min(c.r, c.g, c.b)
+            if (chroma > bestChroma) { best = c; bestChroma = chroma }
+        }
+        if (!best || bestChroma < 0.06)
+            return Qt.hsla(6 / 360, 0.45, 0.66, 1)
+        return Qt.hsla(best.hslHue, Math.min(Math.max(best.hslSaturation, 0.35), 0.55), 0.66, 1)
+    }
+
     function applyPalette(text) {
         if (!text || text.length === 0)
             return
@@ -100,6 +119,7 @@ QtObject {
             if (j.muted)  theme.palMuted  = j.muted
             if (j.faint)  theme.palFaint  = j.faint
             if (j.accent) theme.palAccent = j.accent
+            if (j.hues)   theme.palAlert  = theme.alertFrom(j.hues)
             if (j.warn)   theme.palWarn   = j.warn
             if (j.border) theme.palBorder = j.border
         } catch (e) {
@@ -173,16 +193,11 @@ QtObject {
     readonly property color colFaint: atLeast(palFaint, 0.56)
     readonly property color colSeparator: colGrey             // neutral, same grey as idle widgets
 
-    //  The alarm is the one colour the wallpaper does not choose. It was
-    //  wallust's color14, which came out red on 3 of 23 wallpapers - the
-    //  bar's alarm was blue or green on the rest, and never the red that
-    //  dunst's ТРЕВОГА, the lock screen and the power menu use. Now it is
-    //  that red, #C42B1C, on every wallpaper.
-    //
-    //  Floored to 0.62 rather than to AAA: pushing the alert hue any lighter
-    //  washes it out until it no longer reads as "coloured", which is the
-    //  entire job it has on a monochrome bar.
-    readonly property color colAlert: atLeast(palAlert, 0.62)
+    //  The alarm, picked from the wallpaper by alertFrom(). Not wallust's
+    //  color14 alone, as it once was: that came out grey on some wallpapers,
+    //  next to the white ramp. Lightness 0.66 already clears the old 0.62
+    //  floor, so it needs none.
+    readonly property color colAlert: palAlert
     readonly property color colWarn: palWarn      // state unknown / degraded
     readonly property color colOnAlert: palBg     // text sitting on an alert fill
 

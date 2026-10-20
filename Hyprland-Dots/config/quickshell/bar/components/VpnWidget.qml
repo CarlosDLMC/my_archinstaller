@@ -294,7 +294,7 @@ DropdownWidget {
         id: vpnText
         anchors.verticalCenter: parent.verticalCenter
         // Up and down differ in shape as well as colour: the VPN knot in the
-        // alarm red when a tunnel is up, a crossed-out shield in the grey
+        // alarm colour when a tunnel is up, a crossed-out shield in the grey
         // every idle widget rests in when it is down. Down used to be the
         // same knot in colFaint - wallust's darkest slot lifted to a readable
         // lightness, which on some wallpapers came out vivid blue or yellow

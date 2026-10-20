@@ -593,10 +593,13 @@ good palette rather than rendering blank).
 | `colOnAlert` | text sitting on an alert-filled shape |
 
 `colAlert` is the only real hue in the bar. Spend it only on states worth
-looking at — if everything is an alert, nothing is. It is also the one colour
-the wallpaper does not choose: `palAlert` is fixed at `#C42B1C`, the red of
-dunst's ТРЕВОГА, the lock screen and the power menu. It used to be wallust's
-`color14`, which was red on only 3 of 23 wallpapers.
+looking at — if everything is an alert, nothing is. It comes from the
+wallpaper, softened: `alertFrom()` in Theme.qml takes the most colourful of
+wallust's hue slots (the template's `hues`) at lightness 0.66, saturation
+0.35-0.55. Not `color14` alone - that came out grey on some wallpapers - and
+not a fixed red: `#C42B1C` was tried on 2026-10-20 and hurt the eyes. A paler
+pastel (lightness 0.76, saturation 0.30-0.45) was tried the same day and read
+as grey on the bar.
 
 **`colDim`, `colMuted` and `colFaint` carry the wallpaper's hue at full
 saturation** — `atLeast()` only floors their lightness, it does not desaturate.
