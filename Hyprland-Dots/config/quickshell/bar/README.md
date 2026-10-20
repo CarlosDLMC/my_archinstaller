@@ -16,8 +16,7 @@ A modern, feature-rich status bar for Hyprland built with [Quickshell](https://q
 - **Weather Widget**: Click-to-open popup with detailed forecast, temperature coloring, hourly rain predictions, and offline caching
 - **System Stats**: CPU, memory, disk usage, volume (with audio sink detection), and battery
 - **Network**: WiFi status with real-time upload/download speeds
-- **Bluetooth**: Device status with connection indicator
-- **Power Profiles**: Quick switching between power modes
+- **Control panel (ПУЛЬТ, ⚙)**: Bluetooth on/off with paired devices and in-card search/pairing, night light, power profiles, and a switch that shows or hides the CPU/RAM readings
 - **DND Toggle**: Do Not Disturb mode via dunst (`dunstctl`)
 - **Power Menu**: Lock, logout, reboot, and shutdown options
 - **Notch Design**: Elegant dropdown popups with concave corner notches connecting to the bar
@@ -96,9 +95,8 @@ components/
   ├── VolumeWidget.qml       # Volume/mute via Pipewire
   ├── BatteryWidget.qml      # Battery average, per-pack detail in dropdown
   ├── WifiWidget.qml         # WiFi status, scanning and connecting
-  ├── BluetoothWidget.qml    # Bluetooth status and device management
-  ├── PowerProfileWidget.qml # Power profiles
-  ├── NightLightWidget.qml   # hyprsunset toggle
+  ├── PultWidget.qml         # ПУЛЬТ: bluetooth, night light, power profile, CPU/RAM switch
+  ├── PultSwitch.qml         # One on/off line of the ПУЛЬТ card
   ├── KeyboardLayoutWidget.qml # Current keyboard layout
   ├── LayoutOsd.qml          # Centred layout-switcher OSD, one per screen
   ├── VpnWidget.qml          # VPN selector; Time and Weather toggles

@@ -28,6 +28,66 @@ Singleton {
 
     readonly property int intervalMs: 5000
 
+    // Whether the bar shows the CPU and RAM readings at all - the switch in
+    // the ПУЛЬТ card. Kept in ~/.cache/quickshell/bar-stats ("on"/"off") and
+    // watched, so a change made anywhere reaches every screen's bar. No file
+    // means "on": the readings show until someone turns them off. While they
+    // are hidden nothing is sampled at all.
+    property bool shown: true
+    readonly property string prefPath: (Quickshell.env("HOME") || "") + "/.cache/quickshell/bar-stats"
+
+    function applyPref() {
+        root.shown = prefFile.text().trim() !== "off"
+    }
+
+    function setShown(on) {
+        root.shown = on
+        prefWriteProc.value = on ? "on" : "off"
+        prefWriteProc.running = true
+    }
+
+    FileView {
+        id: prefFile
+        path: root.prefPath
+        printErrors: false
+        watchChanges: true
+        // blockAllReads for the same reason as the readings below: reload()
+        // followed by text() must see the file as it is now.
+        blockAllReads: true
+        onFileChanged: {
+            reload()
+            root.applyPref()
+        }
+        onLoadedChanged: if (loaded) root.applyPref()
+        onLoadFailed: root.shown = true
+    }
+
+    Process {
+        id: prefWriteProc
+        property string value: "on"
+        command: ["sh", "-c", 'mkdir -p "${1%/*}" && printf "%s\\n" "$2" > "$1"', "sh", root.prefPath, value]
+    }
+
+    // CPU usage is a delta between two samples, so the baseline is dropped
+    // while hidden - otherwise the first reading after showing them again
+    // would be the average over the whole time they were off. The settle tick
+    // gives a real one a second later instead of five.
+    onShownChanged: {
+        if (shown) {
+            refresh()
+            settleTimer.restart()
+        } else {
+            root.lastTotal = 0
+            root.lastIdle = 0
+        }
+    }
+
+    Timer {
+        id: settleTimer
+        interval: 1000
+        onTriggered: root.refresh()
+    }
+
     // /proc/stat counts jiffies since boot, so usage is the delta between two
     // samples. The first tick only establishes the baseline and reports 0.
     property real lastIdle: 0
@@ -150,7 +210,7 @@ Singleton {
 
     Timer {
         interval: root.intervalMs
-        running: true
+        running: root.shown
         repeat: true
         onTriggered: root.refresh()
     }

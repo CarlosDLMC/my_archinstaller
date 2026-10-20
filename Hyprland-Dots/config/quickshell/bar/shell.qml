@@ -62,11 +62,13 @@ ShellRoot {
                         "audio":     [volumeWidget.dropdownOpen,       () => volumeWidget.navOpen()],
                         "network":   [wifiWidget.dropdownOpen,         () => wifiWidget.navOpen()],
                         "power":     [powerWidget.dropdownOpen,        () => powerWidget.navOpen()],
-                        "bluetooth": [bluetoothWidget.dropdownOpen,    () => bluetoothWidget.navOpen()],
+                        // Bluetooth and the power profile live in the ПУЛЬТ card
+                        // now; their two shortcuts both open it.
+                        "bluetooth": [pultWidget.dropdownOpen,         () => pultWidget.navOpen()],
                         "calendar":  [centerInfo.calendarVisible,      () => centerInfo.navOpenCalendar()],
                         "weather":   [centerInfo.popupVisible,         () => centerInfo.navOpenWeather()],
                         "vpn":       [vpnWidget.dropdownOpen,          () => vpnWidget.navOpen()],
-                        "profile":   [powerProfileWidget.dropdownOpen, () => powerProfileWidget.navOpen()],
+                        "profile":   [pultWidget.dropdownOpen,         () => pultWidget.navOpen()],
                         "battery":   [batteryWidget.dropdownOpen,      () => batteryWidget.navOpen()],
                         "agent":     [agentWidget.dropdownOpen,        () => agentWidget.navOpen()]
                     }[card]
@@ -185,19 +187,25 @@ ShellRoot {
 
                     Separator { visible: agentWidget.visible }
 
-                    // System stats
-                    CpuWidget {}
+                    // System stats. The ПУЛЬТ card can hide them; their
+                    // separators go with them.
+                    CpuWidget { visible: SystemStats.shown }
 
-                    Separator {}
+                    Separator { visible: SystemStats.shown }
 
-                    MemoryWidget {}
+                    MemoryWidget { visible: SystemStats.shown }
 
-                    Separator {}
+                    Separator { visible: SystemStats.shown }
 
                     //DiskWidget {}
 
                     //Separator {}
 
+                    // Volume, battery, Wi-Fi and the VPN read as one group:
+                    // spaced apart, not divided. Each gap is tied to the
+                    // widget after it, so a machine without that hardware
+                    // gets no double gap.
+                    //
                     // barWindow: the volume readout is a DropdownWidget now -
                     // right-click opens the audio card.
                     VolumeWidget {
@@ -205,18 +213,14 @@ ShellRoot {
                         barWindow: barWindow
                     }
 
-                    Separator {}
+                    Item { Layout.preferredWidth: 16; visible: batteryWidget.visible }
 
                     BatteryWidget {
                         id: batteryWidget
                         barWindow: barWindow
                     }
 
-                    // Tied to the widget beside it. A hidden widget is dropped
-                    // from the layout, but its separator is a sibling and would
-                    // otherwise stay - leaving two dividers with nothing between
-                    // them on any machine without the hardware.
-                    Separator { visible: batteryWidget.visible }
+                    Item { Layout.preferredWidth: 16; visible: wifiWidget.visible }
 
                     // WiFi indicator
                     WifiWidget {
@@ -224,37 +228,7 @@ ShellRoot {
                         barWindow: barWindow
                     }
 
-                    // Only with WiFi before it: without, the battery's separator
-                    // (or the volume's) already stands between, and this one
-                    // made it "| |" on a machine with Bluetooth but no WiFi.
-                    Separator { visible: bluetoothWidget.visible && wifiWidget.visible }
-
-                    // Bluetooth indicator
-                    BluetoothWidget {
-                        id: bluetoothWidget
-                        barWindow: barWindow
-                        Layout.rightMargin: 8
-                    }
-
-                    // Power profile
-                    PowerProfileWidget {
-                        id: powerProfileWidget
-                        barWindow: barWindow
-                        Layout.rightMargin: 8
-                    }
-
-                    // Night light toggle
-                    NightLightWidget {
-                        id: nightLightWidget
-                        Layout.leftMargin: 8
-                    }
-
-                    Separator {}
-
-                    // Keyboard layout
-                    KeyboardLayoutWidget { id: kbLayoutWidget }
-
-                    Separator {}
+                    Item { Layout.preferredWidth: 16 }
 
                     // VPN selector
                     VpnWidget {
@@ -266,22 +240,17 @@ ShellRoot {
 
                     Separator {}
 
-                    // Date display
-                    Text {
-                        id: dateText
-                        text: Qt.formatDateTime(new Date(), "dd.MM.yyyy")
-                        color: Theme.colWhite
-                        font.pixelSize: Theme.fontSize
-                        font.family: Theme.fontFamily
-                        font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
-                        Layout.alignment: Qt.AlignVCenter
+                    // Keyboard layout
+                    KeyboardLayoutWidget { id: kbLayoutWidget }
 
-                        Timer {
-                            interval: 60000
-                            running: true
-                            repeat: true
-                            onTriggered: dateText.text = Qt.formatDateTime(new Date(), "dd.MM.yyyy")
-                        }
+                    Separator {}
+
+                    // ПУЛЬТ: bluetooth, night light, power profile and the
+                    // stats switch. Took the place of their three icons and of
+                    // the date, which the clock's calendar already shows.
+                    PultWidget {
+                        id: pultWidget
+                        barWindow: barWindow
                     }
 
                     // Right padding

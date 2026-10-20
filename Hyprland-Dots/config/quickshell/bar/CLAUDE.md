@@ -69,8 +69,8 @@ components/         # Modular widget components
   ├── ConsoleKeycap.qml    # Console dialogs: a key hint - the key on a small raised cap, its action beside it
   ├── SegmentGauge.qml     # Console cards: a segmented gauge with an optional marker tick
   ├── WifiWidget.qml       # WiFi status with network speeds (extends DropdownWidget)
-  ├── BluetoothWidget.qml  # Bluetooth status with dropdown (extends DropdownWidget)
-  ├── PowerProfileWidget.qml # Power profile selector (extends DropdownWidget)
+  ├── PultWidget.qml       # ПУЛЬТ (⚙): bluetooth + search/pairing, night light, power profile, CPU/RAM switch
+  ├── PultSwitch.qml       # ПУЛЬТ card: one on/off line - lamp, glyph, label, latching button
   ├── PowerWidget.qml      # Power menu: lock, logout, reboot, shutdown (extends DropdownWidget)
   ├── RecordOsd.qml        # Screen-recording dialog (centred box, big buttons, audio toggles)
   ├── ShotOsd.qml          # Screenshot dialog (same box, no audio row)
@@ -114,7 +114,9 @@ components/         # Modular widget components
   every 5s for the whole shell. `CpuWidget` and `MemoryWidget` are pure renderers
   over it. Reads `/proc/stat`, `/proc/meminfo` and the hwmon sensor with `FileView`,
   so it costs no subprocesses at all; the sensor path is resolved once at startup
-  rather than probed on every tick.
+  rather than probed on every tick. It also owns `shown`, the ПУЛЬТ card's
+  "ЦП · ОЗУ НА ПАНЕЛИ" switch: kept in `~/.cache/quickshell/bar-stats`
+  (`on`/`off`, no file = on) and watched, and while it is off nothing is sampled.
 - **NightLight.qml**: night-light state and toggle. `Hyprsunset.sh` records what it
   did in `~/.cache/.hyprsunset_state` and rewrites it in place, so a `FileView` with
   `watchChanges` sees every change instantly - whether it came from the bar or from
@@ -343,7 +345,7 @@ components/         # Modular widget components
 
   The card is ported from Omarchy Quattro's power panel (omacom/omarchy, MIT,
   DHH) - capacity, cycles, draw, time, fill bar, "holding" - **minus its
-  power-profile picker**, which this bar already has as `PowerProfileWidget`. It
+  power-profile picker**, which this bar already has in the ПУЛЬТ card. It
   adds **health** (`energy_full / energy_full_design`), which upstream does not
   show and which is the reading that actually predicts a dead pack: BAT0 here is
   44% at 239 cycles, BAT1 is 82% at 566.
@@ -530,7 +532,28 @@ components/         # Modular widget components
   is not centred in its character cell, so spinning it about that cell makes it
   orbit rather than rotate. Geometry cannot. `running` is bound to `visible`,
   so a hidden one costs nothing.
-- **BluetoothWidget.qml**: Bluetooth status with dropdown. Icon turns green when device connected
+- **PultWidget.qml / PultSwitch.qml**: ПУЛЬТ, the ⚙ at the right end. It replaced
+  the bluetooth, power-profile and night-light icons and the date (the clock's
+  calendar shows it), because the right side of the bar was too busy. The card
+  holds bluetooth on/off with the paired devices, night light, the CPU/RAM
+  switch (`SystemStats.shown`) and the power-profile buttons. SUPER+CTRL+T and
+  SUPER+CTRL+E (the old bluetooth and profile cards) both open it.
+
+  Bluetooth and the profile are **read when the card opens and watched over
+  D-Bus only while it is open** - nothing on the bar shows them any more, and
+  the old widgets each ran a dbus-monitor (bluetooth also a 10s poll) for the
+  whole session, per screen.
+
+  ПОИСК searches **in the card**: `bluetoothctl --timeout 30 scan on` (in
+  non-interactive mode bluez leaves discovery running until the timeout), with
+  `bluetoothctl devices` polled every 1.5s and listed under НАЙДЕНО, minus the
+  paired ones and the ones bluez could only name after their address. A click
+  stops the scan (pairing during discovery fails on some controllers), then
+  pairs, trusts and connects. It registers no agent of its own, so a device
+  that needs a code is asked through the session's default agent (blueman-applet,
+  started when the card switches bluetooth on), and with none bluez pairs "just
+  works". It replaced opening blueman-manager, which put a floating window in
+  front of a card that should do the job itself. Closing the card ends the scan.
 - **Widget components**: Each has its own Process components for data fetching and PopupWindow for dropdowns
 
 ### Theming

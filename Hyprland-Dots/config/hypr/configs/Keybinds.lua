@@ -52,11 +52,11 @@ bind(M .. " + ALT + V",   hl.dsp.global("quickshell:clipMenu"), { description = 
 bind(M .. " + CTRL + A", hl.dsp.global("quickshell:cardAudio"),     { description = "audio card" })
 bind(M .. " + CTRL + W", hl.dsp.global("quickshell:cardNetwork"),   { description = "network card" })
 bind(M .. " + CTRL + P", hl.dsp.global("quickshell:cardPower"),     { description = "power card" })
-bind(M .. " + CTRL + T", hl.dsp.global("quickshell:cardBluetooth"), { description = "bluetooth card" })
+bind(M .. " + CTRL + T", hl.dsp.global("quickshell:cardBluetooth"), { description = "control panel card (bluetooth)" })
 bind(M .. " + CTRL + C", hl.dsp.global("quickshell:cardCalendar"),  { description = "calendar" })
 bind(M .. " + CTRL + M", hl.dsp.global("quickshell:cardWeather"),   { description = "weather card" })
 bind(M .. " + CTRL + V", hl.dsp.global("quickshell:cardVpn"),       { description = "VPN card" })
-bind(M .. " + CTRL + E", hl.dsp.global("quickshell:cardProfile"),   { description = "power profile card" })
+bind(M .. " + CTRL + E", hl.dsp.global("quickshell:cardProfile"),   { description = "control panel card (power profile)" })
 bind(M .. " + CTRL + G", hl.dsp.global("quickshell:cardBattery"),   { description = "battery card" })
 bind(M .. " + CTRL + I", hl.dsp.global("quickshell:cardAgent"),     { description = "Claude Code card" })
 

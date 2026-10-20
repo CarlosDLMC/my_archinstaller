@@ -646,9 +646,9 @@ readlink /etc/resolv.conf       # /run/systemd/resolve/stub-resolv.conf
 
 ### Power profiles
 
-The bar's `PowerProfileWidget.qml` runs `powerprofilesctl` and watches
-`net.hadess.PowerProfiles` on the system bus. What it needs is that D-Bus API —
-not one particular package.
+The bar's control panel (`PultWidget.qml`) reads and sets the profile with
+`busctl` over `net.hadess.PowerProfiles` on the system bus. What it needs is
+that D-Bus API — not one particular package.
 
 On Arch the API comes from `power-profiles-daemon`. On CachyOS it normally
 comes from `tuned-cachy-ppd`, which provides the same interface and

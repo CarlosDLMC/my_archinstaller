@@ -16,9 +16,9 @@ LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_power_profiles.log"
 
 # Why this is not just another entry in 01-hypr-pkgs.sh
 #
-# The bar's PowerProfileWidget.qml runs `powerprofilesctl` and watches
-# net.hadess.PowerProfiles on the system bus. What it needs is that D-Bus API,
-# not one specific package. On Arch the API comes from power-profiles-daemon.
+# The bar's control panel (PultWidget.qml) reads and sets the profile with
+# `busctl` over net.hadess.PowerProfiles on the system bus. What it needs is
+# that D-Bus API, not one specific package. On Arch the API comes from power-profiles-daemon.
 # On CachyOS it normally comes from tuned-cachy-ppd, which *provides* the same
 # API and *conflicts* with power-profiles-daemon.
 #
