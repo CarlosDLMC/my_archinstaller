@@ -31,7 +31,7 @@ RowLayout {
 
     // Temperature
     Text {
-        text: SystemStats.cpuTemp + "ºC"
+        text: SystemStats.cpuTemp + "°"
         color: Theme.colValue
         font.pixelSize: Theme.fontSize
         font.family: Theme.fontFamily
