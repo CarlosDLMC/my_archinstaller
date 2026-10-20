@@ -42,12 +42,16 @@ for arg in "$@"; do
 done
 
 if ! $run; then
+  # With --lock, a screensaver that cannot start still locks: idle and
+  # SUPER+CTRL+ALT+L count on the screen ending up locked.
   command -v ttfx >/dev/null || {
     notify-send "Screensaver" "ttfx is not installed"
+    $lock && exec "$HOME/.config/hypr/scripts/LockScreen.sh"
     exit 1
   }
   ((${#arts[@]})) || {
     notify-send "Screensaver" "No art yet: make $art_dir/*.txt with ImgToText.py"
+    $lock && exec "$HOME/.config/hypr/scripts/LockScreen.sh"
     exit 1
   }
   # Already up
