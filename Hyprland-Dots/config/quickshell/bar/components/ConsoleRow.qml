@@ -31,7 +31,38 @@ Rectangle {
         if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
             row.picked()
             event.accepted = true
+        } else if (event.key === Qt.Key_Down || event.key === Qt.Key_Right || event.key === Qt.Key_Tab) {
+            if (row.stepInList(1))
+                event.accepted = true
+        } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Left || event.key === Qt.Key_Backtab) {
+            if (row.stepInList(-1))
+                event.accepted = true
         }
+    }
+
+    // In a list that scrolls (more networks, devices or tunnels than fit), the
+    // keys walk the rows here: a ListView only builds the rows in view, so the
+    // card's focus chain (CardKeys) never reached the ones below. The list
+    // scrolls to the next pickable row and it takes the focus; past either
+    // end, the key goes on to CardKeys as before.
+    function stepInList(step) {
+        var v = ListView.view
+        if (!v)
+            return false
+        for (var n = index + step; n >= 0 && n < v.count; n += step) {
+            v.positionViewAtIndex(n, ListView.Contain)
+            var it = v.itemAtIndex(n)
+            if (it && it.activeFocusOnTab) {
+                it.forceActiveFocus(step > 0 ? Qt.TabFocusReason : Qt.BacktabFocusReason)
+                return true
+            }
+        }
+        return false
+    }
+    // Reached another way (Shift+Tab round the end, a click), still in view.
+    onActiveFocusChanged: {
+        if (activeFocus && ListView.view)
+            ListView.view.positionViewAtIndex(index, ListView.Contain)
     }
 
     width: parent ? parent.width : 0
