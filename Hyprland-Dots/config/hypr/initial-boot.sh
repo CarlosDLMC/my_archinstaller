@@ -105,7 +105,8 @@ if [ ! -f "$HOME/.config/hypr/.initial_startup_done" ]; then
 
     # Screensaver art sized for this machine's screen: ScreensaverArt.sh opens a
     # fullscreen foot for a moment to measure it and writes
-    # ~/.local/share/screensaver/art.txt from the image beside it. After a few
+    # ~/.local/share/screensaver/art/<name>.txt from each image in
+    # ~/.local/share/screensaver/images/. After a few
     # seconds, once the session has settled; in the background, and not a reason
     # to retry the whole first boot if it fails.
     (sleep 5; "$scriptsDir/ScreensaverArt.sh") > /dev/null 2>&1 &

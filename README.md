@@ -1889,24 +1889,26 @@ picked by hand (decrypt, burn, rain, fireworks, vhstape...) — until you come b
   2560×1440 the whole screensaver took ~75% of one core at 120 fps and ~59% at 60.
   ttfx itself is 3–5% of that; the terminal redrawing is the rest.
 
-The art is the Mosfilm logo — Mukhina's *Worker and Kolkhoz Woman* over МОСФИЛЬМ — made
-for each machine's own screen. The repo ships only the image,
-`Hyprland-Dots/.local/share/screensaver/mosfilm_logo.png`, which `copy.sh` puts in
-`~/.local/share/screensaver/`. At the first login `initial-boot.sh` runs
-`~/.config/hypr/scripts/ScreensaverArt.sh`: it opens a fullscreen `foot` for a moment to
-measure it, and writes `~/.local/share/screensaver/art.txt` two rows shorter than the
-terminal (narrower too, if it would come within two columns of the sides) — 216×58 for
-a 256×60 terminal at 2560×1440, 160×43 for 192×45 at 1920×1080. Run it again by hand after
-changing monitors or the `foot` font, or with another image: `ScreensaverArt.sh some.png`.
-A different `art.txt` already there is kept as `art.txt.backup-<date-time>`. The art
-lives outside `~/.config/hypr` because an installer re-run replaces that whole folder;
-the repo has no `art.txt`, so a re-run never overwrites yours.
+The art is a set of 13 Soviet-poster silhouettes — the Mosfilm logo (Mukhina's *Worker
+and Kolkhoz Woman* over МОСФИЛЬМ), cosmonauts, Sputnik, the Kremlin, *The Motherland
+Calls* and others — made for each machine's own screen. The screensaver opens with
+`mosfilm_logo` drawn by `scattered`, and after that shows a random piece with a random
+effect each time, never the same piece twice in a row.
 
-For more than one piece, put several `.txt` files in `~/.local/share/screensaver/art/`:
-the screensaver then opens with `mosfilm_logo.txt` from that folder (if it is there)
-drawn by `scattered`, and after that shows a random piece with a random effect each
-time, never the same piece twice in a row. With no `.txt` in that folder it uses
-`art.txt`. `ttfx` comes from the AUR and is built without its tests (see
+The repo ships only the images, `Hyprland-Dots/.local/share/screensaver/images/`, which
+`copy.sh` puts in `~/.local/share/screensaver/images/`. At the first login
+`initial-boot.sh` runs `~/.config/hypr/scripts/ScreensaverArt.sh`: it opens a fullscreen
+`foot` for a moment to measure it, and writes one `~/.local/share/screensaver/art/<name>.txt`
+per image, two rows shorter than the terminal (narrower too, if it would come within
+two columns of the sides) — 58 rows for a 256×60 terminal at 2560×1440 (Mosfilm
+216×58), 43 for 192×45 at 1920×1080 (Mosfilm 160×43). Run it again by hand after
+changing monitors or the `foot` font, or for just some images:
+`ScreensaverArt.sh some.png other.png`. A different `<name>.txt` already there is kept
+as `<name>.txt.backup-<date-time>`. To drop a piece from the rotation, delete its
+`.txt` from `art/` (and its image from `images/`, or the next run brings it back). With
+no `.txt` in `art/`, the screensaver uses `~/.local/share/screensaver/art.txt`. The art
+lives outside `~/.config/hypr` because an installer re-run replaces that whole folder;
+the repo has no `.txt` art, so a re-run never overwrites yours. `ttfx` comes from the AUR and is built without its tests (see
 `install-scripts/01-hypr-pkgs.sh`): on CachyOS one bit-exact test fails by a last-bit
 rounding difference in glibc, so an update through yay there needs
 `yay -S ttfx --mflags --nocheck`.
@@ -1955,14 +1957,14 @@ each character shows two of them, one above the other: `█` both on, `▀` the 
    The screensaver picks from the 21 listed in `effect=(... --include-effects ...)` in
    `Screensaver.sh`; edit that list to add or drop one.
 
-6. **Use it.**
+6. **Use it.** Give it a name of its own in the rotation:
    ```bash
-   mkdir -p ~/.local/share/screensaver
-   cp art.txt ~/.local/share/screensaver/art.txt
+   cp art.txt ~/.local/share/screensaver/art/logo.txt
    ~/.config/hypr/scripts/Screensaver.sh
    ```
-   Or, to have it in the rotation with other pieces, give it a name of its own in
-   `~/.local/share/screensaver/art/` (e.g. `art/logo.txt`).
+   Or skip steps 2–4: put the image in `~/.local/share/screensaver/images/` and run
+   `~/.config/hypr/scripts/ScreensaverArt.sh ~/.local/share/screensaver/images/logo.png`,
+   which sizes it for your screen and writes `art/logo.txt`.
 
 7. **Idle.** It already starts on idle: the 9-minute listener in
    `~/.config/hypr/hypridle.conf` runs it, unless the screen is already locked, and

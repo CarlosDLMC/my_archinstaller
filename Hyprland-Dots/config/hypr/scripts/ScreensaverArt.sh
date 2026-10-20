@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Screensaver art for this screen: ~/.local/share/screensaver/art.txt, made
-# from an image by ImgToText.py as tall as a fullscreen foot minus 2 rows -
-# and narrower, if it would come within 2 columns of the sides.
+# Screensaver art for this screen: one ~/.local/share/screensaver/art/<name>.txt
+# for each image in ~/.local/share/screensaver/images/, made by ImgToText.py as
+# tall as a fullscreen foot minus 2 rows - and narrower, if it would come
+# within 2 columns of the sides.
 #
-#   ScreensaverArt.sh [IMAGE]   default: ~/.local/share/screensaver/mosfilm_logo.png
+#   ScreensaverArt.sh [IMAGE...]   default: every image in images/
 #
 # initial-boot.sh runs it once, at the first login. Run it again by hand after
-# changing monitors or the foot font. A different art.txt already there is
-# kept as art.txt.backup-<date-time>.
+# changing monitors or the foot font. A different <name>.txt already there is
+# kept as <name>.txt.backup-<date-time> (Screensaver.sh only reads *.txt).
 
 dir="$HOME/.local/share/screensaver"
-src="${1:-$dir/mosfilm_logo.png}"
-out="$dir/art.txt"
+art_dir="$dir/art"
 
 fail() {
   notify-send "Screensaver art" "$1"
@@ -19,7 +19,13 @@ fail() {
   exit 1
 }
 
-[[ -f $src ]] || fail "No image at $src"
+shopt -s nullglob nocaseglob
+srcs=("$@")
+((${#srcs[@]})) || srcs=("$dir/images"/*.{png,jpg,jpeg,webp})
+((${#srcs[@]})) || fail "No images in $dir/images"
+for src in "${srcs[@]}"; do
+  [[ -f $src ]] || fail "No image at $src"
+done
 command -v foot >/dev/null || fail "foot is not installed"
 
 # The monitor the measuring window opens on, and its pixels.
@@ -45,29 +51,42 @@ rm -f "$size_file"
 # would not parse as --cell-aspect.
 aspect=$(LC_ALL=C awk -v w="$mon_w" -v h="$mon_h" -v c="$cols" -v r="$rows" \
   'BEGIN { if (w > 0 && h > 0) printf "%.3f", (h / r) / (w / c); else print 2.4 }')
+echo "${cols}x${rows} terminal, cell aspect $aspect"
 
-tmp="$out.tmp"
-mkdir -p "$dir"
-# Writes $tmp, prints its width in columns.
+mkdir -p "$art_dir"
+# Writes $tmp from $src, prints its width in columns.
 make_art() {
   "$HOME/.config/hypr/scripts/ImgToText.py" "$src" "$tmp" --rows "$1" \
     --mode block --cell-aspect "$aspect" | sed -nE 's/.*: ([0-9]+) cols.*/\1/p'
 }
 
-r=$((rows - 2))
-width=$(make_art "$r")
-[[ -n $width ]] || fail "ImgToText.py failed on $src"
-if ((width > cols - 2)); then
-  r=$((r * (cols - 2) / width))
+failed=()
+for src in "${srcs[@]}"; do
+  name=$(basename "${src%.*}")
+  out="$art_dir/$name.txt"
+  tmp="$out.tmp"
+  r=$((rows - 2))
   width=$(make_art "$r")
-  [[ -n $width ]] || fail "ImgToText.py failed on $src"
-fi
+  if [[ -n $width ]] && ((width > cols - 2)); then
+    r=$((r * (cols - 2) / width))
+    width=$(make_art "$r")
+  fi
+  if [[ -z $width ]]; then
+    rm -f "$tmp"
+    failed+=("$name")
+    echo "  $name: ImgToText.py failed" >&2
+    continue
+  fi
 
-if [[ -f $out ]] && cmp -s "$tmp" "$out"; then
-  rm -f "$tmp"
-  echo "$out is already this art (${width}x${r} for a ${cols}x${rows} terminal)"
-  exit 0
-fi
-[[ -f $out ]] && cp -p "$out" "$out.backup-$(date +%Y%m%d-%H%M%S)"
-mv -f "$tmp" "$out"
-echo "$out: ${width}x${r} for a ${cols}x${rows} terminal (cell aspect $aspect)"
+  if [[ -f $out ]] && cmp -s "$tmp" "$out"; then
+    rm -f "$tmp"
+    echo "  $name: unchanged (${width}x${r})"
+    continue
+  fi
+  [[ -f $out ]] && cp -p "$out" "$out.backup-$(date +%Y%m%d-%H%M%S)"
+  mv -f "$tmp" "$out"
+  echo "  $name: ${width}x${r}"
+done
+
+((${#failed[@]})) && fail "ImgToText.py failed on: ${failed[*]}"
+exit 0
