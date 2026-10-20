@@ -74,8 +74,10 @@ ShellRoot {
                     }[card]
                     if (!open)
                         return
-                    // A hidden widget (no battery, no Claude Code) has no card.
+                    // A hidden widget (no battery, no Wi-Fi, no Claude Code) has
+                    // no card: opened anyway, it hung off the screen's left edge.
                     if ((card === "battery" && !batteryWidget.visible)
+                        || (card === "network" && !wifiWidget.visible)
                         || (card === "agent" && !agentWidget.visible))
                         return
                     var wasOpen = open[0]
