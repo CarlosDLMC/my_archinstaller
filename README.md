@@ -278,7 +278,12 @@ first prompt.
 ### Desktop Environment
 - Quickshell (custom bar)
 - foot (terminal)
-- rofi (launcher)
+- rofi (launcher) - built from `pkgbuilds/rofi` by `install-scripts/rofi-ondemand.sh`:
+  Arch's rofi 2.0 plus five small patches - on-demand keyboard focus for the launcher
+  (a click on a window beside it takes the keyboard while it stays open), the row
+  counter, the cursor blink, `keep-list` for the ФАЙЛЫ tab's preview, and a quoted
+  `{entry}` for its preview hook. If the build fails, the repo's stock rofi stays and
+  the menus still work, only without those extras
 - «ПУСК · ПУЛЬТ» power menu (in the Quickshell bar, CTRL + ALT + P, or CTRL + ALT +
   Delete to open it on ВЫХОД); logout, reboot and
   power-off end with a CRT power-off - the picture folds into a line, then a dot
@@ -324,7 +329,18 @@ first prompt.
 - Hunk (terminal diff viewer for agent changesets — also an out-of-band binary,
   see [Hunk](#hunk-reading-what-the-agents-wrote))
 - omawrite, omacut (omarchy's apps — built from the PKGBUILDs vendored in
-  `pkgbuilds/`, see `install-scripts/omarchy-apps.sh`)
+  `pkgbuilds/`, see `install-scripts/omarchy-apps.sh`). They are in `IgnorePkg` in
+  `/etc/pacman.conf`, so `pacman -Syu` and `yay -Syu` never touch them (the AUR has an
+  unpatched `omawrite` under the same name); update them by bumping the vendored
+  PKGBUILD and re-running the script
+- Default apps (`~/.config/mimeapps.list`): text and Markdown open in omawrite,
+  images in imv, PDFs in Papers, sound and video in mpv; in the launcher's ФАЙЛЫ tab,
+  source code opens in nvim
+- Microphone noise suppression: `pipewire.sh` installs `noise-suppression-for-voice`
+  (RNNoise) and enables PipeWire's `filter-chain.service` with
+  `config/pipewire/filter-chain.conf.d/99-mic-denoise.conf`, a "smart" filter that
+  every recording app gets in front of the microphone. Without the plugin only the
+  filter is missing; the raw microphone keeps working
 - ttfx (terminal text effects, the screensaver's animations — AUR, built without
   its tests, see [Screensaver](#screensaver-ascii-art))
 
@@ -846,6 +862,13 @@ stamped backup), checks it with `keyd check` and enables the service. keyd
 types through its own virtual keyboard, which Hyprland gives the same layouts.
 If it ever misbehaves, Backspace+Escape+Enter together stops it;
 `sudo systemctl disable --now keyd` turns it off.
+
+On a laptop that virtual keyboard needed one more line: libinput only switches the
+touchpad off while you type for a keyboard it takes to be built in, and keyd's says it
+is USB - so a palm on the touchpad moved the pointer (and with tap-to-click, clicked)
+mid-sentence. `keyd.sh` adds the quirk from keyd's own FAQ to
+`/etc/libinput/local-overrides.quirks` (after anything already in that file), which
+marks the keyd keyboard as built in; it takes effect from the next login.
 
 ### Boot splash (Plymouth)
 
@@ -1460,6 +1483,15 @@ those three commands — the VPN widget is the only thing here that depends on i
 - `CTRL + ALT + L` - Lock screen (Soviet TUI)
 - `SUPER + CTRL + ALT + L` - Screensaver, then lock screen (see [Screensaver](#screensaver-ascii-art))
 - `CTRL + ALT + P` - Power menu («ПУСК · ПУЛЬТ» in the quickshell bar; also the Arch logo)
+- `SUPER + N` - Close all notifications
+- `SUPER + CTRL + <letter>` - Open one of the bar's cards with the keyboard in it: `A`
+  audio, `W` Wi-Fi, `P` power, `T` or `E` the ⚙ control panel, `C` calendar, `M`
+  weather, `V` VPN, `G` battery, `I` Claude Code (the same keys again close it). Tab or
+  the arrows move, Enter or Space presses, Esc closes; a list longer than the card
+  scrolls with the cursor, and the Wi-Fi password field takes the typing as soon as it
+  opens. From the keyboard, the power card's ВЫХОД, ПЕРЕЗАГРУЗКА and ВЫКЛЮЧЕНИЕ open the
+  power menu armed - the five-second countdown runs and Esc stops it - while a click
+  acts at once. A card whose icon is hidden (no battery, no Wi-Fi) does not open
 - `ALT + Tab` - **nothing, on purpose.** Hyprland's default cycle-window bind is
   removed in `UserKeybinds.lua` so the key reaches Herdr, which cycles terminal
   tabs with it. A compositor bind is consumed before any application sees it, so
@@ -1817,7 +1849,8 @@ here have broken silently before.
 **Keys and mouse:**
 - `ENTER` submit · `ESC` or `CTRL + U` clear the password
 - `ALT + SHIFT` or `SUPER + SPACE` — switch keyboard layout (these work while locked)
-- Click the `РАСКЛАДКА` value — also switches layout
+- `F1` twice — shut down: the first press arms it for 4 s and shows a red notice, the
+  second powers off, so one stray key never switches the machine off
 
 **Works on any display.** `hyprlock.conf` contains no geometry at all — it sources
 `hyprlock-monitors.conf`, regenerated before every lock by `scripts/SovietLockGen.py`
@@ -1832,12 +1865,14 @@ laptop and a 2K external are each sized correctly at the same time. Chosen font 
 Verified by rendering at all four. HiDPI scaling, ultrawide and rotated panels are
 handled too (a 4K at scale 2 is laid out as 1080p, which is what hyprlock actually uses).
 
-**Going idle does not lock.** The lock screen is only ever raised deliberately, with
-`CTRL + ALT + L`. hypridle's screenlock listener is commented out in `hypridle.conf`;
-uncomment it to get a 10-minute auto-lock back. **Going idle does not blank the display
-either**: the "Turn off screen" listener is commented out too, on purpose, so the only
-live listener is the 9-minute idle notification. The session is still locked before
-suspend (`before_sleep_cmd`), which is separate from idle.
+**Going idle starts the screensaver, which locks when it ends.** After 9 minutes idle
+hypridle runs `Screensaver.sh --lock` (see [Screensaver](#screensaver-ascii-art)), so
+coming back ends on the lock screen - and if the screensaver cannot start (no `ttfx`,
+no art yet), it locks straight away. hypridle's own screenlock listener stays commented
+out in `hypridle.conf`. **Going idle does not blank the display either**: the "Turn off
+screen" listener is commented out too, on purpose, so the screensaver is the only live
+listener. The session is still locked before suspend (`before_sleep_cmd`), which is
+separate from idle.
 
 **If you turn idle blanking back on**, point its `on-timeout` at `scripts/IdleDpms.sh`
 (the commented listener already does) rather than at `dpms off` directly: it skips the
@@ -1873,7 +1908,7 @@ Output is byte-identical to the Python version it replaced.
 ### Screensaver (ASCII art)
 
 Text art drawn by [ttfx](https://github.com/omacom/ttfx) (omarchy's terminal text
-effects) in a fullscreen black `foot`: one random effect after another — 22 of ttfx's 37,
+effects) in a fullscreen black `foot`: one random effect after another — 21 of ttfx's 37,
 picked by hand (decrypt, burn, rain, fireworks, vhstape...) — until you come back.
 
 | Start | Coming back |
@@ -1887,7 +1922,9 @@ picked by hand (decrypt, burn, rain, fireworks, vhstape...) — until you come b
 
 - Any key, mouse movement or click, or the window losing focus ends it.
 - With `--lock` it locks first and closes second: its last frame stays up until the
-  lock screen has started (at most 3 s), so the desktop never shows in between.
+  lock screen has started (at most 3 s), so the desktop never shows in between. With
+  `--lock` and nothing to show (no `ttfx`, no art yet) it locks straight away, with a
+  notification saying why, so idle and `SUPER + CTRL + ALT + L` always end locked.
 - It never runs behind the lock screen, where nothing can show: idle does not start it
   while locked, and it quits within a second if the screen locks while it runs.
 - Idle does not start it while a herdr agent is working, as while a video plays: see
@@ -1908,16 +1945,22 @@ Calls* and others — made for each machine's own screen. The screensaver opens 
 effect each time, never the same piece twice in a row.
 
 The repo ships only the images, `Hyprland-Dots/.local/share/screensaver/images/`, which
-`copy.sh` puts in `~/.local/share/screensaver/images/`. At the first login
-`initial-boot.sh` runs `~/.config/hypr/scripts/ScreensaverArt.sh`: it opens a fullscreen
-`foot` for a moment to measure it, and writes one `~/.local/share/screensaver/art/<name>.txt`
-per image, two rows shorter than the terminal (narrower too, if it would come within
+`copy.sh` puts in `~/.local/share/screensaver/images/`. At every login
+`Startup_Apps.lua` runs `~/.config/hypr/scripts/ScreensaverArt.sh --new`, which makes
+art only for the images that never had any: all of them at the first login, later just
+the ones an installer re-run brought in (and all of them on a machine installed before
+the art existed); with nothing new it does nothing and opens nothing. Making art opens
+a fullscreen `foot` for a moment to measure it, and writes one
+`~/.local/share/screensaver/art/<name>.txt` per image, two rows shorter than the terminal (narrower too, if it would come within
 two columns of the sides) — 58 rows for a 256×60 terminal at 2560×1440 (Mosfilm
 216×58), 43 for 192×45 at 1920×1080 (Mosfilm 160×43). Run it again by hand after
 changing monitors or the `foot` font, or for just some images:
 `ScreensaverArt.sh some.png other.png`. A different `<name>.txt` already there is kept
-as `<name>.txt.backup-<date-time>`. To drop a piece from the rotation, delete its
-`.txt` from `art/` (and its image from `images/`, or the next run brings it back). With
+as `<name>.txt.backup-<date-time>`. On a monitor turned on its side it measures the
+screen the right way round, so portrait art keeps its proportions. To drop a piece from
+the rotation, delete its `.txt` from `art/`: `art/.made` lists the images done, so
+`--new` does not make it again (a `ScreensaverArt.sh` run by hand without `--new`
+would). With
 no `.txt` in `art/`, the screensaver uses `~/.local/share/screensaver/art.txt`. The art
 lives outside `~/.config/hypr` because an installer re-run replaces that whole folder;
 the repo has no `.txt` art, so a re-run never overwrites yours. `ttfx` comes from the AUR and is built without its tests (see
@@ -2182,7 +2225,8 @@ Re-running `./install.sh --preset custom-preset.conf` is also safe — every
 package step skips what is already installed, and `copy.sh` will not overwrite
 a `secrets.zsh` you have filled in. It also keeps your wallust palette, your
 active wallpaper, the first-boot marker, your monitor layout (`monitors.lua`,
-`workspaces.lua`), herdr's saved session, your rofi theme, RofiBeats stations,
+`workspaces.lua`), herdr's saved session, your rofi theme (not the old default
+`style-4.rasi`: an install from before the teletype theme moves to it), RofiBeats stations,
 sidebar bookmarks, and files of your own in `environment.d`,
 `fontconfig`, `Kvantum` and `MangoHud`. Everything else under a copied
 `~/.config` directory is reset to the repo version — edits you made there
@@ -2317,8 +2361,8 @@ chmod +x install.sh
   greeting — see [Terminal greeting](#terminal-greeting-pokefetch))
 - ✅ zsh (the shell the dotfiles are written for)
 - ✅ thunar (the file manager the binds and bookmarks expect)
-- and the rest as `custom-preset.conf` has them: herdr, neovim, hunk, docker and
-  text_boot, thp_madvise and keyd_nav `ON`, plymouth `OFF`; nvidia, nouveau, rog, bluetooth, limine and hackbgrt are resolved from the
+- and the rest as `custom-preset.conf` has them: herdr, neovim, hunk, docker,
+  omarchy_apps, text_boot, thp_madvise and keyd_nav `ON`, plymouth `OFF`; nvidia, nouveau, rog, bluetooth, limine and hackbgrt are resolved from the
   hardware when you pick `auto` in a preset
 
 ## Verification
