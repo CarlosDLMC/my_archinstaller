@@ -123,7 +123,7 @@ DropdownWidget {
     }
 
     function profileLabel(profile) {
-        return (({ "performance": "Форсаж", "balanced": "Норма", "power-saver": "Экономия" })[profile] || profile).toUpperCase()
+        return (({ "performance": "Разгон", "balanced": "Норма", "power-saver": "Экономия" })[profile] || profile).toUpperCase()
     }
 
     Process {
