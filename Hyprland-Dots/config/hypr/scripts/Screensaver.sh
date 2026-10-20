@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Screensaver: your text art (~/.local/share/screensaver/art.txt, made with
+# Screensaver: your text art (the *.txt files in ~/.local/share/screensaver/art/,
+# or ~/.local/share/screensaver/art.txt when that folder has none; made with
 # ImgToText.py - see the README's Screensaver section) drawn by ttfx effects,
-# one random effect after another, in a fullscreen foot.
+# a random piece with a random effect, one after another, in a fullscreen foot.
 #
 #   Screensaver.sh          open it on the focused monitor; ending it goes
 #                           straight back to the desktop
@@ -18,19 +19,25 @@
 
 # Not under ~/.config/hypr: an installer re-run replaces that folder with the
 # repo's copy, and the art is yours, not the repo's.
-art="$HOME/.local/share/screensaver/art.txt"
+art_dir="$HOME/.local/share/screensaver/art"
+# The single piece ScreensaverArt.sh makes on a fresh install
+art_file="$HOME/.local/share/screensaver/art.txt"
 app_id="screensaver"
+
+shopt -s nullglob
+arts=("$art_dir"/*.txt)
+((${#arts[@]})) || [[ ! -f $art_file ]] || arts=("$art_file")
 
 run=false
 lock=false
 for arg in "$@"; do
   case $arg in
-    --run) run=true ;;
-    --lock) lock=true ;;
-    *)
-      echo "usage: Screensaver.sh [--lock]" >&2
-      exit 2
-      ;;
+  --run) run=true ;;
+  --lock) lock=true ;;
+  *)
+    echo "usage: Screensaver.sh [--lock]" >&2
+    exit 2
+    ;;
   esac
 done
 
@@ -39,8 +46,8 @@ if ! $run; then
     notify-send "Screensaver" "ttfx is not installed"
     exit 1
   }
-  [[ -f $art ]] || {
-    notify-send "Screensaver" "No art yet: make $art with ImgToText.py"
+  ((${#arts[@]})) || {
+    notify-send "Screensaver" "No art yet: make $art_dir/*.txt with ImgToText.py"
     exit 1
   }
   # Already up
@@ -109,15 +116,27 @@ printf '\033]11;rgb:00/00/00\007\033[?25l\033[?1003h\033[?1006h'
 hyprctl eval 'hl.config({ cursor = { invisible = true } })' >/dev/null 2>&1
 
 while true; do
+  # 21 of ttfx's 37, picked by watching each one on the art
+  effect=(--random-effect --include-effects binarypath blackhole bouncyballs
+    burn decrypt expand fireworks highlight middleout orbittingvolley pour
+    rain scattered slice slide spray sweep synthgrid thunderstorm
+    unstable vhstape)
+  # The Mosfilm logo opens, always scattered; then a random piece with a
+  # random effect, never the same piece twice in a row
+  if [[ -z ${last_art:-} && -f $art_dir/mosfilm_logo.txt ]]; then
+    art=$art_dir/mosfilm_logo.txt
+    effect=(scattered)
+  else
+    art=${arts[RANDOM % ${#arts[@]}]}
+    while ((${#arts[@]} > 1)) && [[ $art == "${last_art:-}" ]]; do
+      art=${arts[RANDOM % ${#arts[@]}]}
+    done
+  fi
+  last_art=$art
   ttfx -i "$art" --frame-rate 60 \
     --canvas-width 0 --canvas-height 0 --reuse-canvas \
     --anchor-canvas c --anchor-text c \
-    --random-effect --no-eol --no-restore-cursor \
-    `# 22 of ttfx's 37, picked by watching each one on the art` \
-    --include-effects binarypath blackhole bouncyballs burn decrypt \
-    expand fireworks highlight middleout orbittingvolley pour rain \
-    scattered slice slide spray swarm sweep synthgrid thunderstorm \
-    unstable vhstape &
+    --no-eol --no-restore-cursor "${effect[@]}" &
   pid=$!
   while kill -0 "$pid" 2>/dev/null; do
     if read -rsn1 -t 1 || ! focused || pidof hyprlock >/dev/null; then

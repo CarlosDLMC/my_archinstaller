@@ -1900,7 +1900,13 @@ a 256×60 terminal at 2560×1440, 160×43 for 192×45 at 1920×1080. Run it agai
 changing monitors or the `foot` font, or with another image: `ScreensaverArt.sh some.png`.
 A different `art.txt` already there is kept as `art.txt.backup-<date-time>`. The art
 lives outside `~/.config/hypr` because an installer re-run replaces that whole folder;
-the repo has no `art.txt`, so a re-run never overwrites yours. `ttfx` comes from the AUR and is built without its tests (see
+the repo has no `art.txt`, so a re-run never overwrites yours.
+
+For more than one piece, put several `.txt` files in `~/.local/share/screensaver/art/`:
+the screensaver then opens with `mosfilm_logo.txt` from that folder (if it is there)
+drawn by `scattered`, and after that shows a random piece with a random effect each
+time, never the same piece twice in a row. With no `.txt` in that folder it uses
+`art.txt`. `ttfx` comes from the AUR and is built without its tests (see
 `install-scripts/01-hypr-pkgs.sh`): on CachyOS one bit-exact test fails by a last-bit
 rounding difference in glibc, so an update through yay there needs
 `yay -S ttfx --mflags --nocheck`.
@@ -1946,8 +1952,8 @@ each character shows two of them, one above the other: `█` both on, `▀` the 
      ttfx -i art.txt --canvas-width 0 --canvas-height 0 --anchor-canvas c --anchor-text c --frame-rate 60 "$e"
    done
    ```
-   To keep an effect out of the screensaver, add `--exclude-effects <name>...` to the
-   `ttfx` line in `Screensaver.sh`.
+   The screensaver picks from the 21 listed in `effect=(... --include-effects ...)` in
+   `Screensaver.sh`; edit that list to add or drop one.
 
 6. **Use it.**
    ```bash
@@ -1955,6 +1961,8 @@ each character shows two of them, one above the other: `█` both on, `▀` the 
    cp art.txt ~/.local/share/screensaver/art.txt
    ~/.config/hypr/scripts/Screensaver.sh
    ```
+   Or, to have it in the rotation with other pieces, give it a name of its own in
+   `~/.local/share/screensaver/art/` (e.g. `art/logo.txt`).
 
 7. **Idle.** It already starts on idle: the 9-minute listener in
    `~/.config/hypr/hypridle.conf` runs it, unless the screen is already locked, and
