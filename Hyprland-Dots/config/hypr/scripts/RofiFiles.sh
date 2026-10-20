@@ -110,9 +110,40 @@ path_of() {
     printf '%s' "$p"
 }
 
+# Source code and config files open in nvim (in foot), not their default app.
+# xdg-open goes by a file's contents, which call most code text/plain
+# (omawrite), so the extension decides here; .txt and .md stay with omawrite,
+# .html with the browser. A file with no extension counts when its contents
+# say script or source (a shebang: file reports text/x-...).
+code_exts=" c h cc cpp cxx hpp hh rs go py pyi rb pl pm lua js mjs cjs ts tsx
+    jsx java kt kts scala swift zig nim dart php r jl hs ml ex exs erl clj el
+    vim sh bash zsh fish ps1 sql qml css scss sass less vue svelte xml json
+    jsonc toml yaml yml ini conf cfg rasi kdl nix cmake mk diff patch tex
+    gradle proto graphql desktop service "
+code_names=" Makefile makefile GNUmakefile Dockerfile Containerfile PKGBUILD
+    Justfile justfile CMakeLists.txt .gitignore .gitconfig .editorconfig "
+
+is_code() {
+    local name=${1##*/} ext
+    [[ -f $1 ]] || return 1
+    [[ $code_names == *" $name "* || $name == .*rc || $name == .*profile ]] && return 0
+    if [[ ${name#.} == *.* ]]; then
+        ext=${name##*.}
+        [[ $code_exts == *[[:space:]]"${ext,,}"[[:space:]]* ]]
+    else
+        [[ $(file -b --mime-type -- "$1" 2>/dev/null) == text/x-* ]]
+    fi
+}
+
 open_path() {
+    local p
+    p=$(path_of "$1")
     # setsid keeps the app alive after rofi exits.
-    setsid -f xdg-open "$(path_of "$1")" >/dev/null 2>&1
+    if is_code "$p"; then
+        setsid -f foot nvim -- "$p" >/dev/null 2>&1
+    else
+        setsid -f xdg-open "$p" >/dev/null 2>&1
+    fi
 }
 
 # Thunar's daemon answers org.freedesktop.FileManager1, whose ShowItems opens
@@ -167,6 +198,10 @@ preview_open() {
     local app
     [[ $(cat "$PV.last" 2>/dev/null) == "$1" ]] && return
     printf '%s' "$1" > "$PV.last"
+    if is_code "$1"; then
+        setsid -f foot nvim -- "$1" >/dev/null 2>&1
+        return
+    fi
     app=$(default_app "$1")
     # Never previewed in a web browser, nor with no default app (xdg-open
     # would fall back to one): it lands as a tab in the running browser, or as
