@@ -289,30 +289,39 @@ DropdownWidget {
         onTriggered: vpnWidget.updateVpnStatus()
     }
 
-    // Icon content
-    Text {
-        id: vpnText
+    // Icon content: one fixed slot for both glyphs. Terminess is not the Mono
+    // Nerd Font, so the two are laid out by their ink - the knot 26px, the
+    // shield 24px - and everything to the right jumped 2px each time the
+    // tunnel went up or down. The slot is the wider of the two, measured in the
+    // same font so it follows Theme.fontSize.
+    //
+    // The glyph is centred by moving the Text, not with horizontalAlignment:
+    // AlignHCenter centres the glyph's 14px advance, not its 26px of ink, which
+    // pushed the knot 6px to the right and into the divider beside it.
+    Item {
+        id: vpnSlot
         anchors.verticalCenter: parent.verticalCenter
-        // Up and down differ in shape as well as colour: the VPN knot in the
-        // alarm colour when a tunnel is up, a crossed-out shield in the grey
-        // every idle widget rests in when it is down. Down used to be the
-        // same knot in colFaint - wallust's darkest slot lifted to a readable
-        // lightness, which on some wallpapers came out vivid blue or yellow
-        // and looked lit. This is the single place the alert hue is used for
-        // something that is not a problem - a live tunnel is worth seeing at
-        // a glance.
-        text: vpnWidget.activeVpn ? "󰖂" : "󰦜"
-        color: vpnWidget.activeVpn ? Theme.colAlert : Theme.colGrey
-        font.pixelSize: Theme.fontSize + 4
-        font.family: Theme.fontFamily
-        font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
-        // One slot for both glyphs. Terminess is not the Mono Nerd Font, so the
-        // two are laid out by their ink - the knot 26px, the shield 24px - and
-        // everything to the right jumped 2px each time the tunnel went up or
-        // down. The slot is the wider of the two, measured in the same font so
-        // it follows Theme.fontSize, with the glyph centred in it.
         width: Math.ceil(Math.max(upGlyph.boundingRect.width, downGlyph.boundingRect.width))
-        horizontalAlignment: Text.AlignHCenter
+        height: vpnText.implicitHeight
+
+        Text {
+            id: vpnText
+            anchors.verticalCenter: parent.verticalCenter
+            x: Math.round((vpnSlot.width - implicitWidth) / 2)
+            // Up and down differ in shape as well as colour: the VPN knot in the
+            // alarm colour when a tunnel is up, a crossed-out shield in the grey
+            // every idle widget rests in when it is down. Down used to be the
+            // same knot in colFaint - wallust's darkest slot lifted to a readable
+            // lightness, which on some wallpapers came out vivid blue or yellow
+            // and looked lit. This is the single place the alert hue is used for
+            // something that is not a problem - a live tunnel is worth seeing at
+            // a glance.
+            text: vpnWidget.activeVpn ? "󰖂" : "󰦜"
+            color: vpnWidget.activeVpn ? Theme.colAlert : Theme.colGrey
+            font.pixelSize: Theme.fontSize + 4
+            font.family: Theme.fontFamily
+            font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
+        }
     }
 
     TextMetrics { id: upGlyph; font: vpnText.font; text: "󰖂" }
