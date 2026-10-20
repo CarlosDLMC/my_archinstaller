@@ -412,7 +412,7 @@ DropdownWidget {
             onImplicitHeightChanged: pult.cardHeight = implicitHeight
             Component.onCompleted: pult.cardHeight = implicitHeight
 
-            ConsoleCaption { text: "ПУЛЬТ" }
+            ConsoleCaption { text: "НАСТРОЙКИ" }
 
             ConsolePlate {
                 pad: 6
