@@ -555,8 +555,20 @@ DropdownWidget {
                         onTextChanged: wifiWidget.enteredPassword = text
                         Keys.onReturnPressed: wifiWidget.connectWithPassword()
                         Keys.onEscapePressed: wifiWidget.cancelPasswordEntry()
+                        // The field is built with the card, before any network
+                        // asks for a password, so it takes the focus each time
+                        // the password view comes up - typing goes straight in,
+                        // and Tab reaches it from the buttons.
+                        activeFocusOnTab: true
                         Component.onCompleted: {
                             if (wifiWidget.passwordMode) forceActiveFocus()
+                        }
+                        Connections {
+                            target: wifiWidget
+                            function onPasswordModeChanged() {
+                                if (wifiWidget.passwordMode)
+                                    Qt.callLater(() => passwordInput.forceActiveFocus())
+                            }
                         }
                     }
                 }
