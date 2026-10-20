@@ -1,6 +1,6 @@
 # Vendored from Arch's rofi package:
 #   https://gitlab.archlinux.org/archlinux/packaging/packages/rofi
-# with four patches. keyboard-on-demand.patch: when ROFI_KEYBOARD_ON_DEMAND is
+# with five patches. keyboard-on-demand.patch: when ROFI_KEYBOARD_ON_DEMAND is
 # set in its environment, rofi asks for on-demand keyboard focus instead of
 # exclusive. Stock rofi on Wayland always takes the keyboard exclusively (a
 # layer-shell overlay), so nothing else can be typed into or clicked while it
@@ -11,7 +11,9 @@
 #
 # num-current-row.patch: a num-current-row widget, the position of the selected
 # row among the filtered ones - next to rofi's own num-filtered-rows and
-# num-rows the launcher's prompt line reads "2 / 23 / 84721".
+# num-rows the launcher's prompt line reads "2 / 23 / 84721". The widget's text
+# carries its own " /", so stock rofi, which draws nothing for it, shows a
+# clean "23 / 84721".
 #
 # blink-interval.patch: a blink-interval theme property, the ms between the
 # input cursor's on and off (rofi hard-codes 1200; still the default).
@@ -22,6 +24,11 @@
 # toggles the preview with it; before, rofi needed a fresh list to stay open,
 # and the row Shift+Enter was pressed on had to move to the top to keep the
 # cursor.
+#
+# quote-entry.patch: -on-selection-changed gets {entry} shell-quoted, as one
+# argument. Stock rofi pastes the row in raw and then parses the command line,
+# so a row with an odd " or a trailing \ (a file, an app, a window title like
+# 27" monitor) failed to parse and rofi's error dialog replaced the menu.
 #
 # install-scripts/rofi-ondemand.sh builds this with makepkg. pkgrel is above
 # the repos' (1, CachyOS 1.1), so `pacman -Syu` keeps it - until the repos ship
@@ -47,8 +54,8 @@
 
 pkgname=rofi
 pkgver=2.0.0
-pkgrel=4
-pkgdesc="A window switcher, application launcher and dmenu replacement (on-demand focus, current-row, blink-interval and keep-list patches)"
+pkgrel=5
+pkgdesc="A window switcher, application launcher and dmenu replacement (on-demand focus, current-row, blink-interval, keep-list and entry-quoting patches)"
 url="https://davatorium.github.io/rofi"
 arch=('x86_64')
 license=('MIT')
@@ -62,13 +69,15 @@ source=("https://github.com/davatorium/rofi/releases/download/${pkgver}/rofi-${p
         'keyboard-on-demand.patch'
         'num-current-row.patch'
         'blink-interval.patch'
-        'keep-list.patch')
+        'keep-list.patch'
+        'quote-entry.patch')
 sha256sums=('f81659b175306ff487e35d88d6b36128e85a793bfb56b64fa22c62eb54c4abd0'
             '0cd6f1360580f49647ceb7d169ab015f4998e778fd750ce3ad2e861f333824e3'
             'b5b459b4334b0e529010539cfaaf35cd5da5a80d40a03bea42126714bd8a1b2c'
-            'ad9ce33e470a21daf5435b16770502f2a035cdad30f7ded0bc02b6b1984dff38'
+            '473d3a4cd6e9469c1e72245e34fd6a637969a6fbc94c70e2ee05624eb6871d40'
             '16a23289dfe7b53cb16e46462dc6e0f28041eb68016e530eadfe85a47d9689db'
-            '2e0cdd44c7c465e68fb4b545f29f98b4bf92d6401adc85ac84571bd515fc1ada')
+            '2e0cdd44c7c465e68fb4b545f29f98b4bf92d6401adc85ac84571bd515fc1ada'
+            '492b3edd150a4eb4fee715b4516c57fd5ca42c562992c066d6a05d0f72ce5fa6')
 
 prepare() {
 	cd "${pkgname}-${pkgver}"
@@ -79,6 +88,7 @@ prepare() {
 	patch -Np1 -i "${srcdir}/num-current-row.patch"
 	patch -Np1 -i "${srcdir}/blink-interval.patch"
 	patch -Np1 -i "${srcdir}/keep-list.patch"
+	patch -Np1 -i "${srcdir}/quote-entry.patch"
 }
 
 build() {

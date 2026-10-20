@@ -25,10 +25,12 @@ local bind = hl.bind
 -- window take the keyboard while the launcher stays open - the preview beside
 -- it (Shift+Enter in ФАЙЛЫ) can be used. Stock rofi ignores it.
 -- -on-selection-changed hands every row the cursor moves to to RofiFiles.sh
--- --hover, which opens it while preview mode is on. rofi pastes {entry} into
--- the command before splitting it, hence the quotes: a name containing " or \
--- is not previewed.
-bind(M .. " + D",      exec("pkill rofi || true && ROFI_KEYBOARD_ON_DEMAND=1 rofi -config ~/.config/rofi/config-launcher.rasi -show drun -modi drun,files:" .. S .. "/RofiFiles.sh,run,window -matching glob -on-selection-changed '" .. S .. "/RofiFiles.sh --hover \"{entry}\"'"), { description = "app launcher" })
+-- --hover, which opens it while preview mode is on. {entry} goes in bare: the
+-- patched rofi quotes it itself, so any name arrives as one argument (quoted
+-- here as well, a row with " or \ broke the command and rofi showed an error
+-- box over the launcher). Stock rofi splits it at spaces; RofiFiles.sh joins
+-- the words back.
+bind(M .. " + D",      exec("pkill rofi || true && ROFI_KEYBOARD_ON_DEMAND=1 rofi -config ~/.config/rofi/config-launcher.rasi -show drun -modi drun,files:" .. S .. "/RofiFiles.sh,run,window -matching glob -on-selection-changed '" .. S .. "/RofiFiles.sh --hover {entry}'"), { description = "app launcher" })
 bind(M .. " + B",      exec("librewolf"),                  { description = "open browser" })
 bind(M .. " + A",      exec(S .. "/OverviewToggle.sh"),    { description = "desktop overview" }) -- quickshell overview, AGS fallback
 bind(M .. " + Return", exec(D.term),                       { description = "open terminal" })

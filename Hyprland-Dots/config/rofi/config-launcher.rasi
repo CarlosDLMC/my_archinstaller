@@ -39,18 +39,19 @@ mainbox {
 }
 
 /* Position / matches / total, at the right end of the prompt line. The
-   position (num-current-row) comes from the patched rofi, pkgbuilds/rofi;
-   stock rofi turns the unknown name into an empty box, which takes no room. */
+   position (num-current-row) comes from the patched rofi, pkgbuilds/rofi, and
+   brings its own " /"; stock rofi turns the unknown name into an empty box,
+   which takes no room, and reads "matches / total". */
 inputbar {
-    children:                    [ "textbox-prompt-colon", "entry", "num-current-row", "textbox-num-sep", "num-filtered-rows", "textbox-num-sep2", "num-rows" ];
+    children:                    [ "textbox-prompt-colon", "entry", "num-current-row", "num-filtered-rows", "textbox-num-sep", "num-rows" ];
 }
-num-current-row, num-filtered-rows, num-rows, textbox-num-sep, textbox-num-sep2 {
+num-current-row, num-filtered-rows, num-rows, textbox-num-sep {
     expand:                      false;
     vertical-align:              0.5;
     font:                        "Terminess Nerd Font 16";
     text-color:                  @tty-dim;
 }
-textbox-num-sep, textbox-num-sep2 {
+textbox-num-sep {
     str:                         "/";
 }
 

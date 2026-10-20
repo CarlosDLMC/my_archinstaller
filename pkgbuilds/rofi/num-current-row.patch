@@ -21,7 +21,7 @@ index 28d6fb0..292f132 100644
    }
 +  if (state->tb_current_row) {
 +    char *r = g_strdup_printf(
-+        "%u", index < state->filtered_lines ? index + 1 : 0);
++        "%u /", index < state->filtered_lines ? index + 1 : 0);
 +    textbox_text(state->tb_current_row, r);
 +    g_free(r);
 +  }

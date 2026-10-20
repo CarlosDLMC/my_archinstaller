@@ -1,0 +1,21 @@
+diff --git a/source/view.c b/source/view.c
+--- a/source/view.c
++++ b/source/view.c
+@@ -645,10 +645,15 @@
+                                       &fstate, NULL, TRUE);
+   char **args = NULL;
+   int argv = 0;
+-  helper_parse_setup(config.on_selection_changed, &args, &argv, "{entry}", text,
+-                     (char *)0);
++  // Shell-quoted, so {entry} is one argument whatever the row holds. Pasted in
++  // raw, a row with an odd " or a trailing \ made the command fail to parse,
++  // and the error dialog replaced the menu.
++  char *quoted = g_shell_quote(text != NULL ? text : "");
++  helper_parse_setup(config.on_selection_changed, &args, &argv, "{entry}",
++                     quoted, (char *)0);
+   if (args != NULL)
+     helper_execute(NULL, args, "", config.on_selection_changed, NULL);
++  g_free(quoted);
+   g_free(text);
+ }
+ static void selection_changed_callback(G_GNUC_UNUSED listview *lv,

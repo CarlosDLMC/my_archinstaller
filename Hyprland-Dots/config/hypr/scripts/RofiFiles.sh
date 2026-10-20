@@ -14,6 +14,11 @@
 #
 # Also run as `RofiFiles.sh --hover ENTRY` by rofi's on-selection-changed hook
 # (the SUPER D bind), for the preview.
+#
+# Stock rofi (if pkgbuilds/rofi's build failed or a repo update replaced it):
+# Shift+Enter reloads the list with the row first instead of keeping it, and
+# a row with an odd " or a trailing \ in its name shows rofi's parse-error
+# box instead of a preview.
 
 # Cache, toolchain and app-data folders, skipped in both searches. They hold
 # most of the files under ~ (over a million) and nothing worth opening; delete
@@ -79,6 +84,7 @@ tree_header() {
     fi
 }
 
+# list_tree ROOT [ROW]: ROW comes first in the list (see keep_tree).
 list_tree() {
     root=$1
     local x args=(--hidden --color never --absolute-path)
@@ -90,17 +96,36 @@ list_tree() {
         for x in "${root_excludes[@]}"; do args+=(--exclude "$x"); done
     fi
     tree_header
+    [[ $2 ]] && printf '%s\n' "$2"
     printf '..   НАЗАД\0info\x1fback\n'
     # Paths under home are shown as ~/..., shorter to read and to type.
-    fd "${args[@]}" . "$root" 2>/dev/null | sed "s|^$HOME/|~/|"
+    if [[ -z $2 ]]; then
+        fd "${args[@]}" . "$root" 2>/dev/null | sed "s|^$HOME/|~/|"
+    else
+        fd "${args[@]}" . "$root" 2>/dev/null | sed "s|^$HOME/|~/|" |
+            LC_ALL=C grep -vxF -- "$2"
+    fi
 }
 
-# The file list stays as it is - same rows, filter and cursor - and only its
-# message changes. keep-list is the patched rofi's (pkgbuilds/rofi); without
-# it, an answer with no rows would close rofi.
+# rofi is the patched build (pkgbuilds/rofi), which knows keep-list.
+rofi_keeps_lists() {
+    LC_ALL=C pacman -Qi rofi 2>/dev/null | grep -q '^Description .*keep-list'
+}
+
+# keep_tree ROW: the file list stays as it is - same rows, filter and cursor -
+# and only its message changes. keep-list is the patched rofi's; stock rofi
+# (its build failed, or a repo update replaced it) would close on an answer
+# with no rows, so it gets the list again with ROW, the one Shift+Enter was
+# pressed on, first: rofi puts the cursor on the first match, and ROW matches
+# the filter. (keep-selection cannot do it: rofi maps it through the old list,
+# and fd's order changes from run to run.)
 keep_tree() {
-    tree_header
-    printf '\0keep-list\x1ftrue\n'
+    if rofi_keeps_lists; then
+        tree_header
+        printf '\0keep-list\x1ftrue\n'
+    else
+        list_tree "$root" "$1"
+    fi
 }
 
 # A row's path as the shell needs it: ~/ expanded, no trailing / on folders.
@@ -291,8 +316,11 @@ hover() {
     preview_open "$p"
 }
 
+# The patched rofi hands the row over as one argument; stock rofi splits it at
+# spaces, so the words are joined back (a run of spaces comes back as one).
 if [[ $1 == --hover ]]; then
-    hover "$2"
+    shift
+    hover "$*"
     exit 0
 fi
 
@@ -311,7 +339,7 @@ case ${ROFI_RETV:-0} in
                 if [[ $ROFI_RETV == 11 ]]; then
                     # Shift+Enter: preview mode on/off, list left as it is.
                     toggle_preview "$1"
-                    keep_tree
+                    keep_tree "$1"
                 else
                     # Enter: no output, which closes rofi (and with it the
                     # preview).
