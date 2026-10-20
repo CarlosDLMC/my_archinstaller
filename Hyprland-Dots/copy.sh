@@ -238,12 +238,23 @@ apply_user_state() { # dir from to [quiet]
         _s=$(keep_added_lines "$_from/online_music.list" "$_to/online_music.list" name)
         [ -z "$_quiet" ] && [ "$_s" -gt 0 ] && echo "  ${OK} Kept the $_s radio station(s) you added (RofiBeats)"
         # The theme picked in SUPER+SHIFT+E > Тема rofi: the one
-        # @theme line that is not commented out. Only while that theme exists.
+        # @theme line that is not commented out. Only while that theme exists,
+        # and not when it is a former default of the repo's: that line came
+        # with an older install, not from a pick, and keeping it kept every
+        # menu in the old look after the default moved on (style-4.rasi, the
+        # default until soviet-teletype.rasi, 2026-10-16).
         _t=$(grep -m1 -E '^[[:space:]]*@theme ' "$_from/config.rasi" 2>/dev/null | sed -E 's/^[[:space:]]*@theme "(.*)".*/\1/')
-        if [ -n "$_t" ] && [ -f "${_t/#\~/$HOME}" ] \
-           && keep_line "$_from/config.rasi" "$_to/config.rasi" '[[:space:]]*@theme ' && [ -z "$_quiet" ]; then
-            echo "  ${OK} Kept your rofi theme (${_t##*/})"
-        fi
+        case "${_t##*/}" in
+        style-4.rasi)
+            [ -z "$_quiet" ] && echo "  ${NOTE} Your rofi theme was ${_t##*/}, the previous default - the menus take the current one"
+            ;;
+        *)
+            if [ -n "$_t" ] && [ -f "${_t/#\~/$HOME}" ] \
+               && keep_line "$_from/config.rasi" "$_to/config.rasi" '[[:space:]]*@theme ' && [ -z "$_quiet" ]; then
+                echo "  ${OK} Kept your rofi theme (${_t##*/})"
+            fi
+            ;;
+        esac
         ;;
     gtk-3.0)
         # Sidebar bookmarks added in Thunar or a file chooser (Ctrl+D).
