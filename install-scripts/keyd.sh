@@ -77,6 +77,29 @@ else
   echo "${OK} Wrote $CONF" | tee -a "$LOG"
 fi
 
+# Disable-while-typing. libinput turns the touchpad off while you type only for
+# a keyboard it takes to be built in, and keyd's virtual keyboard - which all
+# typing comes through now - reports itself as USB. Without this, on a laptop a
+# palm on the touchpad moved the pointer (and with tap-to-click, clicked)
+# mid-sentence. The quirk is the one keyd's README gives (its FAQ), added to
+# libinput's one local overrides file after whatever is already there. libinput
+# reads it when a device appears: from the next login. Harmless without a
+# touchpad.
+QUIRKS=/etc/libinput/local-overrides.quirks
+if [ -f "$QUIRKS" ] && grep -qx 'MatchName=keyd\*keyboard' "$QUIRKS"; then
+  echo "${INFO} The keyd keyboard is already marked built-in in $QUIRKS." | tee -a "$LOG"
+else
+  _sep=""
+  if [ -s "$QUIRKS" ]; then _sep=$'\n'; fi
+  if sudo mkdir -p /etc/libinput \
+     && printf '%s# keyd'"'"'s virtual keyboard is the built-in one (my_archinstaller, install-scripts/keyd.sh)\n[keyd virtual keyboard]\nMatchUdevType=keyboard\nMatchName=keyd*keyboard\nAttrKeyboardIntegration=internal\n' "$_sep" \
+        | sudo tee -a "$QUIRKS" >/dev/null; then
+    echo "${OK} Marked the keyd keyboard built-in for libinput: the touchpad stays off while you type." | tee -a "$LOG"
+  else
+    echo "${WARN} Could not write $QUIRKS - the touchpad will not pause while you type (see keyd's README, FAQ)." | tee -a "$LOG"
+  fi
+fi
+
 # Enabled for every boot, and (re)started now so the new config is live -
 # restart, not reload, because a reload is ignored while keyd is not running.
 if sudo systemctl enable keyd.service >>"$LOG" 2>&1 \

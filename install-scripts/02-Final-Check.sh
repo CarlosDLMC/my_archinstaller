@@ -380,6 +380,8 @@ if selected keyd_nav; then
         systemctl is-enabled keyd.service
     check_outcome "/etc/keyd/default.conf has no Caps Lock navigation layer (install-scripts/keyd.sh)" \
         grep -qx 'capslock = overload(nav, capslock)' /etc/keyd/default.conf
+    check_outcome "libinput does not take keyd's keyboard as built-in - the touchpad keeps working while you type (install-scripts/keyd.sh)" \
+        grep -qx 'MatchName=keyd\*keyboard' /etc/libinput/local-overrides.quirks
 fi
 
 if selected docker; then
