@@ -53,6 +53,7 @@ for PKG in "${omarchy_apps_vendored[@]}"; do
   if [ -n "$HAVE" ] && [ "$(vercmp "$HAVE" "$WANT")" -ge 0 ]; then
     echo "${INFO} ${MAGENTA}$PKG${RESET} $HAVE is already installed. Skipping..." | tee -a "$LOG"
     clear_package_failure "$PKG"
+    clear_package_failure "$PKG-$WANT"
     continue
   fi
 
@@ -94,9 +95,20 @@ for PKG in "${omarchy_apps_vendored[@]}"; do
   mv "$TMPD"/*.log "$PARENT_DIR/Install-Logs/" 2>/dev/null || true
   rm -rf "$TMPD"
 
-  if pacman -Q "$PKG" &>/dev/null; then
-    echo "${OK} Package ${YELLOW}$PKG${RESET} $(pacman -Q "$PKG" | awk '{print $2}') has been successfully installed!" | tee -a "$LOG"
+  # Installed at the version just built, not merely installed: after a failed
+  # update (a file conflict, the pacman lock held) the previous build is still
+  # there, and reading that as success cleared the failure and let the preset
+  # reboot on the old build.
+  NOW=$(pacman -Q "$PKG" 2>/dev/null | awk '{print $2}')
+  if [ "$NOW" = "$WANT" ]; then
+    echo "${OK} Package ${YELLOW}$PKG${RESET} $WANT has been successfully installed!" | tee -a "$LOG"
     clear_package_failure "$PKG"
+    clear_package_failure "$PKG-$WANT"
+  elif [ -n "$NOW" ]; then
+    echo "${ERROR} ${YELLOW}$PKG${RESET} $WANT did not install - $NOW is still the one installed. See $LOG." | tee -a "$LOG"
+    # Recorded with the version: the final check re-verifies each name with
+    # pacman, and plain "$PKG" is installed.
+    record_package_failure "$PKG-$WANT"
   else
     echo "${ERROR} ${YELLOW}$PKG${RESET} failed to install. See $LOG." | tee -a "$LOG"
     record_package_failure "$PKG"
