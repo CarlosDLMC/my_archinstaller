@@ -306,7 +306,17 @@ DropdownWidget {
         font.pixelSize: Theme.fontSize + 4
         font.family: Theme.fontFamily
         font.bold: true; style: Text.Outline; styleColor: Theme.colTextShadow
+        // One slot for both glyphs. Terminess is not the Mono Nerd Font, so the
+        // two are laid out by their ink - the knot 26px, the shield 24px - and
+        // everything to the right jumped 2px each time the tunnel went up or
+        // down. The slot is the wider of the two, measured in the same font so
+        // it follows Theme.fontSize, with the glyph centred in it.
+        width: Math.ceil(Math.max(upGlyph.boundingRect.width, downGlyph.boundingRect.width))
+        horizontalAlignment: Text.AlignHCenter
     }
+
+    TextMetrics { id: upGlyph; font: vpnText.font; text: "󰖂" }
+    TextMetrics { id: downGlyph; font: vpnText.font; text: "󰦜" }
 
     // Popup content: the tunnel's lamp and name with an off button, the two
     // sync toggles as latching push buttons, and the tunnels on a plate.
