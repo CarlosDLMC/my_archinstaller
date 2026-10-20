@@ -82,6 +82,14 @@ hl.on("hyprland.start", function()
     -- Resume Hyprsunset if state is "on" from previous session
     run(S .. "/Hyprsunset.sh init")
 
+    -- Screensaver art sized for this screen, for each image in
+    -- ~/.local/share/screensaver/images/ that never had any: all of them at
+    -- the first login, later only what an installer re-run brought in (a
+    -- machine installed before the art existed gets them all then). With
+    -- nothing new it opens nothing - see ScreensaverArt.sh. A few seconds in,
+    -- once the session has settled: it measures a fullscreen foot.
+    run("sleep 5; " .. S .. "/ScreensaverArt.sh --new")
+
     ---- available but disabled by default ----
     -- run("awww-daemon --format argb && awww img " .. V.home .. "/Pictures/wallpapers/mecha-nostalgia.png")
     -- run(S .. "/Polkit-NixOS.sh")      -- Gnome polkit for NixOS

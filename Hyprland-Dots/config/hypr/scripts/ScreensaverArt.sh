@@ -5,13 +5,20 @@
 # within 2 columns of the sides.
 #
 #   ScreensaverArt.sh [IMAGE...]   default: every image in images/
+#   ScreensaverArt.sh --new        only the images that never had art made here
 #
-# initial-boot.sh runs it once, at the first login. Run it again by hand after
-# changing monitors or the foot font. A different <name>.txt already there is
-# kept as <name>.txt.backup-<date-time> (Screensaver.sh only reads *.txt).
+# Startup_Apps.lua runs it with --new at every login: on a fresh install that
+# is every image; after an installer re-run, the images it brought (all of
+# them on a machine installed before the art existed); otherwise nothing, and
+# nothing opens. art/.made lists the images done, so a piece you delete from
+# art/ is not made again. Run it by hand, without --new, after changing
+# monitors or the foot font. A different <name>.txt already there is kept as
+# <name>.txt.backup-<date-time> (Screensaver.sh only reads *.txt).
 
 dir="$HOME/.local/share/screensaver"
 art_dir="$dir/art"
+# The images whose art has been made, one name per line.
+made="$art_dir/.made"
 
 fail() {
   notify-send "Screensaver art" "$1"
@@ -19,17 +26,47 @@ fail() {
   exit 1
 }
 
+mark_made() {
+  grep -qxF -- "$1" "$made" 2>/dev/null || echo "$1" >>"$made"
+}
+
 shopt -s nullglob nocaseglob
+new=false
+if [[ ${1-} == --new ]]; then
+  new=true
+  shift
+fi
 srcs=("$@")
 ((${#srcs[@]})) || srcs=("$dir/images"/*.{png,jpg,jpeg,webp})
+if $new; then
+  # An image with a <name>.txt but no line in .made had its art made before
+  # the list existed, or by hand: counted as done and left alone.
+  pick=()
+  for src in "${srcs[@]}"; do
+    name=$(basename "${src%.*}")
+    grep -qxF -- "$name" "$made" 2>/dev/null && continue
+    if [[ -f $art_dir/$name.txt ]]; then
+      mark_made "$name"
+      continue
+    fi
+    pick+=("$src")
+  done
+  ((${#pick[@]})) || exit 0
+  srcs=("${pick[@]}")
+fi
 ((${#srcs[@]})) || fail "No images in $dir/images"
 for src in "${srcs[@]}"; do
   [[ -f $src ]] || fail "No image at $src"
 done
 command -v foot >/dev/null || fail "foot is not installed"
 
-# The monitor the measuring window opens on, and its pixels.
-read -r mon_w mon_h < <(hyprctl monitors -j | jq -r '.[] | select(.focused) | "\(.width) \(.height)"')
+# The monitor the measuring window opens on, and its pixels as it shows them.
+# Hyprland reports the mode's width and height, so on a monitor turned on its
+# side (an odd transform: 90 or 270 degrees, flipped or not) they swap.
+read -r mon_w mon_h mon_t < <(hyprctl monitors -j | jq -r '.[] | select(.focused) | "\(.width) \(.height) \(.transform)"')
+if [[ $mon_t =~ ^[0-9]+$ ]] && ((mon_t % 2)); then
+  read -r mon_w mon_h <<<"$mon_h $mon_w"
+fi
 
 # A terminal's rows and columns can only be read from inside one: a
 # fullscreen foot, black and opaque, for a moment. It opens at 80x24 and is
@@ -80,11 +117,13 @@ for src in "${srcs[@]}"; do
 
   if [[ -f $out ]] && cmp -s "$tmp" "$out"; then
     rm -f "$tmp"
+    mark_made "$name"
     echo "  $name: unchanged (${width}x${r})"
     continue
   fi
   [[ -f $out ]] && cp -p "$out" "$out.backup-$(date +%Y%m%d-%H%M%S)"
   mv -f "$tmp" "$out"
+  mark_made "$name"
   echo "  $name: ${width}x${r}"
 done
 
