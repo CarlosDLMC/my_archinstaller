@@ -657,6 +657,11 @@ for dir in "${config_dirs[@]}"; do
             wallust)    _cmp_x=(output) ;;
             rofi)       _cmp_x=(wallust .current_wallpaper) ;;
             cava)       _cmp_x=(config) ;;
+            # The wallust outputs in them (wallust_targets, seeded further
+            # down) - wallust's, not the repo's, so counted they backed these
+            # three up on every re-run with nothing edited.
+            btop)       _cmp_x=(wallust.theme wallust-palette.json) ;;
+            gtk-3.0|gtk-4.0) _cmp_x=(wallust.css) ;;
             # nwg-displays' saved profiles: its own state, not tracked (restored
             # from the backup by restore_state when the directory is replaced).
             nwg-displays) _cmp_x=(profiles active_profile.json) ;;
