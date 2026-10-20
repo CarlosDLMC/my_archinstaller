@@ -8,7 +8,8 @@
 # the old omacom-io org. Both are built here from the PKGBUILDs omarchy ships
 # them with, vendored in pkgbuilds/ (source pinned by sha256, like yay-bin/).
 # They become real pacman packages, so `pacman -R` removes them cleanly - but
-# nothing updates them: bump the vendored PKGBUILD and re-run this script.
+# nothing updates them: bump the vendored PKGBUILD and re-run this script. They
+# are in pacman.conf's IgnorePkg, so -Syu never swaps in the AUR's omawrite.
 #
 # Both apps colour themselves from omarchy's theme file,
 # ~/.local/state/omarchy/current/theme/colors.toml, and watch it. Here wallust
@@ -35,6 +36,29 @@ if ! source "$SCRIPT_DIR/Global_functions.sh"; then
 fi
 
 LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_omarchy-apps.log"
+
+# Kept off -Syu. The AUR has an omawrite under the same name, so a routine
+# `yay -Syu` checks this build against it: once the AUR's version passed the
+# vendored one, the unpatched upstream app would replace it - no portal
+# wrapper, none of the patches. IgnorePkg (pacman.conf) stops that for pacman
+# and yay alike, while `pacman -U` below still installs and updates them. Our
+# own line under [options], with a comment above it - pacman has no comments
+# at the end of a line. Names another IgnorePkg line already holds are left out.
+_ignore=()
+for PKG in "${omarchy_apps_vendored[@]}"; do
+  if ! pacman-conf IgnorePkg 2>/dev/null | grep -qxF "$PKG"; then
+    _ignore+=("$PKG")
+  fi
+done
+if [ ${#_ignore[@]} -gt 0 ]; then
+  if sudo cp -p /etc/pacman.conf "/etc/pacman.conf.bak-$(date +%Y%m%d-%H%M%S)" \
+     && sudo sed -i "/^\[options\]/a # Built from pkgbuilds/ by my_archinstaller (install-scripts/omarchy-apps.sh) - not from the AUR\nIgnorePkg = ${_ignore[*]}" /etc/pacman.conf \
+     && pacman-conf IgnorePkg 2>/dev/null | grep -qxF "${_ignore[0]}"; then
+    echo "${OK} ${_ignore[*]} added to IgnorePkg in /etc/pacman.conf - updated from pkgbuilds/, never by -Syu." | tee -a "$LOG"
+  else
+    echo "${WARN} Could not add ${_ignore[*]} to IgnorePkg in /etc/pacman.conf - a newer AUR omawrite could replace this build on -Syu." | tee -a "$LOG"
+  fi
+fi
 
 for PKG in "${omarchy_apps_vendored[@]}"; do
   SRC="$PARENT_DIR/pkgbuilds/$PKG"
