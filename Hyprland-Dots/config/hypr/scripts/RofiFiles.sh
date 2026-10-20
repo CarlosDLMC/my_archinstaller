@@ -316,8 +316,8 @@ hover() {
     preview_open "$p"
 }
 
-# The patched rofi hands the row over as one argument; stock rofi splits it at
-# spaces, so the words are joined back (a run of spaces comes back as one).
+# The row is one argument ("{entry}" in the bind); joined anyway, in case a
+# bind without the quotes splits it at spaces.
 if [[ $1 == --hover ]]; then
     shift
     hover "$*"

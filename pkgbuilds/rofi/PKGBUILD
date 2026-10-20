@@ -25,10 +25,13 @@
 # and the row Shift+Enter was pressed on had to move to the top to keep the
 # cursor.
 #
-# quote-entry.patch: -on-selection-changed gets {entry} shell-quoted, as one
-# argument. Stock rofi pastes the row in raw and then parses the command line,
-# so a row with an odd " or a trailing \ (a file, an app, a window title like
-# 27" monitor) failed to parse and rofi's error dialog replaced the menu.
+# quote-entry.patch: -on-selection-changed gets {entry} escaped for the double
+# quotes it sits in ("{entry}" in the SUPER D bind): a backslash before \ " $
+# and `. Stock rofi pastes the row in raw and then parses the command line, so a
+# row with an odd " or a trailing \ (a file named 12" single.flac) failed to
+# parse and rofi's error dialog replaced the menu. Escaping rather than quoting,
+# so the bind keeps its quotes and stock rofi still copes with the commoner
+# names (an apostrophe, a #).
 #
 # install-scripts/rofi-ondemand.sh builds this with makepkg. pkgrel is above
 # the repos' (1, CachyOS 1.1), so `pacman -Syu` keeps it - until the repos ship
@@ -54,7 +57,7 @@
 
 pkgname=rofi
 pkgver=2.0.0
-pkgrel=5
+pkgrel=6
 pkgdesc="A window switcher, application launcher and dmenu replacement (on-demand focus, current-row, blink-interval, keep-list and entry-quoting patches)"
 url="https://davatorium.github.io/rofi"
 arch=('x86_64')
@@ -77,7 +80,7 @@ sha256sums=('f81659b175306ff487e35d88d6b36128e85a793bfb56b64fa22c62eb54c4abd0'
             '473d3a4cd6e9469c1e72245e34fd6a637969a6fbc94c70e2ee05624eb6871d40'
             '16a23289dfe7b53cb16e46462dc6e0f28041eb68016e530eadfe85a47d9689db'
             '2e0cdd44c7c465e68fb4b545f29f98b4bf92d6401adc85ac84571bd515fc1ada'
-            '492b3edd150a4eb4fee715b4516c57fd5ca42c562992c066d6a05d0f72ce5fa6')
+            '42ab4f0a9d33e559d6c0cd906791a6193f8e447d07410c6355d66b2c492f8c5c')
 
 prepare() {
 	cd "${pkgname}-${pkgver}"

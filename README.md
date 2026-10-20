@@ -281,8 +281,8 @@ first prompt.
 - rofi (launcher) - built from `pkgbuilds/rofi` by `install-scripts/rofi-ondemand.sh`:
   Arch's rofi 2.0 plus five small patches - on-demand keyboard focus for the launcher
   (a click on a window beside it takes the keyboard while it stays open), the row
-  counter, the cursor blink, `keep-list` for the ФАЙЛЫ tab's preview, and a quoted
-  `{entry}` for its preview hook. If the build fails, the repo's stock rofi stays and
+  counter, the cursor blink, `keep-list` for the ФАЙЛЫ tab's preview, and an escaped
+  `{entry}` for its preview hook (stock rofi breaks on a file name with an odd `"`). If the build fails, the repo's stock rofi stays and
   the menus still work, only without those extras
 - «ПУСК · ПУЛЬТ» power menu (in the Quickshell bar, CTRL + ALT + P, or CTRL + ALT +
   Delete to open it on ВЫХОД); logout, reboot and

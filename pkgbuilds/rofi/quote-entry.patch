@@ -1,21 +1,39 @@
 diff --git a/source/view.c b/source/view.c
 --- a/source/view.c
 +++ b/source/view.c
-@@ -645,10 +645,15 @@
+@@ -635,6 +635,20 @@
+   // state->selected = state->filtered_lines - 1;
+   listview_set_selected(state->list_view, -1);
+ }
++// A row escaped for a double-quoted "{entry}" in -on-selection-changed: a
++// backslash before \ " $ and `, the characters that mean something inside
++// double quotes (a newline stays as it is). Pasted in raw, a row with an odd "
++// or a trailing \ made the command fail to parse, and the error dialog
++// replaced the menu.
++static char *escape_for_double_quotes(const char *s) {
++  GString *out = g_string_sized_new(s != NULL ? strlen(s) + 8 : 1);
++  for (const char *c = s; c != NULL && *c != '\0'; c++) {
++    if (*c == '\\' || *c == '"' || *c == '$' || *c == '`')
++      g_string_append_c(out, '\\');
++    g_string_append_c(out, *c);
++  }
++  return g_string_free(out, FALSE);
++}
+ static void selection_changed_user_callback(unsigned int index,
+                                             RofiViewState *state) {
+   if (config.on_selection_changed == NULL)
+@@ -645,10 +659,12 @@
                                        &fstate, NULL, TRUE);
    char **args = NULL;
    int argv = 0;
 -  helper_parse_setup(config.on_selection_changed, &args, &argv, "{entry}", text,
 -                     (char *)0);
-+  // Shell-quoted, so {entry} is one argument whatever the row holds. Pasted in
-+  // raw, a row with an odd " or a trailing \ made the command fail to parse,
-+  // and the error dialog replaced the menu.
-+  char *quoted = g_shell_quote(text != NULL ? text : "");
++  char *escaped = escape_for_double_quotes(text);
 +  helper_parse_setup(config.on_selection_changed, &args, &argv, "{entry}",
-+                     quoted, (char *)0);
++                     escaped, (char *)0);
    if (args != NULL)
      helper_execute(NULL, args, "", config.on_selection_changed, NULL);
-+  g_free(quoted);
++  g_free(escaped);
    g_free(text);
  }
  static void selection_changed_callback(G_GNUC_UNUSED listview *lv,
