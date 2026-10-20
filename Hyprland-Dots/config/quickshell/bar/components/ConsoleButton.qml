@@ -18,6 +18,10 @@ Rectangle {
     property int fontSize: Theme.fontSize - 4
     property int minWidth: 58
     signal picked()
+    // Whether the last press came from the keyboard (Enter or Space) rather
+    // than a click - set just before picked(), for a handler that treats the
+    // two differently (the power card: a key arms a countdown).
+    property bool byKeyboard: false
 
     // Keyboard (CardKeys.qml): Tab and the arrows land here, Enter or Space
     // presses it. Focus looks like hover - plus a white outline, so it still
@@ -28,6 +32,7 @@ Rectangle {
     border.color: Theme.colWhite
     Keys.onPressed: event => {
         if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+            btn.byKeyboard = true
             btn.picked()
             event.accepted = true
         }
@@ -101,6 +106,9 @@ Rectangle {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        onClicked: btn.picked()
+        onClicked: {
+            btn.byKeyboard = false
+            btn.picked()
+        }
     }
 }

@@ -30,6 +30,20 @@ DropdownWidget {
         endDelay.restart()
     }
 
+    // From the keyboard, logout, reboot and power-off go through the «ПУСК ·
+    // ПУЛЬТ» menu armed on that order, as Enter does there: its five-second
+    // countdown runs on screen and Esc stops it. The card opens with the
+    // focus on БЛОКИРОВКА and Up wraps round to ВЫКЛЮЧЕНИЕ, so a stray "Up,
+    // Enter" used to power off on the spot. A click still acts at once.
+    function armEnd(k) {
+        dropdownOpen = false
+        Qt.callLater(() => {
+            if (!PowerState.dialogOpen)
+                PowerState.openOn(k)
+            PowerState.press(k)
+        })
+    }
+
     Timer {
         id: endDelay
         interval: 250
@@ -91,14 +105,16 @@ DropdownWidget {
                 width: parent.width
                 icon: "󰍃"
                 label: "ВЫХОД"
-                onPicked: powerWidget.endSession("hyprctl dispatch 'hl.dsp.exit()'")
+                onPicked: byKeyboard ? powerWidget.armEnd("E")
+                                     : powerWidget.endSession("hyprctl dispatch 'hl.dsp.exit()'")
             }
 
             ConsoleButton {
                 width: parent.width
                 icon: "󰜉"
                 label: "ПЕРЕЗАГРУЗКА"
-                onPicked: powerWidget.endSession("systemctl reboot")
+                onPicked: byKeyboard ? powerWidget.armEnd("R")
+                                     : powerWidget.endSession("systemctl reboot")
             }
 
             ConsoleButton {
@@ -106,7 +122,8 @@ DropdownWidget {
                 icon: "󰐥"
                 iconColor: Theme.colAlert
                 label: "ВЫКЛЮЧЕНИЕ"
-                onPicked: powerWidget.endSession("systemctl poweroff")
+                onPicked: byKeyboard ? powerWidget.armEnd("S")
+                                     : powerWidget.endSession("systemctl poweroff")
             }
         }
     }
