@@ -42,6 +42,8 @@ SESSION = os.environ.get("HERDR_SESSION") or "default"
 # Same idea as [ui.toast] delay_seconds: a state that does not last this long
 # (a blocked prompt answered at once, an idle between two steps) is not news.
 SETTLE = 1.0
+# How often a waiting notice checks that dunst is still the one holding it.
+WATCH = 30
 
 APP = "Агент"
 TEXT = {"done": "Задание выполнено", "blocked": "Ждёт вашего решения"}
@@ -177,17 +179,45 @@ def hypr_env():
     log("hypr_env: signature %r was not usable, now %r" % (sig, os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")))
 
 
+def notifications_owner():
+    """The bus name of the running notification daemon (dunst), or None."""
+    try:
+        out = subprocess.run(["gdbus", "call", "--session", "--dest", "org.freedesktop.DBus",
+                              "--object-path", "/org/freedesktop/DBus",
+                              "--method", "org.freedesktop.DBus.GetNameOwner",
+                              "org.freedesktop.Notifications"],
+                             capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out.stdout.strip() if out.returncode == 0 else None
+
+
 def notice(tag, urgency, summary, body, pane):
     """Show the notice and wait: clicked, go to the agent. Ends without a click
-    when the notice is closed or replaced (same stack tag)."""
+    when the notice is closed or replaced (same stack tag), or when dunst exits
+    or is restarted - the notice goes with it, and notify-send would otherwise
+    wait for its click until logout."""
     log("notice %s waiting (pid %s)" % (tag, os.getpid()))
     hypr_env()
-    out = subprocess.run(["notify-send", "-a", APP, "-u", urgency,
-                          "-h", "string:x-dunst-stack-tag:" + tag,
-                          "-A", "default=Открыть", summary, body],
-                         capture_output=True, text=True)
-    log("notice %s ended: rc=%s action=%r" % (tag, out.returncode, out.stdout.strip()))
-    if out.stdout.strip() == "default":
+    proc = subprocess.Popen(["notify-send", "-a", APP, "-u", urgency,
+                             "-h", "string:x-dunst-stack-tag:" + tag,
+                             "-A", "default=Открыть", summary, body],
+                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    owner = None
+    while True:
+        try:
+            action = proc.communicate(timeout=WATCH)[0].strip()
+            break
+        except subprocess.TimeoutExpired:
+            now = notifications_owner()
+            if now is None or (owner is not None and now != owner):
+                proc.kill()
+                proc.wait()
+                log("notice %s dropped: the notification daemon is gone" % tag)
+                return
+            owner = now
+    log("notice %s ended: rc=%s action=%r" % (tag, proc.returncode, action))
+    if action == "default":
         go_to(pane)
 
 
