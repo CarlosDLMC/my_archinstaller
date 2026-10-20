@@ -241,12 +241,13 @@ apply_user_state() { # dir from to [quiet]
         # @theme line that is not commented out. Only while that theme exists,
         # and not when it is a former default of the repo's: that line came
         # with an older install, not from a pick, and keeping it kept every
-        # menu in the old look after the default moved on (style-4.rasi, the
-        # default until soviet-teletype.rasi, 2026-10-16).
+        # menu in the old look after the default moved on: style-4.rasi until
+        # 2026-10-16, then soviet-tui.rasi for a day, then soviet-teletype.rasi
+        # (2026-10-17).
         _t=$(grep -m1 -E '^[[:space:]]*@theme ' "$_from/config.rasi" 2>/dev/null | sed -E 's/^[[:space:]]*@theme "(.*)".*/\1/')
         case "${_t##*/}" in
-        style-4.rasi)
-            [ -z "$_quiet" ] && echo "  ${NOTE} Your rofi theme was ${_t##*/}, the previous default - the menus take the current one"
+        style-4.rasi|soviet-tui.rasi)
+            [ -z "$_quiet" ] && echo "  ${NOTE} Your rofi theme was ${_t##*/}, a previous default - the menus take the current one"
             ;;
         *)
             if [ -n "$_t" ] && [ -f "${_t/#\~/$HOME}" ] \

@@ -2225,8 +2225,9 @@ Re-running `./install.sh --preset custom-preset.conf` is also safe — every
 package step skips what is already installed, and `copy.sh` will not overwrite
 a `secrets.zsh` you have filled in. It also keeps your wallust palette, your
 active wallpaper, the first-boot marker, your monitor layout (`monitors.lua`,
-`workspaces.lua`), herdr's saved session, your rofi theme (not the old default
-`style-4.rasi`: an install from before the teletype theme moves to it), RofiBeats stations,
+`workspaces.lua`), herdr's saved session, your rofi theme (not a previous
+default, `style-4.rasi` or `soviet-tui.rasi`: an install from before the teletype theme moves
+to it), RofiBeats stations,
 sidebar bookmarks, and files of your own in `environment.d`,
 `fontconfig`, `Kvantum` and `MangoHud`. Everything else under a copied
 `~/.config` directory is reset to the repo version — edits you made there
