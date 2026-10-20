@@ -201,10 +201,11 @@ ShellRoot {
 
                     //Separator {}
 
-                    // Volume, battery, Wi-Fi and the VPN read as one group:
-                    // spaced apart, not divided. Each gap is tied to the
-                    // widget after it, so a machine without that hardware
-                    // gets no double gap.
+                    // Volume, battery, Wi-Fi and the VPN, divided. Each
+                    // separator is tied to the widget after it: a hidden widget
+                    // is dropped from the layout, but its separator is a
+                    // sibling and would otherwise stay, leaving "| |" on a
+                    // machine without that hardware.
                     //
                     // barWindow: the volume readout is a DropdownWidget now -
                     // right-click opens the audio card.
@@ -213,14 +214,14 @@ ShellRoot {
                         barWindow: barWindow
                     }
 
-                    Item { Layout.preferredWidth: 16; visible: batteryWidget.visible }
+                    Separator { visible: batteryWidget.visible }
 
                     BatteryWidget {
                         id: batteryWidget
                         barWindow: barWindow
                     }
 
-                    Item { Layout.preferredWidth: 16; visible: wifiWidget.visible }
+                    Separator { visible: wifiWidget.visible }
 
                     // WiFi indicator
                     WifiWidget {
@@ -228,7 +229,7 @@ ShellRoot {
                         barWindow: barWindow
                     }
 
-                    Item { Layout.preferredWidth: 16 }
+                    Separator {}
 
                     // VPN selector
                     VpnWidget {
