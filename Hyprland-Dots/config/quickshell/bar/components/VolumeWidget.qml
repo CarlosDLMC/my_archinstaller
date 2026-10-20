@@ -51,7 +51,9 @@ DropdownWidget {
 
     property string volumeIcon: {
         if (volumeMuted) return "󰖁"
-        if (audioSink === "headphone") return ""
+        // nf-md-headphones, the glyph the audio card already uses for the same
+        // device. This was an empty string: a headphone output had no icon.
+        if (audioSink === "headphone") return "󰋋"
         if (audioSink === "bluetooth") return "󰂰"
         if (audioSink === "hdmi") return "󰡁"
         // Static speaker icon
