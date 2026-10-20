@@ -279,7 +279,8 @@ first prompt.
 - Quickshell (custom bar)
 - foot (terminal)
 - rofi (launcher)
-- «ПУСК · ПУЛЬТ» power menu (in the Quickshell bar, CTRL + ALT + P); logout, reboot and
+- «ПУСК · ПУЛЬТ» power menu (in the Quickshell bar, CTRL + ALT + P, or CTRL + ALT +
+  Delete to open it on ВЫХОД); logout, reboot and
   power-off end with a CRT power-off - the picture folds into a line, then a dot
 - dunst (notifications — swaync is removed if present)
 - awww (wallpaper daemon)
@@ -1436,7 +1437,8 @@ those three commands — the VPN widget is the only thing here that depends on i
 - `SUPER + Return` - Open terminal (foot)
 - `SUPER + Q` - Close active window
 - `SUPER + SHIFT + Q` - Terminate active process
-- `CTRL + ALT + Delete` - Exit Hyprland
+- `CTRL + ALT + Delete` - Exit Hyprland, asking first: the power menu opens on
+  ВЫХОД, Enter arms the five-second countdown, Esc backs out
 - `SUPER + M` - Split ratio 0.3 (the focused split on dwindle, the master width on master)
 - `SUPER + SPACE` - Switch keyboard layout. Most recent first, like Alt+Tab: a
   tap toggles between the last two (US ⇄ ES); press again while the popup is

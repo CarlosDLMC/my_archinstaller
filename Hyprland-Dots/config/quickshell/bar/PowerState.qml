@@ -5,7 +5,8 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
 
-// Power menu «ПУСК · ПУЛЬТ» on CTRL+ALT+P (global shortcut quickshell:powerMenu).
+// Power menu «ПУСК · ПУЛЬТ» on CTRL+ALT+P (global shortcut quickshell:powerMenu),
+// and on CTRL+ALT+Delete opened on ВЫХОД (quickshell:exitMenu).
 // Replaces wlogout. The Arch logo keeps its own small dropdown (PowerWidget).
 //
 // L and U fire at once. E, R, S - and B, W, which reboot - arm a five-second
@@ -144,6 +145,15 @@ Singleton {
         if (dialogOpen) close()
         else open()
     }
+    // CTRL+ALT+Delete: the menu, with the cursor on an order rather than on
+    // БЛОКИРОВКА. Nothing runs until Enter or the key arms it - the bind used
+    // to end the session on the spot.
+    function openOn(k) {
+        if (dialogOpen) { close(); return }
+        open()
+        var m = modeOf(k)
+        if (m) selected = modes.indexOf(m)
+    }
 
     // A key or click on an order.
     function press(k) {
@@ -253,5 +263,11 @@ Singleton {
         name: "powerMenu"
         description: "Power menu"
         onPressed: root.toggle()
+    }
+    GlobalShortcut {
+        appid: "quickshell"
+        name: "exitMenu"
+        description: "Power menu, on ВЫХОД"
+        onPressed: root.openOn("E")
     }
 }

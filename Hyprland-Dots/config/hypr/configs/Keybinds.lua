@@ -133,7 +133,9 @@ bind(M .. " + CTRL + F11", hl.dsp.workspace.move({ monitor = "u" }), { descripti
 bind(M .. " + CTRL + F12", hl.dsp.workspace.move({ monitor = "d" }), { description = "move workspace to down monitor" })
 
 ---- SYSTEM ----
-bind("CTRL + ALT + Delete", hl.dsp.exit(),                          { description = "exit Hyprland" })
+-- Opens the power menu on ВЫХОД instead of exiting outright: Enter (or E)
+-- arms the five-second countdown, Esc backs out.
+bind("CTRL + ALT + Delete", hl.dsp.global("quickshell:exitMenu"),   { description = "exit Hyprland (asks first)" })
 bind(M .. " + Q",           hl.dsp.window.close(),                  { description = "close active window" })
 bind(M .. " + SHIFT + Q",   exec(S .. "/KillActiveProcess.sh"),     { description = "kill active window process (force)" })
 bind("CTRL + ALT + L",      exec(S .. "/LockScreen.sh"),            { description = "lock screen" })
