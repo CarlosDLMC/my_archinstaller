@@ -1,6 +1,7 @@
 # My Arch Installer
 
-Automated Arch Linux installation with custom Hyprland setup.
+Automated Arch Linux installation with a custom mango (Wayland) setup. It used to be Hyprland;
+the desktop looks and behaves the same, on mango ([mangowm](https://github.com/mangowm/mango)).
 
 Dates and times run on a Russian time locale (`LC_TIME=ru_RU.UTF-8`), which is
 what gives the 24-hour clock, the Monday-first calendar and the Cyrillic day and
@@ -45,8 +46,10 @@ select exactly this and nothing else:
   in place of the CachyOS one, and adds and wires plymouth itself if a later
   installer release no longer ships it.
 - Uncheck everything else: the shell configuration, every desktop entry
-  (especially **Hyprland** - it brings SDDM and its own bar, which would fight
-  ly and the Quickshell bar), Firefox, both printing groups and accessibility.
+  (especially **Hyprland** and the **Mango** editions - they bring SDDM or a shell
+  of their own, which would fight ly and the Quickshell bar), Firefox, both
+  printing groups and accessibility. If a Mango edition is installed anyway,
+  `01-hypr-pkgs.sh` removes its settings package and keeps mango itself.
 
 If the machine has an NVIDIA GPU, the CachyOS installer already puts its
 prebuilt kernel module (`linux-cachyos-nvidia-open`) on it. `nvidia.sh` sees
@@ -55,7 +58,8 @@ conflict with it. That package covers one kernel, so any other installed kernel
 without a module (a `linux-cachyos-lts` fallback, say) gets its own matching
 prebuilt package (`linux-cachyos-lts-nvidia-open`). The rest of the NVIDIA setup
 (mkinitcpio modules, modeset options, nouveau blacklist) runs the same either way. The NVIDIA environment
-variables in `configs/ENVariables.lua` turn themselves on when every GPU in the
+variables (written at login by `hypr/scripts/MachineConf.sh` into mango's `state/machine.conf`)
+turn themselves on when every GPU in the
 machine is NVIDIA *and* the proprietary driver is actually loaded, and stay off on
 hybrid laptops. The driver check matters on the machines the installer leaves on
 nouveau (`nvidia="OFF"`, Kepler-or-older cards, a DKMS build that failed on every kernel): forcing
@@ -76,9 +80,9 @@ then continue with the [Installation Steps](#installation-steps) below.
 ## Features
 
 - **Custom Quickshell Bar** with event-based monitoring (no polling)
-- **Complete Hyprland Configuration** with custom keybindings and layouts
+- **Complete mango configuration** with custom keybindings, tab groups and layouts
 - **Keyboard Layout Switcher** (US/ES/RU) with SUPER+SPACE
-- **Night Light Toggle** with hyprsunset
+- **Night Light Toggle** with wlsunset
 - **VPN Selector** with WireGuard configurations
 - **Custom Terminal** setup with pokefetch and zsh
 - **ly Display Manager** (lightweight TUI login screen with large font)
@@ -116,7 +120,7 @@ With `archinstall`, the choices that matter:
   `tuned` as well as `power-profiles-daemon`, and text-boot.sh (or plymouth.sh,
   for the splash) edits the kernel command line for systemd-boot, GRUB, Limine
   and rEFInd. With EFISTUB they say what to change in the boot entry by hand.
-- **In a virtual machine**, turn on 3D acceleration: Hyprland needs it.
+- **In a virtual machine**, turn on 3D acceleration: mango needs it.
 
 The sudo requirement is the one that actually bites, because a minimal
 `archinstall` does not guarantee it and the failure is immediate. `install.sh`
@@ -239,14 +243,18 @@ first prompt.
    `uv`, `rustup` or Homebrew. `.zshrc` guards each of their hooks, so their
    absence is silent - install whichever you need.
 
-6. **Done!** After reboot, log in through ly and enjoy your custom Hyprland setup.
+6. **Done!** After reboot, log in through ly and enjoy your custom mango setup.
 
 ## What Gets Installed
 
 ### Core System
-- Hyprland, hypridle, hyprlock
-- ly display manager with large font. Its session list is Hyprland only: ly
-  ignores `TryExec` and uwsm is not installed, so `pacman.sh` adds
+- mango (mangowm), hypridle, hyprlock
+- ly display manager with large font. Its session is mango's own
+  (`mango.desktop`, from the package). On a machine that still has Hyprland
+  from before, Hyprland stays in the list, and a saved Hyprland choice is
+  pointed at mango. Hyprland's second session file, the uwsm one, would bounce
+  straight back to the login screen (ly ignores `TryExec` and uwsm is not
+  installed), so `pacman.sh` adds
   `NoExtract = usr/share/wayland-sessions/hyprland-uwsm.desktop` to
   `/etc/pacman.conf`, and `ly_config.sh` removes any copy already on disk.
   Delete that line if you ever install uwsm. The login-screen flag is cut per
@@ -293,7 +301,7 @@ first prompt.
 
 ### Custom Features
 - Keyboard layouts: US, ES, RU
-- Night light with hyprsunset
+- Night light with wlsunset
 - VPN selector for WireGuard
 - Custom pokefetch terminal greeting
 - Event-based system monitoring
@@ -315,7 +323,7 @@ first prompt.
     it like the page's input box, which resistFingerprinting makes white);
   - Google's sign-in skips resistFingerprinting, so it can be dark;
   - WebRTC is locked off.
-- vim (the `$EDITOR` the Hyprland config names) and nano
+- vim (the `$EDITOR` mango's `env.conf` exports) and nano
 - Thunar (file manager)
 - btop, cava, fastfetch
 - mpv, pavucontrol
@@ -360,7 +368,7 @@ date, with nothing anywhere explaining why.
 Three places consume it, and all three want Russian:
 
 - `config/environment.d/locale.conf` — `LC_TIME` for the systemd user session
-- `config/hypr/configs/ENVariables.lua` — `LC_TIME` for everything Hyprland launches
+- `config/mango/env.conf` — `LC_TIME` for everything mango launches
 - `scripts/SovietLock.py` — calls `setlocale(LC_TIME, "ru_RU.utf8")` itself, so
   the lock screen reads `Четверг, 10 сентября 2026`
 
@@ -368,7 +376,7 @@ The bar's calendar picks up `firstDayOfWeek` and its `MMMM yyyy` heading from
 `Qt.locale()`. The bar's *clock* does not — `components/CenterInfo.qml` formats `"HH:mm"`
 directly, so it is 24-hour regardless of locale.
 
-**To change it**, edit `LC_TIME` in both `locale.conf` and `ENVariables.lua`,
+**To change it**, edit `LC_TIME` in both `locale.conf` and `mango/env.conf`,
 add the locale to `wanted_locales` in `locales.sh`, and re-run it.
 
 ### Fonts
@@ -401,8 +409,8 @@ in the same file.
 One place names a font that is **not** installed and never has been:
 `config/rofi/themes/LonerOrZ.rasi` asks for `Iosevka`. It renders substituted
 here already, so this is inherited from upstream rather than something the
-install broke. (The quickshell overview takes its fonts from
-`overview/common/Appearance.qml`: Terminess and JetBrains Mono, as above.)
+install broke. (The overview, part of the bar, takes its fonts from
+`bar/overview/common/Appearance.qml`: Terminess and JetBrains Mono, as above.)
 
 ### GTK theme
 
@@ -491,7 +499,7 @@ their next launch.
 
 `gtk_themes.sh` also still installs the Flat-Remix GTK theme and the white
 `Bibata-Modern-Ice` cursor — they are simply no longer selected. The **cursor**
-is the black one Hyprland loads by itself: the XCursor theme `default` (the
+is the black one: the XCursor theme `default` (the
 `default-cursors` package, which inherits Adwaita), named in `settings.ini` and
 by `initial-boot.sh` too, so the first session already has it. There is no
 light mode: the desktop is dark only.
@@ -770,15 +778,15 @@ have to remember to flip when you move the preset to another machine.
 - **Separators** — tied to the widget beside them. A hidden widget drops out of
   the layout, but its separator is a sibling and would otherwise remain,
   leaving two dividers with nothing between them.
-- **`configs/Laptops.lua` and `UserConfigs/Laptops.lua`** — not loaded at all on
-  a desktop. They bind `XF86MonBrightness*`, `XF86KbdBrightness*` and
-  `XF86TouchpadToggle`, and name a touchpad device by its exact Hyprland name.
-  None of that errors on a desktop; it just fills the keybind cheat sheet with
-  entries that do nothing.
+- **`mango/laptop.conf`** (and `asus.conf` where `asusctl` is installed) — not
+  loaded at all on a desktop. They bind `XF86MonBrightness*`,
+  `XF86KbdBrightness*` and `XF86TouchpadToggle`. None of that errors on a
+  desktop; it just fills the keybind cheat sheet with entries that do nothing.
 - **`bluetooth` in the preset** — `auto`, so bluez is installed and enabled only
   when a controller is present.
 
-Laptop detection lives in `V.is_laptop` (`configs/Vars.lua`). A battery is the
+Laptop detection lives in `hypr/scripts/MachineConf.sh`, which runs at login and
+writes the source lines into mango's `state/machine.conf`. A battery is the
 primary signal; DMI `chassis_type` is the fallback, so a laptop running with a
 dead or removed battery is still treated as one.
 
@@ -859,7 +867,8 @@ the cheat sheet.
 `install-scripts/keyd.sh` installs [keyd](https://github.com/rvaiya/keyd),
 writes `/etc/keyd/default.conf` (an existing one that differs is kept as a
 stamped backup), checks it with `keyd check` and enables the service. keyd
-types through its own virtual keyboard, which Hyprland gives the same layouts.
+types through its own virtual keyboard, which mango puts in the keyboard group
+with the others, so it gets the same layouts.
 If it ever misbehaves, Backspace+Escape+Enter together stops it;
 `sudo systemctl disable --now keyd` turns it off.
 
@@ -1262,7 +1271,8 @@ Stable was verified rather than assumed: the exported QML API of 0.3.1 was
 diffed against the `0.3.0.r6.gb66495f` build this bar was developed on — 118 →
 119 types and 1056 → 1057 members, with nothing removed or renamed. The bar
 only uses `PanelWindow`, `PopupWindow`, `Variants`, `ShellRoot`, `Singleton`,
-`Process`, `Timer` and `HyprlandFocusGrab`, all unchanged.
+`Process`, `Timer`, `Socket` and `IpcHandler`, all unchanged. (Since the move to
+mango it no longer uses the `Quickshell.Hyprland` module at all.)
 
 ### Wallpapers
 
@@ -1288,14 +1298,17 @@ over them.
 These are machine-specific, so a fresh install starts without them:
 
 - **`~/.config/zsh/secrets.zsh`** — API keys and tokens. See installation step 4.
-- **`~/.config/hypr/monitors.lua`** — the repo ships a generic template. This
-  machine's copy also carries a patched-EDID setup for a 2560x1440@75 Samsung
-  over HDMI, which additionally needs a blob in `/usr/lib/firmware/edid/`, a
-  `FILES=` entry in `/etc/mkinitcpio.conf` and a `drm.edid_firmware=` kernel
-  parameter — none of which live under `~`. Use `nwg-displays` to lay out
-  whatever monitors the new machine has. Once you have, a re-run of the
-  installer keeps it: `copy.sh` restores `monitors.lua` and `workspaces.lua`
-  from the `hypr` backup instead of resetting them to the template.
+- **`~/.config/mango/monitors.conf`** — the repo ships a generic catch-all
+  (every output at its preferred mode, VRR on). This machine's setup also
+  carries a patched EDID for a 2560x1440@75 Samsung over HDMI, which needs a
+  blob in `/usr/lib/firmware/edid/`, a `FILES=` entry in `/etc/mkinitcpio.conf`
+  and a `drm.edid_firmware=` kernel parameter — none of which live under `~`.
+  Lay out whatever monitors the new machine has as `monitor_rule` lines in that
+  file (try a layout live with `wdisplays` first; `wlr-randr` lists names and
+  modes - the file has examples). A re-run of the installer keeps it: `copy.sh`
+  restores `monitors.conf` from the `mango` backup instead of resetting it to
+  the template. A Hyprland `monitors.lua` from before the switch is not
+  converted - write the mango rules once.
 - **`/etc/wireguard/*.conf`** — your VPN configs. They contain private keys, so
   they must never be committed. See below for how to move them across.
 - **`/etc/cups/printers.conf`** and its PPD — the printer queue. The device URI
@@ -1307,10 +1320,10 @@ These are machine-specific, so a fresh install starts without them:
   nothing to reproduce. Undervolt offsets are also per-CPU-sample, so copying
   another machine's numbers is a bad idea.
 - **Applications** beyond the desktop itself (browsers, editors, chat, language
-  toolchains). The installer builds the Hyprland environment, not the full
+  toolchains). The installer builds the desktop environment, not the full
   workstation.
 - **The wallust colour files** — `cava/config`,
-  `hypr/wallust/wallust-hyprland.lua`, `rofi/wallust/colors-rofi.rasi` and
+  `mango/wallust/colors.conf`, `rofi/wallust/colors-rofi.rasi` and
   `quickshell/bar/wallust-colors.json`. Every one is a `target` in
   `wallust.toml`, rewritten in full each time the wallpaper changes, so they are
   runtime state and are gitignored — otherwise whichever palette happened to be
@@ -1319,8 +1332,8 @@ These are machine-specific, so a fresh install starts without them:
 
   Most of them still have to *exist*: thirteen rofi themes `@theme`
   `colors-rofi.rasi` — a missing file there is an error on first launch, not a silent fallback.
-  (`UserDecorations.lua` is the exception: it loads `wallust-hyprland.lua`
-  through `pcall` and falls back to a built-in palette.) So a rendered snapshot
+  (mango's `colors.conf` is the exception: `config.conf` sources it with
+  `source_optional`, and `settings.conf` holds a fallback palette.) So a rendered snapshot
   of each lives in **`Hyprland-Dots/defaults/`**, mirroring its path under
   `~/.config/`, and `copy.sh` puts it in place. `initial-boot.sh` runs wallust on
   first login and overwrites all of them from your actual wallpaper.
@@ -1452,8 +1465,8 @@ sudo wg-quick down de-ber
 
 Nothing needs restarting: the bar's VPN dropdown reads `/etc/wireguard` again
 every time it opens. (To restart the bar anyway, use SUPER+CTRL+B. A
-`pkill qs; qs -c bar &` in a terminal also kills the overview, and leaves the
-new bar a job of that terminal, which takes it down when it closes.)
+`pkill qs; qs -c bar &` in a terminal leaves the new bar a job of that
+terminal, which takes it down when it closes.)
 
 **This needs passwordless sudo.** `VpnWidget.qml` runs `sudo find`,
 `sudo wg-quick up|down` and `sudo timedatectl set-timezone` from a QML `Process`,
@@ -1470,13 +1483,16 @@ those three commands — the VPN widget is the only thing here that depends on i
 - `SUPER + Return` - Open terminal (foot)
 - `SUPER + Q` - Close active window
 - `SUPER + SHIFT + Q` - Terminate active process
-- `CTRL + ALT + Delete` - Exit Hyprland, asking first: the power menu opens on
+- `CTRL + ALT + Delete` - Exit mango, asking first: the power menu opens on
   ВЫХОД, Enter arms the five-second countdown, Esc backs out
 - `SUPER + M` - Split ratio 0.3 (the focused split on dwindle, the master width on master)
 - `SUPER + SPACE` - Switch keyboard layout. Most recent first, like Alt+Tab: a
   tap toggles between the last two (US ⇄ ES); press again while the popup is
   open to go further (RU)
-- `SUPER + SHIFT + SPACE` - Float current window
+- `SUPER + SHIFT + SPACE` - Float current window (over its own tile, as on Hyprland)
+- `SUPER + G` - Tab group on or off. mango groups need two windows, so a window
+  outside a group joins its nearest neighbour; `SUPER + Tab` / `SUPER + CTRL + Tab`
+  step through the tabs, `SUPER + SHIFT + Tab` / `SUPER + ALT + Tab` move a tab
 - `SUPER + CTRL + ALT + B` - Toggle quickshell bar
 - `SUPER + CTRL + F8` - Handy: toggle speech-to-text (press once to start recording, press again to stop and transcribe into the focused field)
 - `SUPER + ALT + <1-0>` - Move *every* window of the current workspace to that workspace, keeping the tiling layout intact (`SUPER + CTRL + <1-0>` still moves one window silently)
@@ -1492,28 +1508,28 @@ those three commands — the VPN widget is the only thing here that depends on i
   opens. From the keyboard, the power card's ВЫХОД, ПЕРЕЗАГРУЗКА and ВЫКЛЮЧЕНИЕ open the
   power menu armed - the five-second countdown runs and Esc stops it - while a click
   acts at once. A card whose icon is hidden (no battery, no Wi-Fi) does not open
-- `ALT + Tab` - **nothing, on purpose.** Hyprland's default cycle-window bind is
-  removed in `UserKeybinds.lua` so the key reaches Herdr, which cycles terminal
-  tabs with it. A compositor bind is consumed before any application sees it, so
+- `ALT + Tab` - **nothing, on purpose.** `mango/keybinds.conf` binds nothing to
+  it, so the key reaches Herdr, which cycles terminal tabs with it. A compositor bind is consumed before any application sees it, so
   this is the only way Herdr can have the key. Window cycling stays on
   `SUPER + J` / `SUPER + K`.
 
-See `Hyprland-Dots/config/hypr/configs/Keybinds.lua` for all keybindings, or press
-`SUPER H` for the cheat sheet: a window listing every live bind (from `hyprctl binds`) with a
-search box, so typing `screenshot` or `super shift` filters by action or keys. `SUPER SHIFT K`
-shows the same list in rofi.
+See `Hyprland-Dots/config/mango/keybinds.conf` for all keybindings, or press
+`SUPER H` for the cheat sheet: a window listing every bind in the mango config (laptop keys
+included where they are loaded) with a search box, so typing `screenshot` or `super shift`
+filters by action or keys. `SUPER SHIFT K` shows the same list in rofi.
 
-The Hyprland config is Lua (`hyprland.lua` + `configs/*.lua` + `UserConfigs/*.lua`); the
-hyprlang `.conf` format is deprecated since Hyprland 0.55 and removed in 0.57.
-`hyprctl keyword` no longer exists — scripts change options with `hyprctl eval 'hl.config({...})'`
-and dispatch with `hyprctl dispatch 'hl.dsp.…'`.
+The mango config is `key=value` files in `~/.config/mango/` (`config.conf` sources the rest),
+and mango reloads by itself when one of them changes. `mango -c ~/.config/mango/config.conf -p`
+checks it without touching the running session; scripts talk to mango with `mmsg`
+(`mmsg dispatch …`, `mmsg get all-clients`). mango repeats every bind while its key is held,
+so the binds that must fire once per press go through `hypr/scripts/Once.sh`.
 
 **Two binds do nothing on a fresh install.** `SUPER + T` launches Telegram and
-`SUPER + R` launches RustRover (`UserConfigs/UserKeybinds.lua`), and
+`SUPER + R` launches RustRover (`mango/keybinds.conf`), and
 neither application is installed by this repo — applications beyond the desktop
 itself are deliberately out of scope, see
 [What is deliberately NOT in this repo](#what-is-deliberately-not-in-this-repo).
-A bind pointing at a missing binary fails silently in Hyprland: no error, no
+A bind pointing at a missing binary fails silently in mango: no error, no
 notification, the key just does nothing. Install `telegram-desktop` and
 `rustrover` if you want them, or delete the two lines.
 
@@ -1530,17 +1546,17 @@ Handy is offline speech-to-text — no audio leaves your machine. `wtype` inject
 **First login on a fresh install:**
 - Handy does **not** autostart — it is launched on demand by the keybind, to save the RAM of an idle daemon. So on first use, press `SUPER + CTRL + F8` and Handy comes up.
 - Pick a model: choose **Parakeet V3** (CPU-friendly, auto-detects 25 languages including English, Spanish, German, Russian) and let it download (~30s).
-- **Ignore the "Shortcut" field inside Handy's UI** — Wayland blocks apps from registering global shortcuts, so it doesn't work. The Hyprland keybind in `UserKeybinds.lua` is what actually fires the toggle.
+- **Ignore the "Shortcut" field inside Handy's UI** — Wayland blocks apps from registering global shortcuts, so it doesn't work. The keybind in `mango/keybinds.conf` is what actually fires the toggle.
 
-**If you would rather have it resident**, uncomment this line in `~/.config/hypr/UserConfigs/Startup_Apps.lua`:
+**If you would rather have it resident**, uncomment this line in `~/.config/mango/startup.conf`:
 
-```lua
--- hl.exec_cmd(V.UserScripts .. "/handy-start.sh")
+```
+# exec_once=~/.config/hypr/UserScripts/handy-start.sh
 ```
 
 `handy-start.sh` opens Handy visibly while `selected_model` is empty — so you get the model picker on a fresh machine — and switches to `--start-hidden` once a model is set.
 
-**Paste settings are pinned.** Before Handy starts, the keybind and `handy-start.sh` both run `UserScripts/handy-paste-settings.sh`, which sets Handy's paste method to **External Script** with `UserScripts/handy-type.sh` as the script: it waits **700 ms**, then types the transcript with `wtype`. Ctrl+V paste does not reach terminals, so typing it is. The wait matters because `wtype` types through its own keymap and Hyprland matches binds by key position: with SUPER/CTRL still held from the stop press, a long transcript fires binds (`a` → SUPER+4, `t` → SUPER+Q, `p` → SUPER+CTRL+R). Handy's own **Direct** method cannot do this: it types at once, and its paste-delay setting only applies to the clipboard methods. The script edits `settings_store.json` only while Handy is not running, and only once the file exists, so the very first Handy session after an install still uses Handy's defaults.
+**Paste settings are pinned.** Before Handy starts, the keybind and `handy-start.sh` both run `UserScripts/handy-paste-settings.sh`, which sets Handy's paste method to **External Script** with `UserScripts/handy-type.sh` as the script: it waits **700 ms**, then types the transcript with `wtype`. Ctrl+V paste does not reach terminals, so typing it is. The wait mattered under Hyprland, which matched binds by key position: with SUPER/CTRL still held from the stop press, a long transcript fired binds (`a` → SUPER+4, `t` → SUPER+Q, `p` → SUPER+CTRL+R). mango ignores binds from a virtual keyboard; the wait stays so the bind's keys are let go before the typing starts. Handy's own **Direct** method cannot do this: it types at once, and its paste-delay setting only applies to the clipboard methods. The script edits `settings_store.json` only while Handy is not running, and only once the file exists, so the very first Handy session after an install still uses Handy's defaults.
 
 ### Herdr (terminal workspace manager)
 
@@ -1589,8 +1605,8 @@ The prefix is `CTRL + B`, and `CTRL + B ?` lists everything.
 | `ALT + B` | Previous workspace (there is no next-workspace key; use `ALT + 1…9` or the picker) |
 | `CTRL + B W` | Workspace picker |
 
-`ALT + Tab` only reaches Herdr because `UserKeybinds.lua` removes Hyprland's
-default cycle-window bind on that key; see [Key Bindings](#key-bindings-some-important-ones).
+`ALT + Tab` only reaches Herdr because `mango/keybinds.conf` binds nothing to
+that key; see [Key Bindings](#key-bindings-some-important-ones).
 
 `CTRL + ALT + 1…9` are not a Herdr feature — Herdr's own `switch_tab` cannot
 create a tab that is not there. They are `[[keys.command]]` entries calling
@@ -1639,7 +1655,7 @@ past the end.
   решения» in red, with the herdr workspace, tab and conversation title. Both
   wait until clicked (`[agent_notices]` in dunstrc), and an agent shows one
   notice at a time. Clicking a notice takes you to that agent: herdr switches
-  to its pane (`herdr agent focus`) and Hyprland focuses the herdr window on
+  to its pane (`herdr agent focus`) and mango focuses the herdr window on
   whatever workspace it is, or opens `foot herdr` if no terminal is attached.
   The hook hands each notice to a detached copy of itself that waits for the
   click, so herdr is never held up; what a click did is logged to
@@ -1648,7 +1664,7 @@ past the end.
   close_current` (so a chat notice that offers "open" opens the chat too); a
   right click (`close_current`) dismisses it without, a middle click all of them.
   Herdr's own `delivery = "system"` cannot do this: it skips the tab herdr
-  has open whatever Hyprland is showing, so an agent finishing there while you
+  has open whatever the screen is showing, so an agent finishing there while you
   were elsewhere told no one. It is a herdr event hook, so herdr runs it and
   there is nothing to start; `herdr.sh` registers it with `herdr plugin link`.
   Turn it off with `herdr plugin disable agent-notify`.
@@ -1854,7 +1870,7 @@ here have broken silently before.
 
 **Works on any display.** `hyprlock.conf` contains no geometry at all — it sources
 `hyprlock-monitors.conf`, regenerated before every lock by `scripts/SovietLockGen.py`
-from `hyprctl monitors`. It emits one widget set *per attached monitor*, so a 1080p
+from `mmsg get all-monitors`. It emits one widget set *per attached monitor*, so a 1080p
 laptop and a 2K external are each sized correctly at the same time. Chosen font size:
 
 - `1280x720` → 8
@@ -1946,7 +1962,7 @@ effect each time, never the same piece twice in a row.
 
 The repo ships only the images, `Hyprland-Dots/.local/share/screensaver/images/`, which
 `copy.sh` puts in `~/.local/share/screensaver/images/`. At every login
-`Startup_Apps.lua` runs `~/.config/hypr/scripts/ScreensaverArt.sh --new`, which makes
+`mango/startup.conf` runs `~/.config/hypr/scripts/ScreensaverArt.sh --new`, which makes
 art only for the images that never had any: all of them at the first login, later just
 the ones an installer re-run brought in (and all of them on a machine installed before
 the art existed); with nothing new it does nothing and opens nothing. Making art opens
@@ -2048,7 +2064,7 @@ Edit `custom-preset.conf` to enable/disable components:
 - And more...
 
 Two of them are load-bearing rather than optional, despite the names:
-`dots` (without it you get vanilla Hyprland) and `pokemon` (`.zshrc` needs
+`dots` (without it you get vanilla mango) and `pokemon` (`.zshrc` needs
 `pokemon-colorscripts` — see [Terminal greeting](#terminal-greeting-pokefetch)).
 
 #### Hardware options
@@ -2150,7 +2166,8 @@ of the old file and deletes it if nothing else is in it.
 ### After Installation
 
 All configs are in `~/.config/`. Main files to edit:
-- `~/.config/hypr/` - Hyprland configuration
+- `~/.config/mango/` - mango configuration (keybinds, rules, startup, look)
+- `~/.config/hypr/` - the scripts the binds run, the lock screen and hypridle
 - `~/.config/quickshell/bar/` - Custom bar configuration
 - `~/.config/foot/` - Terminal configuration
 - `~/.zshrc` - Shell configuration
@@ -2194,7 +2211,7 @@ passwordless sudo rule is in place (`sudo -n -l` lists `NOPASSWD: ALL` - a bare
 `sudo -n true` also passes on a cached timestamp), the icon and cursor themes are
 extracted. Each failure names the script
 to re-run. These exist because the failures that hurt most were never
-packages: a `copy.sh` that died left vanilla Hyprland with every package
+packages: a `copy.sh` that died left vanilla mango with every package
 "installed", and a `locales.sh` that was killed before it ran left the clock in
 English — and both used to reboot as if nothing were wrong.
 
@@ -2224,14 +2241,18 @@ systemctl reboot
 Re-running `./install.sh --preset custom-preset.conf` is also safe — every
 package step skips what is already installed, and `copy.sh` will not overwrite
 a `secrets.zsh` you have filled in. It also keeps your wallust palette, your
-active wallpaper, the first-boot marker, your monitor layout (`monitors.lua`,
-`workspaces.lua`), herdr's saved session, your rofi theme (not a previous
+active wallpaper (a video one too), the first-boot marker, your monitor layout
+(`mango/monitors.conf` and saved monitor profiles), a chosen animation preset,
+herdr's saved session, your rofi theme (not a previous
 default, `style-4.rasi` or `soviet-tui.rasi`: an install from before the teletype theme moves
 to it), RofiBeats stations,
 sidebar bookmarks, and files of your own in `environment.d`,
 `fontconfig`, `Kvantum` and `MangoHud`. Everything else under a copied
 `~/.config` directory is reset to the repo version — edits you made there
-(`UserConfigs/*.lua`, say) are in the `<dir>.backup-<stamp>` copy next to it.
+(`mango/keybinds.conf`, say) are in the `<dir>.backup-<stamp>` copy next to it.
+A machine set up by this repo's Hyprland version moves over on a re-run: its
+`hypr/` is backed up and replaced, and the wallpaper, a video wallpaper and the
+current palette carry over to mango.
 
 #### "Validating source files with sha256sums... FAILED"
 
@@ -2307,9 +2328,10 @@ failure - a missing or untrusted signing key - and `--skipchecksums` does not
 address it. The installer deliberately does not treat that as a checksum
 problem; import the key instead.
 
-### If you see "Warning: You are using an autogenerated config"
+### If mango comes up with none of the keybinds, bar or theming
 
-This means the custom dotfiles weren't copied. Run the diagnostic:
+This means the custom dotfiles weren't copied (mango runs on its built-in
+defaults without `~/.config/mango/config.conf`). Run the diagnostic:
 
 ```bash
 cd ~/Documents/my_archinstaller
@@ -2325,7 +2347,7 @@ If dotfiles weren't copied:
 ```bash
 cd ~/Documents/my_archinstaller/Hyprland-Dots
 ./copy.sh
-hyprctl dispatch 'hl.dsp.exit()'  # Restart Hyprland (the Lua form - plain 'dispatch exit' no longer exists)
+mmsg dispatch quit  # leave mango, then log in again through ly
 ```
 
 ### Check Installation Logs
@@ -2348,11 +2370,11 @@ chmod +x install.sh
 
 **Important:** Make sure to select:
 - ✅ quickshell
-- ✅ dots (Download and install pre-configured Hyprland dotfiles)
+- ✅ dots (Download and install pre-configured dotfiles)
 - ✅ ly (lightweight TUI display manager)
 - ✅ gtk_themes (the Flat-Remix icons the wallust icon theme is made from)
 - ✅ bluetooth (if you need it)
-- ✅ xdph (for screen sharing)
+- ✅ xdph (XDG portals for screen sharing - the name is from Hyprland's portal)
 - ✅ handy (offline speech-to-text, SUPER + CTRL + F8)
 - ✅ nopasswd_sudo (passwordless sudo for wheel — the bar's VPN widget
   silently does nothing without it; see [VPN configs](#vpn-configs-the-bars-vpn-selector)

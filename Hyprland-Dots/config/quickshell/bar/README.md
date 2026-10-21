@@ -1,8 +1,8 @@
-# Quickshell Bar for Hyprland
+# Quickshell Bar for mango
 
-A modern, feature-rich status bar for Hyprland built with [Quickshell](https://quickshell.outfoxxed.me/). Features a clean design with notch-style dropdown popups, weather integration, system monitoring, and more.
+A modern, feature-rich status bar for [mango](https://github.com/mangowm/mango) (it started out on Hyprland) built with [Quickshell](https://quickshell.outfoxxed.me/). Features a clean design with notch-style dropdown popups, weather integration, system monitoring, and more.
 
-![Quickshell Bar](https://img.shields.io/badge/Hyprland-Ready-blue)
+![Quickshell Bar](https://img.shields.io/badge/mango-Ready-blue)
 ![QML](https://img.shields.io/badge/Built%20with-QML-green)
 
 ## Preview
@@ -11,7 +11,8 @@ A modern, feature-rich status bar for Hyprland built with [Quickshell](https://q
 
 ## Features
 
-- **Workspaces**: Pill-shaped indicators with workspace numbers and app icons
+- **Workspaces**: The workspaces of each monitor, numbered
+- **Overview** (SUPER+A): every workspace with a picture of each window; click to go there, drag a window to move it
 - **Window Info**: Current window title display
 - **Weather Widget**: Click-to-open popup with detailed forecast, temperature coloring, hourly rain predictions, and offline caching
 - **System Stats**: CPU, memory, disk usage, volume (with audio sink detection), and battery
@@ -24,13 +25,14 @@ A modern, feature-rich status bar for Hyprland built with [Quickshell](https://q
 ## Dependencies
 
 - [Quickshell](https://quickshell.outfoxxed.me/) - The shell framework
-- [Hyprland](https://hyprland.org/) - Wayland compositor
+- [mango](https://github.com/mangowm/mango) - Wayland compositor (`mmsg` and its IPC socket)
 - `nmcli` - WiFi management
 - `bluetoothctl` - Bluetooth management
 - `busctl` (systemd) - Power profile switching, over D-Bus (power-profiles-daemon or tuned-ppd)
 - `dunst` / `dunstctl` - Notification daemon with DND support
 - `wpctl` / `pactl` - Audio control
-- `hyprctl` - Hyprland IPC
+- `wlr-randr` - the monitor list for the capture dialogs
+- `grim` - the overview's window pictures
 - `jq` - JSON parsing
 - A [Nerd Font](https://www.nerdfonts.com/) - For icons (Material Design Icons range recommended)
 
@@ -42,13 +44,13 @@ A modern, feature-rich status bar for Hyprland built with [Quickshell](https://q
 ## Installation
 
 Nothing to do by hand in this repo. `Hyprland-Dots/copy.sh` deploys this folder
-to `~/.config/quickshell/bar`, and Hyprland starts it as `qs -c bar`
-(`configs/Startup_Apps.lua`). A bare `quickshell` would look for
+to `~/.config/quickshell/bar`, and mango starts it as `qs -c bar`
+(`mango/startup.conf`). A bare `quickshell` would look for
 `~/.config/quickshell/shell.qml`, which does not exist here.
 
-To restart it, press SUPER+CTRL+B. From a terminal, `setsid -f qs -c bar` after
-stopping the running one - `pkill qs` would take the overview with it, and a
-bar started as a plain job of the terminal dies when the terminal closes.
+To restart it, press SUPER+CTRL+B (the overview restarts with it - it is part of
+the bar). From a terminal, `setsid -f qs -c bar` after stopping the running one:
+a bar started as a plain job of the terminal dies when the terminal closes.
 
 ## Configuration
 
@@ -119,14 +121,15 @@ scripts/
 
 - **Hot Reload**: Changes are applied automatically on save
 - **Process + SplitParser**: Shell commands for data fetching (but prefer event payloads and FileView - see CLAUDE.md)
-- **HyprlandFocusGrab**: Click-outside to close popups
+- **CardSurface**: each card sits on a full-screen layer that takes the keyboard and closes the card on a click outside
 - **Notch Design**: Dropdowns use Canvas-drawn shapes with concave corners
 
 ## Credits & Inspiration
 
 - **[quickshell-btw](https://github.com/tonybanters/quickshell-btw)** by Tony Banters - Major inspiration for this configuration
 - **[Quickshell](https://quickshell.outfoxxed.me/)** - The amazing shell framework by outfoxxed
-- **[Hyprland](https://hyprland.org/)** - The dynamic tiling Wayland compositor
+- **[mango](https://github.com/mangowm/mango)** - The Wayland compositor (dwl/wlroots) it runs on now
+- **[Hyprland](https://hyprland.org/)** - The compositor it was written for
 
 ## License
 

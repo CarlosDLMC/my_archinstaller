@@ -4,7 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This is a Quickshell configuration for a Hyprland Wayland desktop bar. The config uses QML with Quickshell-specific modules, organized into modular components.
+This is a Quickshell configuration for the desktop bar of a mango (mangowm) Wayland desktop - it was written for Hyprland and moved to mango. The config uses QML with Quickshell-specific modules, organized into modular components. The workspace overview (SUPER+A) is part of it, under `overview/`.
+
+It talks to mango through `Mango.qml` (mango's IPC socket: monitors, tags, the
+focused window, the keyboard layout - streamed, no polling; `Mango.dispatch()`
+for commands), and the mango keybinds call into it with
+`qs -c bar ipc call <target> <function>` - the IpcHandlers in the `*State`
+singletons. There are no global shortcuts (mango has no such protocol).
 
 ## Commands
 
@@ -25,19 +31,23 @@ shell.qml           # Main entry point, assembles the bar layout
 Theme.qml           # Singleton with colors, fonts, and theme settings
 qmldir              # QML module definition for the singletons
 Monitors.qml        # Singleton: connected monitors, shared by the capture dialogs
-RecordState.qml     # Singleton: screen-recording dialog state + global shortcuts
-ShotState.qml       # Singleton: screenshot dialog state + global shortcut
+Mango.qml           # Singleton: mango's IPC - monitors/tags/focused window/layout streams, dispatch
+RecordState.qml     # Singleton: screen-recording dialog state + IPC "record" (open, stop)
+ShotState.qml       # Singleton: screenshot dialog state + IPC "shot" (open)
 SystemStats.qml     # Singleton: CPU usage/temp + memory, read from /proc via FileView
 BatteryState.qml    # Singleton: every battery reading, read from /sys via FileView
 AgentUsage.qml      # Singleton: Claude Code allowance + token stats
-ClipboardState.qml  # Singleton: clipboard history state + the clipMenu shortcut
+ClipboardState.qml  # Singleton: clipboard history state + IPC "clipboard" (toggle)
 PolkitState.qml     # Singleton: the polkit agent (replaces hyprpolkitagent) + wrong-password/checking state
-PowerState.qml      # Singleton: power menu (CTRL+ALT+P) - orders, 5 s armed countdown, uptime
-WallpaperState.qml  # Singleton: wallpaper carousel - the tree, thumbnails, folders + the wallMenu shortcut
-NightLight.qml      # Singleton: night-light state, watched off Hyprsunset.sh's state file
-BarCards.qml        # Singleton: one global shortcut per card (quickshell:card<Name>, SUPER+CTRL+<letter>)
+PowerState.qml      # Singleton: power menu (CTRL+ALT+P) - orders, 5 s armed countdown, uptime; IPC "power"
+WallpaperState.qml  # Singleton: wallpaper carousel - the tree, thumbnails, folders; IPC "wallpaper"
+NightLight.qml      # Singleton: night-light state, watched off NightLight.sh's state file (wlsunset)
+BarCards.qml        # Singleton: IPC "cards" toggle(<card>), what SUPER+CTRL+<letter> calls
+LayoutState.qml     # Singleton: keyboard-layout MRU switcher; IPC "layout" (next, restore)
+overview/           # The workspace overview (SUPER+A, IPC "overview"): MangoData.qml lists the windows while it is open
 components/         # Modular widget components
   ├── DropdownWidget.qml   # Base component for click-to-open dropdown widgets (notch design)
+  ├── CardSurface.qml      # The full-screen layer a card sits on: keyboard focus, outside click closes
   ├── CardKeys.qml         # Keyboard inside a card: arrows/Tab between controls, Esc closes
   ├── AudioPanel.qml       # Audio card body: output/input device + level, per-app levels
   ├── NetworkPanel.qml     # Network card body: link, connection, traffic, DNS, speed test, share QR
@@ -52,7 +62,7 @@ components/         # Modular widget components
   ├── VolumeSlider.qml     # Segmented fader (SegmentGauge + cap), shared by every row of the audio card
   ├── LevelMeter.qml       # Live mic signal under the audio card's input fader (PwNodePeakMonitor, dB scale, peak hold)
   ├── WeatherStatItem.qml  # Reusable stat row for weather popup
-  ├── WorkspaceBar.qml     # Hyprland workspaces with app icons (pill-shaped)
+  ├── WorkspaceBar.qml     # mango's workspaces (tags) of this monitor, numbered
   ├── WindowInfo.qml       # Current window title
   ├── CenterInfo.qml       # Date/DND/weather with click popup showing detailed forecast
   ├── CpuWidget.qml        # CPU usage + temperature (renders SystemStats)
@@ -76,8 +86,6 @@ components/         # Modular widget components
   ├── ShotOsd.qml          # Screenshot dialog (same box, no audio row)
   ├── BigButton.qml        # Big console key (icon, label, key letter), shared by both capture dialogs
   ├── ToggleRow.qml        # Lamp + label + latching ВКЛ/ВЫКЛ key, shared by both capture dialogs
-  ├── SlackWidget.qml      # Slack indicator, click to focus app
-  ├── WhatsAppWidget.qml   # WhatsApp indicator, click to focus app
   ├── Spinner.qml          # Ring of dots for indeterminate waits (drawn, not a glyph)
   └── Separator.qml        # Visual separator line
 ```
@@ -86,16 +94,16 @@ components/         # Modular widget components
 
 - **Theme.qml**: Singleton pragma provides `Theme.colBg`, `Theme.fontSize`, etc. to all components.
   Colours are **not** hardcoded here — see Theming below.
-- **WorkspaceBar.qml**: Pill-shaped workspace indicators with numbers and deduplicated app icons (max 3). Hover effects and active state highlighting
-- **RecordOsd.qml**: Screen-recording dialog on `$mainMod SHIFT R` (global shortcut
-  `quickshell:recordMenu`). Two big mode buttons (full screen / region), a monitor
+- **WorkspaceBar.qml**: The workspaces of this bar's monitor, numbered, the shown one bracketed, up to the highest one in use. Hover effects and active state highlighting
+- **RecordOsd.qml**: Screen-recording dialog on `$mainMod SHIFT R`
+  (`qs -c bar ipc call record open`). Two big mode buttons (full screen / region), a monitor
   picker shown only when more than one is connected, and switches for system audio
   and mic. State lives in `RecordState.qml`; the recording itself is done by
   `~/.config/hypr/scripts/ScreenRecord.sh`, so the dialog and the bare keybinds
   share one code path. Keys: `F` full screen, `R` region, `W` window, `S`/`M` audio
   toggles, `Esc` dismiss. Pressing the shortcut while recording stops it.
-- **ShotOsd.qml**: Screenshot dialog on `$mainMod Print` (global shortcut
-  `quickshell:shotMenu`). Same box as RecordOsd without the audio row. State in
+- **ShotOsd.qml**: Screenshot dialog on `$mainMod SHIFT S`
+  (`qs -c bar ipc call shot open`). Same box as RecordOsd without the audio row. State in
   `ShotState.qml`, capture by `~/.config/hypr/scripts/ScreenShot.sh`. Keys: `F`
   full screen, `R` region, `W` active window, `E` annotate (satty), `Esc` dismiss.
   `ShotState.settleMs` (300ms) waits for the overlay to leave the screen before
@@ -117,11 +125,11 @@ components/         # Modular widget components
   rather than probed on every tick. It also owns `shown`, the ПУЛЬТ card's
   "ЦП · ОЗУ НА ПАНЕЛИ" switch: kept in `~/.cache/quickshell/bar-stats`
   (`on`/`off`, no file = on) and watched, and while it is off nothing is sampled.
-- **NightLight.qml**: night-light state and toggle. `Hyprsunset.sh` records what it
-  did in `~/.cache/.hyprsunset_state` and rewrites it in place, so a `FileView` with
+- **NightLight.qml**: night-light state and toggle. `NightLight.sh` (wlsunset) records
+  what it did in `~/.cache/.nightlight_state` and rewrites it in place, so a `FileView` with
   `watchChanges` sees every change instantly - whether it came from the bar or from
   `SUPER + N`. A 60s check against `pgrep` runs only while the file says "on", to
-  catch hyprsunset having died and left the file lying.
+  catch wlsunset having died and left the file lying.
 - **AgentWidget.qml / AgentPanel.qml / AgentUsage.qml**: Claude Code usage.
   The bar shows the share of the 5-hour session spent (the number that says
   whether you are about to be cut off); the card adds the plan, weekly and
@@ -200,7 +208,7 @@ components/         # Modular widget components
   earlier version ran a full probe every 30s while the card was open, which is
   120.
 - **ClipboardOsd.qml / ClipboardState.qml**: clipboard history on
-  `SUPER + ALT + V` (global shortcut `quickshell:clipMenu`), replacing a rofi
+  `SUPER + ALT + V` (`qs -c bar ipc call clipboard toggle`), replacing a rofi
   picker. Centred overlay built like `ShotOsd`; list on the left with inline
   thumbnails, large preview on the right, type to filter. Keys: arrows move,
   Enter pastes, `Ctrl+Del` removes one entry, `Alt+Del` wipes, `Esc` closes -
@@ -236,7 +244,7 @@ components/         # Modular widget components
      count differs); reassigning it unconditionally rebuilt the ListView and
      reset the scroll under the cursor a beat after opening.
 - **WallpaperOsd.qml / WallpaperState.qml**: the wallpaper picker on `SUPER + W`
-  (global shortcut `quickshell:wallMenu`), replacing the rofi menu of
+  (`qs -c bar ipc call wallpaper toggle`), replacing the rofi menu of
   `hypr/UserScripts/WallpaperSelect.sh`. A strip of slanted cards across the
   focused monitor - the centred one large and framed, the rest shrinking and
   fading with distance - folder tabs above it and a caption below. Keys: ←/→
@@ -253,7 +261,7 @@ components/         # Modular widget components
   folder that holds wallpapers itself, nested ones by path.
 
   **Applying stays in `WallpaperSelect.sh`**, which gained a direct mode,
-  `WallpaperSelect.sh FILE`: awww, mpvpaper for videos, the `Startup_Apps.lua`
+  `WallpaperSelect.sh FILE`: awww, mpvpaper for videos, the `.wallpaper_video`
   rewrite, wallust and the refresh are what they were. With no argument it is
   still the rofi menu, as a fallback. The awww transition is `center` - a circle
   growing from the middle of the screen out to the edges - which replaced `any`
@@ -296,8 +304,9 @@ components/         # Modular widget components
   picture sheared back, so the frame slants and the image does not. A clip
   draws whole pixels - a stair down every slanted edge - so the strip renders
   into a 4x multisampled layer (`layer.samples: 4`, ~28MB of GPU memory while
-  open). The blur behind it is a layer rule on the `quickshell:wallpaper`
-  namespace in `hypr/UserConfigs/WindowRules.lua`; the dim alone left the
+  open). The blur behind it comes from mango, which blurs layer surfaces
+  unless `mango/rules.conf`'s no_blur layer rule names them (it leaves out
+  `quickshell:wallpaper`); the dim alone left the
   windows underneath readable through it.
 - **CenterInfo.qml**: DND toggle + date + weather. Click shows popup with notch design connecting to bar. Displays location, temperature, condition, feels-like, min/max, and hourly rain forecast bars. Weather icon/temp colored by temperature. Caches weather data for offline use.
 - **CpuWidget.qml / MemoryWidget.qml / DiskWidget.qml**: Simple percentage displays with themed colors
@@ -554,7 +563,7 @@ components/         # Modular widget components
   started when the card switches bluetooth on), and with none bluez pairs "just
   works". It replaced opening blueman-manager, which put a floating window in
   front of a card that should do the job itself. Closing the card ends the scan.
-- **Widget components**: Each has its own Process components for data fetching and PopupWindow for dropdowns
+- **Widget components**: Each has its own Process components for data fetching and a CardSurface for its card
 
 ### Theming
 
@@ -633,13 +642,15 @@ singleton that the widgets render; only the rendering should be per-screen. See
 
 **Prefer, in this order:**
 
-1. **A Hyprland event payload.** `Hyprland.onRawEvent` carries the data with the
-   event - `activewindow` is `"<class>,<title>"`, `windowtitlev2` is
-   `"<address>,<title>"`, `activelayout` is `"<device>,<layout>"`. Parse the
-   payload; do not shell out to `hyprctl` to re-fetch what you were just handed.
-   **Always filter on `event.name` first** - Hyprland fires a great many events
-   (ten `activelayout`s per keyboard switch), and an unfiltered handler runs on
-   all of them. See `WindowInfo.qml` and `KeyboardLayoutWidget.qml`.
+1. **mango's own stream, through `Mango.qml`.** mango pushes a full snapshot of
+   every monitor (tags, the focused window, its title) on every change, and the
+   keyboard layout on its own stream; `Mango.qml` keeps them as properties, and
+   a property only changes when its value does. Bind to those; do not shell out
+   to `mmsg get` for what the stream already has. Snapshots come 2-4 per user
+   action with intermediate states, so compare values rather than reacting to
+   every update. See `WindowInfo.qml`, `WorkspaceBar.qml` and `LayoutState.qml`.
+   The window list (`watch all-clients`) is streamed only while the overview is
+   open (`overview/services/MangoData.qml`).
 2. **`FileView`**, for anything that lives in a file - `/proc`, `/sys`, and the
    caches under `~/.cache/quickshell`. With `watchChanges: true` it updates on
    inotify, which is both cheaper and faster than polling an mtime by hand. Set
@@ -662,7 +673,7 @@ singleton that the widgets render; only the rendering should be per-screen. See
    favour of it. `SystemStats` had the quiet version of the same bug: every CPU,
    memory and temperature reading was one 5s tick old. `NightLight` had the
    user-visible version: its icon latched on and the toggle looked dead, while
-   hyprsunset itself started and stopped perfectly.
+   the night light itself started and stopped perfectly.
 
    **`onLoadedChanged` does not rescue this**, which is the trap. It fires on the
    transition *into* `loaded`, and after the first read `loaded` is already true,
@@ -687,16 +698,13 @@ singleton that the widgets render; only the rendering should be per-screen. See
   it cannot use.
 - **Process + SplitParser**: how the remaining shell-command data is fetched
 - **Theme singleton**: Components access theme via `import ".."` then use `Theme.colFg`, `Theme.fontSize`, etc.
-- **PopupWindows**: Dropdowns use `PopupWindow` with `visible` bound to `*DropdownOpen` properties
-- **HyprlandFocusGrab**: Used to close popups when clicking outside. Requires `import Quickshell.Hyprland`. Example:
-  ```qml
-  HyprlandFocusGrab {
-      id: myFocusGrab
-      windows: [myPopup]
-      active: myDropdownOpen
-      onCleared: myDropdownOpen = false
-  }
-  ```
+- **Cards**: Dropdowns put their card on a `CardSurface` with `open` bound to `*DropdownOpen` properties
+- **Cards sit on a `CardSurface`**: mango never gives a popup keyboard focus and
+  has no focus-grab protocol, so a card is a full-screen, see-through layer
+  surface (namespace `quickshell:card`, exclusive keyboard focus) with the card
+  drawn at its place under the bar; a click outside it emits `dismissed`, and
+  `shell.qml` closes every card when mango's focused window changes. Under
+  Hyprland the cards were `PopupWindow`s closed by `HyprlandFocusGrab`.
 - **Two font roles.** `Theme.fontFamily` is Terminess, the bar's face: a
   bitmap-derived terminal font that suits a row of short fixed labels.
   `Theme.fontFamilyContent` is JetBrains Mono, for surfaces that render
@@ -726,10 +734,12 @@ singleton that the widgets render; only the rendering should be per-screen. See
   `qs -c crt` (`config/quickshell/crt`, its own config, not this bar) folds the picture into a
   line and a dot and stays black until the session ends; a failed command or 30s without the
   machine going down give the desktop back. W runs it after the password step, never over a
-  prompt. Shown without a layer animation (`quickshell:crt` in `UserConfigs/WindowRules.lua`)
+  prompt. Shown without a layer animation (`quickshell:crt` in `mango/rules.conf`)
 - `dunstctl` for DND (Do Not Disturb) toggle
 - `wpctl` / `pactl` for volume control and audio sink detection
-- `hyprctl` for workspace/window data
+- `mmsg` (mango's IPC client) for commands, and mango's socket for the state (`Mango.qml`)
+- `wlr-randr` for the monitor list of the capture dialogs (`Monitors.qml`)
+- `grim` for the overview's window pictures (`scripts/overview-shots.sh`)
 - `jq` for JSON parsing
 - `scripts/weather-fetch.sh` -> `scripts/weather-location.py` for weather data (outputs JSON the bar parses)
 - `scripts/network-speedtest.sh <down|up> [seconds]` prints one Mb/s sample per second.
@@ -780,7 +790,7 @@ singleton that the widgets render; only the rendering should be per-screen. See
        onOpened: someProcess.running = true
    }
    ```
-   The base component handles: barWindow connection, dropdownOpen state, MouseArea toggle, HyprlandFocusGrab, and PopupWindow with notch design (concave corners connecting narrow stem to wider body). Popup is automatically centered on the icon.
+   The base component handles: barWindow connection, dropdownOpen state, MouseArea toggle, the CardSurface the card sits on, and the notch design (concave corners connecting narrow stem to wider body). Popup is automatically centered on the icon.
 
    `triggerButton` picks which button opens the card (left by default).
    Whichever buttons are *not* the trigger arrive as `onOtherClicked(button)`,

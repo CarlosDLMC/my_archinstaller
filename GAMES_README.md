@@ -93,7 +93,9 @@ FSR 4 needs RDNA 4 — it will not run on older cards.
 
 Keys: `Shift_R+F12` show/hide overlay · `Shift_L+F1` cycle the cap ·
 in gamescope `SUPER+U` toggle FSR, `SUPER+I`/`O` sharpness.
-`Keybinds.lua` deliberately leaves SUPER + U/N/I/S/G unbound for gamescope.
+`mango/keybinds.conf` leaves SUPER + I and S free for gamescope. SUPER + U, N
+and G are the desktop's own (join a tab group, close notifications, tab group):
+mango takes those before gamescope sees them.
 
 ## 3. Where the config lives
 
@@ -111,7 +113,7 @@ still apply — MangoHud is not just an overlay.
 **Cap 3 below your monitor's max refresh rate.** Find it:
 
 ```sh
-hyprctl monitors | grep -A1 '^Monitor'          # current mode, e.g. 2560x1440@74.998
+wlr-randr | grep current                         # current mode, e.g. 2560x1440 px, 74.998001 Hz
 edid-decode /sys/class/drm/card*-DP-*/edid | grep -i 'Monitor ranges'
 ```
 
@@ -135,7 +137,9 @@ dropping under 48 fps means visible judder. Turn settings down until the 1%
 low stays clear of it; MangoHud shows that as the second number in
 `fps_metrics`.
 
-FreeSync itself needs no launch option. It comes from `misc:vrr = 2` in
-`config/hypr/configs/SystemSettings.lua` (fullscreen only) and works whether
-or not MangoHud is loaded — but the game must be **Fullscreen**, not
-Borderless Windowed. Check with `hyprctl monitors | grep -i vrr` → `vrr: true`.
+FreeSync itself needs no launch option. It comes from `vrr:1` in
+`config/mango/monitors.conf` - always on, as it was on Hyprland: switching it
+per fullscreen window made the Samsung go black for ~2 s at every toggle - and
+works whether or not MangoHud is loaded. Fullscreen still gives the cleanest
+result, since nothing else on screen is drawing. Check with
+`wlr-randr | grep -i adaptive` → `Adaptive Sync: enabled`.

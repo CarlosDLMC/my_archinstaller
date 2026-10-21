@@ -4,15 +4,16 @@
 
 This repo is a personal Arch/CachyOS installer and dotfiles set. It is meant to
 be run on **every fresh install of CachyOS or Arch Linux** to reproduce *this
-computer's* setup — the Hyprland desktop, apps, theming, and configuration —
+computer's* setup — the desktop (mango, formerly Hyprland), apps, theming, and configuration —
 so a brand-new machine ends up behaving exactly like the one this repo was
 built from.
 
 The top-level `*.sh` scripts (`install.sh`, `auto-install.sh`, plus helpers
 like `diagnose.sh` and `verify-before-transfer.sh`) drive the install. The
 actual desktop configuration lives under `Hyprland-Dots/config/`, which mirrors
-`~/.config/` on the running machine (e.g. `Hyprland-Dots/config/hypr` →
-`~/.config/hypr`, `Hyprland-Dots/config/rofi` → `~/.config/rofi`, and so on).
+`~/.config/` on the running machine (e.g. `Hyprland-Dots/config/mango` →
+`~/.config/mango`, `Hyprland-Dots/config/rofi` → `~/.config/rofi`, and so on).
+The `Hyprland-Dots` name stayed from before the switch to mango.
 
 ## Working with Claude (important)
 
@@ -55,9 +56,18 @@ do. Back up a live file before overwriting it.
 
 ## Notes
 
-- The Hyprland config is **Lua**, not the classic `hypr.conf` syntax, both on the
-  machine and in the repo. Keybinds, startup apps, etc. are `.lua` under
-  `Hyprland-Dots/config/hypr/configs/`.
+- The compositor is **mango** (mangowm, wlroots/dwl-based), not Hyprland. Its
+  config is `key=value` files under `Hyprland-Dots/config/mango/`
+  (`keybinds.conf`, `startup.conf`, `rules.conf`, `settings.conf`, ...), all
+  sourced by `config.conf`. mango reloads by itself when any of them changes;
+  check one with `mango -c ~/.config/mango/config.conf -p`. Control it with
+  `mmsg` (`mmsg dispatch ...`, `mmsg get all-clients`).
+- The scripts every bind runs stay in `~/.config/hypr/scripts` and
+  `~/.config/hypr/UserScripts`, next to `hyprlock.conf` and `hypridle.conf`
+  (hyprlock and hypridle are kept on mango).
 - The wallpaper daemon (swww) ships here under the renamed binary `awww` /
   `awww-daemon`. Theming after a wallpaper change goes through `wallust`.
-- The bar/overview is `quickshell` (QML) under `Hyprland-Dots/config/quickshell/`.
+- The bar is `quickshell` (QML) under `Hyprland-Dots/config/quickshell/bar/`;
+  the overview (SUPER+A) is part of the bar now (`bar/overview/`). It talks to
+  mango through `bar/Mango.qml` (the IPC socket) and gets the keybinds' calls
+  through `qs -c bar ipc call <target> <function>`.
