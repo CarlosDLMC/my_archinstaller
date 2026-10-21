@@ -156,10 +156,13 @@ Item {
                     values: {
                         const lo = root.workspaceGroup * root.workspacesShown
                         const hi = (root.workspaceGroup + 1) * root.workspacesShown
+                        // A group shows one tab; the hidden ones are left
+                        // out (mango keeps their old workspace on them).
                         return root.windows.filter(win => {
                             const ws = root.workspaceOf(win)
                             return root.monitor && win.monitor === root.monitor.name
-                                && !win.is_minimized && lo < ws && ws <= hi
+                                && !win.is_minimized && !(win.is_group && !win.is_group_focus)
+                                && lo < ws && ws <= hi
                         }).sort((a, b) => {
                             // Stacking order: windows on every workspace on top,
                             // then floating over tiled, then the focused one last.

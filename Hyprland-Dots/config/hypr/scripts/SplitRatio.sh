@@ -7,8 +7,12 @@
 #
 # mango has no "set this split's ratio" for dwindle - its split ratio option
 # only shapes new splits - so the split is found from the window geometry and
-# the window resized by the difference. The split tree is rebuilt from the
-# tiles: the cut nearest the middle of a box is taken as the one made first.
+# moved by the difference. The split tree is rebuilt from the tiles: the cut
+# nearest the middle of a box is taken as the one made first.
+#
+# mango's resize step moves the split itself (positive = the first side grows)
+# whichever side the window is on, as Hyprland's does, and gives the first side
+# whole * ratio - gap / 2: Hyprland's 0.3 is mango's 0.15.
 
 layout=$(mmsg get all-monitors | jq -r '.monitors[] | select(.active) | .layout_symbol')
 case "$layout" in
@@ -81,14 +85,13 @@ if not p:
     raise SystemExit(0)
 axis, first, second = p
 x0, y0, x1, y1 = box(first + second)
-size = "width" if axis == "x" else "height"
-whole = (x1 - x0) if axis == "x" else (y1 - y0)
-want_first = whole * 0.3 / 2
-if first[0]["id"] == me["id"] and len(first) == 1:
-    delta = want_first - me[size]
+fx0, fy0, fx1, fy1 = box(first)
+sx0, sy0, sx1, sy1 = box(second)
+if axis == "x":
+    whole, first_size, gap = x1 - x0, fx1 - fx0, sx0 - fx1
 else:
-    delta = (whole - want_first) - me[size]
-delta = int(round(delta))
+    whole, first_size, gap = y1 - y0, fy1 - fy0, sy0 - fy1
+delta = int(round(whole * 0.3 / 2 - first_size - gap / 2))
 if delta:
     dx, dy = (delta, 0) if axis == "x" else (0, delta)
     subprocess.run(["mmsg", "dispatch", f"resizewin,{dx:+d},{dy:+d}"], capture_output=True)

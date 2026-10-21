@@ -12,9 +12,11 @@
 #
 # The repeats follow the keyboard's repeat settings (settings.conf): the first
 # comes repeat_delay (300 ms) after the press, then one every 1000 / repeat_rate
-# (20 ms). So a call with the same arguments as the previous one, less than
-# 40 ms after it or 280-330 ms after it, is a repeat and is dropped. Anything
-# else - another key, or the same key pressed again - runs.
+# (20 ms). So a call with the same arguments as the previous one less than
+# 40 ms after it is a repeat and is dropped. One 280-330 ms after it is the
+# first repeat - or the same key pressed again at just that moment: it waits
+# 45 ms, and runs unless another call came in meanwhile (a held key repeats
+# 20 ms later). Anything else - another key, the same key again - runs.
 
 REPEAT_DELAY_MS=300
 REPEAT_GAP_MS=40
@@ -32,8 +34,13 @@ last=0
 echo "$now" >"$stamp"
 
 gap=$((now - ${last:-0}))
-if ((gap < REPEAT_GAP_MS || (gap > REPEAT_DELAY_MS - 20 && gap < REPEAT_DELAY_MS + 30))); then
+if ((gap < REPEAT_GAP_MS)); then
     exit 0
+fi
+if ((gap > REPEAT_DELAY_MS - 20 && gap < REPEAT_DELAY_MS + 30)); then
+    sleep 0.045
+    read -r latest <"$stamp"
+    [ "$latest" = "$now" ] || exit 0
 fi
 
 if [ "$1" = -d ]; then

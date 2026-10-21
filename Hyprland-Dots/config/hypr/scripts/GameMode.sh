@@ -10,6 +10,8 @@
 #   theirs (an unfocused terminal stays translucent); windows opened in game
 #   mode are opaque;
 # - the bar keeps its blur (mango never changes a mapped surface's blur).
+# The bar is told too: with no gaps it reserves its whole height (mango has one
+# gap for top and bottom, and the bar's reserved strip counts on it).
 
 notif="$HOME/.config/hypr/notify/images/ja.png"
 SCRIPTSDIR="$HOME/.config/hypr/scripts"
@@ -34,12 +36,14 @@ focused_opacity=1.0
 unfocused_opacity=1.0
 window_rule=focused_opacity:1.0,unfocused_opacity:1.0,app_id:.*
 CONF
+    qs -c bar ipc call gamemode set true >/dev/null 2>&1
     awww kill
     notify-send -t 1000 -e -u low -i "$notif" "Игровой режим:" "включён"
     exit
 fi
 
 rm -f "$state"
+qs -c bar ipc call gamemode set false >/dev/null 2>&1
 awww-daemon --format argb && awww img "$HOME/.config/rofi/.current_wallpaper" &
 sleep 0.1
 "$SCRIPTSDIR/WallustSwww.sh"

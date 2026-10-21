@@ -101,8 +101,9 @@ ShellRoot {
             // screen edge has 12 px. mango has one outer gap for top and bottom
             // (gap_outer_vertical=12 in ~/.config/mango/settings.conf), so the
             // bar reserves 12 px less than its height and that gap fills the
-            // rest: the windows' top edge lands on the bar's bottom edge.
-            readonly property int outerGap: 12
+            // rest: the windows' top edge lands on the bar's bottom edge. Game
+            // mode has no gaps, and the bar reserves all of its height.
+            readonly property int outerGap: Mango.gameMode ? 0 : 12
             exclusionMode: ExclusionMode.Normal
             exclusiveZone: Math.max(0, Math.round(implicitHeight) - outerGap)
             // Almost no bar surface: a 20% wash of the background colour

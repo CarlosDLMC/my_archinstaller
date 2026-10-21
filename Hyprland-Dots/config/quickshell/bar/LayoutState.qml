@@ -21,6 +21,15 @@ Singleton {
     property var mru: []
     // Index into `layouts` of the layout currently in effect.
     property int currentIndex: 0
+    // The layout last chosen here, and the one asked of mango and not yet
+    // reported back (-1: none). Every switch in this setup goes through this
+    // bar - no xkb toggle option is set. A mango config reload (a wallpaper
+    // change, blur, game mode, the touchpad toggle, setoption) rebuilds the
+    // keymap on the first layout, mostly without a word: the config's exec=
+    // line calls restore() after each one, and a reset that does get reported
+    // is put back here as well.
+    property int chosenIndex: 0
+    property int pendingIndex: -1
 
     // While a switch session is running the MRU order is frozen, so the popup
     // does not reshuffle under you mid-browse (GNOME behaves the same).
@@ -88,7 +97,15 @@ Singleton {
 
     // mango numbers the layouts from 1 (0 means "next").
     function activate(layoutIndex) {
+        chosenIndex = layoutIndex
+        pendingIndex = layoutIndex
         Mango.dispatch("switch_keyboard_layout," + (layoutIndex + 1))
+    }
+
+    // The bar's layout label: the next layout in configured order.
+    function cycle() {
+        if (!ready) return
+        activate((currentIndex + 1) % layouts.length)
     }
 
     // Driven by the keybinds (LayoutNext.sh -> `qs -c bar ipc call layout next`).
@@ -118,10 +135,14 @@ Singleton {
         }
     }
 
-    // SUPER+SPACE and both ALT+SHIFT orders, through LayoutNext.sh.
+    // next: SUPER+SPACE and both ALT+SHIFT orders, through LayoutNext.sh.
+    // restore: after every config reload (mango/startup.conf).
     IpcHandler {
         target: "layout"
         function next(): void { root.switchNext() }
+        function restore(): void {
+            if (root.ready) root.activate(root.chosenIndex)
+        }
     }
 
     // One-shot at startup: configured layouts + their display names.
@@ -138,6 +159,7 @@ Singleton {
                 for (var i = 0; i < root.layouts.length; i++) order.push(i)
                 // Seed MRU with the active layout in front.
                 root.currentIndex = parsed.current
+                root.chosenIndex = parsed.current
                 root.mru = root.moveToFront(order, parsed.current)
             }
         }
@@ -159,16 +181,22 @@ Singleton {
             for (var i = 0; i < root.layouts.length; i++)
                 if (root.layouts[i].name === displayName) { idx = i; break }
             if (idx < 0) return
+            if (idx === root.pendingIndex) {
+                root.pendingIndex = -1
+            } else if (idx !== root.chosenIndex && !root.sessionActive) {
+                // A reload's reset: put the chosen layout back, no OSD.
+                root.activate(root.chosenIndex)
+                return
+            }
             // The stream starts with the layout in effect, which layouts.py
             // already reported: not a switch.
             if (idx === root.currentIndex && !root.sessionActive) return
 
             root.currentIndex = idx
             if (!root.sessionActive) {
-                // Switched by something other than our shortcut (bar widget,
-                // per-window switch). Show the OSD and let commitTimer do the
-                // promotion later, so this path cannot reshuffle a visible
-                // popup either.
+                // Switched by something other than our shortcut (the bar's
+                // label). Show the OSD and let commitTimer do the promotion
+                // later, so this path cannot reshuffle a visible popup either.
                 root.showOsd()
                 commitTimer.restart()
             }

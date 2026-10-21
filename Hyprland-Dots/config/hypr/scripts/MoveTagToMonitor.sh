@@ -11,8 +11,13 @@ read -r mon tag < <(mmsg get all-monitors |
     jq -r '.monitors[] | select(.active) | "\(.name) \(.active_tags[0] // 0)"')
 [ -n "$mon" ] && [ "${tag:-0}" -gt 0 ] || exit 0
 
+# A group's hidden tabs go with its shown one, so they are left out (mango
+# keeps their old workspace on them in the list).
 mmsg get all-clients | jq -r --arg mon "$mon" --argjson tag "$tag" '
-    .clients[] | select(.monitor == $mon and (.tags | index($tag)) and (.is_global | not)) | .id' |
+    .clients[]
+    | select(.monitor == $mon and (.tags | index($tag)) and (.is_global | not)
+             and ((.is_group and (.is_group_focus | not)) | not))
+    | .id' |
     while read -r id; do
         mmsg dispatch "tagmon,$dir,1" "client,$id" >/dev/null
     done

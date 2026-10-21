@@ -40,6 +40,12 @@ Singleton {
     // The active XKB layout's full name ("English (US)", "Russian", ...).
     property string keyboardLayout: ""
 
+    // Game mode (hypr/scripts/GameMode.sh) turns every gap off, so the bar
+    // reserves its whole height while it is on (shell.qml). The script tells
+    // the bar; the file it leaves on the runtime tmpfs covers a bar started
+    // while game mode is on.
+    property bool gameMode: false
+
     function monitor(name) {
         return monitors.find(m => m.name === name) || null
     }
@@ -96,5 +102,17 @@ Singleton {
                     root.keyboardLayout = data.layout
             }
         }
+    }
+
+    FileView {
+        path: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/mango-gamemode.conf"
+        printErrors: false
+        onLoaded: root.gameMode = true
+    }
+
+    // `qs -c bar ipc call gamemode set true|false`, from GameMode.sh.
+    IpcHandler {
+        target: "gamemode"
+        function set(on: bool): void { root.gameMode = on }
     }
 }

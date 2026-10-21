@@ -17,7 +17,8 @@ import "../.."
  *
  * A window, as mango lists it: id, title, appid, monitor (name), tags [n],
  * x, y, width, height (border included), is_floating, is_global, is_focused,
- * is_minimized, is_xwayland, foreign_toplevel_id.
+ * is_minimized, is_xwayland, is_group, is_group_focus (the shown tab of a
+ * group), foreign_toplevel_id.
  */
 Singleton {
     id: root
@@ -44,7 +45,7 @@ Singleton {
         var cmd = [Quickshell.shellDir + "/scripts/overview-shots.sh", root.shotDir]
         for (var i = 0; i < root.windowList.length; ++i) {
             var w = root.windowList[i]
-            if (w.foreign_toplevel_id && !w.is_minimized)
+            if (w.foreign_toplevel_id && !w.is_minimized && !(w.is_group && !w.is_group_focus))
                 cmd.push(w.id + ":" + w.foreign_toplevel_id)
         }
         shots.command = cmd

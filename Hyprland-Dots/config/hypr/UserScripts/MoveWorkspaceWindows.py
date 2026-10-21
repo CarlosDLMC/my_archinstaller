@@ -189,14 +189,18 @@ def main():
     mon = focused_monitor()
     if not mon:
         return
+    shown_before = (mon.get("active_tags") or [0])[0]
     if source is None:
-        source = (mon.get("active_tags") or [0])[0]
+        source = shown_before
     if not source or source == target:
         return
 
+    # A group's hidden tabs travel with its shown one (mango keeps their old
+    # workspace on them in the list), so only the shown tab is moved.
     mine = [c for c in clients() if c["monitor"] == mon["name"]
             and source in c.get("tags", []) and not c["is_global"]
-            and not c["is_minimized"]]
+            and not c["is_minimized"]
+            and not (c["is_group"] and not c["is_group_focus"])]
     if not mine:
         return
     ids = [c["id"] for c in mine]
@@ -209,7 +213,8 @@ def main():
             if focus_before in ids:
                 dispatch("focusid", focus_before)
         else:
-            dispatch(f"view,{source},0")
+            if shown_before:
+                dispatch(f"view,{shown_before},0")
             if focus_before and focus_before not in ids:
                 dispatch("focusid", focus_before)
 

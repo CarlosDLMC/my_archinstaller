@@ -37,7 +37,7 @@ Rectangle {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        // The next layout in configured order (no argument = next).
-        onClicked: Mango.dispatch("switch_keyboard_layout")
+        // The next layout in configured order.
+        onClicked: LayoutState.cycle()
     }
 }
