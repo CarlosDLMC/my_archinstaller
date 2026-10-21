@@ -72,16 +72,18 @@ fi
 
 # Keep hyprland's uwsm session entry off disk.
 #
-# The hyprland package ships hyprland-uwsm.desktop (Exec=uwsm start ...) next
-# to the hyprland.desktop this setup logs in with. Other display managers hide
+# The desktop is mango now and nothing here installs Hyprland; this is for a
+# machine that has it from before the switch, or gets it some other way. The
+# hyprland package ships hyprland-uwsm.desktop (Exec=uwsm start ...) next
+# to the hyprland.desktop session. Other display managers hide
 # it through its TryExec=uwsm; ly never reads TryExec, nothing here installs
 # uwsm, and ly may even preselect it on the first boot - which is what
 # happened on this laptop (see "Session list" in ly_config.sh).
 #
-# NoExtract, so pacman never writes it - not on the hyprland.sh install later
-# in this run, and not on any upgrade after that. It has to be in place BEFORE
-# hyprland.sh, which is why it lives here and not in ly_config.sh; that script
-# removes the copy an install from before this line already left behind.
+# NoExtract, so pacman never writes it - not on an install of hyprland, and
+# not on any upgrade after that. It has to be in place BEFORE any such install,
+# which is why it lives here and not in ly_config.sh; that script removes the
+# copy an install from before this line already left behind.
 # pacman -Qk skips a missing NoExtract file, so it reads as intended, not as
 # damage. Delete the line from pacman.conf if you ever install uwsm.
 #
@@ -122,7 +124,7 @@ echo -e "${CAT} ${MAGENTA}Pacman.conf${RESET} spicing up completed ${RESET}" 2>&
 # packages against the freshly synced databases; on a system that was not
 # upgraded first (a fresh ISO install, in particular CachyOS with an AUR helper
 # already present, where yay.sh/paru.sh and their -Syu never run) that is a
-# partial upgrade and Hyprland/quickshell fail at first login with missing
+# partial upgrade and mango/quickshell fail at first login with missing
 # libraries. Upgrading here makes the run safe on every path.
 #
 # Keyring first. `-Syu` verifies every package against the installed keyring, so
@@ -143,7 +145,7 @@ fi
 sudo pacman -Su --noconfirm 2>&1 | tee -a "$LOG"
 # PIPESTATUS, not the pipeline status: `cmd | tee` reports tee's exit code.
 if [ "${PIPESTATUS[0]}" -ne 0 ]; then
-  printf "%s - The full system upgrade failed. Fix the repos/keyring and re-run; installing on a partial upgrade breaks Hyprland at first login.\n" "${ERROR}" | tee -a "$LOG"
+  printf "%s - The full system upgrade failed. Fix the repos/keyring and re-run; installing on a partial upgrade breaks the desktop at first login.\n" "${ERROR}" | tee -a "$LOG"
   exit 1
 fi
 

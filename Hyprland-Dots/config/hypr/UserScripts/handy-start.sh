@@ -3,11 +3,11 @@
 #
 # Handy needs a model before it can transcribe anything, and the model is picked
 # in its GUI. So on a machine that has never chosen one, start it visible; once
-# selected_model is set, start it hidden and let the Hyprland keybind
-# (SUPER + CTRL + F8, UserKeybinds.lua) drive it from the background.
+# selected_model is set, start it hidden and let the keybind
+# (SUPER + CTRL + F8, mango/keybinds.conf) drive it from the background.
 #
-# Note that Handy's own "Shortcut" field does not work under Hyprland: Wayland
-# does not let an application register a global shortcut. The keybind is what
+# Note that Handy's own "Shortcut" field does not work here: Wayland does not
+# let an application register a global shortcut. The keybind is what
 # actually fires the toggle.
 
 settings="$HOME/.local/share/com.pais.handy/settings_store.json"

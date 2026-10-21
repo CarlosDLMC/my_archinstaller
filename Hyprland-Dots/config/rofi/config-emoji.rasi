@@ -11,7 +11,7 @@ mainbox {
 /* ---- Window ---- */
 /* A fixed size, nearly the whole screen. Sized by its content, the window
    opened as a thin strip and grew while rofi was still reading the emoji list,
-   and Hyprland animated the growth - so it never opened like the launcher,
+   and the compositor animated the growth - so it never opened like the launcher,
    whose size is fixed too. */
 window {
   width: 92%;

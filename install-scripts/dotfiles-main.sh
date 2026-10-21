@@ -16,7 +16,7 @@ if ! source "$SCRIPT_DIR/Global_functions.sh"; then
 fi
 
 # Install customized Hyprland-Dots from local directory
-printf "${NOTE} Installing ${SKY_BLUE}Customized Hyprland Dots${RESET}....\n"
+printf "${NOTE} Installing ${SKY_BLUE}the customized dotfiles${RESET}....\n"
 
 # Debug: Show current directory
 printf "${INFO} Current directory: $(pwd)\n"

@@ -1,4 +1,4 @@
-/* Hyprland - edit rofi config */
+/* mango - edit rofi config (Quick_Settings.sh) */
 
 @import "~/.config/rofi/config.rasi"  
 
@@ -34,7 +34,7 @@ listview {
 /* ---- Entry input ---- */
 entry {
   expand: true;
-  placeholder: " Настройка Hyprland";
+  placeholder: " Настройка mango";
   horizontal-align: 0.5;
 }
 

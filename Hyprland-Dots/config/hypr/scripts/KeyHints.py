@@ -210,8 +210,8 @@ def gui(rows):
     gi.require_version("Gdk", "3.0")
     from gi.repository import Gdk, Gtk, Pango
 
-    # The title is what configs/WindowRules.lua matches (tag Cheat_Sheet:
-    # float, center, 65% x 90%), so keep it in sync with that rule.
+    # The app id and title are what mango/rules.conf matches (float, 65% x
+    # 90%), so keep them in sync with that rule.
     win = Gtk.Window(title="Quick Cheat Sheet")
     win.set_name("cheatsheet")  # what the CSS above is scoped to
     win.set_default_size(1100, 1000)

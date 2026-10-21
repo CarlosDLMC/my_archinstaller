@@ -7,10 +7,11 @@
 #
 # Why not Handy's "Direct" method: it types with wtype the moment transcription
 # ends, and its paste delay setting only applies to the clipboard methods. wtype
-# sends keys through its own keymap, and Hyprland matches binds by keycode
+# sends keys through its own keymap, and Hyprland matched binds by keycode
 # against the US layout - so with SUPER/CTRL still held from the CTRL+SUPER+F8
-# stop, letters fire binds ("a" -> SUPER+4, "t" -> SUPER+Q, "p" ->
-# SUPER+CTRL+R). Waiting 700 ms gives time to let go. Typing (not Ctrl+V)
+# stop, letters fired binds ("a" -> SUPER+4, "t" -> SUPER+Q, "p" ->
+# SUPER+CTRL+R). mango ignores binds from a virtual keyboard; the 700 ms wait
+# stays anyway, so the keys of the bind are let go before the typing starts. Typing (not Ctrl+V)
 # because a clipboard paste does not reach terminals.
 
 [ -n "${1:-}" ] || exit 0

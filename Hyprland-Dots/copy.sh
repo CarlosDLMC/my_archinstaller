@@ -22,50 +22,58 @@ BACKUP_STAMP="$(date +%Y%m%d-%H%M%S)"
 # into file:///home/John, labelled "Doe/Documents".
 HOME_URI=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$HOME" 2>/dev/null) || HOME_URI="$HOME"
 
-# A video wallpaper chosen in WallpaperSelect.sh lives in three lines of
-# hypr/configs/Startup_Apps.lua: livewallpaper, awww-daemon commented out,
-# mpvpaper live. Copy that choice from one Startup_Apps.lua to another with the
-# same seds WallpaperSelect.sh uses - never the whole file, which is the repo's
-# and should still update. Returns 1 when <from> holds no video choice.
-# ENVIRON, not awk -v: -v would unescape backslashes in the path.
-# LC_ALL=C and grep -a throughout: a line saved by an older WallpaperSelect.sh
-# can hold raw bytes that are not valid UTF-8, and in a UTF-8 locale grep then
-# printed "binary file matches" instead of the line - the path came back empty
-# and the next login had video mode with no video.
-#
-# The path is read BEFORE <to> is touched, and any spacing is accepted (a hand
-# edit like local livewallpaper="..." is valid Lua). It used to switch <to> to
-# video mode first and then find no path - a login with mpvpaper on and an empty
-# path, i.e. no wallpaper at all. Returns 0 copied, 1 no video in <from>, 2 a
-# video is on in <from> but its path line cannot be read (nothing changed).
-copy_video_wallpaper() { # from to
-    local _from="$1" _to="$2" _lw _t
-    local _lw_re='^[[:space:]]*local[[:space:]]+livewallpaper[[:space:]]*='
-    [ -f "$_from" ] && [ -f "$_to" ] || return 1
+# The video wallpaper picked last lives in hypr/wallpaper_effects/.wallpaper_video
+# (WallpaperSelect.sh writes the path, WallpaperStart.sh plays it at login).
+# Under Hyprland it was three lines of hypr/configs/Startup_Apps.lua instead -
+# livewallpaper = "<path>" and the mpvpaper line live - so a backup from then
+# carries it there. This reads it out of such a file into <video-file>: the
+# path as a Lua string (\\, \" and \NNN escapes, the last for every byte that is
+# not printable ASCII), with $HOME at its start the way WallpaperSelect.sh saved
+# it. LC_ALL=C and grep -a: a line saved by an older WallpaperSelect.sh can
+# hold raw bytes that are not valid UTF-8. Returns 0 carried over, 1 no video
+# in <from>, 2 a video is on in <from> but its path cannot be read.
+video_wallpaper_from_lua() { # Startup_Apps.lua video-file
+    local _from="$1" _to="$2" _path
+    [ -f "$_from" ] || return 1
     LC_ALL=C grep -aqE '^\s*run\("mpvpaper ' "$_from" || return 1
-    _lw=$(LC_ALL=C grep -aE "$_lw_re" "$_from" | head -n 1)
-    [ -n "$_lw" ] || return 2
-    # Both edits in ONE pass into a temp file, which replaces <to> only once it
-    # was written in full. The mode switch used to be a sed -i on <to> first: a
-    # temp file that could not be written (a full TMPDIR) then left mpvpaper on
-    # with an empty path - and still returned 0.
-    _t=$(mktemp) || return 2
-    if LW="$_lw" RE="$_lw_re" LC_ALL=C awk '$0 ~ ENVIRON["RE"] {print ENVIRON["LW"]; next} {print}' "$_to" \
-         | LC_ALL=C sed -E 's|^(\s*)run\("awww-daemon --format argb"\)|\1-- run("awww-daemon --format argb")|; s|^(\s*)--\s*run\("mpvpaper |\1run("mpvpaper |' >"$_t" \
-       && [ -s "$_t" ] && cat "$_t" >"$_to"; then
-        rm -f "$_t"
-        return 0
-    fi
-    rm -f "$_t"
-    return 2
+    _path=$(python3 - "$_from" "$HOME" <<'PY'
+import re
+import sys
+data = open(sys.argv[1], 'rb').read()
+m = re.search(rb'^[ \t]*local[ \t]+livewallpaper[ \t]*=[ \t]*"((?:[^"\\]|\\.)*)"', data, re.M)
+if not m:
+    sys.exit(1)
+lit, out, i = m.group(1), bytearray(), 0
+while i < len(lit):
+    if lit[i] == 0x5C and i + 1 < len(lit):
+        d = re.match(rb'[0-9]{1,3}', lit[i + 1:])
+        if d:
+            out.append(int(d.group(0)) & 0xFF)
+            i += 1 + len(d.group(0))
+        else:
+            out.append(lit[i + 1])
+            i += 2
+        continue
+    out.append(lit[i])
+    i += 1
+path = bytes(out)
+if path.startswith(b'$HOME'):
+    path = sys.argv[2].encode() + path[5:]
+if not path:
+    sys.exit(1)
+sys.stdout.buffer.write(path)
+PY
+) || return 2
+    [ -n "$_path" ] || return 2
+    mkdir -p "$(dirname "$_to")" && printf '%s\n' "$_path" >"$_to"
 }
 
 # Is <file> one of the animation presets Animations.sh copies in? Only then is
-# a UserAnimations.lua a CHOICE; an untouched copy of an older repo version is
-# not, and must not be kept over the updated one.
+# a mango/animations.conf a CHOICE; an untouched copy of an older repo version
+# is not, and must not be kept over the updated one.
 is_animation_preset() { # file animations-dir
     local _a
-    for _a in "$2"/*.lua; do
+    for _a in "$2"/*.conf; do
         if [ -f "$_a" ] && cmp -s "$_a" "$1"; then
             return 0
         fi
@@ -136,12 +144,14 @@ keep_line() { # backup-file new-file ERE
 # files" for why each one has to exist.
 wallust_targets=(
     "cava/config"
-    "hypr/wallust/wallust-hyprland.lua"
+    # The window borders and the rest of mango's colours (sourced, optional, by
+    # mango/config.conf - without it mango starts on settings.conf's fallback).
+    "mango/wallust/colors.conf"
     "rofi/wallust/colors-rofi.rasi"
     # bar/Theme.qml reads this through a FileView. The bar and initial-boot.sh's
-    # first `wallust run` start in parallel from hyprland.start, so without a
-    # seed the bar can load before the file exists and sit on its fallback
-    # palette until it is restarted.
+    # first `wallust run` start in parallel at login (mango/startup.conf), so
+    # without a seed the bar can load before the file exists and sit on its
+    # fallback palette until it is restarted.
     "quickshell/bar/wallust-colors.json"
     # btop's color_theme = "wallust" names this one; missing, btop quietly falls
     # back to its built-in theme. hypr/scripts/BtopTheme.py rebuilds it from the
@@ -155,69 +165,72 @@ wallust_targets=(
     "gtk-4.0/wallust.css"
 )
 
-# Put hypr/'s machine state back from its backup: what the repo's copy either
-# lacks or holds only as a template.
+# Put hypr/'s machine state back from its backup: what the repo's copy lacks.
+# hypr/ holds the scripts every bind runs, the lock screen and the wallpaper
+# state; the compositor's own config is mango/ (restore_mango_state).
 restore_hypr_state() { # backup
-    local _bak="$1" _state _ua _rc
+    local _bak="$1" _state _rc
     # Only from a backup of THIS setup. Another one's ~/.config/hypr - JaKooLit's
     # Hyprland-Dots uses the same .initial_startup_done marker - handed its
     # marker over, and initial-boot.sh then never ran for this config: no
-    # wallust palette, no GTK/icon themes, no fonts. hyprland.lua is this
-    # setup's (the config is Lua here), and nobody else's.
-    if [ ! -f "$_bak/hyprland.lua" ]; then
-        echo "  ${NOTE} $(basename "$_bak") is not this setup's (no hyprland.lua) - nothing in it is carried over"
+    # wallust palette, no GTK/icon themes, no fonts. SovietLockGen.py is this
+    # setup's own, and hyprland.lua marks one from before the switch to mango.
+    if [ ! -f "$_bak/scripts/SovietLockGen.py" ] && [ ! -f "$_bak/hyprland.lua" ]; then
+        echo "  ${NOTE} $(basename "$_bak") is not this setup's - nothing in it is carried over"
         return 0
     fi
-    # Not in the repo at all: the first-boot marker, the active wallpaper, the
-    # monitors.conf / workspaces.conf nwg-displays writes next to the .lua, and
-    # the wallpaper brightness WallustSwww.sh measured for the group tabs'
-    # tint (without it they fall back to the dark-wallpaper tint until the
-    # wallpaper next changes).
-    for _state in .initial_startup_done wallpaper_effects/.wallpaper_current wallpaper_effects/.wallpaper_modified monitors.conf workspaces.conf wallust/wallpaper-tone.lua; do
+    # Not in the repo at all: the first-boot marker, the active wallpaper and
+    # the video wallpaper picked last.
+    for _state in .initial_startup_done wallpaper_effects/.wallpaper_current wallpaper_effects/.wallpaper_modified wallpaper_effects/.wallpaper_video; do
         if [ -f "$_bak/$_state" ] && [ ! -e "$HOME/.config/hypr/$_state" ]; then
             mkdir -p "$(dirname "$HOME/.config/hypr/$_state")"
             cp "$_bak/$_state" "$HOME/.config/hypr/$_state" && echo "  ${OK} Kept your $_state from the previous install"
         fi
     done
 
-    # The monitor and workspace layout belong to the machine, not the repo: the
-    # tracked monitors.lua / workspaces.lua are generic templates that
-    # nwg-displays overwrites on Apply. Unlike the files above these DO exist in
-    # the fresh copy (as the templates), so the backup has to win outright -
-    # otherwise a re-run reset every monitor to the catch-all highres/auto rule.
-    for _state in monitors.lua workspaces.lua; do
-        if [ -f "$_bak/$_state" ] && ! cmp -s "$_bak/$_state" "$HOME/.config/hypr/$_state"; then
-            cp "$_bak/$_state" "$HOME/.config/hypr/$_state" && echo "  ${OK} Kept your $_state from the previous install"
+    # A video wallpaper picked under Hyprland, from that setup's
+    # Startup_Apps.lua. Without this the first mango login showed a still image.
+    if [ -f "$_bak/configs/Startup_Apps.lua" ] && [ ! -s "$HOME/.config/hypr/wallpaper_effects/.wallpaper_video" ]; then
+        video_wallpaper_from_lua "$_bak/configs/Startup_Apps.lua" "$HOME/.config/hypr/wallpaper_effects/.wallpaper_video"
+        _rc=$?
+        if [ "$_rc" -eq 0 ]; then
+            echo "  ${OK} Kept your video wallpaper from the previous install"
+        elif [ "$_rc" -eq 2 ]; then
+            echo "  ${WARN} Your Startup_Apps.lua had mpvpaper on, but the video could not be carried over (no livewallpaper line this script can read). It is in $(basename "$_bak"); pick it again with SUPER+W."
         fi
-    done
-
-    # Monitor profiles saved by hand (see Monitor_Profiles/README): the repo
-    # ships only default.lua, so a re-run left nothing else in
-    # SUPER+SHIFT+E > Профиль мониторов.
-    for _state in "$_bak"/Monitor_Profiles/*; do
-        if [ -f "$_state" ] && [ ! -e "$HOME/.config/hypr/Monitor_Profiles/${_state##*/}" ]; then
-            mkdir -p "$HOME/.config/hypr/Monitor_Profiles"
-            cp "$_state" "$HOME/.config/hypr/Monitor_Profiles/" && echo "  ${OK} Kept your monitor profile ${_state##*/}"
-        fi
-    done
-
-    # UserAnimations.lua is state too - Animations.sh copies the chosen preset
-    # over it - but only when it IS one of the presets: an untouched copy of an
-    # older repo version is not a choice, and keeping it blocked repo updates.
-    _ua="UserConfigs/UserAnimations.lua"
-    if [ -f "$_bak/$_ua" ] && ! cmp -s "$_bak/$_ua" "$HOME/.config/hypr/$_ua" \
-       && is_animation_preset "$_bak/$_ua" "$HOME/.config/hypr/animations"; then
-        cp "$_bak/$_ua" "$HOME/.config/hypr/$_ua" && echo "  ${OK} Kept your animation preset ($_ua) from the previous install"
     fi
+}
 
-    # The video wallpaper: only its three lines, not the whole Startup_Apps.lua
-    # (see copy_video_wallpaper). Without this the next login showed a still image.
-    copy_video_wallpaper "$_bak/configs/Startup_Apps.lua" "$HOME/.config/hypr/configs/Startup_Apps.lua"
-    _rc=$?
-    if [ "$_rc" -eq 0 ]; then
-        echo "  ${OK} Kept your video wallpaper from the previous install"
-    elif [ "$_rc" -eq 2 ]; then
-        echo "  ${WARN} Your Startup_Apps.lua had mpvpaper on, but the video could not be carried over (no livewallpaper line this script can read, or no room for a temp file). It is in $(basename "$_bak"); pick it again with SUPER+W."
+# Put mango/'s machine state back from its backup: what the repo's copy holds
+# only as a template, or not at all.
+restore_mango_state() { # backup
+    local _bak="$1" _state
+    # The output layout belongs to the machine, not the repo: the tracked
+    # monitors.conf is a generic catch-all, so the backup wins outright -
+    # otherwise a re-run reset every monitor to its preferred mode.
+    if [ -f "$_bak/monitors.conf" ] && ! cmp -s "$_bak/monitors.conf" "$HOME/.config/mango/monitors.conf"; then
+        cp "$_bak/monitors.conf" "$HOME/.config/mango/monitors.conf" && echo "  ${OK} Kept your monitors.conf from the previous install"
+    fi
+    # Monitor profiles saved by hand (see Monitor_Profiles/README): the repo
+    # ships only default.conf.
+    for _state in "$_bak"/Monitor_Profiles/*; do
+        if [ -f "$_state" ] && [ ! -e "$HOME/.config/mango/Monitor_Profiles/${_state##*/}" ]; then
+            mkdir -p "$HOME/.config/mango/Monitor_Profiles"
+            cp "$_state" "$HOME/.config/mango/Monitor_Profiles/" && echo "  ${OK} Kept your monitor profile ${_state##*/}"
+        fi
+    done
+    # animations.conf is state too - Animations.sh (SUPER+SHIFT+A) copies the
+    # chosen preset over it - but only when it IS one of the presets.
+    if [ -f "$_bak/animations.conf" ] && ! cmp -s "$_bak/animations.conf" "$HOME/.config/mango/animations.conf" \
+       && is_animation_preset "$_bak/animations.conf" "$HOME/.config/mango/animations"; then
+        cp "$_bak/animations.conf" "$HOME/.config/mango/animations.conf" && echo "  ${OK} Kept your animation preset from the previous install"
+    fi
+    # The group tabs' tint for the current wallpaper, which WallustSwww.sh
+    # measures at every wallpaper change; without it the tabs take the
+    # dark-wallpaper tint until the wallpaper next changes.
+    if [ -f "$_bak/state/group-tint.conf" ] && [ ! -e "$HOME/.config/mango/state/group-tint.conf" ]; then
+        mkdir -p "$HOME/.config/mango/state"
+        cp "$_bak/state/group-tint.conf" "$HOME/.config/mango/state/group-tint.conf" && echo "  ${OK} Kept your group tab tint"
     fi
 }
 
@@ -287,6 +300,7 @@ restore_state() { # dir backup
     done
     case "$_dir" in
     hypr) restore_hypr_state "$_bak" ;;
+    mango) restore_mango_state "$_bak" ;;
     rofi)
         # The rofi background link. -e, not -L: one left dangling by a deleted
         # wallpaper is no use.
@@ -304,15 +318,6 @@ restore_state() { # dir backup
         ;;
     gtk-3.0|wallust|Kvantum|qt5ct|qt6ct)
         apply_user_state "$_dir" "$_bak" "$HOME/.config/$_dir"
-        ;;
-    nwg-displays)
-        # Saved display profiles and the active one: nwg-displays' own state,
-        # which the repo does not track and the backup took along.
-        for _s in profiles active_profile.json; do
-            if [ -e "$_bak/$_s" ] && [ ! -e "$HOME/.config/nwg-displays/$_s" ]; then
-                cp -a "$_bak/$_s" "$HOME/.config/nwg-displays/$_s" && echo "  ${OK} Kept your nwg-displays $_s"
-            fi
-        done
         ;;
     esac
 }
@@ -481,6 +486,10 @@ mkdir -p "$HOME/.config"
 # List of config directories to copy
 config_dirs=(
     "hypr"
+    # The compositor's config. Copied whole, like the others: mango reloads
+    # 150 ms after the last change to any file it sources, so a copy into a
+    # running session lands as one reload.
+    "mango"
     # NOT herdr: ~/.config/herdr is also herdr's runtime directory - the running
     # server's sockets, session.json and its logs live next to config.toml - so
     # moving it aside wholesale took the saved session and the live sockets with
@@ -506,9 +515,6 @@ config_dirs=(
     # color-scheme, the xdg-desktop-portal appearance setting AND gtk-3.0's
     # settings.ini. Without this they render in GTK4's built-in light Adwaita.
     "gtk-4.0"
-    # nwg-displays' own settings (view scale, snap threshold). It is referenced
-    # 17 times across the dots as the monitor-layout tool.
-    "nwg-displays"
 )
 
 # Drop-in directories: deployed file by file INTO ~/.config/<dir> (after the
@@ -603,27 +609,30 @@ for dir in "${config_dirs[@]}"; do
             sed -i "s|\$HOME|$HOME|g" "$_cmp_tmp/bookmarks"
             _cmp_src="$_cmp_tmp"
         fi
-        # hypr likewise: compared against the repo copy with this machine's
-        # state already in it - the monitor layout, the lock screen's generated
-        # hyprlock-monitors.conf (rewritten at every login and lock), a chosen
-        # animation preset and a video wallpaper. Everything below restores
-        # those onto the fresh copy anyway, so without this the directory never
+        # hypr and mango likewise: compared against the repo copy with this
+        # machine's state already in it - the lock screen's generated
+        # hyprlock-monitors.conf (rewritten at every login and lock), the monitor
+        # layout and a chosen animation preset. Everything below restores those
+        # onto the fresh copy anyway, so without this the directory never
         # matched again and every re-run backed it up (~9 MB). When it does
         # match, the identical branch copies THIS tree, so nothing is reset.
-        if [ "$dir" = "hypr" ] && [ -d "$HOME/.config/hypr" ]; then
-            _live="$HOME/.config/hypr"
+        if [ "$dir" = "hypr" ] && [ -f "$HOME/.config/hypr/hyprlock-monitors.conf" ]; then
             _cmp_tmp=$(mktemp -d)
             cp -r "$_cmp_src/." "$_cmp_tmp/"
-            for _f in monitors.lua workspaces.lua monitors.conf workspaces.conf hyprlock-monitors.conf; do
-                if [ -f "$_live/$_f" ]; then
-                    cp "$_live/$_f" "$_cmp_tmp/$_f"
-                fi
-            done
-            if [ -f "$_live/UserConfigs/UserAnimations.lua" ] \
-               && is_animation_preset "$_live/UserConfigs/UserAnimations.lua" "$_cmp_tmp/animations"; then
-                cp "$_live/UserConfigs/UserAnimations.lua" "$_cmp_tmp/UserConfigs/UserAnimations.lua"
+            cp "$HOME/.config/hypr/hyprlock-monitors.conf" "$_cmp_tmp/hyprlock-monitors.conf"
+            _cmp_src="$_cmp_tmp"
+        fi
+        if [ "$dir" = "mango" ] && [ -d "$HOME/.config/mango" ]; then
+            _live="$HOME/.config/mango"
+            _cmp_tmp=$(mktemp -d)
+            cp -r "$_cmp_src/." "$_cmp_tmp/"
+            if [ -f "$_live/monitors.conf" ]; then
+                cp "$_live/monitors.conf" "$_cmp_tmp/monitors.conf"
             fi
-            copy_video_wallpaper "$_live/configs/Startup_Apps.lua" "$_cmp_tmp/configs/Startup_Apps.lua" || true
+            if [ -f "$_live/animations.conf" ] \
+               && is_animation_preset "$_live/animations.conf" "$_cmp_tmp/animations"; then
+                cp "$_live/animations.conf" "$_cmp_tmp/animations.conf"
+            fi
             _cmp_src="$_cmp_tmp"
         fi
         # xfce4: Thunar rewrites its last-* window and view keys in thunar.xml
@@ -658,13 +667,16 @@ for dir in "${config_dirs[@]}"; do
         # were backed up on every re-run with no edits at all, ~12 MB each time.
         # The "identical" branch copies the repo over the existing directory, so
         # they stay in place - the repo has none of them to overwrite with. Not
-        # monitors.lua/workspaces.lua: those ARE tracked, and the identical
+        # mango/monitors.conf: that IS tracked, and the identical
         # branch would reset them to the templates with no backup to recover from.
-        # hypr/wallust/, rofi/wallust/ and wallust/output/ hold only wallust
-        # output and have no tracked file at all, so they are left out whole.
+        # mango/wallust/, rofi/wallust/ and wallust/output/ hold only wallust
+        # output and have no tracked file at all, so they are left out whole;
+        # mango/state/ is what MachineConf.sh and WallustSwww.sh write at login
+        # and on a wallpaper change.
         _cmp_x=()
         case "$dir" in
-            hypr)       _cmp_x=(.initial_startup_done .wallpaper_current .wallpaper_modified wallust) ;;
+            hypr)       _cmp_x=(.initial_startup_done .wallpaper_current .wallpaper_modified .wallpaper_video wallust) ;;
+            mango)      _cmp_x=(wallust state) ;;
             quickshell) _cmp_x=(wallust-colors.json) ;;
             wallust)    _cmp_x=(output) ;;
             rofi)       _cmp_x=(wallust .current_wallpaper) ;;
@@ -674,9 +686,6 @@ for dir in "${config_dirs[@]}"; do
             # three up on every re-run with nothing edited.
             btop)       _cmp_x=(wallust.theme wallust-palette.json) ;;
             gtk-3.0|gtk-4.0) _cmp_x=(wallust.css) ;;
-            # nwg-displays' saved profiles: its own state, not tracked (restored
-            # from the backup by restore_state when the directory is replaced).
-            nwg-displays) _cmp_x=(profiles active_profile.json) ;;
             # Thunar rewrites accels.scm whenever it quits (its own header, its
             # own order), and the tracked one is only comments - so opening
             # Thunar once made every later re-run back up Thunar/ for nothing.
@@ -835,11 +844,12 @@ fi
 # regenerated in full on every wallpaper change. That makes them runtime state,
 # and they are gitignored for it - see .gitignore. But they are not optional:
 #
-#   - UserConfigs/UserDecorations.lua requires wallust/wallust-hyprland.lua
-#     (it falls back to a built-in palette, but seeding keeps colours consistent)
+#   - mango/config.conf sources mango/wallust/colors.conf (optional: without it
+#     the borders take settings.conf's fallback palette, but seeding keeps the
+#     colours consistent with the rest)
 #   - thirteen rofi themes `@theme` colors-rofi.rasi
 #
-# A missing file at any of those is a config error on first launch, not a
+# A missing file at most of those is a config error on first launch, not a
 # silent fallback, and first launch happens before initial-boot.sh has had a
 # chance to run wallust. So a rendered snapshot of each ships in defaults/ and
 # is copied into place here. wallust overwrites all of them on first login.
@@ -852,14 +862,36 @@ fi
 # desktop to the snapshot palette - and it would STAY there, because
 # initial-boot.sh is guarded by ~/.config/hypr/.initial_startup_done and does
 # not run a second time. Nothing would repaint until the next wallpaper change.
+#
+# mango's colours are new to a machine that ran this setup under Hyprland: no
+# backup of them exists, but that machine's hypr/ backup holds the same live
+# palette for Hyprland (wallust-hyprland.lua, colorN = "rgb(RRGGBB)"), and the
+# mango template is filled in from it.
 printf "\n${INFO} Seeding wallust output files...\n"
+# Fill a wallust template's {{colorN | strip}} placeholders from a Hyprland-era
+# palette file. Fails if the palette lacks a colour the template uses.
+render_from_lua_palette() { # template lua-palette dest
+    python3 - "$@" <<'PY'
+import re
+import sys
+template, lua, dest = sys.argv[1:4]
+pal = dict(re.findall(r'^\s*(\w+)\s*=\s*"rgb\(([0-9A-Fa-f]{6})\)"', open(lua).read(), re.M))
+def fill(m):
+    return pal[m.group(1)]
+try:
+    out = re.sub(r'\{\{\s*(\w+)\s*\|\s*strip\s*\}\}', fill, open(template).read())
+except KeyError:
+    sys.exit(1)
+open(dest, 'w').write(out)
+PY
+}
 # (wallust_targets is defined at the top; restore_state already put a backed-up
 # palette back as each directory was copied, so this mostly seeds a fresh install.)
 
 for _target in "${wallust_targets[@]}"; do
     _seed="$SCRIPT_DIR/defaults/$_target"
     _dest="$HOME/.config/$_target"
-    # "hypr/wallust/wallust-hyprland.lua" -> dir "hypr", rest "wallust/..."
+    # "mango/wallust/colors.conf" -> dir "mango", rest "wallust/colors.conf"
     _dir="${_target%%/*}"
     _rest="${_target#*/}"
     _live="${BACKUP_OF[$_dir]:+${BACKUP_OF[$_dir]}/$_rest}"
@@ -877,6 +909,13 @@ for _target in "${wallust_targets[@]}"; do
             continue
         fi
         echo "  ${WARN} Could not recover $_target from the backup - falling back to the shipped default"
+    fi
+
+    _lua="${BACKUP_OF[hypr]:+${BACKUP_OF[hypr]}/wallust/wallust-hyprland.lua}"
+    if [ "$_target" = "mango/wallust/colors.conf" ] && [ -n "$_lua" ] && [ -f "$_lua" ] \
+       && render_from_lua_palette "$SCRIPT_DIR/config/wallust/templates/colors-mango.conf" "$_lua" "$_dest"; then
+        echo "  ${OK} Kept your current palette for $_target (from the Hyprland one)"
+        continue
     fi
 
     if [ ! -f "$_seed" ]; then
@@ -992,7 +1031,7 @@ fi
 # Copy the wallpaper library
 #
 # The dots hardcode $HOME/Pictures/wallpapers in WallpaperSelect.sh,
-# WallpaperRandom.sh and Startup_Apps.lua, so an empty directory there means
+# WallpaperRandom.sh and the bar's carousel (WallpaperState.qml), so an empty directory there means
 # the wallpaper picker opens with nothing in it.
 printf "\n${INFO} Copying wallpapers...\n"
 if [ -d "$SCRIPT_DIR/wallpapers" ]; then

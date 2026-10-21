@@ -1,5 +1,5 @@
 #!/bin/bash
-# Hyprland Packages #
+# Desktop packages (the compositor itself is mango.sh's) #
 
 # edit your packages desired here. 
 # WARNING! If you remove packages here, dotfiles may not work properly.
@@ -27,8 +27,24 @@ hypr_package=(
   # current Samba servers announce themselves, now that NetBIOS browsing is
   # gone. gvfs-dnssd + avahi cover the mDNS half. Pulls in wsdd.
   gvfs-wsdd
-  hyprsunset
+  # Night light (hypr/scripts/NightLight.sh, behind the bar's ПУЛЬТ card):
+  # wlsunset, a wlroots gamma client - hyprsunset speaks only Hyprland's own
+  # protocol.
+  wlsunset
+  # Screens off and on for hypridle (IdleDpms.sh, after_sleep_cmd): wlopm,
+  # through the wlroots output-power protocol (Hyprland had `hyprctl dispatch
+  # dpms`).
+  wlopm
+  # The outputs as JSON for the bar's capture dialogs (Monitors.qml): wlr-randr
+  # replaces `hyprctl monitors` there.
+  wlr-randr
+  # The polkit agent is the bar (PolkitState.qml); Polkit.sh starts this one
+  # only when the bar is not there to answer.
   hyprpolkitagent
+  # The Qt Quick style mango/env.conf names (QT_QUICK_CONTROLS_STYLE
+  # org.hyprland.style). hyprpolkitagent pulls it in too, but nothing else
+  # would once Hyprland itself is gone.
+  hyprland-qt-support
   imagemagick
   inxi
   jq
@@ -61,7 +77,7 @@ hypr_package=(
   # weather-location.py, which needs requests and nothing else.
   # SovietLockGen.py imports gi/Pango (python-gobject) and cairo (python-cairo)
   # to measure text before it sizes the lock screen widgets. It runs from
-  # Startup_Apps.lua on every login, and without these it fails silently -
+  # mango/startup.conf on every login, and without these it fails silently -
   # hyprlock-monitors.conf is then never regenerated and the lock screen keeps
   # whatever geometry the committed file was built for.
   python-gobject
@@ -128,8 +144,8 @@ hypr_package_2=(
   # that has no foot. Without it, "Open With > Neovim" failed with "Unable to
   # find terminal required for application"; it picks foot.desktop on its own.
   xdg-terminal-exec
-  # vim is the editor UserConfigs/01-UserDefaults.lua names and ENVariables.lua
-  # exports as $EDITOR. Only nano was installed, so $EDITOR pointed at nothing.
+  # vim is the editor mango/env.conf exports as $EDITOR. Only nano was
+  # installed, so $EDITOR pointed at nothing.
   vim
   mpv
   mpv-mpris
@@ -137,9 +153,9 @@ hypr_package_2=(
   # ~/Pictures/wallpapers alongside the images and builds thumbnails for them,
   # so video wallpapers are an offered feature - but mpvpaper, the only thing
   # that can play one as a background, was in no package list at all. Picking a
-  # video rewrote Startup_Apps.lua to launch it and the next login came up with
-  # no wallpaper. The script now refuses when this is missing; installing it
-  # means it does not have to.
+  # video set the next login to play it (WallpaperStart.sh), and the login came
+  # up with no wallpaper. The script now refuses when this is missing;
+  # installing it means it does not have to.
   mpvpaper
   # Gaming overlay and micro-compositor. mangohud is the fps cap / frametime
   # HUD the Steam launch option `mangohud %command%` pulls in, and it reads
@@ -148,13 +164,17 @@ hypr_package_2=(
   # the 32-bit Vulkan layer; multilib is already enabled by pacman.sh.
   # gamescope is not needed for a normal game, but it is what provides FSR 1.0
   # upscaling and the resolution/cursor isolation a misbehaving title needs -
-  # and Keybinds.lua already frees SUPER + U/N/I/S/G for it. See GAMES_README.md.
+  # and mango/keybinds.conf leaves SUPER + U/N/I/S/G free for it. See
+  # GAMES_README.md.
   mangohud
   lib32-mangohud
   gamescope
   nvtop
   nwg-look
-  nwg-displays
+  # Monitor layout GUI for wlroots compositors (Quick Settings "Мониторы"):
+  # nwg-displays drives only sway and Hyprland. wdisplays applies a layout for
+  # the session; ~/.config/mango/monitors.conf is the one that lasts.
+  wdisplays
   pacman-contrib
   qalculate-gtk
   yt-dlp
@@ -171,6 +191,11 @@ uninstall=(
   # setup uses and is installed above. It was in both arrays, so every run
   # removed it and immediately reinstalled it.
   cachyos-hyprland-settings
+  # CachyOS's own mango editions (Noctalia and DankMaterialShell): their shell
+  # and settings would sit on top of this one. mangowm itself stays - mango.sh
+  # marks it as explicitly installed.
+  cachyos-mango-noctalia
+  cachyos-mangowc-dms
   swaync
   # rofi deliberately NOT listed here: it is the launcher this setup uses and
   # is installed above. Being in both arrays meant every re-run removed it and
@@ -200,7 +225,7 @@ LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_hypr-pkgs.log"
 
 # conflicting packages removal
 overall_failed=0
-printf "\n%s - ${SKY_BLUE}Removing some packages${RESET} as they conflict with these Hyprland dotfiles \n" "${NOTE}"
+printf "\n%s - ${SKY_BLUE}Removing some packages${RESET} as they conflict with these dotfiles \n" "${NOTE}"
 for PKG in "${uninstall[@]}"; do
   uninstall_package "$PKG" 2>&1 | tee -a "$LOG"
   if [ "${PIPESTATUS[0]}" -ne 0 ]; then
@@ -235,7 +260,7 @@ if pacman -Qi openresolv &>/dev/null && ! pacman -Qi systemd-resolvconf &>/dev/n
 fi
 
 # Installation of main components
-printf "\n%s - Installing ${SKY_BLUE}the necessary Hyprland packages${RESET} .... \n" "${NOTE}"
+printf "\n%s - Installing ${SKY_BLUE}the desktop packages${RESET} .... \n" "${NOTE}"
 
 for PKG1 in "${hypr_package[@]}" "${hypr_package_2[@]}" "${Extra[@]}"; do
   install_package "$PKG1" "$LOG"

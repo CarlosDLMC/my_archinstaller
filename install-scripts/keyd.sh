@@ -1,16 +1,16 @@
 #!/bin/bash
 # vim's h/j/k/l as the arrow keys, on a held Caps Lock (keyd).
 #
-# Hold Caps Lock and h/j/k/l are Left/Down/Up/Right - everywhere: Hyprland's
+# Hold Caps Lock and h/j/k/l are Left/Down/Up/Right - everywhere: mango's
 # arrow binds (SUPER+Caps+h is SUPER+Left), the bar's cards and dialogs, rofi,
 # the browser, the terminal, even the TTY. keyd works on physical keys before
 # the keyboard layout is applied, so it is the same in EN, ES and RU. Tapped on
 # its own, Caps Lock still toggles Caps Lock, and no existing bind changes
 # (SUPER+H stays the cheat sheet).
 #
-# keyd grabs the keyboards and types through its own "keyd virtual keyboard";
-# Hyprland gives that one the layouts from kb_layout like any other, and the
-# layout switching (switchxkblayout all) covers it.
+# keyd grabs the keyboards and types through its own "keyd virtual keyboard",
+# an input device like any other to mango: it joins the keyboard group, so it
+# gets the layouts and follows every layout switch.
 #
 # An existing /etc/keyd/default.conf that differs is kept as a stamped backup.
 # The config is checked with `keyd check` before keyd (re)starts, so a broken

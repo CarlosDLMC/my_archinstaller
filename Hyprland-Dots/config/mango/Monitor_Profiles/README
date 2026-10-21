@@ -3,8 +3,10 @@
 # Give each a unique name ending in .conf, e.g. Mirror.conf, Office.conf.
 # (Suggest not to call one "default" - that name ships with the dotfiles.)
 
-# tip: make the layout with nwg-displays and Apply it, then copy the file it
-# writes, ~/.config/mango/monitors.conf, here under its new name:
+# tip: try the layout live with wdisplays (Quick Settings > «Мониторы
+# (wdisplays)»), write it into ~/.config/mango/monitors.conf as monitor_rule
+# lines (`wlr-randr` shows names, modes and positions), then copy that file
+# here under its new name:
 #     cp ~/.config/mango/monitors.conf ~/.config/mango/Monitor_Profiles/Office.conf
 # SUPER SHIFT E > «Профиль мониторов» copies <name>.conf over
 # ~/.config/mango/monitors.conf.

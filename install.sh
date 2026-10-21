@@ -79,7 +79,7 @@ if [ ! -d Install-Logs ]; then
 fi
 
 # Set the name of the log file to include the current date and time
-LOG="Install-Logs/01-Hyprland-Install-Scripts-$(date +%Y%m%d-%H%M%S).log"
+LOG="Install-Logs/01-Install-Scripts-$(date +%Y%m%d-%H%M%S).log"
 
 # Authenticate sudo once, first thing, and keep the timestamp alive for the whole
 # run. This used to happen halfway down, after hardware detection - but the
@@ -395,10 +395,10 @@ fi
 # interactive path is unchanged.
 if [ "$preset_mode" != "true" ]; then
     # Welcome message using whiptail (for displaying information)
-    whiptail --title "Hyprland Install Script" \
-        --msgbox "Welcome to the Hyprland install script!\n\n\
+    whiptail --title "mango Install Script" \
+        --msgbox "Welcome to the mango install script!\n\n\
 ATTENTION: Run a full system update and Reboot first !!! (Highly Recommended)\n\n\
-NOTE: If you are installing on a VM, ensure to enable 3D acceleration else Hyprland may NOT start!" \
+NOTE: If you are installing on a VM, ensure to enable 3D acceleration else mango may NOT start!" \
         15 80
 
     # Ask if the user wants to proceed
@@ -763,11 +763,11 @@ options_command+=(
     "bluetooth" "Do you want script to configure Bluetooth?" "OFF"
     "thunar" "Do you want Thunar file manager to be installed?" "OFF"
     "quickshell" "Install quickshell for Desktop-Like Overview?" "OFF"
-    "xdph" "Install XDG-DESKTOP-PORTAL-HYPRLAND (for screen share)?" "OFF"
+    "xdph" "Install the XDG desktop portals (wlr + gtk, for screen share)?" "OFF"
     "zsh" "Install zsh shell with Oh-My-Zsh?" "OFF"
     "pokemon" "Add Pokemon color scripts to your terminal?" "OFF"
     "rog" "Are you installing on Asus ROG laptops?" "OFF"
-    "dots" "Install the pre-configured Hyprland dotfiles?" "OFF"
+    "dots" "Install the pre-configured dotfiles (mango, bar, theming)?" "OFF"
     "handy" "Install Handy speech-to-text (CTRL+SUPER+F8 toggle)?" "OFF"
     "nopasswd_sudo" "Passwordless sudo for wheel? (needed by the bar's VPN widget)" "OFF"
     "printing" "Install CUPS printing? (nothing else pulls in a print stack)" "OFF"
@@ -894,8 +894,8 @@ while true; do
     # If "dots" is not selected, show a note and ask the user to proceed or return to choices
     if [[ "$dots_selected" == "OFF" ]]; then
         # Show a note about not selecting the "dots" option
-        if ! whiptail --title "Hyprland Dotfiles" --yesno \
-        "You have not selected to install the pre-configured Hyprland dotfiles.\n\nNOTE: without them Hyprland starts with its default vanilla configuration - none of the bar, keybinds, theming or scripts in this repo will be in place.\n\nContinue without the dotfiles, or return to the options?" \
+        if ! whiptail --title "Dotfiles" --yesno \
+        "You have not selected to install the pre-configured dotfiles.\n\nNOTE: without them mango starts with its default vanilla configuration - none of the bar, keybinds, theming or scripts in this repo will be in place.\n\nContinue without the dotfiles, or return to the options?" \
         --yes-button "Continue" --no-button "Return" 15 90; then
             echo "🔙 Returning to options..." | tee -a "$LOG"
             continue
@@ -1012,7 +1012,7 @@ while true; do
         continue 
     fi
 
-    echo "👌 ${OK} You confirmed your choices. Proceeding with the ${SKY_BLUE}Hyprland installation...${RESET}" | tee -a "$LOG"
+    echo "👌 ${OK} You confirmed your choices. Proceeding with the ${SKY_BLUE}installation...${RESET}" | tee -a "$LOG"
     break  
 done
 fi
@@ -1170,8 +1170,8 @@ echo "${INFO} Installing ${SKY_BLUE}pipewire and pipewire-audio...${RESET}" | te
 sleep 1
 execute_script "pipewire.sh"
 
-# Run the Hyprland related scripts
-echo "${INFO} Installing ${SKY_BLUE}additional Hyprland packages...${RESET}" | tee -a "$LOG"
+# The desktop's packages
+echo "${INFO} Installing ${SKY_BLUE}the desktop packages...${RESET}" | tee -a "$LOG"
 sleep 1
 execute_script "01-hypr-pkgs.sh"
 
@@ -1208,9 +1208,9 @@ echo "${INFO} Installing ${SKY_BLUE}necessary fonts...${RESET}" | tee -a "$LOG"
 sleep 1
 execute_script "fonts.sh"
 
-echo "${INFO} Installing ${SKY_BLUE}Hyprland...${RESET}"
+echo "${INFO} Installing ${SKY_BLUE}mango...${RESET}"
 sleep 1
-execute_script "hyprland.sh"
+execute_script "mango.sh"
 
 # Clean up the selected options (remove quotes and trim spaces)
 selected_options=$(echo "$selected_options" | tr -d '"' | tr -s ' ')
@@ -1254,7 +1254,7 @@ for option in "${options[@]}"; do
         nouveau)
             # Only on top of a working NVIDIA driver. Ticking nouveau without
             # nvidia (or a preset forcing nouveau="ON" while nvidia resolved OFF)
-            # used to blacklist it anyway: no GPU driver at all, Hyprland on
+            # used to blacklist it anyway: no GPU driver at all, mango on
             # simpledrm, and the final check - whose NVIDIA checks only run when
             # nvidia is selected - passed and let the preset reboot.
             if [[ " $selected_options " != *" nvidia "* ]]; then
@@ -1284,7 +1284,7 @@ for option in "${options[@]}"; do
             execute_script "quickshell.sh"
             ;;
         xdph)
-            echo "${INFO} Installing ${SKY_BLUE}xdg-desktop-portal-hyprland...${RESET}" | tee -a "$LOG"
+            echo "${INFO} Installing ${SKY_BLUE}the XDG desktop portals (wlr + gtk)...${RESET}" | tee -a "$LOG"
             execute_script "xdph.sh"
             ;;
         bluetooth)
@@ -1311,7 +1311,7 @@ for option in "${options[@]}"; do
             execute_script "rog.sh"
             ;;
         dots)
-            echo "${INFO} Installing the pre-configured ${SKY_BLUE}Hyprland dotfiles...${RESET}" | tee -a "$LOG"
+            echo "${INFO} Installing the pre-configured ${SKY_BLUE}dotfiles...${RESET}" | tee -a "$LOG"
             execute_script "dotfiles-main.sh"
             ;;
         handy)
@@ -1473,25 +1473,23 @@ fi
 
 printf "\n%.0s" {1..1}
 
-# Check if hyprland or hyprland-git is installed
-if pacman -Q hyprland &> /dev/null || pacman -Q hyprland-git &> /dev/null; then
+# Check if mangowm or mangowm-git is installed
+if pacman -Q mangowm &> /dev/null || pacman -Q mangowm-git &> /dev/null; then
     if [ "$install_complete" == "true" ]; then
-        printf "\n ${OK} 👌 Hyprland is installed and every package checked out."
+        printf "\n ${OK} 👌 mango is installed and every package checked out."
     else
-        printf "\n ${WARN} Hyprland is installed, but ${WARNING}the final check found problems${RESET} - see the list above."
+        printf "\n ${WARN} mango is installed, but ${WARNING}the final check found problems${RESET} - see the list above."
     fi
     printf "\n"
     sleep 2
     printf "\n%.0s" {1..2}
 
     # Only after a passing check: it used to sit between "the final check found
-    # problems" and "NOT rebooting", and told you to type a bare `Hyprland`
-    # (if SDDM was not installed - this setup uses ly), which Hyprland 0.56
-    # itself warns against.
+    # problems" and "NOT rebooting".
     if [ "$install_complete" == "true" ]; then
         printf "${SKY_BLUE}Installation complete.${RESET} ${YELLOW}Enjoy!${RESET}"
         printf "\n%.0s" {1..2}
-        printf "\n${NOTE} Reboot to log in through ly. To try it before that, run ${SKY_BLUE}start-hyprland${RESET} from a TTY.\n\n"
+        printf "\n${NOTE} Reboot to log in through ly. To try it before that, run ${SKY_BLUE}mango${RESET} from a TTY.\n\n"
     fi
 
     # Repeated here because the warning from hardware detection is an hour of
@@ -1599,7 +1597,7 @@ if pacman -Q hyprland &> /dev/null || pacman -Q hyprland-git &> /dev/null; then
     done
 else
     # Print error message if neither package is installed
-    printf "\n${WARN} Hyprland is NOT installed. Please check 00_CHECK-time_installed.log and other files in the Install-Logs/ directory..."
+    printf "\n${WARN} mango is NOT installed. Please check 00_CHECK-time_installed.log and other files in the Install-Logs/ directory..."
     printf "\n%.0s" {1..3}
     exit 1
 fi

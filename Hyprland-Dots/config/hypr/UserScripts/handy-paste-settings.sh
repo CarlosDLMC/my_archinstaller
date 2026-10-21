@@ -10,7 +10,7 @@
 # Only edits settings_store.json while Handy is NOT running (a running Handy
 # writes its in-memory settings back over the file), and only once the file
 # exists (Handy creates it on first start). Called by the keybind
-# (UserKeybinds.lua) and by handy-start.sh.
+# (mango/keybinds.conf) and by handy-start.sh.
 
 settings="$HOME/.local/share/com.pais.handy/settings_store.json"
 type_script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/handy-type.sh"

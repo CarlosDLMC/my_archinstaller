@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # A bash script designed to run only once dotfiles installed
 
-# THIS SCRIPT CAN BE DELETED ONCE SUCCESSFULLY BOOTED!! And also, edit ~/.config/hypr/configs/Settings.conf
+# THIS SCRIPT CAN BE DELETED ONCE SUCCESSFULLY BOOTED!! (it runs from ~/.config/mango/startup.conf)
 # NOT necessary to do since this script is only designed to run only once as long as the marker exists
 # marker file is located at ~/.config/hypr/.initial_startup_done
 # However, I do highly suggest not to touch it since again, as long as the marker exist, script wont run

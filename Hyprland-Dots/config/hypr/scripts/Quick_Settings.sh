@@ -40,7 +40,7 @@ menu() {
 Мониторы
 Настройки ноутбука
 --- УТИЛИТЫ ---
-Мониторы (nwg-displays)
+Мониторы (wdisplays)
 Оформление GTK (nwg-look)
 Qt-приложения (qt6ct)
 Qt-приложения (qt5ct)
@@ -67,12 +67,13 @@ main() {
         "Анимации") file="$config/animations.conf" ;;
         "Мониторы") file="$config/monitors.conf" ;;
         "Настройки ноутбука") file="$config/laptop.conf" ;;
-        "Мониторы (nwg-displays)") 
-            if ! command -v nwg-displays &>/dev/null; then
-                notify-send -i "$iDIR/error.png" "ОШИБКА" "Сначала установите nwg-displays"
+        # A layout for this session; monitors.conf (above) is the one that lasts.
+        "Мониторы (wdisplays)")
+            if ! command -v wdisplays &>/dev/null; then
+                notify-send -i "$iDIR/error.png" "ОШИБКА" "Сначала установите wdisplays"
                 exit 1
             fi
-            nwg-displays ;;
+            wdisplays ;;
 		"Оформление GTK (nwg-look)") 
             if ! command -v nwg-look &>/dev/null; then
                 notify-send -i "$iDIR/error.png" "ОШИБКА" "Сначала установите nwg-look"

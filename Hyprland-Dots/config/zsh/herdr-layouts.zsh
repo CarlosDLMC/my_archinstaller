@@ -30,7 +30,7 @@
 #      Claude Code, and any other agent still works as `hdl codex`.
 #
 #   3. The editor is `nvim`, not `$EDITOR`. $EDITOR is `vim` on this machine
-#      (UserConfigs/01-UserDefaults.lua) and these layouts exist for the LazyVim
+#      (mango/env.conf) and these layouts exist for the LazyVim
 #      file tree, which vim does not have. Naming it outright also means the layout
 #      does not change meaning if $EDITOR is later repointed at something else.
 #

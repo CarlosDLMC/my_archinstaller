@@ -53,13 +53,13 @@ done
 # Report-only: the desktop integration comes from the dotfiles. Say so if it is not
 # there, rather than writing a second copy of it.
 HANDY_LAUNCHER="$HOME/.config/hypr/UserScripts/handy-start.sh"
-USER_KEYBINDS="$HOME/.config/hypr/UserConfigs/UserKeybinds.lua"
-if [ -x "$HANDY_LAUNCHER" ] && grep -q 'handy --toggle-transcription' "$USER_KEYBINDS" 2>/dev/null; then
+USER_KEYBINDS="$HOME/.config/mango/keybinds.conf"
+if [ -x "$HANDY_LAUNCHER" ] && grep -q 'handy-toggle.sh' "$USER_KEYBINDS" 2>/dev/null; then
   echo "${OK} Launcher and CTRL+SUPER+F8 keybind are in place (from the dotfiles)." | tee -a "$LOG"
 else
-  echo "${WARN} The dotfiles' Handy launcher/keybind were not found under ~/.config/hypr." | tee -a "$LOG"
+  echo "${WARN} The dotfiles' Handy launcher (~/.config/hypr) or keybind (~/.config/mango) was not found." | tee -a "$LOG"
   echo "${NOTE} Select the 'dots' option (or run install-scripts/dotfiles-main.sh); handy.sh no longer writes them itself." | tee -a "$LOG"
 fi
 
-printf "\n${NOTE} ${SKY_BLUE}Handy${RESET} installed. Autostart is ${YELLOW}disabled${RESET} to save RAM - run ${MAGENTA}handy${RESET} once to pick a model (${MAGENTA}Parakeet V3${RESET} recommended, auto-detects 25 languages) and let it download. Afterwards ${YELLOW}CTRL+SUPER+F8${RESET} toggles transcription. To autostart it, uncomment the handy-start.sh line in ${SKY_BLUE}~/.config/hypr/UserConfigs/Startup_Apps.lua${RESET}.\n"
+printf "\n${NOTE} ${SKY_BLUE}Handy${RESET} installed. Autostart is ${YELLOW}disabled${RESET} to save RAM - run ${MAGENTA}handy${RESET} once to pick a model (${MAGENTA}Parakeet V3${RESET} recommended, auto-detects 25 languages) and let it download. Afterwards ${YELLOW}CTRL+SUPER+F8${RESET} toggles transcription. To autostart it, uncomment the handy-start.sh line in ${SKY_BLUE}~/.config/mango/startup.conf${RESET}.\n"
 printf "\n%.0s" {1..2}

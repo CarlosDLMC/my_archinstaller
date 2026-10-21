@@ -7,7 +7,7 @@
 #   ScreensaverArt.sh [IMAGE...]   default: every image in images/
 #   ScreensaverArt.sh --new        only the images that never had art made here
 #
-# Startup_Apps.lua runs it with --new at every login: on a fresh install that
+# mango/startup.conf runs it with --new at every login: on a fresh install that
 # is every image; after an installer re-run, the images it brought (all of
 # them on a machine installed before the art existed); otherwise nothing, and
 # nothing opens. art/.made lists the images done, so a piece you delete from

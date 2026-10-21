@@ -23,6 +23,12 @@ Hyprland-Dots/config/hypr/.initial_startup_done
 # the default wallpaper instead.
 Hyprland-Dots/config/hypr/wallpaper_effects/.wallpaper_current
 Hyprland-Dots/config/hypr/wallpaper_effects/.wallpaper_modified
+# The video wallpaper picked last (WallpaperSelect.sh), played at login.
+Hyprland-Dots/config/hypr/wallpaper_effects/.wallpaper_video
+
+# What mango's own scripts write at login and on a wallpaper change
+# (MachineConf.sh: this machine's settings; WallustSwww.sh: the group tab tint).
+Hyprland-Dots/config/mango/state/
 
 # Install logs are per-run output. Tracking them meant every install left the
 # working tree dirty, which auto-install.sh then refuses to pull over.
@@ -39,13 +45,13 @@ GTK-themes-icons/*.log
 # tree again. auto-install.sh refuses to pull over a dirty tree, so this was on
 # its way to blocking updates.
 #
-# They still have to EXIST on a fresh machine: UserDecorations.lua requires
-# wallust-hyprland.lua and twelve rofi themes @theme colors-rofi.rasi - a
-# missing file there is a config error, not a fallback. So a rendered snapshot of each lives in
+# They still have to EXIST on a fresh machine: twelve rofi themes @theme
+# colors-rofi.rasi - a missing file there is a config error, not a fallback -
+# and mango's borders would start on settings.conf's fallback palette. So a rendered snapshot of each lives in
 # Hyprland-Dots/defaults/ and copy.sh seeds it when the real file is absent.
 # initial-boot.sh then runs wallust on first login and overwrites all of them.
 Hyprland-Dots/config/cava/config
-Hyprland-Dots/config/hypr/wallust/wallust-hyprland.lua
+Hyprland-Dots/config/mango/wallust/colors.conf
 Hyprland-Dots/config/rofi/wallust/colors-rofi.rasi
 Hyprland-Dots/config/quickshell/bar/wallust-colors.json
 Hyprland-Dots/config/btop/themes/wallust.theme

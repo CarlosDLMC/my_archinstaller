@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Login reminder to bring the VPN up, sent once by UserConfigs/Startup_Apps.lua
+# Login reminder to bring the VPN up, sent once by mango/startup.conf
 # (it replaced a yad window that said the same in English).
 #
 # Critical urgency, so dunst's [critical_never_expires] rule keeps the card on

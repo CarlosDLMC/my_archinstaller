@@ -94,7 +94,10 @@ ly_install 644 "$PARENT_DIR/assets/ly/config.ini" /etc/ly/config.ini
 printf "${NOTE} Installing ly start script...\n"
 ly_install 755 "$PARENT_DIR/assets/ly/start.sh" /etc/ly/start.sh
 
-# Session list: Hyprland, and only Hyprland
+# Session list: mango (and Hyprland's own entry, on a machine that still has it)
+#
+# mangowm ships one session file, mango.desktop (Exec=mango). The rest of this
+# block is for a machine that still has Hyprland from before the switch.
 #
 # The hyprland package ships two session files: hyprland.desktop
 # (Exec=/usr/bin/start-hyprland, what this setup logs in with) and
@@ -106,8 +109,8 @@ ly_install 755 "$PARENT_DIR/assets/ly/start.sh" /etc/ly/start.sh
 # last depends on the filesystem's hash seed: on this laptop's ext4 it was the
 # uwsm one, so the first login after the install bounced (ly.log, Sep 13).
 #
-# pacman.sh adds `NoExtract` for the file, and runs before hyprland.sh, so a
-# fresh install never gets it at all. This removes the copy an earlier install
+# pacman.sh adds `NoExtract` for the file, and runs before any Hyprland install,
+# so a fresh install never gets it at all. This removes the copy an earlier install
 # already put there - NoExtract only governs future extraction - and pacman -Qk
 # counts a missing NoExtract file as intended, not as damage.
 _uwsm_entry=/usr/share/wayland-sessions/hyprland-uwsm.desktop
@@ -148,12 +151,14 @@ fi
 #
 # So when the list changes, rewrite each index to the same session's new
 # position, and a session that no longer exists (shell, xinitrc, uwsm) to
-# Hyprland's. An index already past the end of the list is stale whatever
-# happened - ly never corrects one it clamped - so it goes to Hyprland too,
+# mango's. An index already past the end of the list is stale whatever
+# happened - ly never corrects one it clamped - so it goes to mango too,
 # which on the next re-run also mends an old index that a running ly wrote
 # back (see below). Anything else is left exactly as it is, so a re-run on an
 # unchanged list writes nothing. The first line, the index of the last user,
-# is not touched.
+# is not touched. Hyprland, where it is still installed, counts as replaced:
+# a user whose last session was Hyprland gets mango, the desktop that took its
+# place; Hyprland stays in the list for whoever picks it once.
 #
 # One caveat: a running ly holds the OLD list in memory and rewrites save.txt
 # from it at the next login. A preset run reboots before that happens; after
@@ -164,14 +169,14 @@ _new_sessions=$(ly_sessions /etc/ly/config.ini)
 # and the shell entry no longer guarantees there is at least one. ly 1.4.1
 # never checks for none: main.zig and UserList.zig take `len - 1` of the list
 # and the login reads items[current], so an empty one is undefined behaviour
-# in a release build, not a clean error on the login screen. hyprland.sh ran
+# in a release build, not a clean error on the login screen. mango.sh ran
 # before this script, so empty here means its session file is missing (a
 # failed install, or a package that renamed it) - say so while the log is
 # still being read, rather than at a login screen that misbehaves.
 if [ -n "$_new_sessions" ]; then
   echo "${NOTE} ly's session list: $(echo "$_new_sessions" | paste -sd' ' -)" | tee -a "$LOG"
 else
-  echo "${WARN} ly has no sessions to offer: no /usr/share/wayland-sessions/*.desktop (is hyprland installed?). Log in on tty3 (Ctrl+Alt+F3) and fix that first." | tee -a "$LOG"
+  echo "${WARN} ly has no sessions to offer: no /usr/share/wayland-sessions/*.desktop (is mangowm installed?). Log in on tty3 (Ctrl+Alt+F3) and fix that first." | tee -a "$LOG"
 fi
 if [ -n "$_old_sessions" ] && [ -n "$_new_sessions" ] && [ -s /etc/ly/save.txt ] && [ -r /etc/ly/save.txt ]; then
   _saved=$(cat /etc/ly/save.txt)
@@ -183,14 +188,15 @@ if [ -n "$_old_sessions" ] && [ -n "$_new_sessions" ] && [ -s /etc/ly/save.txt ]
       fallback = 0
       for (i = 1; i <= n; i++) {
         at[new[i]] = i - 1
-        if (new[i] == "wayland:hyprland") fallback = i - 1
+        if (new[i] == "wayland:mango") fallback = i - 1
       }
     }
     NR == 1 || !/^[^:]+:[0-9]+$/ { print; next }
     {
       user = $0; sub(/:[0-9]+$/, "", user)
       k = substr($0, length(user) + 2) + 0
-      if (same && k < n) idx = k
+      if (k < nold && old[k + 1] == "wayland:hyprland") idx = fallback
+      else if (same && k < n) idx = k
       else if (k < nold && (old[k + 1] in at)) idx = at[old[k + 1]]
       else idx = fallback
       print user ":" idx
@@ -200,7 +206,7 @@ if [ -n "$_old_sessions" ] && [ -n "$_new_sessions" ] && [ -s /etc/ly/save.txt ]
        [ "$(cat /etc/ly/save.txt 2>/dev/null)" = "$_remapped" ]; then
       echo "${OK} Re-pointed /etc/ly/save.txt at the new session list: $(echo "$_remapped" | tail -n +2 | paste -sd' ' -)" | tee -a "$LOG"
     else
-      echo "${WARN} Could not rewrite /etc/ly/save.txt - pick Hyprland once on the login screen and ly remembers it." | tee -a "$LOG"
+      echo "${WARN} Could not rewrite /etc/ly/save.txt - pick mango once on the login screen and ly remembers it." | tee -a "$LOG"
     fi
   fi
 fi

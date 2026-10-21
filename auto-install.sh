@@ -80,5 +80,5 @@ chmod +x install.sh
 # Drive the install from the preset, exactly as the README documents. Without
 # --preset, install.sh opens the interactive checklist with every option
 # unticked, so an "auto" install would sit waiting for input and then install
-# a bare Hyprland with none of the customisations in this repo.
+# a bare mango with none of the customisations in this repo.
 ./install.sh --preset custom-preset.conf
