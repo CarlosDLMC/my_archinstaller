@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
-import Quickshell.Hyprland
 import ".."
 
 Item {
@@ -106,24 +105,16 @@ Item {
         return d
     }
 
-    HyprlandFocusGrab {
-        id: calendarFocusGrab
-        windows: [calendarPopupWindow]
-        active: root.isOpen
-        onCleared: {
-            root.closed()
-        }
-    }
-
-    PopupWindow {
+    // The card: CardSurface closes it on a click outside and gives it the
+    // keyboard while it is open.
+    CardSurface {
         id: calendarPopupWindow
-        visible: root.isOpen
-        anchor.window: barWindow
-        anchor.rect.x: root.anchorX - 200
-        anchor.rect.y: barWindow.designHeight * barWindow.uiScale + 2
-        implicitWidth: 400
-        implicitHeight: calendarContent.implicitHeight + 12 + 24
-        color: "transparent"
+        barWindow: root.barWindow
+        open: root.isOpen
+        onDismissed: root.closed()
+        cardX: root.anchorX - 200
+        cardWidth: 400
+        cardHeight: calendarContent.implicitHeight + 12 + 24
 
         Canvas {
             id: cardRect

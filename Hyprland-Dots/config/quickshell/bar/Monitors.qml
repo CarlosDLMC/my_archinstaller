@@ -3,7 +3,6 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import Quickshell.Hyprland
 
 // The connected monitors, shared by the capture dialogs.
 //
@@ -14,7 +13,9 @@ import Quickshell.Hyprland
 Singleton {
     id: root
 
-    // [{name, width, height, refresh, description, focused}] in Hyprland order.
+    // [{name, width, height, refresh, description}]: every enabled output,
+    // its current mode in pixels. From wlr-randr (output management), which
+    // has the refresh rate and the description that mango's IPC lacks.
     property var list: []
 
     readonly property bool multiple: list.length > 1
@@ -24,8 +25,8 @@ Singleton {
     }
 
     function focusedName() {
-        if (Hyprland.focusedMonitor && Hyprland.focusedMonitor.name)
-            return Hyprland.focusedMonitor.name
+        if (Mango.focusedMonitorName)
+            return Mango.focusedMonitorName
         return list.length > 0 ? list[0].name : ""
     }
 
@@ -40,8 +41,10 @@ Singleton {
     Process {
         id: proc
         command: ["sh", "-c",
-            "hyprctl -j monitors | jq -c '[.[] | {name, width, height, " +
-            "refresh: (.refreshRate|round), description, focused}]'"]
+            "wlr-randr --json | jq -c '[.[] | select(.enabled) | . as $o " +
+            "| ($o.modes[] | select(.current)) as $m " +
+            "| {name: $o.name, width: $m.width, height: $m.height, " +
+            "refresh: ($m.refresh|round), description: $o.description}]'"]
         stdout: SplitParser {
             onRead: data => {
                 if (!data) return

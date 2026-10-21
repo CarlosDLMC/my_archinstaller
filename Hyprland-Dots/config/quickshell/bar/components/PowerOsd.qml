@@ -1,7 +1,6 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
-import Quickshell.Hyprland
 import ".."
 
 // «ПУСК · ПУЛЬТ» - the power menu window (state in PowerState).
@@ -20,8 +19,7 @@ PanelWindow {
     screen: modelData
 
     readonly property bool onFocusedMonitor:
-        Hyprland.focusedMonitor && modelData
-        && Hyprland.focusedMonitor.name === modelData.name
+        !!modelData && Mango.focusedMonitorName === modelData.name
     // OnDemand creates this window when the dialog opens, so it is born
     // with the dialog already open. `ready` turns on just after creation:
     // until then it does not count as shown, so the usual hidden-to-shown

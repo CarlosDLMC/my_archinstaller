@@ -3,7 +3,6 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import Quickshell.Hyprland
 
 // State for the screen-recording dialog.
 //
@@ -153,17 +152,11 @@ Singleton {
         Component.onCompleted: running = true
     }
 
-    GlobalShortcut {
-        appid: "quickshell"
-        name: "recordMenu"
-        description: "Screen recording dialog"
-        onPressed: root.open()
-    }
-
-    GlobalShortcut {
-        appid: "quickshell"
-        name: "recordStop"
-        description: "Stop screen recording"
-        onPressed: root.stop()
+    // SUPER+SHIFT+R: qs -c bar ipc call record open (stops a running
+    // recording); `record stop` stops one without the dialog.
+    IpcHandler {
+        target: "record"
+        function open(): void { root.open() }
+        function stop(): void { root.stop() }
     }
 }

@@ -225,7 +225,7 @@ QtObject {
     readonly property color colWindow: desat(palFg, 0.60, 0.84)
 
     //  Arch logo / power menu. Pinned to palBorder ({{color12}}, the same
-    //  wallust slot as Hyprland's col.active_border) so the mark and the
+    //  wallust slot as mango's focus_color) so the mark and the
     //  focused window's border are the same colour - that match is the point
     //  of the role. But color12 is one of wallust's dark slots: on
     //  Catppuccin-Mocha_hanged_man_tree it came out #09151E against a

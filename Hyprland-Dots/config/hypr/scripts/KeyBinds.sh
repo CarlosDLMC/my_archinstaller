@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Searchable keybinds in rofi (SUPER SHIFT K).
 #
-# The list comes from the mango config (KeyHints.py --dump), i.e. the binds as they
-# loaded right now - the Lua config builds binds in loops and helper functions,
-# so parsing the config files by hand would miss half of them. A bind shows its
-# description; give every hl.bind() one, or it lists as "(no description)".
-# KeyHints.py does the formatting so this and the cheat sheet (SUPER H) agree.
+# The list comes from the mango config (KeyHints.py --dump): every bind in
+# ~/.config/mango/config.conf and the files it sources. A bind shows its
+# description - the "  # text" comment at the end of its line; without one it
+# lists as its dispatcher and arguments. KeyHints.py does the formatting so
+# this and the cheat sheet (SUPER H) agree.
 
 # kill yad / the cheat sheet to not interfere with these binds
 pkill yad 2>/dev/null || true

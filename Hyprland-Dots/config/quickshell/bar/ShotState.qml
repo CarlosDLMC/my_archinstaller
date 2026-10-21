@@ -3,7 +3,6 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import Quickshell.Hyprland
 
 // State for the screenshot dialog. Mirrors RecordState: the dialog only
 // collects intent, ScreenShot.sh takes the picture, so the dialog and the bare
@@ -70,10 +69,9 @@ Singleton {
         command: ["true"]
     }
 
-    GlobalShortcut {
-        appid: "quickshell"
-        name: "shotMenu"
-        description: "Screenshot dialog"
-        onPressed: root.open()
+    // SUPER+SHIFT+S: qs -c bar ipc call shot open
+    IpcHandler {
+        target: "shot"
+        function open(): void { root.open() }
     }
 }

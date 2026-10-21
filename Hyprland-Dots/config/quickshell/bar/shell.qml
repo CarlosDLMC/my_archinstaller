@@ -2,12 +2,12 @@
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Io
-import Quickshell.Hyprland
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
 
 import "components"
+import "overview/modules/overview"
 
 ShellRoot {
     id: root
@@ -35,17 +35,12 @@ ShellRoot {
             readonly property real uiScale: Math.max(minScale, Math.min(1.0, width / referenceWidth))
             readonly property real designWidth: width / uiScale
 
-            // Close popups when focus moves to another window. Hyprland also
-            // re-sends activewindow for the SAME window (a browser retitling
-            // itself, group redraws), so compare addresses instead of closing
-            // on every event - that closed widgets after a couple of seconds.
-            property string focusedAddress: ""
+            // Close popups when focus moves to another window. mango pushes a
+            // new snapshot for many things besides focus (a retitle, a tag
+            // change), so only a different focused window id counts.
             Connections {
-                target: Hyprland
-                function onRawEvent(event) {
-                    if (event.name !== "activewindowv2") return
-                    if (event.data === barWindow.focusedAddress) return
-                    barWindow.focusedAddress = event.data
+                target: Mango
+                function onFocusedClientIdChanged() {
                     barWindow.closeAllPopups()
                 }
             }
@@ -95,13 +90,21 @@ ShellRoot {
                 right: true
             }
 
-            // Own namespace, matching the quickshell:<config> convention the
-            // overview uses. A Hyprland layerrule blurs this namespace; since
-            // the bar has no background of its own, that blurs the wallpaper
-            // behind the whole strip - which is the effect being asked for.
+            // Own namespace, matching the quickshell:<config> convention. mango
+            // blurs every layer surface under its visible pixels; the bar's wash
+            // covers the whole strip, so the wallpaper behind it is blurred -
+            // which is the effect being asked for.
             WlrLayershell.namespace: "quickshell:bar"
 
             implicitHeight: designHeight * uiScale
+            // Windows start right under the bar with no gap, the rest of the
+            // screen edge has 12 px. mango has one outer gap for top and bottom
+            // (gap_outer_vertical=12 in ~/.config/mango/settings.conf), so the
+            // bar reserves 12 px less than its height and that gap fills the
+            // rest: the windows' top edge lands on the bar's bottom edge.
+            readonly property int outerGap: 12
+            exclusionMode: ExclusionMode.Normal
+            exclusiveZone: Math.max(0, Math.round(implicitHeight) - outerGap)
             // Almost no bar surface: a 20% wash of the background colour
             // under the compositor blur. The exclusion zone is still
             // reserved, so nothing tiles underneath the widgets.
@@ -148,6 +151,7 @@ ShellRoot {
 
                     // Workspaces
                     WorkspaceBar {
+                        screenName: barWindow.modelData ? barWindow.modelData.name : ""
                         Layout.preferredHeight: parent.height
                     }
 
@@ -275,14 +279,14 @@ ShellRoot {
     }
 
     // Centred keyboard-layout OSD, one per screen (it shows itself only on
-    // the focused monitor). Driven by Hyprland's activelayout event.
+    // the focused monitor). Driven by LayoutState (mango's layout stream).
     Variants {
         model: Quickshell.screens
         LayoutOsd {}
     }
 
     // Screen-recording dialog, one per screen (it shows itself only on the
-    // focused monitor). Driven by the recordMenu global shortcut.
+    // focused monitor). Driven by RecordState (IPC target "record").
     Variants {
         model: Quickshell.screens
         OnDemand {
@@ -293,7 +297,7 @@ ShellRoot {
         }
     }
 
-    // Clipboard picker, same deal. Driven by the clipMenu global shortcut.
+    // Clipboard picker, same deal. Driven by ClipboardState (IPC "clipboard").
     Variants {
         model: Quickshell.screens
         OnDemand {
@@ -304,7 +308,7 @@ ShellRoot {
         }
     }
 
-    // Screenshot dialog, same deal. Driven by the shotMenu global shortcut.
+    // Screenshot dialog, same deal. Driven by ShotState (IPC "shot").
     Variants {
         model: Quickshell.screens
         OnDemand {
@@ -327,8 +331,8 @@ ShellRoot {
         }
     }
 
-    // Power menu «ПУСК · ПУЛЬТ», same deal. Driven by the powerMenu global
-    // shortcut (CTRL+ALT+P); replaces wlogout.
+    // Power menu «ПУСК · ПУЛЬТ», same deal. Driven by PowerState (IPC "power",
+    // CTRL+ALT+P); replaces wlogout.
     Variants {
         model: Quickshell.screens
         OnDemand {
@@ -339,8 +343,8 @@ ShellRoot {
         }
     }
 
-    // Wallpaper carousel, same deal. Driven by the wallMenu global shortcut
-    // (SUPER W); WallpaperState holds the list and the thumbnails.
+    // Wallpaper carousel, same deal. Driven by WallpaperState (IPC "wallpaper",
+    // SUPER W), which holds the list and the thumbnails.
     Variants {
         model: Quickshell.screens
         OnDemand {
@@ -351,8 +355,12 @@ ShellRoot {
         }
     }
 
-    // ...and its transition after a pick: two slanted edges opening from the
-    // centre, on the layer just above awww's.
+    // The workspace overview (SUPER+A): IPC target "overview". Its surfaces
+    // map only while it is open.
+    Overview {}
+
+    // ...the wallpaper carousel's transition after a pick: two slanted edges
+    // opening from the centre, on the layer just above awww's.
     Variants {
         model: Quickshell.screens
         OnDemand {

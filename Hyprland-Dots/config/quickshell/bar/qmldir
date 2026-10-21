@@ -13,3 +13,4 @@ singleton PolkitState 1.0 PolkitState.qml
 singleton WallpaperState 1.0 WallpaperState.qml
 singleton PowerState 1.0 PowerState.qml
 singleton BarCards 1.0 BarCards.qml
+singleton Mango 1.0 Mango.qml

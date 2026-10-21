@@ -1,7 +1,6 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
-import Quickshell.Hyprland
 import ".."
 
 // GNOME-style keyboard-layout switcher OSD, dressed as a control console like
@@ -59,8 +58,7 @@ PanelWindow {
     readonly property int selected: LayoutState.selectedPos
 
     readonly property bool onFocusedMonitor:
-        Hyprland.focusedMonitor && modelData
-        && Hyprland.focusedMonitor.name === modelData.name
+        !!modelData && Mango.focusedMonitorName === modelData.name
 
     visible: windowVisible && onFocusedMonitor && items.length > 0
 

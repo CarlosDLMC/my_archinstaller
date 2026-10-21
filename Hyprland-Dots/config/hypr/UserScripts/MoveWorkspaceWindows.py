@@ -1,21 +1,24 @@
 #!/usr/bin/env python3
 """Move every window of one workspace into another, keeping the dwindle layout.
 
-Hyprland's IPC cannot read or write the dwindle tree, so the layout is
-recovered from the window rectangles (they always form a guillotine/BSP
-partition), replayed in the target workspace with `hl.dsp.layout("preselect")`,
-and the split ratios are restored with `hl.dsp.window.resize`.
+mango's IPC cannot read or write the dwindle tree, so the layout is recovered
+from the window rectangles (they always form a guillotine/BSP partition) and
+replayed in the target workspace: each window is moved next to the window it
+was split from, with that window's split direction set first (mango's manual
+split mode, its form of Hyprland's preselect), and the split ratios are then
+restored by resizing.
 
-Hyprland runs a Lua config, so every `hyprctl dispatch` argument below is a Lua
-dispatcher expression (hl.dsp.*) and options are set with `hyprctl eval`.
+Animations off and manual split on go into one runtime file applied with
+`setoption,source`; one config reload at the end puts both back.
 
 Usage: MoveWorkspaceWindows.py <target> [source] [--follow] [--simple]
-  target/source  workspace id or name; source defaults to the active workspace
+  target/source  workspace number; source defaults to the shown workspace
   --follow       stay on the target workspace afterwards
-  --simple       plain batch move, no layout reconstruction
+  --simple       plain move, no layout reconstruction
 """
 
 import json
+import os
 import subprocess
 import sys
 import time
@@ -25,67 +28,40 @@ EDGE_SLOP = 6          # px tolerance when recovering the split tree
 RATIO_PASSES = 3       # resize sweeps used to restore split ratios
 
 
-def hypr(*args):
-    # Timed out: this script disables animations and forces a split direction
-    # for the duration of the move, and restores both in a finally. A hyprctl
-    # that never returns would hang before that finally is reached and leave
-    # the session with animations off and dwindle.force_split pinned.
+def mmsg(*args):
+    # Timed out: the move turns animations off and manual split on, and a
+    # reload in a finally puts them back. An mmsg that never returns would hang
+    # before that finally is reached.
     try:
-        return subprocess.run(("hyprctl", *args), capture_output=True,
-                              text=True, timeout=5).stdout
+        out = subprocess.run(("mmsg", *args), capture_output=True,
+                             text=True, timeout=5).stdout
     except Exception:
-        return ""
+        return {}
+    try:
+        return json.loads(out or "{}")
+    except json.JSONDecodeError:
+        return {}
 
 
-def query(what):
-    return json.loads(hypr("-j", what))
+def dispatch(cmd, client=None):
+    if client is None:
+        mmsg("dispatch", cmd)
+    else:
+        mmsg("dispatch", cmd, f"client,{client}")
+    time.sleep(SETTLE)
 
 
-def dispatch(*cmds):
-    # the batch separator is ";" - the hl.dsp strings built below contain none
-    hypr("--batch", "; ".join("dispatch " + c for c in cmds))
+def clients():
+    return mmsg("get", "all-clients").get("clients", [])
 
 
-def getopt(name):
-    """int or bool option value (the Lua config manager reports bools as bools)."""
-    reply = json.loads(hypr("-j", "getoption", name))
-    return reply["int"] if "int" in reply else reply["bool"]
+def focused_monitor():
+    return next((m for m in mmsg("get", "all-monitors").get("monitors", [])
+                 if m.get("active")), None)
 
 
-def setopt(name, value):
-    lua = ("true" if value else "false") if isinstance(value, bool) else str(value)
-    hypr("eval", f'hl.config({{ ["{name}"] = {lua} }})')
-
-
-# ------------------------------------------------------------ Lua dispatchers
-
-def d_focus_window(address):
-    return f'hl.dsp.focus({{ window = "address:{address}" }})'
-
-
-def d_focus_workspace(ws):
-    return f'hl.dsp.focus({{ workspace = "{ws}" }})'
-
-
-def d_focus_monitor(name):
-    return f'hl.dsp.focus({{ monitor = "{name}" }})'
-
-
-def d_move_to_workspace(ws, address, follow=True):
-    tail = "" if follow else ", follow = false"
-    return f'hl.dsp.window.move({{ workspace = "{ws}", window = "address:{address}"{tail} }})'
-
-
-def d_fullscreen_state(internal, client):
-    return f'hl.dsp.window.fullscreen_state({{ internal = {internal}, client = {client} }})'
-
-
-def d_resize_exact(w, h, address):
-    return f'hl.dsp.window.resize({{ x = {w}, y = {h}, window = "address:{address}" }})'
-
-
-def d_move_exact(x, y, address):
-    return f'hl.dsp.window.move({{ x = {x}, y = {y}, window = "address:{address}" }})'
+def box(c):
+    return (c["x"], c["y"], c["width"], c["height"])
 
 
 # ---------------------------------------------------------------- BSP recovery
@@ -93,7 +69,7 @@ def d_move_exact(x, y, address):
 class Leaf:
     def __init__(self, win):
         self.win = win
-        self.box = win["box"]
+        self.box = box(win)
 
     def rep(self):
         return self.win
@@ -132,7 +108,7 @@ def cut(boxes, axis):
 def build(wins):
     if len(wins) == 1:
         return Leaf(wins[0])
-    by_box = {id(w): w["box"] for w in wins}
+    by_box = {id(w): box(w) for w in wins}
     boxes = [by_box[id(w)] for w in wins]
     for axis in (0, 1):
         parts = cut(boxes, axis)
@@ -144,10 +120,10 @@ def build(wins):
 
 
 def plan(node, ops):
-    """Pre-order insertion plan: (anchor, preselect direction, new window)."""
+    """Pre-order insertion plan: (anchor, split direction, new window)."""
     if isinstance(node, Leaf):
         return
-    ops.append((node.first.rep(), "r" if node.axis == 0 else "d",
+    ops.append((node.first.rep(), "horizontal" if node.axis == 0 else "vertical",
                 node.second.rep()))
     plan(node.first, ops)
     plan(node.second, ops)
@@ -168,17 +144,31 @@ def make_scaler(src_area, dst_area):
     dx0, dy0, dw, dh = dst_area
     fx, fy = dw / sw, dh / sh
 
-    def scale(box):
-        x, y, w, h = box
+    def scale(b):
+        x, y, w, h = b
         return (round(dx0 + (x - sx0) * fx), round(dy0 + (y - sy0) * fy),
                 max(1, round(w * fx)), max(1, round(h * fy)))
     return scale
 
 
+def focus_colour():
+    """The focused border colour, for the split marker manual split draws."""
+    path = os.path.expanduser("~/.config/mango/wallust/colors.conf")
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("focus_color="):
+                    return line.split("=", 1)[1].strip()
+    except OSError:
+        pass
+    return "0x067263ff"
+
+
 # ----------------------------------------------------------------------- move
 
-def simple_move(addrs, target):
-    dispatch(*(d_move_to_workspace(target, a, follow=False) for a in addrs))
+def simple_move(ids, target):
+    for i in ids:
+        dispatch(f"tagsilent,{target}", i)
 
 
 def main():
@@ -190,132 +180,107 @@ def main():
         elif arg == "--simple":
             simple = True
         elif target is None:
-            target = arg
+            target = int(arg)
         else:
-            source = arg
+            source = int(arg)
     if target is None:
         sys.exit(__doc__)
 
-    clients = query("clients")
+    mon = focused_monitor()
+    if not mon:
+        return
     if source is None:
-        source = query("activeworkspace")["name"]
-    if source == target:
+        source = (mon.get("active_tags") or [0])[0]
+    if not source or source == target:
         return
 
-    mine = [c for c in clients if c["workspace"]["name"] == source
-            and not c["pinned"]]
+    mine = [c for c in clients() if c["monitor"] == mon["name"]
+            and source in c.get("tags", []) and not c["is_global"]
+            and not c["is_minimized"]]
     if not mine:
         return
+    ids = [c["id"] for c in mine]
+    grouped = any(c["is_group"] for c in mine)
+    focus_before = next((c["id"] for c in clients() if c["is_focused"]), None)
 
-    addrs = [c["address"] for c in mine]
-    grouped = any(c["grouped"] for c in mine)
+    def finish():
+        if follow:
+            dispatch(f"view,{target},0")
+            if focus_before in ids:
+                dispatch("focusid", focus_before)
+        else:
+            dispatch(f"view,{source},0")
+            if focus_before and focus_before not in ids:
+                dispatch("focusid", focus_before)
 
     # A fullscreen window hides its own tile, so drop the state first, read the
     # real layout, and put the state back at the end.
-    fulls = [(c["address"], c["fullscreen"], c["fullscreenClient"])
-             for c in mine if c["fullscreen"]]
+    fulls = [c["id"] for c in mine if c["is_fullscreen"]]
     if fulls and not simple and not grouped:
-        for address, _, _ in fulls:
-            dispatch(d_focus_window(address), d_fullscreen_state(0, 0))
-            time.sleep(SETTLE)
-        clients = query("clients")
-        mine = [c for c in clients if c["address"] in addrs]
+        for i in fulls:
+            dispatch("togglefullscreen", i)
+        mine = [c for c in clients() if c["id"] in ids]
 
-    tiled = [c for c in mine if not c["floating"]]
-
-    if simple or grouped or not tiled:
-        simple_move(addrs, target)
-        if follow:
-            dispatch(d_focus_workspace(target))
+    tiled = [c for c in mine if not c["is_floating"]]
+    tree = build(tiled) if (tiled and not simple and not grouped) else None
+    if tree is None:
+        simple_move(ids, target)
+        for i in fulls:
+            dispatch("togglefullscreen", i)
+        finish()
         return
-
-    for c in tiled:
-        c["box"] = tuple(c["at"]) + tuple(c["size"])
-    tree = build(tiled)
-    if tree is None:                      # unexpected geometry, stay safe
-        simple_move(addrs, target)
-        if follow:
-            dispatch(d_focus_workspace(target))
-        return
-
-    monitors = {m["id"]: m for m in query("monitors")}
-    workspaces = {w["name"]: w for w in query("workspaces")}
-    src_mon = monitors[mine[0]["monitor"]]
-    dst_name = workspaces.get(target, {}).get("monitor", src_mon["name"])
-    dst_mon = next(m for m in monitors.values() if m["name"] == dst_name)
-    src_area = bbox([c["box"] for c in tiled])
-    mon_scale = make_scaler(
-        (src_mon["x"], src_mon["y"], src_mon["width"], src_mon["height"]),
-        (dst_mon["x"], dst_mon["y"], dst_mon["width"], dst_mon["height"]))
 
     ops = []
     plan(tree, ops)
-    floats = [c for c in mine if c["floating"]]
+    floats = [c for c in mine if c["is_floating"]]
+    src_area = bbox([box(c) for c in tiled])
 
-    anim = getopt("animations.enabled")
-    split = getopt("dwindle.force_split")
-    focus_before = query("activewindow").get("address")
-    ws_before = {m["name"]: m["activeWorkspace"]["name"]
-                 for m in monitors.values()}
-    mon_before = next(m["name"] for m in monitors.values() if m["focused"])
-
-    # Both setopt calls are INSIDE the try, so the finally below always runs.
-    # Outside it, a failure in the second call skipped the finally entirely and
-    # left animations disabled for the rest of the session.
+    run_dir = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
+    override = os.path.join(run_dir, "mango-moveworkspace.conf")
+    with open(override, "w", encoding="utf-8") as f:
+        f.write("animations=0\nlayer_animations=0\ndwindle_manual_split=1\n"
+                f"split_color={focus_colour()}\n")
     try:
-        setopt("animations.enabled", False)
-        setopt("dwindle.force_split", 2)
-        dispatch(d_focus_monitor(dst_mon["name"]), d_focus_workspace(target))
+        mmsg("dispatch", f"setoption,source,{override}")
         time.sleep(SETTLE)
+        dispatch(f"view,{target},0")
 
         root = tree.rep()
-        dispatch(d_move_to_workspace(target, root["address"]))
-        time.sleep(SETTLE)
+        dispatch(f"tagsilent,{target}", root["id"])
         for anchor, direction, new in ops:
-            dispatch(d_focus_window(anchor["address"]),
-                     f'hl.dsp.layout("preselect {direction}")',
-                     d_move_to_workspace(target, new["address"]))
-            time.sleep(SETTLE)
+            dispatch("focusid", anchor["id"])
+            dispatch(f"dwindle_split_{direction}", anchor["id"])
+            dispatch(f"tagsilent,{target}", new["id"])
 
-        placed = {c["address"]: tuple(c["at"]) + tuple(c["size"])
-                  for c in query("clients")}
+        placed = {c["id"]: box(c) for c in clients()}
         tile_scale = make_scaler(
-            src_area,
-            bbox([placed[l.win["address"]] for l in tree.leaves()]))
+            src_area, bbox([placed[leaf.win["id"]] for leaf in tree.leaves()]))
         for leaf in tree.leaves():
             leaf.target = tile_scale(leaf.box)
-        sweep = [d_resize_exact(l.target[2], l.target[3], l.win["address"])
-                 for l in sorted(tree.leaves(),
-                                 key=lambda l: -l.target[2] * l.target[3])]
+        order = sorted(tree.leaves(), key=lambda l: -l.target[2] * l.target[3])
         for _ in range(RATIO_PASSES):
-            dispatch(*sweep)
-            time.sleep(SETTLE)
+            now = {c["id"]: box(c) for c in clients()}
+            for leaf in order:
+                cur = now.get(leaf.win["id"])
+                if not cur:
+                    continue
+                dw, dh = leaf.target[2] - cur[2], leaf.target[3] - cur[3]
+                if dw or dh:
+                    dispatch(f"resizewin,{dw:+d},{dh:+d}", leaf.win["id"])
 
-        drift = []
         for c in floats:
-            x, y, w, h = mon_scale(tuple(c["at"]) + tuple(c["size"]))
-            drift += [d_move_to_workspace(target, c["address"]),
-                      d_resize_exact(w, h, c["address"]),
-                      d_move_exact(x, y, c["address"])]
-        if drift:
-            dispatch(*drift)
-        for address, mode, client_mode in fulls:
-            dispatch(d_focus_window(address),
-                     d_fullscreen_state(mode, client_mode))
-            time.sleep(SETTLE)
-
-        if follow:
-            if focus_before in addrs:
-                dispatch(d_focus_window(focus_before))
-        else:
-            dispatch(d_focus_workspace(ws_before[dst_mon["name"]]),
-                     d_focus_monitor(mon_before))
-            time.sleep(SETTLE)
-            if focus_before and focus_before not in addrs:
-                dispatch(d_focus_window(focus_before))
+            dispatch(f"tagsilent,{target}", c["id"])
+            dispatch(f"resizewin,{c['width']},{c['height']}", c["id"])
+            dispatch(f"movewin,{c['x']},{c['y']}", c["id"])
+        for i in fulls:
+            dispatch("togglefullscreen", i)
+        finish()
     finally:
-        setopt("dwindle.force_split", split)
-        setopt("animations.enabled", anim)
+        try:
+            os.remove(override)
+        except OSError:
+            pass
+        mmsg("dispatch", "reload_config")
 
 
 if __name__ == "__main__":

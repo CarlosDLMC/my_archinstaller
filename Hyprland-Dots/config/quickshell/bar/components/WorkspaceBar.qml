@@ -1,22 +1,27 @@
 import QtQuick
 import QtQuick.Layouts
-import Quickshell.Hyprland
 import ".."
 
+// The workspaces of this bar's monitor (mango's tags), numbered. Shows at
+// least 1-5, and up to the highest one that holds windows or is shown.
 RowLayout {
     id: workspaceBar
     spacing: 0
 
+    required property var screenName
+    readonly property var monitorData: Mango.monitor(screenName)
+    readonly property var tags: monitorData ? monitorData.tags : []
+
     property int maxWorkspaceWithWindows: {
         var max = 0
-        for (var i = 0; i < Hyprland.workspaces.values.length; i++) {
-            var ws = Hyprland.workspaces.values[i]
-            if (ws.id > max) max = ws.id
+        for (var i = 0; i < tags.length; i++) {
+            if (tags[i].client_count > 0 && tags[i].index > max) max = tags[i].index
         }
         return max
     }
 
-    property int activeWorkspaceId: Hyprland.focusedWorkspace?.id ?? 1
+    property int activeWorkspaceId: monitorData && monitorData.active_tags.length > 0
+                                    ? monitorData.active_tags[0] : 1
     property int workspacesToShow: Math.max(5, maxWorkspaceWithWindows, activeWorkspaceId)
 
     Repeater {
@@ -33,9 +38,9 @@ RowLayout {
             radius: 4
 
             property int wsId: index + 1
-            property var workspace: Hyprland.workspaces.values.find(ws => ws.id === wsId) ?? null
+            property var workspace: workspaceBar.tags.find(t => t.index === wsId) ?? null
             property bool isActive: workspaceBar.activeWorkspaceId === wsId
-            property bool hasWindows: workspace !== null
+            property bool hasWindows: workspace !== null && workspace.client_count > 0
 
             Text {
                 id: wsNumber
@@ -58,7 +63,8 @@ RowLayout {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: Hyprland.dispatch('hl.dsp.focus({ workspace = "' + wsRect.wsId + '" })')
+                // On this bar's monitor, whichever has focus.
+                onClicked: Mango.dispatch("viewcrossmon," + wsRect.wsId + ",^" + workspaceBar.screenName + "$")
             }
         }
     }

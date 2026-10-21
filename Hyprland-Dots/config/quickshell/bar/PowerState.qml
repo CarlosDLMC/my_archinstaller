@@ -3,10 +3,9 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import Quickshell.Hyprland
 
-// Power menu «ПУСК · ПУЛЬТ» on CTRL+ALT+P (global shortcut quickshell:powerMenu),
-// and on CTRL+ALT+Delete opened on ВЫХОД (quickshell:exitMenu).
+// Power menu «ПУСК · ПУЛЬТ» on CTRL+ALT+P (IPC: power toggle), and on
+// CTRL+ALT+Delete opened on ВЫХОД (power exit).
 // Replaces wlogout. The Arch logo keeps its own small dropdown (PowerWidget).
 //
 // L and U fire at once. E, R, S - and B, W, which reboot - arm a five-second
@@ -43,7 +42,7 @@ Singleton {
           show: "loginctl lock-session", cmd: home + "/.config/hypr/scripts/LockScreen.sh" },
         { k: "E", ru: "У", name: "ВЫХОД",        slogan: "СМЕНА ОКОНЧЕНА.", arm: true,  glyph: 0xF0343,
           ask: "Смену закончить, сеанс сдать.", readback: "Вас понял: смену сдаю.",
-          show: "hyprctl dispatch 'hl.dsp.exit()'", cmd: crt + "hyprctl dispatch 'hl.dsp.exit()'" },
+          show: "mmsg dispatch quit", cmd: crt + "mmsg dispatch quit" },
         { k: "U", ru: "Г", name: "СПЯЩИЙ РЕЖИМ", slogan: "ПЕРЕКУР.",        arm: false, glyph: 0xF04B2,
           ask: "Разрешаю перекур.", readback: "",
           show: "systemctl suspend", cmd: "systemctl suspend" },
@@ -258,16 +257,11 @@ Singleton {
         }
     }
 
-    GlobalShortcut {
-        appid: "quickshell"
-        name: "powerMenu"
-        description: "Power menu"
-        onPressed: root.toggle()
-    }
-    GlobalShortcut {
-        appid: "quickshell"
-        name: "exitMenu"
-        description: "Power menu, on ВЫХОД"
-        onPressed: root.openOn("E")
+    // CTRL+ALT+P: qs -c bar ipc call power toggle
+    // CTRL+ALT+Delete: qs -c bar ipc call power exit (opened on ВЫХОД)
+    IpcHandler {
+        target: "power"
+        function toggle(): void { root.toggle() }
+        function exit(): void { root.openOn("E") }
     }
 }

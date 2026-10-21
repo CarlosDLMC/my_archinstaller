@@ -59,10 +59,10 @@ DropdownWidget {
             id: powerIcon
             anchors.centerIn: parent
             text: ""
-            // The Hyprland active-window border colour: the bar template maps
-            // "border" to {{color12}}, which is the same wallust slot
-            // UserDecorations.lua uses for col.active_border. So the logo and
-            // the focused window's border match, by request.
+            // The focused-window border colour: the bar template maps
+            // "border" to {{color12}}, which is the same wallust slot mango's
+            // colours file uses for focus_color. So the logo and the focused
+            // window's border match, by request.
             //
             // colLogo, not palBorder: color12 is a dark slot, and on some
             // wallpapers it lands on top of the bar's own background (1.00:1
@@ -106,7 +106,7 @@ DropdownWidget {
                 icon: "󰍃"
                 label: "ВЫХОД"
                 onPicked: byKeyboard ? powerWidget.armEnd("E")
-                                     : powerWidget.endSession("hyprctl dispatch 'hl.dsp.exit()'")
+                                     : powerWidget.endSession("mmsg dispatch quit")
             }
 
             ConsoleButton {

@@ -21,7 +21,7 @@ import Quickshell
 //
 // The dialog itself must not count as shown until it is complete (its `ready`
 // flag), so it sees the usual hidden-to-shown change and runs its normal open
-// code, fade-in included. The global shortcuts live in the *State singletons,
+// code, fade-in included. The IPC handlers live in the *State singletons,
 // not in the windows, so they keep working while no window exists.
 Scope {
     id: root

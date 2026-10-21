@@ -2,24 +2,51 @@
 """Emit the configured xkb layouts as JSON for the layout switcher.
 
 Display names come from the xkb rules database rather than a hardcoded map,
-so any layout added to input:kb_layout gets a correct short code and name
-with no code change. Short codes match what GNOME shows (us -> "en").
+so any layout added to mango's xkb_rules_layout gets a correct short code and
+name with no code change. Short codes match what GNOME shows (us -> "en").
 
 Output: {"layouts": [{"code","short","name"}, ...], "current": <index>}
 """
 import json
+import os
 import subprocess
 import xml.etree.ElementTree as ET
 
 XKB_RULES = "/usr/share/X11/xkb/rules/evdev.xml"
+CONFIG = os.path.expanduser("~/.config/mango/config.conf")
 
 
-def hyprctl(*args):
-    return subprocess.run(["hyprctl", *args], capture_output=True, text=True).stdout
+def config_values(path, key, seen=None):
+    """Every value of `key` in mango's config and the files it sources, in
+    mango's reading order (the last one is the one in effect)."""
+    seen = set() if seen is None else seen
+    path = os.path.realpath(path)
+    if path in seen:
+        return []
+    seen.add(path)
+    out = []
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("#") or "=" not in line:
+                    continue
+                k, _, v = line.partition("=")
+                k = k.strip()
+                v = v.split(" #", 1)[0].strip()
+                if k in ("source", "source_optional"):
+                    if v.startswith("./"):
+                        v = os.path.join(os.path.dirname(CONFIG), v[2:])
+                    out += config_values(os.path.expanduser(v), key, seen)
+                elif k == key:
+                    out.append(v)
+    except OSError:
+        pass
+    return out
 
 
 def configured_codes():
-    raw = json.loads(hyprctl("getoption", "-j", "input:kb_layout"))["str"]
+    values = config_values(CONFIG, "xkb_rules_layout")
+    raw = values[-1] if values else "us"
     return [c.strip() for c in raw.split(",") if c.strip()]
 
 
@@ -45,14 +72,13 @@ def xkb_names():
 
 
 def active_display_name():
+    """The layout in effect, by its XKB name ("English (US)")."""
     try:
-        devices = json.loads(hyprctl("devices", "-j"))
+        out = subprocess.run(["mmsg", "get", "keyboardlayout"],
+                             capture_output=True, text=True, timeout=3).stdout
+        return json.loads(out).get("layout")
     except Exception:
         return None
-    for kb in devices.get("keyboards", []):
-        if kb.get("main"):
-            return kb.get("active_keymap")
-    return None
 
 
 names = xkb_names()

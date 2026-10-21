@@ -2,7 +2,6 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
-import Quickshell.Hyprland
 import ".."
 
 Item {
@@ -629,23 +628,16 @@ Item {
         onTriggered: centerInfo.requestWeather()
     }
 
-    HyprlandFocusGrab {
-        id: weatherFocusGrab
-        windows: [weatherPopup]
-        active: centerInfo.popupVisible
-        onCleared: centerInfo.popupVisible = false
-    }
-
-    // Weather popup
-    PopupWindow {
+    // Weather popup. CardSurface closes it on a click outside and gives it
+    // the keyboard while it is open.
+    CardSurface {
         id: weatherPopup
-        visible: centerInfo.popupVisible && centerInfo.weatherText
-        anchor.window: barWindow
-        anchor.rect.x: (centerInfo.x + centerText.x + weatherPill.x + weatherPill.width/2) * barWindow.uiScale - width/2
-        anchor.rect.y: barWindow.designHeight * barWindow.uiScale + 2
-        implicitWidth: 340
-        implicitHeight: contentColumn.implicitHeight + 12 + 24
-        color: "transparent"
+        barWindow: centerInfo.barWindow
+        open: centerInfo.popupVisible && !!centerInfo.weatherText
+        onDismissed: centerInfo.popupVisible = false
+        cardX: (centerInfo.x + centerText.x + weatherPill.x + weatherPill.width/2) * barWindow.uiScale - cardWidth/2
+        cardWidth: 340
+        cardHeight: contentColumn.implicitHeight + 12 + 24
 
         // Main card with notch corners
         Canvas {

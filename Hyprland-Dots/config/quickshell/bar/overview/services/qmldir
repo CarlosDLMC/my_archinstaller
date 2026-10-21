@@ -1,0 +1,2 @@
+singleton MangoData 1.0 MangoData.qml
+singleton GlobalStates 1.0 GlobalStates.qml

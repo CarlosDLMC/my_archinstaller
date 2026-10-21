@@ -3,7 +3,6 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import Quickshell.Hyprland
 
 // Keyboard-layout state for the GNOME-style switcher.
 //
@@ -87,12 +86,12 @@ Singleton {
         return out
     }
 
+    // mango numbers the layouts from 1 (0 means "next").
     function activate(layoutIndex) {
-        applyProc.command = ["hyprctl", "switchxkblayout", "all", String(layoutIndex)]
-        applyProc.running = true
+        Mango.dispatch("switch_keyboard_layout," + (layoutIndex + 1))
     }
 
-    // Driven by the global shortcut.
+    // Driven by the keybinds (LayoutNext.sh -> `qs -c bar ipc call layout next`).
     function switchNext() {
         if (!ready || mru.length < 2) return
         if (!sessionActive) {
@@ -119,16 +118,10 @@ Singleton {
         }
     }
 
-    GlobalShortcut {
-        appid: "quickshell"
-        name: "layoutNext"
-        description: "Switch keyboard layout (most recently used)"
-        onPressed: root.switchNext()
-    }
-
-    Process {
-        id: applyProc
-        command: ["true"]
+    // SUPER+SPACE and both ALT+SHIFT orders, through LayoutNext.sh.
+    IpcHandler {
+        target: "layout"
+        function next(): void { root.switchNext() }
     }
 
     // One-shot at startup: configured layouts + their display names.
@@ -153,23 +146,22 @@ Singleton {
 
     // Track every layout change, however it was triggered. Because the MRU is
     // derived from what actually happened rather than from our own bookkeeping,
-    // it cannot drift out of sync with the real layout.
+    // it cannot drift out of sync with the real layout. mango reports only real
+    // switches of the keyboard group: virtual keyboards (wtype, Handy) have
+    // their own keymaps and never show up here.
     Connections {
-        target: Hyprland
-        function onRawEvent(event) {
-            if (event.name !== "activelayout") return
-            var comma = event.data.indexOf(",")
-            if (comma < 0) return
-            // Virtual keyboards (wtype, Handy: "hl-virtual-keyboard-*") report
-            // "English (US)" when they appear, which is not a layout switch -
-            // reacting to it opened the switcher popup on every paste.
-            if (event.data.substring(0, comma).startsWith("hl-virtual-keyboard")) return
-            var displayName = event.data.substring(comma + 1)
+        target: Mango
+        function onKeyboardLayoutChanged() {
+            var displayName = Mango.keyboardLayout
+            if (!displayName) return
 
             var idx = -1
             for (var i = 0; i < root.layouts.length; i++)
                 if (root.layouts[i].name === displayName) { idx = i; break }
             if (idx < 0) return
+            // The stream starts with the layout in effect, which layouts.py
+            // already reported: not a switch.
+            if (idx === root.currentIndex && !root.sessionActive) return
 
             root.currentIndex = idx
             if (!root.sessionActive) {

@@ -3,13 +3,12 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import Quickshell.Hyprland
 
-// Wallpaper carousel state, on SUPER W (global shortcut quickshell:wallMenu).
+// Wallpaper carousel state, on SUPER W (`qs -c bar ipc call wallpaper toggle`).
 //
 // Replaces the rofi menu of hypr/UserScripts/WallpaperSelect.sh. That script
 // still does the applying (`WallpaperSelect.sh FILE`), so awww and its
-// transition, mpvpaper for videos, the Startup_Apps.lua rewrite, wallust and
+// transition, mpvpaper for videos, the .wallpaper_video record, wallust and
 // the refresh are exactly what they were - only the picker is new.
 //
 // scripts/wallpapers.py walks ~/Pictures/wallpapers and keeps a thumbnail of
@@ -351,13 +350,6 @@ Singleton {
     // Warm at startup, so the first press opens on a full carousel and any
     // missing thumbnail is made in the background (niced) before it is needed.
     Component.onCompleted: refresh()
-
-    GlobalShortcut {
-        appid: "quickshell"
-        name: "wallMenu"
-        description: "Wallpaper carousel"
-        onPressed: root.toggle()
-    }
 
     // `qs -c bar ipc call wallpaper <fn>`, for scripts and other binds. next
     // and prev open the carousel first when it is shut, as upstream's do.

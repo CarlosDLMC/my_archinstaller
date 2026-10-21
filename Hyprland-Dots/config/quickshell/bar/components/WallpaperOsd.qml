@@ -1,7 +1,6 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
-import Quickshell.Hyprland
 import ".."
 
 // Wallpaper carousel (SUPER W), replacing the rofi menu. A strip of slanted
@@ -25,8 +24,7 @@ PanelWindow {
     screen: modelData
 
     readonly property bool onFocusedMonitor:
-        Hyprland.focusedMonitor && modelData
-        && Hyprland.focusedMonitor.name === modelData.name
+        !!modelData && Mango.focusedMonitorName === modelData.name
 
     // OnDemand creates this window when the dialog opens, so it is born
     // with the dialog already open. `ready` turns on just after creation:
@@ -65,7 +63,7 @@ PanelWindow {
     visible: windowVisible
 
     anchors { top: true; bottom: true; left: true; right: true }
-    // Own namespace for the blur rule in hypr/UserConfigs/WindowRules.lua.
+    // Own namespace: mango/rules.conf leaves it out of its no_blur rule.
     WlrLayershell.namespace: "quickshell:wallpaper"
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None

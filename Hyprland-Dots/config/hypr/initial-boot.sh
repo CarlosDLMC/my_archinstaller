@@ -26,7 +26,8 @@ gtk_theme="Wallust-A"
 # one if it could not be built.
 icon_theme="Flat-Remix-Wallust-Dark"
 # The black cursor: the XCursor theme "default" (default-cursors, which inherits
-# Adwaita) - the one Hyprland loads and keeps in gsettings. Bibata (white) is
+# Adwaita) - the one mango loads (cursor_theme in ~/.config/mango/settings.conf)
+# and GTK reads from gsettings. Bibata (white) is
 # still extracted by gtk_themes.sh for nwg-look, but not selected.
 cursor_theme="default"
 # GTK application fonts. These live in dconf, not in any file the dots ship, so
@@ -103,12 +104,11 @@ if [ ! -f "$HOME/.config/hypr/.initial_startup_done" ]; then
     # initiate kvantum theme
     kvantummanager --set "$kvantum_theme" > /dev/null 2>&1 &
 
-    # No "initiate the kb_layout" call here any more: SwitchKeyboardLayout.sh CYCLES
-    # to the next layout, and with kb_layout = "us,es,ru" that put every keyboard on
-    # Spanish at first login. Hyprland already starts on the first layout; the bar's
-    # SUPER+SPACE (quickshell:layoutNext) owns switching.
+    # No "initiate the kb_layout" call here: cycling to the next layout put every
+    # keyboard on Spanish at first login (layouts us,es,ru). mango already starts
+    # on the first layout; the bar's SUPER+SPACE owns switching.
 
-    # (Screensaver art is not made here: Startup_Apps.lua runs ScreensaverArt.sh
+    # (Screensaver art is not made here: ~/.config/mango/startup.conf runs ScreensaverArt.sh
     # --new at every login, so a re-run's new images get theirs too.)
 
     # Create a marker file to indicate that the script has been executed - only

@@ -10,7 +10,10 @@
     # and no dunst reload after every wallpaper change.
     # ------------------------------------------------------------------
     origin = top-center
-    offset = (0, 0)
+    # 12 px down: the bar reserves 12 px less than its height (the windows'
+    # top gap fills the rest, quickshell/bar/shell.qml), and dunst starts at
+    # the reserved edge - with no offset it overlapped the bar's bottom.
+    offset = (0, 12)
     width = 600
     height = (0, 400)
     font = JetBrainsMono Nerd Font 16

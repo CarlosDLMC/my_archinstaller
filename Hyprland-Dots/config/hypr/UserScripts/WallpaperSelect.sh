@@ -63,7 +63,7 @@ prepare_menu() {
 
   # Variables
   rofi_theme="$HOME/.config/rofi/config-wallpaper.rasi"
-  focused_monitor=$(hyprctl monitors -j | jq -r '.[] | select(.focused) | .name')
+  focused_monitor=$(mmsg get all-monitors | jq -r '.monitors[] | select(.active) | .name')
 
   # Ensure focused_monitor is detected
   if [[ -z "$focused_monitor" ]]; then
@@ -71,11 +71,10 @@ prepare_menu() {
     exit 1
   fi
 
-  # Monitor details
-  scale_factor=$(hyprctl monitors -j | jq -r --arg mon "$focused_monitor" '.[] | select(.name == $mon) | .scale')
-  monitor_height=$(hyprctl monitors -j | jq -r --arg mon "$focused_monitor" '.[] | select(.name == $mon) | .height')
+  # Monitor details. mango's height is already the logical one (pixels / scale).
+  monitor_height=$(mmsg get all-monitors | jq -r --arg mon "$focused_monitor" '.monitors[] | select(.name == $mon) | .height')
 
-  icon_size=$(echo "scale=1; ($monitor_height * 3) / ($scale_factor * 150)" | bc)
+  icon_size=$(echo "scale=1; ($monitor_height * 3) / 150" | bc)
   adjusted_icon_size=$(echo "$icon_size" | awk '{if ($1 < 15) $1 = 20; if ($1 > 25) $1 = 25; print $1}')
   rofi_override="element-icon{size:${adjusted_icon_size}%;}"
 
@@ -236,77 +235,23 @@ set_sddm_wallpaper() {
   fi
 }
 
-# The body of a Lua string literal for any file name, built byte by byte in
-# the C locale: \ and " escaped, and every control byte and every byte >= 0x80
-# written as a three-digit decimal escape (\233 for a Latin-1 é). The saved
-# line is then plain ASCII whatever the name is. Written raw, a CR or LF ended
-# the string ("unfinished string"), and a byte that is not valid UTF-8 later
-# stopped sed's .* in the UTF-8 session, leaving the tail of the old path
-# behind - either way the require of Startup_Apps.lua failed and took every
-# config loaded after it down. Always three digits, so a digit that follows in
-# the name cannot join the escape. Called in $( ), so the locale stays local.
-lua_escape() {
-  local LC_ALL=C s="$1" out="" c o i
-  for (( i = 0; i < ${#s}; i++ )); do
-    c="${s:i:1}"
-    case "$c" in
-      '\') out+='\\' ;;
-      '"') out+='\"' ;;
-      *)
-        printf -v o '%d' "'$c"
-        if (( o < 32 || o > 126 )); then
-          printf -v c '\\%03d' "$o"
-        fi
-        out+="$c"
-        ;;
-    esac
-  done
-  printf '%s' "$out"
-}
-
-modify_startup_config() {
+# Remember the kind of wallpaper for the next login: WallpaperStart.sh (mango
+# startup.conf) loops this video with mpvpaper, or starts awww when the file is
+# empty, and awww shows the last image by itself. Written through a temp file,
+# so a login never reads it half-written. A name can hold any byte but a
+# newline, which no file picked here has.
+record_wallpaper_kind() {
   local selected_file="$1"
-  local startup_config="$HOME/.config/hypr/configs/Startup_Apps.lua"
+  local video_file="$HOME/.config/hypr/wallpaper_effects/.wallpaper_video"
 
-  # Startup_Apps.lua has these three lines inside hl.on("hyprland.start", ...):
-  #   local livewallpaper = "..."
-  #   run("awww-daemon --format argb")
-  #   -- run("mpvpaper '*' ... " .. livewallpaper)
-  # Image wallpaper: awww on, mpvpaper commented. Video: the other way round.
+  mkdir -p "$(dirname "$video_file")"
   # Case-insensitive, like main() and the find -iname listing: clip.MP4 played
   # as a video but was saved as an image, so the next login showed a still.
   if [[ "${selected_file,,}" =~ \.(mp4|mkv|mov|webm)$ ]]; then
-    # For video wallpapers:
-    # LC_ALL=C on every sed here: in the UTF-8 session .* stops at a byte that
-    # is not valid UTF-8, so a line saved by an older version of this script
-    # was only partly replaced.
-    LC_ALL=C sed -i -E 's|^(\s*)run\("awww-daemon --format argb"\)|\1-- run("awww-daemon --format argb")|' "$startup_config"
-    LC_ALL=C sed -i -E 's|^(\s*)--\s*run\("mpvpaper |\1run("mpvpaper |' "$startup_config"
-
-    # The path is saved with $HOME in it (Startup_Apps.lua resolves it), then
-    # escaped for the Lua string (lua_escape above), then for the sed
-    # replacement, where \ & and the | delimiter are special - unescaped, "a &
-    # b.mp4" pasted the whole matched line into the file.
-    selected_file="${selected_file/#"$HOME"/\$HOME}"
-    local _repl
-    _repl=$(lua_escape "$selected_file")
-    _repl=$(printf '%s' "$_repl" | LC_ALL=C sed -e 's/[\\&|]/\\&/g')
-    # Any spacing: a hand edit such as local livewallpaper="..." is valid Lua,
-    # and matching only the exact "local livewallpaper = " form printed
-    # "Configured for live wallpaper" while leaving the old path in place.
-    LC_ALL=C sed -i -E "s|^[[:space:]]*local[[:space:]]+livewallpaper[[:space:]]*=.*|local livewallpaper = \"${_repl}\"|" "$startup_config"
-
+    printf '%s\n' "$selected_file" > "$video_file.tmp" && mv -f "$video_file.tmp" "$video_file"
     echo "Configured for live wallpaper (video)."
   else
-    # For image wallpapers:
-    LC_ALL=C sed -i -E 's|^(\s*)--\s*run\("awww-daemon --format argb"\)|\1run("awww-daemon --format argb")|' "$startup_config"
-    LC_ALL=C sed -i -E 's|^(\s*)run\("mpvpaper |\1-- run("mpvpaper |' "$startup_config"
-    # And forget the video: left in place, the stale path made copy.sh see
-    # Startup_Apps.lua as changed and back hypr up on the next re-run.
-    # The whole line, comment included, exactly as the repo ships it - the video
-    # branch above drops the comment, and anything else still differs.
-    LC_ALL=C sed -i -E 's|^[[:space:]]*local[[:space:]]+livewallpaper[[:space:]]*=.*|local livewallpaper = ""  -- WallpaperSelect.sh rewrites this line for video wallpapers|' "$startup_config"
-
+    : > "$video_file"
     echo "Configured for static wallpaper (image)."
   fi
 }
@@ -405,14 +350,12 @@ apply_selected() {
   # A video selection needs mpvpaper, and that is checked HERE rather than only
   # inside apply_video_wallpaper below.
   #
-  # modify_startup_config runs unconditionally and, for a video, comments out
-  # run("awww-daemon --format argb") and uncomments the mpvpaper line in
-  # Startup_Apps.lua. apply_video_wallpaper's own guard then refuses and the
-  # running session is left alone - which is why this looked harmless. But the
-  # startup config has already been switched to a binary that is not installed,
-  # so the NEXT login comes up with no wallpaper at all and stays that way until
-  # the Lua is hand-edited or an image is picked again. Refuse before anything
-  # is written, not after.
+  # record_wallpaper_kind runs unconditionally and, for a video, makes the next
+  # login start mpvpaper. apply_video_wallpaper's own guard then refuses and
+  # the running session is left alone - which is why this looked harmless. But
+  # the next login would start a binary that is not installed (WallpaperStart.sh
+  # falls back to awww then, but the choice is still wrong). Refuse before
+  # anything is written, not after.
   if [[ "${selected_file,,}" =~ \.(mp4|mkv|mov|webm)$ ]] \
      && ! command -v mpvpaper &>/dev/null; then
     notify-send -i "$iDIR/error.png" "Видеообои недоступны" \
@@ -421,8 +364,8 @@ apply_selected() {
     exit 1
   fi
 
-  # Modify Startup_Apps.lua based on wallpaper type
-  modify_startup_config "$selected_file"
+  # The next login starts the same kind of wallpaper
+  record_wallpaper_kind "$selected_file"
 
   # **CHECK FIRST** if it's a video or an image **before calling any function**
   if [[ "${selected_file,,}" =~ \.(mp4|mkv|mov|webm)$ ]]; then

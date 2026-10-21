@@ -11,11 +11,11 @@ sends a dunst notification when an agent
 
 always - also while herdr is the focused window. Herdr's own popups
 ([ui.toast]) cannot do this: they are skipped for herdr's active tab whatever
-Hyprland is showing, so an agent finishing in the tab herdr has open while you
+the desktop is showing, so an agent finishing in the tab herdr has open while you
 are on another workspace never told anyone.
 
 Clicking a notice takes you to that agent: herdr switches to its pane
-(`herdr agent focus`) and Hyprland focuses the herdr window - on whatever
+(`herdr agent focus`) and mango focuses the herdr window - on whatever
 workspace it is - or, with no terminal attached to herdr, opens one first. The
 hook does not wait for that click (herdr would be held up): it hands the notice
 to a detached copy of itself (--notice), which waits on notify-send's default
@@ -50,17 +50,12 @@ TEXT = {"done": "Задание выполнено", "blocked": "Ждёт ваш
 
 
 def herdr_window():
-    """The address of the Hyprland window with a herdr client in it, or None."""
-    sig = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")
-    run = os.environ.get("XDG_RUNTIME_DIR", "/run/user/%d" % os.getuid())
-    if sig and not os.path.isdir(os.path.join(run, "hypr", sig)):
-        # Hyprland was restarted under a long-lived herdr server: let hyprctl
-        # find the running instance instead of the dead one.
-        os.environ.pop("HYPRLAND_INSTANCE_SIGNATURE")
+    """The mango id of the window with a herdr client in it, or None."""
+    mango_env()
     try:
-        out = subprocess.run(["hyprctl", "clients", "-j"],
+        out = subprocess.run(["mmsg", "get", "all-clients"],
                              capture_output=True, text=True, timeout=3)
-        wins = {c["pid"]: c["address"] for c in json.loads(out.stdout) if c.get("pid", -1) > 1}
+        wins = {c["pid"]: c["id"] for c in json.loads(out.stdout)["clients"] if c.get("pid", -1) > 1}
     except (OSError, ValueError, KeyError, subprocess.SubprocessError):
         return None
     procs = {}
@@ -112,12 +107,13 @@ def run(cmd):
 
 
 def go_to(pane):
-    """Show this agent: its pane in herdr, and the herdr window in Hyprland."""
+    """Show this agent: its pane in herdr, and the herdr window in mango."""
     addr = herdr_window()
     log("go_to %s: herdr window %s" % (pane, addr))
     if addr is None:
         # No terminal attached to herdr (the server runs on without one).
-        subprocess.run(["hyprctl", "dispatch", 'hl.dsp.exec_cmd("foot herdr")'],
+        # mango starts it, with the session's environment.
+        subprocess.run(["mmsg", "dispatch", "spawn,foot herdr"],
                        capture_output=True, timeout=5)
         for _ in range(50):
             time.sleep(0.1)
@@ -128,7 +124,9 @@ def go_to(pane):
     # herdr client restore the pane it was showing, which undid a pane switch
     # made before it - you landed on herdr, but on whatever was open there.
     if addr:
-        run(["hyprctl", "dispatch", "hl.dsp.focus({ window = 'address:%s' })" % addr])
+        # focusid switches to the window's workspace, and brings a hidden tab
+        # of a group to the front.
+        run(["mmsg", "dispatch", "focusid", "client,%s" % addr])
         time.sleep(0.3)
     run([HERDR, "agent", "focus", pane])
     try:
@@ -161,22 +159,23 @@ def notify(tag, urgency, summary, body, pane):
                      stderr=subprocess.DEVNULL, start_new_session=True)
 
 
-def hypr_env():
-    """Point hyprctl at the running Hyprland, whatever environment herdr gave us."""
+def mango_env():
+    """Point mmsg at the running mango, whatever environment herdr gave us: the
+    herdr server can outlive a mango restart and keep a dead socket path."""
     run_dir = os.environ.get("XDG_RUNTIME_DIR") or "/run/user/%d" % os.getuid()
     os.environ["XDG_RUNTIME_DIR"] = run_dir
-    sig = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")
-    hypr = os.path.join(run_dir, "hypr")
-    if sig and os.path.exists(os.path.join(hypr, sig, ".socket.sock")):
+    sig = os.environ.get("MANGO_INSTANCE_SIGNATURE")
+    if sig and os.path.exists(sig):
         return
     try:
-        live = [d for d in os.listdir(hypr) if os.path.exists(os.path.join(hypr, d, ".socket.sock"))]
+        live = [os.path.join(run_dir, d) for d in os.listdir(run_dir)
+                if d.startswith("mango-") and d.endswith(".sock")]
     except OSError:
         live = []
     if live:
-        live.sort(key=lambda d: os.path.getmtime(os.path.join(hypr, d)))
-        os.environ["HYPRLAND_INSTANCE_SIGNATURE"] = live[-1]
-    log("hypr_env: signature %r was not usable, now %r" % (sig, os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")))
+        live.sort(key=os.path.getmtime)
+        os.environ["MANGO_INSTANCE_SIGNATURE"] = live[-1]
+    log("mango_env: socket %r was not usable, now %r" % (sig, os.environ.get("MANGO_INSTANCE_SIGNATURE")))
 
 
 def notifications_owner():
@@ -198,7 +197,7 @@ def notice(tag, urgency, summary, body, pane):
     or is restarted - the notice goes with it, and notify-send would otherwise
     wait for its click until logout."""
     log("notice %s waiting (pid %s)" % (tag, os.getpid()))
-    hypr_env()
+    mango_env()
     proc = subprocess.Popen(["notify-send", "-a", APP, "-u", urgency,
                              "-h", "string:x-dunst-stack-tag:" + tag,
                              "-A", "default=Открыть", summary, body],

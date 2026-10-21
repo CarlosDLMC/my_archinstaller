@@ -1,8 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
-import Quickshell.Wayland
-import Quickshell.Hyprland
 import ".."
 
 Item {
@@ -78,18 +76,14 @@ Item {
         onWheel: wheel => root.wheelMoved(wheel.angleDelta.y)
     }
 
-    HyprlandFocusGrab {
-        id: focusGrab
-        windows: [popup]
-        active: dropdownOpen
-        onCleared: dropdownOpen = false
-    }
-
-    PopupWindow {
+    // The card: CardSurface closes it on a click outside and gives it the
+    // keyboard while it is open.
+    CardSurface {
         id: popup
-        visible: dropdownOpen
-        anchor.window: barWindow
-        anchor.rect.x: {
+        barWindow: root.barWindow
+        open: dropdownOpen
+        onDismissed: dropdownOpen = false
+        cardX: {
             var iconCenter = (root.x + iconContainer.x + iconContainer.width/2) * barWindow.uiScale
             if (stemAlignment === "right") {
                 return iconCenter - popupWidth + cardRect.stemWidth/2 + 10
@@ -99,10 +93,8 @@ Item {
                 return iconCenter - popupWidth/2
             }
         }
-        anchor.rect.y: barWindow.designHeight * barWindow.uiScale + 2
-        implicitWidth: popupWidth
-        implicitHeight: popupHeight
-        color: "transparent"
+        cardWidth: popupWidth
+        cardHeight: popupHeight
 
         // Main card with notch corners
         Canvas {

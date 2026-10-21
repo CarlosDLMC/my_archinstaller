@@ -1,7 +1,6 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
-import Quickshell.Hyprland
 import ".."
 
 // Clipboard picker. Replaces the rofi one: a centred card in the bar's own
@@ -35,8 +34,7 @@ PanelWindow {
     screen: modelData
 
     readonly property bool onFocusedMonitor:
-        Hyprland.focusedMonitor && modelData
-        && Hyprland.focusedMonitor.name === modelData.name
+        !!modelData && Mango.focusedMonitorName === modelData.name
 
     // OnDemand creates this window when the dialog opens, so it is born
     // with the dialog already open. `ready` turns on just after creation:

@@ -3,12 +3,11 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import Quickshell.Hyprland
 
 // Clipboard history state for the picker, on top of cliphist.
 //
 // Replaces the rofi ClipManager.sh. The store is unchanged - the same
-// `wl-paste --watch cliphist store` pair from Startup_Apps.lua, the same
+// `wl-paste --watch cliphist store` pair from mango/startup.conf, the same
 // history - only the picker is new, so nothing that was already captured is
 // lost and images keep arriving the way they always did.
 //
@@ -272,10 +271,9 @@ Singleton {
     // Warm at startup, so even the first press opens on a populated list.
     Component.onCompleted: reload()
 
-    GlobalShortcut {
-        appid: "quickshell"
-        name: "clipMenu"
-        description: "Clipboard history"
-        onPressed: root.toggle()
+    // SUPER+ALT+V: qs -c bar ipc call clipboard toggle
+    IpcHandler {
+        target: "clipboard"
+        function toggle(): void { root.toggle() }
     }
 }
