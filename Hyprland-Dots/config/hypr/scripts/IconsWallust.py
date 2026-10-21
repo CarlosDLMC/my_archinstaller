@@ -8,6 +8,12 @@ swap with the colour the bar's console cards are lit in - wallust's accent,
 read from the bar's own palette file - and so the folders in Thunar and the
 icons in the launcher follow the wallpaper like everything else.
 
+The Desktop icon (user-desktop and its eleven aliases in places/) is not a
+folder but a screen filled with a gradient, blue #357af0 to violet #8c42ab,
+that no colour variant changes - so it stayed blue-violet among recoloured
+folders. Its two stops get the same two colours. Only there: #8c42ab is also
+the violet folders' own colour.
+
 The result is ~/.icons/Flat-Remix-Wallust-Dark. It holds only the ~12,000
 icons that carry the blue; it inherits the other ~28,000 from
 Flat-Remix-Blue-Dark instead of keeping a second 319 MB copy of them.
@@ -36,7 +42,12 @@ MANIFEST = os.path.join(DST, ".wallust-manifest")   # the icons that carry the b
 STATE = os.path.join(DST, ".wallust-colours")       # the colours they carry now
 LOCK = os.path.join(HOME, ".icons", "." + NAME + ".lock")
 
+# First line of the manifest. Bump it when manifest() starts collecting
+# something new, so a manifest written by an older version is rebuilt.
+MANIFEST_VERSION = "# v2 desktop"
+
 BLUES = re.compile(rb"#(367bf0|2b62c0)", re.IGNORECASE)
+DESKTOP = re.compile(rb"#(357af0|8c42ab)", re.IGNORECASE)   # the Desktop icon's gradient
 
 
 def hls_hex(h, l, s):
@@ -61,25 +72,35 @@ def colours():
     return hls_hex(h, l, s), hls_hex(h, l * 0.8, s * 0.85)
 
 
+def is_desktop(rel, data):
+    """The Desktop icon: a place that carries the gradient's blue stop."""
+    return rel.startswith("places" + os.sep) and b"#357af0" in data.lower()
+
+
 def manifest():
-    """Every icon in the source theme that carries one of the two blues."""
+    """Every icon in the source theme that carries one of the two blues,
+    and the Desktop icon."""
     if os.path.exists(MANIFEST) and \
             os.path.getmtime(MANIFEST) >= os.path.getmtime(os.path.join(SRC, "index.theme")):
         with open(MANIFEST, encoding="utf-8") as f:
-            return [line for line in f.read().split("\n") if line]
+            lines = [line for line in f.read().split("\n") if line]
+        if lines and lines[0] == MANIFEST_VERSION:
+            return lines[1:]
     found = []
     for root, _dirs, files in os.walk(SRC):
         for name in files:
             if not name.endswith(".svg"):
                 continue
             path = os.path.join(root, name)
+            rel = os.path.relpath(path, SRC)
             with open(path, "rb") as f:
-                if BLUES.search(f.read()):
-                    found.append(os.path.relpath(path, SRC))
+                data = f.read()
+            if BLUES.search(data) or is_desktop(rel, data):
+                found.append(rel)
     found.sort()
     os.makedirs(DST, exist_ok=True)
     with open(MANIFEST, "w", encoding="utf-8") as f:
-        f.write("\n".join(found) + "\n")
+        f.write(MANIFEST_VERSION + "\n" + "\n".join(found) + "\n")
     return found
 
 
@@ -173,12 +194,15 @@ def main():
             adopt()
             return 0
 
-        table = {b"367bf0": main_hex.encode(), b"2b62c0": dark_hex.encode()}
+        table = {b"367bf0": main_hex.encode(), b"2b62c0": dark_hex.encode(),
+                 b"357af0": main_hex.encode(), b"8c42ab": dark_hex.encode()}
         created = False
         for rel in files:
             with open(os.path.join(SRC, rel), "rb") as f:
                 data = f.read()
             data = BLUES.sub(lambda m: b"#" + table[m.group(1).lower()], data)
+            if is_desktop(rel, data):
+                data = DESKTOP.sub(lambda m: b"#" + table[m.group(1).lower()], data)
             out = os.path.join(DST, rel)
             if not os.path.exists(out):
                 os.makedirs(os.path.dirname(out), exist_ok=True)
