@@ -53,6 +53,44 @@ Item {
     // laid out here instead, as dwindle will: a lone one fills the work area,
     // more are split in turn along the longer side. A workspace whose windows
     // still tile it (nothing moved in or out) keeps mango's own layout.
+    // A tile dropped on its own workspace. A floating window goes where it was
+    // dropped. A tiled one dropped on another tile swaps with it: mango has no
+    // swap by id, so it is exchange_client towards the other tile (mango takes
+    // the nearest window that way - the dropped-on one when they touch). That
+    // only works on the workspace on screen, so a hidden one is shown first
+    // (and stays shown: switching back would flash it under the overview).
+    function dropInside(tile) {
+        const win = tile.windowData
+        if (Math.abs(tile.x - tile.initX) < 8 && Math.abs(tile.y - tile.initY) < 8)
+            return
+        const ws = workspaceOf(win)
+        if (win.is_floating) {
+            const x = Math.round(monitor.x + Math.max(0, tile.x - tile.xOffset) / scale)
+            const y = Math.round(monitor.y + reservedTop + Math.max(0, tile.y - tile.yOffset) / scale)
+            Mango.dispatch("movewin," + x + "," + y, win.id)
+            return
+        }
+        const px = tile.x + tile.Drag.hotSpot.x, py = tile.y + tile.Drag.hotSpot.y
+        let target = null
+        for (let i = 0; i < windowRepeater.count; ++i) {
+            const t = windowRepeater.itemAt(i)
+            if (!t || t === tile || workspaceOf(t.windowData) !== ws || t.windowData.is_floating)
+                continue
+            if (px >= t.initX && px < t.initX + t.width && py >= t.initY && py < t.initY + t.height)
+                target = t.windowData
+        }
+        if (!target)
+            return
+        const dx = (target.x + target.width / 2) - (win.x + win.width / 2)
+        const dy = (target.y + target.height / 2) - (win.y + win.height / 2)
+        const dir = Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up")
+        const swap = "mmsg dispatch exchange_client," + dir + " client," + win.id
+        if (monitor.active_tags.indexOf(ws) !== -1)
+            Quickshell.execDetached(["sh", "-c", swap])
+        else
+            Quickshell.execDetached(["sh", "-c", "mmsg dispatch 'viewcrossmon," + ws + ",^" + monitor.name + "$' && " + swap])
+    }
+
     readonly property int tileGap: 12  // the gap mango leaves around and between windows
     function retileHidden(list) {
         if (!monitor)
@@ -217,6 +255,7 @@ Item {
             implicitHeight: workspaceColumnLayout.implicitHeight
 
             Repeater { // Window repeater
+                id: windowRepeater
                 model: ScriptModel {
                     values: {
                         const lo = root.workspaceGroup * root.workspacesShown
@@ -299,6 +338,8 @@ Item {
                             // workspace a few ms later, which moves this tile there.
                             if (targetWorkspace !== -1 && targetWorkspace !== root.workspaceOf(windowData))
                                 Mango.dispatch("tagsilent," + targetWorkspace, windowData.id)
+                            else if (targetWorkspace !== -1)
+                                root.dropInside(window)
                             window.followWindow()
                         }
                         onClicked: (event) => {
