@@ -145,6 +145,25 @@
     msg_urgency = critical
     format = "<span font_desc='Terminess Nerd Font Bold 13' background='#C42B1C' foreground='#F2F2EC' letter_spacing='1024' text_transform='uppercase'> %a </span>  <span foreground='#F2F2EC'><b>%s</b></span>\n%b"
 
+# Messages from people are stamped like telegrams instead of with the app's
+# name: a personal chat (Telegram, WhatsApp) is a ТЕЛЕГРАММА, work (Slack)
+# is СЛУЖЕБНАЯ - an official one. A message the app itself sends critical
+# is a МОЛНИЯ, the express telegram, so that ТРЕВОГА stays the machine's own
+# alarm; none of these apps sends one today. The order matters: МОЛНИЯ
+# comes last so that it wins over both.
+[look_telegram]
+    appname = "^([Tt]elegram.*|ZapZap|[Ww]hats[Aa]pp.*)$"
+    format = "<span font_desc='Terminess Nerd Font Bold 13' background='#6E7066' foreground='#000000' letter_spacing='1024'> ТЕЛЕГРАММА </span>  <span foreground='#F2F2EC'><b>%s</b></span>\n%b"
+
+[look_official]
+    appname = "^[Ss]lack$"
+    format = "<span font_desc='Terminess Nerd Font Bold 13' background='#6E7066' foreground='#000000' letter_spacing='1024'> СЛУЖЕБНАЯ </span>  <span foreground='#F2F2EC'><b>%s</b></span>\n%b"
+
+[look_molniya]
+    appname = "^([Tt]elegram.*|ZapZap|[Ww]hats[Aa]pp.*|[Ss]lack)$"
+    msg_urgency = critical
+    format = "<span font_desc='Terminess Nerd Font Bold 13' background='#C42B1C' foreground='#F2F2EC' letter_spacing='1024'> МОЛНИЯ </span>  <span foreground='#F2F2EC'><b>%s</b></span>\n%b"
+
 # ------------------------------------------------------------------
 # One second: the toasts that only confirm an action you just took.
 #
