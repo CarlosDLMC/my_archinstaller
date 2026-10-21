@@ -17,11 +17,10 @@ rm -rf "$dir" && mkdir -p "$dir"
 # PPM, not PNG: grim spent 658ms compressing a 1080p PNG, 37ms writing this.
 while read -r name; do
     grim -t ppm -o "$name" "$dir/$name.ppm" &
-done < <(hyprctl monitors -j | jq -r '.[].name')
+done < <(mmsg get all-monitors | jq -r '.monitors[] | select(.width > 0) | .name')
 wait
 
-cursor() { hyprctl eval "hl.config({ cursor = { invisible = $1 } })" >/dev/null 2>&1; }
-cursor true
+# The overlay hides the pointer itself while it is up (quickshell/crt).
 qs -c crt >/dev/null 2>&1 &
 crt=$!
 
@@ -35,6 +34,5 @@ done
 rc=$?
 if [ "$rc" -ne 0 ]; then
     kill "$crt" 2>/dev/null
-    cursor false
 fi
 exit "$rc"

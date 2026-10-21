@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
-# Rofi menu for Hyprland quick settings (SUPER SHIFT E)
-# Updated for UserConfigs/configs separation
+# Rofi menu for the desktop's quick settings (SUPER SHIFT E): the mango config
+# files to edit, and the settings tools.
 
-# Default terminal and EDITOR come from UserConfigs/01-UserDefaults.lua. It is a
-# plain Lua table (no hl.* calls), so the stock `lua` interpreter can read it.
-defaults_file="$HOME/.config/hypr/UserConfigs/01-UserDefaults.lua"
-eval "$(DEFAULTS="$defaults_file" lua -e 'local d = dofile(os.getenv("DEFAULTS")); for k, v in pairs(d) do print(k .. "=" .. string.format("%q", v)) end')"
-edit="${EDITOR:-${editor:-nano}}"
+# The terminal comes from mango's defaults.conf (var=term,...); the editor is
+# $EDITOR, which mango exports from env.conf.
+config="$HOME/.config/mango"
+term=$(sed -n 's/^var=term,//p' "$config/defaults.conf" 2>/dev/null | tail -n 1)
+term="${term:-foot}"
+edit="${EDITOR:-nano}"
 # ##################################### #
 
 # variables
-configs="$HOME/.config/hypr/configs"
-UserConfigs="$HOME/.config/hypr/UserConfigs"
 rofi_theme="$HOME/.config/rofi/config-edit.rasi"
 msg='Выберите действие'
 iDIR="$HOME/.config/hypr/notify/images"
@@ -30,28 +29,22 @@ show_info() {
 # Function to display the menu options without numbers
 menu() {
     cat <<EOF
---- СВОИ НАСТРОЙКИ ---
+--- НАСТРОЙКИ ---
 Приложения по умолчанию
-Свои сочетания клавиш
-Свои переменные окружения
-Свой автозапуск
-Свои правила окон
-Свои настройки
-Своё оформление
-Свои анимации
+Сочетания клавиш
+Переменные окружения
+Автозапуск
+Правила окон
+Настройки и оформление
+Анимации
+Мониторы
 Настройки ноутбука
---- СИСТЕМНЫЕ НАСТРОЙКИ ---
-Системные сочетания клавиш
-Системный автозапуск
-Системные правила окон
-Системные настройки
 --- УТИЛИТЫ ---
 Мониторы (nwg-displays)
-Рабочие столы (nwg-displays)
 Оформление GTK (nwg-look)
 Qt-приложения (qt6ct)
 Qt-приложения (qt5ct)
-Анимации Hyprland
+Пресеты анимаций
 Профиль мониторов
 Тема rofi
 Поиск сочетаний клавиш
@@ -65,26 +58,16 @@ main() {
     
     # Map choices to corresponding files
     case "$choice" in
-    	"Приложения по умолчанию") file="$UserConfigs/01-UserDefaults.lua" ;;
-        "Свои переменные окружения") file="$UserConfigs/ENVariables.lua" ;;
-        "Свои сочетания клавиш") file="$UserConfigs/UserKeybinds.lua" ;;
-        "Свой автозапуск") file="$UserConfigs/Startup_Apps.lua" ;;
-        "Свои правила окон") file="$UserConfigs/WindowRules.lua" ;;
-        "Свои настройки") file="$UserConfigs/UserSettings.lua" ;;
-        "Своё оформление") file="$UserConfigs/UserDecorations.lua" ;;
-        "Свои анимации") file="$UserConfigs/UserAnimations.lua" ;;
-        "Настройки ноутбука") file="$UserConfigs/Laptops.lua" ;;
-        "Системные сочетания клавиш") file="$configs/Keybinds.lua" ;;
-        "Системный автозапуск") file="$configs/Startup_Apps.lua" ;;
-        "Системные правила окон") file="$configs/WindowRules.lua" ;;
-        "Системные настройки") file="$configs/SystemSettings.lua" ;;
+    	"Приложения по умолчанию") file="$config/defaults.conf" ;;
+        "Сочетания клавиш") file="$config/keybinds.conf" ;;
+        "Переменные окружения") file="$config/env.conf" ;;
+        "Автозапуск") file="$config/startup.conf" ;;
+        "Правила окон") file="$config/rules.conf" ;;
+        "Настройки и оформление") file="$config/settings.conf" ;;
+        "Анимации") file="$config/animations.conf" ;;
+        "Мониторы") file="$config/monitors.conf" ;;
+        "Настройки ноутбука") file="$config/laptop.conf" ;;
         "Мониторы (nwg-displays)") 
-            if ! command -v nwg-displays &>/dev/null; then
-                notify-send -i "$iDIR/error.png" "ОШИБКА" "Сначала установите nwg-displays"
-                exit 1
-            fi
-            nwg-displays ;;
-        "Рабочие столы (nwg-displays)") 
             if ! command -v nwg-displays &>/dev/null; then
                 notify-send -i "$iDIR/error.png" "ОШИБКА" "Сначала установите nwg-displays"
                 exit 1
@@ -108,7 +91,7 @@ main() {
                 exit 1
             fi
             qt5ct ;;
-        "Анимации Hyprland") $scriptsDir/Animations.sh ;;
+        "Пресеты анимаций") $scriptsDir/Animations.sh ;;
         "Профиль мониторов") $scriptsDir/MonitorProfiles.sh ;;
         "Тема rofi") $scriptsDir/RofiThemeSelector.sh ;;
         "Поиск сочетаний клавиш") $scriptsDir/KeyBinds.sh ;;

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Searchable keybinds in rofi (SUPER SHIFT K).
 #
-# The list comes from `hyprctl binds`, i.e. the binds Hyprland actually has
+# The list comes from the mango config (KeyHints.py --dump), i.e. the binds as they
 # loaded right now - the Lua config builds binds in loops and helper functions,
 # so parsing the config files by hand would miss half of them. A bind shows its
 # description; give every hl.bind() one, or it lists as "(no description)".

@@ -36,8 +36,9 @@ threshold = 11
 cava.template = 'colors-cava'
 cava.target = '~/.config/cava/config'
 
-hypr.template = 'colors-hyprland.lua'
-hypr.target = '~/.config/hypr/wallust/wallust-hyprland.lua'
+# The window borders and shadow (mango sources the file and reloads).
+mango.template = 'colors-mango.conf'
+mango.target = '~/.config/mango/wallust/colors.conf'
 
 rofi.template = 'colors-rofi.rasi'
 rofi.target = '~/.config/rofi/wallust/colors-rofi.rasi'

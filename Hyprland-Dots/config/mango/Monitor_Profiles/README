@@ -1,0 +1,16 @@
+# Monitor profiles: one .conf file per layout you want to switch to, in this folder.
+
+# Give each a unique name ending in .conf, e.g. Mirror.conf, Office.conf.
+# (Suggest not to call one "default" - that name ships with the dotfiles.)
+
+# tip: make the layout with nwg-displays and Apply it, then copy the file it
+# writes, ~/.config/mango/monitors.conf, here under its new name:
+#     cp ~/.config/mango/monitors.conf ~/.config/mango/Monitor_Profiles/Office.conf
+# SUPER SHIFT E > «Профиль мониторов» copies <name>.conf over
+# ~/.config/mango/monitors.conf.
+
+# Picking a profile overwrites ~/.config/mango/monitors.conf and keeps no
+# backup of it - save the current layout as a profile first if you want it back.
+
+# The profile loads on its own: mango reloads its config when a sourced file
+# changes. `mmsg get all-monitors` lists names, sizes and positions.

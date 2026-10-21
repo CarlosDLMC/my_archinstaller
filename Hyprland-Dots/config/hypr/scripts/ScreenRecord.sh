@@ -176,27 +176,9 @@ start_recorder() {
     return 1
 }
 
-# Pick the output (monitor) whose bounds contain the given x,y point.
-#
-# In logical coordinates, as the window's position is: .width/.height are the
-# monitor's pixels, so on a scaled panel (2560 px at 1.6 = 1600 logical) a
-# window on the monitor to its right still fell inside it, and the whole wrong
-# monitor was recorded. Rotated (odd transform) swaps the two.
-output_for_point() {
-    local x=$1 y=$2
-    hyprctl -j monitors | jq -r --argjson x "$x" --argjson y "$y" '
-        .[]
-        | ((if (.transform % 2) == 1 then .height else .width end) / .scale) as $w
-        | ((if (.transform % 2) == 1 then .width else .height end) / .scale) as $h
-        | select(
-            $x >= .x and $x < (.x + $w) and
-            $y >= .y and $y < (.y + $h)
-        ) | .name' | head -1
-}
-
 # Name of the monitor that currently has focus.
 focused_output() {
-    hyprctl -j monitors | jq -r '.[] | select(.focused) | .name' | head -1
+    mmsg get all-monitors | jq -r '.monitors[] | select(.active) | .name' | head -1
 }
 
 # Record one whole monitor. $1 = output name; defaults to the focused monitor.
@@ -266,19 +248,16 @@ record_active() {
         return
     fi
 
-    active_window_class=$(hyprctl -j activewindow | jq -r '(.class)')
-    # Geometry from hyprctl's JSON, not its text output: in the text form the
-    # title: and initialTitle: lines come after at: and size:, so `grep 'at:' |
-    # tail -n1` took a window TITLE containing "at:" ("Chat: ...", "What: ...") as
-    # the position, and the capture failed.
-    w_pos=$(hyprctl -j activewindow | jq -r '"\(.at[0]),\(.at[1])"')
-    w_size=$(hyprctl -j activewindow | jq -r '"\(.size[0])x\(.size[1])"')
-    geometry="${w_pos} ${w_size}"
-
-    # Resolve which monitor this window sits on so wf-recorder targets it.
-    win_x=${w_pos%,*}
-    win_y=${w_pos#*,}
-    output=$(output_for_point "$win_x" "$win_y")
+    # The focused window: its app id, the monitor it is on (wf-recorder
+    # targets that output), and its box without the border - mango's window
+    # geometry includes the border (border_px in ~/.config/mango/settings.conf).
+    local client bw
+    client=$(mmsg get focusing-client)
+    bw=$(sed -n 's/^border_px=//p' "$HOME/.config/mango/settings.conf" 2>/dev/null | tail -n 1)
+    active_window_class=$(jq -r '.appid // empty' <<<"$client")
+    geometry=$(jq -r --argjson bw "${bw:-1}" '
+        select(.id) | "\(.x + $bw),\(.y + $bw) \(.width - 2 * $bw)x\(.height - 2 * $bw)"' <<<"$client")
+    output=$(jq -r '.monitor // empty' <<<"$client")
 
     if [[ -n "$output" ]]; then
         start_recorder -o "$output" -g "$geometry" -f "${dir}/${file}"

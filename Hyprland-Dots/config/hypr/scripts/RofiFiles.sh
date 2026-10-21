@@ -46,9 +46,9 @@ root=${ROFI_DATA#*;}
 # that PID in script mode); $PV.last the file on screen, $PV.hover the row the
 # cursor last moved to, $PV.mpv the preview mpv's IPC socket, $PV.imv the
 # preview imv's PID, $PV.img* the symlink imv was last handed.
-# configs/WindowRules.lua does the window side: while RofiFilesPreview(true) is
-# on, every new window floats beside the launcher without taking its keyboard
-# or animating, and closes the one before; the mode ends when rofi closes.
+# RofiPreviewMode.sh does the window side: while it is on, every new window
+# floats beside the launcher without taking its keyboard or animating, and
+# closes the one before; the mode ends when rofi closes.
 PV=${XDG_RUNTIME_DIR:-/tmp}/rofi-files-preview
 
 header() {
@@ -218,7 +218,7 @@ is_browser() {
 }
 
 # Open a file (full path) as the preview, unless it is already on screen. The
-# window it opens replaces the previous preview (WindowRules.lua).
+# window it opens replaces the previous preview (RofiPreviewMode.sh).
 preview_open() {
     local app
     [[ $(cat "$PV.last" 2>/dev/null) == "$1" ]] && return
@@ -288,11 +288,11 @@ toggle_preview() {
     local p
     if preview_here; then
         rm -f "$PV" "$PV.last" "$PV.hover" "$PV.mpv" "$PV.imv" "$PV".img*
-        hyprctl eval 'RofiFilesPreview(false)' >/dev/null 2>&1
+        "$HOME/.config/hypr/scripts/RofiPreviewMode.sh" off
     else
         printf '%s' "$ROFI_OUTSIDE" > "$PV"
         rm -f "$PV.last"
-        hyprctl eval 'RofiFilesPreview(true)' >/dev/null 2>&1
+        "$HOME/.config/hypr/scripts/RofiPreviewMode.sh" on "$ROFI_OUTSIDE"
         p=$(path_of "$1")
         [[ -f $p ]] && preview_open "$p"
     fi

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Keybind cheat sheet with a search box (SUPER H).
 
-The list is generated LIVE from `hyprctl binds`, i.e. the keybinds Hyprland
-has loaded right now, so it never drifts out of date: add a bind with a
-description in the Lua config and it shows up here after the next reload.
+The list is read from mango's config - ~/.config/mango/config.conf and every
+file it sources, the way mango reads them - so it follows the binds as they
+are: add a bind with a description and it shows up here. A bind's
+description is the comment at the end of its line ("  # text").
 
 Usage:
     KeyHints.py          open the GTK window (type to filter, Esc closes)
@@ -16,16 +17,18 @@ import re
 import subprocess
 import sys
 
-# Hyprland modmask bits (X11 modifier order): SHIFT=1 CTRL=4 ALT=8 SUPER=64.
+CONFIG = os.path.expanduser("~/.config/mango/config.conf")
+
+# Modifier order, and their weight when sorting (SHIFT=1 CTRL=4 ALT=8 SUPER=64).
 MOD_BITS = ((64, "SUPER"), (4, "CTRL"), (8, "ALT"), (1, "SHIFT"))
 
-# Friendlier names for the keysyms Hyprland reports. Anything not listed is
+# Friendlier names for the key names in the config. Anything not listed is
 # shown as-is (F6, Print, XF86AudioPlay, ...).
 KEY_NAMES = {
-    "mouse:272": "left click (drag)",
-    "mouse:273": "right click (drag)",
-    "mouse_up": "scroll up",
-    "mouse_down": "scroll down",
+    "btn_left": "left click (drag)",
+    "btn_right": "right click (drag)",
+    "UP": "scroll up",
+    "DOWN": "scroll down",
     "bracketleft": "[",
     "bracketright": "]",
     "period": ".",
@@ -34,60 +37,85 @@ KEY_NAMES = {
     "Return": "Enter",
     "Delete": "Del",
     "Print": "PrtSc",
-    "left": "Left",
-    "right": "Right",
-    "up": "Up",
-    "down": "Down",
-    "SHIFT_L": "Left Shift",
-    "ALT_L": "Left Alt",
+    "Shift_L": "Left Shift",
+    "Alt_L": "Left Alt",
+    "code:209": "XF86AudioPause",
 }
-
-
-def key_name(b):
-    """Keysym or keycode of a bind, as text. The digit row is bound by keycode
-    in some setups (10..19 = 1..9,0); anything else by keycode stays raw."""
-    code = b.get("keycode", 0)
-    if code > 0:
-        if 10 <= code <= 18:
-            return str(code - 9)
-        if code == 19:
-            return "0"
-        return f"code:{code}"
-    return b.get("key", "")
-
-
-def mods(b):
-    mask = b.get("modmask", 0)
-    return [name for bit, name in MOD_BITS if mask & bit]
-
-
-def action(b):
-    if b.get("has_description") and b.get("description"):
-        return b["description"]
-    if b.get("dispatcher") == "__lua":
-        return "(no description)"
-    return f'{b.get("dispatcher", "")} {b.get("arg", "")}'.strip()
 
 
 def natural(s):
     return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", s)]
 
 
+def strip_comment(line):
+    """(value, comment): mango cuts a line at a # that follows whitespace and
+    is not inside quotes."""
+    quote = None
+    for i, ch in enumerate(line):
+        if quote:
+            if ch == quote:
+                quote = None
+        elif ch in "'\"":
+            quote = ch
+        elif ch == "#" and i > 0 and line[i - 1] in " \t":
+            return line[:i].rstrip(), line[i + 1:].strip()
+    return line.rstrip(), ""
+
+
+def config_lines(path, seen):
+    """Every line of the config and the files it sources, in mango's order."""
+    path = os.path.realpath(path)
+    if path in seen:
+        return
+    seen.add(path)
+    base = os.path.dirname(CONFIG)
+    try:
+        with open(path, encoding="utf-8") as f:
+            for raw in f:
+                if raw.startswith("#") or not raw.strip():
+                    continue
+                key, _, value = raw.rstrip("\n").partition("=")
+                key = key.strip()
+                if key in ("source", "source_optional"):
+                    src = value.split(" #", 1)[0].strip()
+                    if src.startswith("./"):
+                        src = os.path.join(base, src[2:])
+                    yield from config_lines(os.path.expanduser(src), seen)
+                else:
+                    yield key, value
+    except OSError:
+        return
+
+
 def load_binds():
-    out = subprocess.run(["hyprctl", "-j", "binds"], check=True,
-                         capture_output=True, text=True).stdout
     rows, seen = [], set()
-    for b in json.loads(out):
-        if b.get("submap"):
+    for key, value in config_lines(CONFIG, set()):
+        value, desc = strip_comment(value)
+        if re.fullmatch(r"bind[slrpc]*", key):
+            kind = "key"
+        elif key in ("mousebind", "axisbind", "gesturebind"):
+            kind = key
+        else:
             continue
-        raw = key_name(b)
-        m = mods(b)
-        keys = " + ".join(m + [KEY_NAMES.get(raw, raw)])
-        act = action(b)
+        fields = [f.strip() for f in value.split(",")]
+        if len(fields) < 3:
+            continue
+        mod_names = [m.strip().upper() for m in fields[0].split("+")]
+        mask = 0
+        for bit, name in MOD_BITS:
+            if name in mod_names:
+                mask |= bit
+        raw = fields[1]
+        if kind == "gesturebind":
+            label = f"{fields[2]}-finger swipe {raw.lower()}"
+        else:
+            label = KEY_NAMES.get(raw, raw.upper() if len(raw) == 1 else raw)
+        mods = [name for bit, name in MOD_BITS if mask & bit]
+        keys = " + ".join(mods + [label])
+        act = desc or " ".join(f for f in fields[2:] if f)
         if (keys, act) in seen:
             continue
         seen.add((keys, act))
-        mask = b.get("modmask", 0)
         # SUPER binds first, then grouped by modifier combo, then by key.
         sort_key = (0 if mask & 64 else 1, mask, natural("10" if raw == "0" else raw))
         rows.append((sort_key, keys, act, raw))
@@ -104,7 +132,7 @@ def dump(rows):
 # wallust's rofi colours, so the cheat sheet follows the wallpaper exactly as
 # rofi does: a grey window under a title band, a red > prompt with a blinking
 # one-letter block cursor, and the list on the terminal's black. The literals
-# are the sovietpunk fallbacks, for when the file is missing. Hyprland draws
+# are the sovietpunk fallbacks, for when the file is missing. mango draws
 # the frame: it is the focused-window border.
 ROFI_COLORS = os.path.expanduser("~/.config/rofi/wallust/colors-rofi.rasi")
 PALETTE = {
@@ -335,7 +363,7 @@ def main():
     try:
         rows = load_binds()
     except (OSError, subprocess.CalledProcessError, ValueError) as e:
-        print(f"KeyHints: could not read binds from hyprctl: {e}", file=sys.stderr)
+        print(f"KeyHints: could not read binds from the mango config: {e}", file=sys.stderr)
         return 1
     if "--dump" in sys.argv[1:]:
         dump(rows)

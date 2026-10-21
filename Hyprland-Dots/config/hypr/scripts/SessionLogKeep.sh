@@ -2,18 +2,16 @@
 # Preserve the session's log across logout.
 #
 # Two logs vanish exactly when you need them:
-#   - Hyprland's own log lives in $XDG_RUNTIME_DIR, cleared when the last
-#     session ends.
-#   - ly writes the session's stdout/stderr to ~/.local/state/ly-session.log,
+#   - ly writes the session's stdout/stderr - mango's log included, mango
+#     logs to stderr - to ~/.local/state/ly-session.log,
 #     but TRUNCATES it at every login, so a session that died last night is
 #     unreadable this morning.
 # This mirrors ly's log into ~/.cache/hypr-logs/ and keeps the previous
 # session's copy, so a crash can still be read after logging back in.
 #
-# Cheap: one `tail -F`, no polling. Note Hyprland writes little here unless
-# `debug { disable_logs = false }` is set - abort/stderr messages still land.
+# Cheap: one `tail -F`, no polling.
 #
-# Started from configs/Startup_Apps.lua (hyprland.start handler).
+# Started from ~/.config/mango/startup.conf.
 
 LOGDIR="$HOME/.cache/hypr-logs"
 SRC="$HOME/.local/state/ly-session.log"
@@ -49,10 +47,12 @@ done
 [ -f "$SRC" ] || { echo "=== $SRC never appeared ===" >>"$DST"; exit 0; }
 
 # -F survives ly truncating or recreating the file; --pid ends the mirror with
-# this Hyprland (GNU tail checks every second). Its pid is the first line of the
-# instance's lock file - not $PPID: Hyprland double-forks what it starts.
-hypr_pid=$(head -n 1 "$XDG_RUNTIME_DIR/hypr/${HYPRLAND_INSTANCE_SIGNATURE:-}/hyprland.lock" 2>/dev/null)
-if [[ "$hypr_pid" =~ ^[0-9]+$ ]] && kill -0 "$hypr_pid" 2>/dev/null; then
-    exec tail -n +1 -F --pid="$hypr_pid" "$SRC" >>"$DST" 2>/dev/null
+# this mango (GNU tail checks every second). Its pid is in the name of its IPC
+# socket, $XDG_RUNTIME_DIR/mango-<pid>.sock - not $PPID: mango double-forks
+# what it starts.
+mango_pid=${MANGO_INSTANCE_SIGNATURE##*/mango-}
+mango_pid=${mango_pid%.sock}
+if [[ "$mango_pid" =~ ^[0-9]+$ ]] && kill -0 "$mango_pid" 2>/dev/null; then
+    exec tail -n +1 -F --pid="$mango_pid" "$SRC" >>"$DST" 2>/dev/null
 fi
 exec tail -n +1 -F "$SRC" >>"$DST" 2>/dev/null

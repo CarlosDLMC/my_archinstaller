@@ -423,7 +423,7 @@ def mode_footer():
     hyprlock clears the password buffer on ESC, Ctrl+U and Ctrl+Backspace.
     ALT+SHIFT is listed because that bind is `bindld` and dispatches a global
     to quickshell, which keeps running while locked. F1 is ly's shutdown key:
-    Hyprland's locked binds fire whether the session is locked or not, so it is
+    mango's locked binds fire whether the session is locked or not, so it is
     bound non-consuming (apps keep their F1) and LockPower.sh does nothing
     unless hyprlock is running; two presses, so one stray key cannot power off."""
     print("ENTER ПОДТВЕРДИТЬ   ESC ОЧИСТИТЬ   ALT+SHIFT РАСКЛАДКА   F1 ВЫКЛЮЧИТЬ")
@@ -435,7 +435,7 @@ def mode_panel():
 
     out.append(section("ДОСТУП"))
     out.append(kv("ГРАЖДАНИН", user()))
-    out.append(kv("ОКРУЖЕНИЕ", "HYPRLAND / WAYLAND"))
+    out.append(kv("ОКРУЖЕНИЕ", "MANGO / WAYLAND"))
     # value overlaid by a live, clickable $LAYOUT label - see hyprlock.conf
     out.append(kv("РАСКЛАДКА", ""))
     # The input-field widget is overlaid onto this row; leave the value blank.

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Shutdown from the lock screen, keyboard only: F1 (configs/Keybinds.lua).
+# Shutdown from the lock screen, keyboard only: F1 (~/.config/mango/keybinds.conf).
 #
-# Hyprland's locked binds fire whether the session is locked or not, so F1 is
+# mango's locked binds fire whether the session is locked or not, so F1 is
 # bound non-consuming - apps still get their F1 - and this does nothing unless
 # hyprlock is running.
 #

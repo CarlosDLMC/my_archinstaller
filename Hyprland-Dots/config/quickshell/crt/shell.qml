@@ -10,8 +10,8 @@ import Quickshell.Wayland
 // Not part of the bar: hypr/scripts/CrtOff.sh starts this (`qs -c crt`) in front
 // of the «ПУСК · ПУЛЬТ» menu's logout, reboot and power-off commands, after
 // putting one frame of each monitor in $XDG_RUNTIME_DIR/crt-off/<name>.ppm.
-// Hyprland shows the layer without an animation (quickshell:crt in
-// UserConfigs/WindowRules.lua), so it lands exactly on the frame it shows.
+// mango shows the layer without an animation (quickshell:crt in
+// ~/.config/mango/rules.conf), so it lands exactly on the frame it shows.
 ShellRoot {
     id: root
 
@@ -21,13 +21,8 @@ ShellRoot {
     Process { id: done; command: ["touch", root.dir + "/done"] }
 
     // If the machine has not gone down by now, something refused it: give the
-    // desktop and the cursor back rather than leave a black screen.
-    Process {
-        id: restore
-        command: ["hyprctl", "eval", "hl.config({ cursor = { invisible = false } })"]
-        onExited: Qt.quit()
-    }
-    Timer { interval: 30000; running: true; onTriggered: restore.running = true }
+    // desktop back rather than leave a black screen.
+    Timer { interval: 30000; running: true; onTriggered: Qt.quit() }
 
     Variants {
         model: Quickshell.screens
@@ -43,6 +38,13 @@ ShellRoot {
             WlrLayershell.namespace: "quickshell:crt"
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
             color: "black"
+
+            // No pointer over the picture while it collapses.
+            MouseArea {
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.BlankCursor
+            }
 
             Item {
                 id: tube

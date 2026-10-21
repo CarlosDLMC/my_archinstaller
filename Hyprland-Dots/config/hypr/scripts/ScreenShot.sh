@@ -13,9 +13,19 @@ iDoR="$HOME/.config/hypr/notify/images"
 sDIR="$HOME/.config/hypr/scripts"
 
 # active_window_* are deliberately NOT computed here. They used to be, which
-# cost an hyprctl call plus a jq fork (~15ms measured) on every screenshot of
+# cost a compositor query plus a jq fork (~15ms measured) on every screenshot of
 # every kind, to build a filename only --active ever uses. shotactive sets them
 # itself, and notify_view "active" is only ever reached from shotactive.
+
+# The focused window's box without its border, as "x,y wxh" for grim -g; empty
+# when nothing has focus. mango's window geometry includes the border (border_px
+# in ~/.config/mango/settings.conf) - the capture is the window, as before.
+active_geometry() {
+	local bw
+	bw=$(sed -n 's/^border_px=//p' "$HOME/.config/mango/settings.conf" 2>/dev/null | tail -n 1)
+	mmsg get focusing-client | jq -r --argjson bw "${bw:-1}" '
+		select(.id) | "\(.x + $bw),\(.y + $bw) \(.width - 2 * $bw)x\(.height - 2 * $bw)"'
+}
 
 notify_cmd_base="notify-send -t 10000 -A action1=Открыть -A action2=Удалить -h string:x-canonical-private-synchronous:shot-notify"
 notify_cmd_shot="${notify_cmd_base} -i ${iDIR}/picture.png "
@@ -73,13 +83,11 @@ countdown() {
 annotate=false
 
 # satty, sized to 80% of the focused monitor so the editor never opens bigger
-# than the screen it lands on. Reads the image on stdin. A rotated (odd
-# transform) monitor swaps the mode's width and height, as in output_at_cursor.
+# than the screen it lands on. Reads the image on stdin. mango gives the
+# monitor's logical size, rotation and scale already applied.
 satty_open() {
 	local res w h
-	res=$(hyprctl monitors -j | jq -r '.[] | select(.focused==true)
-		| (if (.transform % 2) == 1 then [.height, .width] else [.width, .height] end) as [$w, $h]
-		| "\($w / .scale | floor)x\($h / .scale | floor)"')
+	res=$(mmsg get all-monitors | jq -r '.monitors[] | select(.active) | "\(.width | floor)x\(.height | floor)"')
 	w=$(echo "$res" | cut -dx -f1)
 	h=$(echo "$res" | cut -dx -f2)
 	w=$(( w * 80 / 100 ))
@@ -170,30 +178,9 @@ shotnow() {
 
 # Name of the monitor the pointer is currently on. This is deliberately not
 # the focused monitor: the pointer can sit on one screen while focus is on the
-# other, and "the screen my mouse is in" means the pointer.
-#
-# hyprctl reports x,y in layout coordinates but width,height in pixels, so the
-# logical extent is width/scale. Both monitors here are scale 1, but dividing
-# keeps it right on a scaled display.
+# other, and "the screen my mouse is in" means the pointer. mango names it.
 output_at_cursor() {
-	local pos x y
-	pos=$(hyprctl cursorpos 2>/dev/null | tr -d ' ')
-	x=${pos%,*}
-	y=${pos#*,}
-
-	[[ -z "$x" || -z "$y" ]] && return 1
-
-	# width/height are the mode's, before rotation: a rotated (odd transform)
-	# monitor swaps them, as in ScreenRecord.sh - a portrait screen's box was
-	# landscape, so the pointer on its lower part found no monitor at all.
-	hyprctl -j monitors | jq -r --argjson x "$x" --argjson y "$y" '
-		.[]
-		| ((if (.transform % 2) == 1 then .height else .width end) / .scale) as $w
-		| ((if (.transform % 2) == 1 then .width else .height end) / .scale) as $h
-		| select(
-			$x >= .x and $x < (.x + $w) and
-			$y >= .y and $y < (.y + $h)
-		) | .name' | head -1
+	mmsg get cursorpos 2>/dev/null | jq -r '.monitor // empty'
 }
 
 # Shot of the monitor under the pointer, taken immediately.
@@ -212,7 +199,7 @@ shotmouse() {
 # Shot of one whole monitor. $1 = output name, defaults to the focused one.
 shotmonitor() {
 	local output="$1"
-	[[ -z "$output" ]] && output=$(hyprctl -j monitors | jq -r '.[] | select(.focused) | .name' | head -1)
+	[[ -z "$output" ]] && output=$(mmsg get all-monitors | jq -r '.monitors[] | select(.active) | .name' | head -1)
 
 	if [[ -z "$output" ]]; then
 		${notify_cmd_NOT} "Снимок экрана:" "не удалось определить монитор"
@@ -239,14 +226,11 @@ shot10() {
 }
 
 shotwin() {
-	# Geometry from hyprctl's JSON, not its text output: in the text form the
-	# title: and initialTitle: lines come after at: and size:, so `grep 'at:' |
-	# tail -n1` took a window TITLE containing "at:" ("Chat: ...", "What: ...") as
-	# the position, and the capture failed.
-	w_pos=$(hyprctl -j activewindow | jq -r '"\(.at[0]),\(.at[1])"')
-	w_size=$(hyprctl -j activewindow | jq -r '"\(.size[0])x\(.size[1])"')
-	[[ $annotate == true ]] && { edit_shot -g "$w_pos $w_size"; return; }
-	cd ${dir} && grim -l 1 -g "$w_pos $w_size" - | tee "$file" | wl-copy
+	local geom
+	geom=$(active_geometry)
+	[[ -n "$geom" ]] || return 1
+	[[ $annotate == true ]] && { edit_shot -g "$geom"; return; }
+	cd ${dir} && grim -l 1 -g "$geom" - | tee "$file" | wl-copy
 	notify_view
 }
 
@@ -272,12 +256,13 @@ shotarea() {
 }
 
 shotactive() {
-    active_window_class=$(hyprctl -j activewindow | jq -r '(.class)')
+    active_window_class=$(mmsg get focusing-client | jq -r '.appid // empty')
     active_window_file="Screenshot_${time}_${active_window_class}.png"
     active_window_path="${dir}/${active_window_file}"
 
     local geom
-    geom=$(hyprctl -j activewindow | jq -r '"\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"')
+    geom=$(active_geometry)
+    [[ -n "$geom" ]] || return 1
 
 	[[ $annotate == true ]] && { edit_shot -g "$geom"; return; }
 

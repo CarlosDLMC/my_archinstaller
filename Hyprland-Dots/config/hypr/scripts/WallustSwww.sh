@@ -9,13 +9,9 @@ passed_path="${1:-}"
 rofi_link="$HOME/.config/rofi/.current_wallpaper"
 wallpaper_current="$HOME/.config/hypr/wallpaper_effects/.wallpaper_current"
 
-# Helper: get focused monitor name (prefer JSON)
+# Helper: get focused monitor name
 get_focused_monitor() {
-  if command -v jq >/dev/null 2>&1; then
-    hyprctl monitors -j | jq -r '.[] | select(.focused) | .name'
-  else
-    hyprctl monitors | awk '/^Monitor/{name=$2} /focused: yes/{print name}'
-  fi
+  mmsg get all-monitors | jq -r '.monitors[] | select(.active) | .name'
 }
 
 # Determine wallpaper_path
@@ -55,32 +51,30 @@ case "$wallpaper_path" in
     ;;
 esac
 
-# How bright the wallpaper is (0 black .. 1 white), for the group tabs:
-# UserDecorations.lua deepens their see-through black tint on bright wallpapers
-# so the white titles stay readable. wallust cannot say this - its dark16
-# palette is dark whatever the picture. Written before wallust runs, so the
-# reload its own Hyprland colours trigger picks this up as well; through a
-# temp file, so Hyprland never reads it half-written.
-tone_file="$HOME/.config/hypr/wallust/wallpaper-tone.lua"
+# How bright the wallpaper is (0 black .. 1 white), for the group tabs: their
+# see-through black tint deepens on bright wallpapers so the white titles stay
+# readable. wallust cannot say this - its dark16 palette is dark whatever the
+# picture. 25% / 12.5% black (focused / other tabs) up to a brightness of 0.30,
+# rising evenly to 60% / 45% at 0.70 and above. mango sources the file and
+# reloads when it changes; through a temp file, so it never reads it
+# half-written.
+tint_file="$HOME/.config/mango/state/group-tint.conf"
 if brightness="$(LC_ALL=C magick "${wallpaper_path}[0]" -resize 200x -colorspace Gray -format '%[fx:mean]' info: 2>/dev/null)" \
   && [[ "$brightness" =~ ^[0-9]*\.?[0-9]+$ ]]; then
-  mkdir -p "$(dirname "$tone_file")"
-  printf -- '-- Written by WallustSwww.sh on every wallpaper change.\nreturn { brightness = %s }\n' "$brightness" \
-    > "$tone_file.tmp" && mv -f "$tone_file.tmp" "$tone_file" || true
+  mkdir -p "$(dirname "$tint_file")"
+  LC_ALL=C awk -v b="$brightness" 'BEGIN {
+    t = (b - 0.30) / 0.40; if (t < 0) t = 0; if (t > 1) t = 1
+    printf "# Written by WallustSwww.sh on every wallpaper change (brightness %s).\n", b
+    printf "group_bar_decorate_focus_bg_color=0x000000%02x\n", int((0.25 + 0.35 * t) * 255 + 0.5)
+    printf "group_bar_decorate_bg_color=0x000000%02x\n", int((0.125 + 0.325 * t) * 255 + 0.5)
+  }' > "$tint_file.tmp" && mv -f "$tint_file.tmp" "$tint_file" || true
 fi
 
 # Run wallust (silent) to regenerate templates defined in ~/.config/wallust/wallust.toml
-# -s is used in this repo to keep things quiet and avoid extra prompts
+# -s is used in this repo to keep things quiet and avoid extra prompts.
+# Its mango colour file is sourced by the config, so mango reloads by itself:
+# every reload re-reads all the files, the last one sees both.
 wallust run -s "$wallpaper_path" || true
-
-# One reload now that both files Hyprland reads are final. Each write above
-# makes Hyprland reload on its own, and the second can land while it is still
-# reloading for the first: it then kept the old palette - borders in the last
-# wallpaper's colours - with the new tab tint. Not in game mode, which a
-# reload undoes (GameMode.sh reloads itself when it turns off).
-if [[ ! -e "${XDG_RUNTIME_DIR:-/run/user/$UID}/hypr/${HYPRLAND_INSTANCE_SIGNATURE:-}/gamemode" ]]; then
-  hyprctl reload >/dev/null 2>&1 || true
-fi
 
 # btop: BtopTheme.py turns the palette wallust just wrote into
 # btop/themes/wallust.theme (omarchy's layout) and makes a running btop reload

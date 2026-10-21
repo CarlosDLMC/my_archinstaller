@@ -55,7 +55,7 @@ if ! $run; then
     exit 1
   }
   # Already up
-  hyprctl clients -j | jq -e --arg id "$app_id" 'any(.class == $id)' >/dev/null && exit 0
+  mmsg get all-clients | jq -e --arg id "$app_id" 'any(.clients[]; .appid == $id)' >/dev/null && exit 0
   args=(--run)
   $lock && args+=(--lock)
   # Opaque, whatever alpha foot.ini gives normal terminals
@@ -63,8 +63,13 @@ if ! $run; then
 fi
 
 focused() {
-  hyprctl activewindow -j | jq -e --arg id "$app_id" '.class == $id' >/dev/null 2>&1
+  mmsg get focusing-client | jq -e --arg id "$app_id" '.appid == $id' >/dev/null 2>&1
 }
+
+# The pointer: mango has no switch that hides it for good, so it hides one
+# second after the last pointer movement while this runs - and moving the
+# mouse ends the screensaver anyway. 0 is the config's own (never hide).
+cursor_hide() { mmsg dispatch "setoption,cursor_hide_timeout,$1" >/dev/null 2>&1; }
 
 finish() {
   trap '' INT TERM HUP QUIT # once is enough
@@ -86,24 +91,14 @@ finish() {
   fi
   printf '\033[?1003l\033[?1006l\033[?25h' # mouse reporting off, cursor back
   stty echo 2>/dev/null
-  hyprctl eval 'hl.config({ cursor = { invisible = false } })' >/dev/null 2>&1
+  cursor_hide 0
   # Notifications back - unless Do Not Disturb was already on
   [[ ${was_paused:-} == false ]] && dunstctl set-paused false
-  # The windows under a fullscreen window are faded out, and fade back in
-  # (fadeIn) once it closes - the bare wallpaper showed first. fadeIn off for
-  # that moment, and back to exactly what it was half a second later.
-  local f_on f_speed f_bezier
-  read -r f_on f_speed f_bezier < <(hyprctl animations -j 2>/dev/null |
-    jq -r '.[0][] | select(.name == "fadeIn") | "\(.enabled) \(.speed) \(.bezier)"')
-  if [[ $f_on == true && -n $f_speed && -n $f_bezier ]]; then
-    hyprctl eval 'hl.animation({ leaf = "fadeIn", enabled = false })' >/dev/null 2>&1
-    setsid -f bash -c "sleep 0.5; hyprctl eval 'hl.animation({ leaf = \"fadeIn\", enabled = true, speed = $f_speed, bezier = \"$f_bezier\" })'" >/dev/null 2>&1
-  fi
   exit 0
 }
 trap finish INT TERM HUP QUIT
 
-# The window opens at 80x24 and is resized once Hyprland has made it
+# The window opens at 80x24 and is resized once mango has made it
 # fullscreen; ttfx measures the terminal once, at start.
 deadline=$((SECONDS + 2))
 while ((SECONDS < deadline)) && [[ $(stty size 2>/dev/null) == "24 80" ]]; do
@@ -117,7 +112,7 @@ was_paused=$(dunstctl is-paused 2>/dev/null)
 dunstctl set-paused true 2>/dev/null
 # Report all mouse motion as input, so moving the mouse wakes it like a key.
 printf '\033]11;rgb:00/00/00\007\033[?25l\033[?1003h\033[?1006h'
-hyprctl eval 'hl.config({ cursor = { invisible = true } })' >/dev/null 2>&1
+cursor_hide 1
 
 # The machine's colours, the lock screen's and dunst's: ink on black, a dim
 # grey, a near-white, and red only for heat - sparks, fire, lightning, a

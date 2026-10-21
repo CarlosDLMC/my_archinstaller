@@ -2,10 +2,12 @@
 # Start the lock screen, and record why it stops.
 #
 # hypridle's lock_cmd used to discard hyprlock's output, so when hyprlock quit
-# mid-lock there was no record of it anywhere - the only evidence was
-# Hyprland's "lockscreen app died" screen, and its runtime log is wiped at
-# logout. This keeps the current and previous lock's output plus the exit code,
-# which is the one datum that says whether hyprlock crashed or chose to quit.
+# mid-lock there was no record of it anywhere. A crashed hyprlock leaves mango
+# showing a plain grey screen, still locked; a new hyprlock takes the lock over
+# and can be unlocked as usual (from a TTY: WAYLAND_DISPLAY=wayland-N hyprlock,
+# N from ls $XDG_RUNTIME_DIR). This keeps the current and previous
+# lock's output plus the exit code, which is the one datum that says whether
+# hyprlock crashed or chose to quit.
 #
 # Called from hypridle.conf's lock_cmd, which fires on every
 # `loginctl lock-session` (so also from scripts/LockScreen.sh).

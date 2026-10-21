@@ -61,16 +61,14 @@ done
 command -v foot >/dev/null || fail "foot is not installed"
 
 # The monitor the measuring window opens on, and its pixels as it shows them.
-# Hyprland reports the mode's width and height, so on a monitor turned on its
-# side (an odd transform: 90 or 270 degrees, flipped or not) they swap.
-read -r mon_w mon_h mon_t < <(hyprctl monitors -j | jq -r '.[] | select(.focused) | "\(.width) \(.height) \(.transform)"')
-if [[ $mon_t =~ ^[0-9]+$ ]] && ((mon_t % 2)); then
-  read -r mon_w mon_h <<<"$mon_h $mon_w"
-fi
+# mango reports the logical size, rotation already applied; times the scale
+# that is the pixels.
+read -r mon_w mon_h < <(mmsg get all-monitors | jq -r '.monitors[] | select(.active)
+  | "\(.width * .scale | round) \(.height * .scale | round)"')
 
 # A terminal's rows and columns can only be read from inside one: a
 # fullscreen foot, black and opaque, for a moment. It opens at 80x24 and is
-# resized once Hyprland has made it fullscreen, so wait for that first.
+# resized once mango has made it fullscreen, so wait for that first.
 size_file=$(mktemp)
 foot --fullscreen --app-id screensaver-measure -o colors-dark.alpha=1.0 \
   bash -c 'printf "\033[?25l"

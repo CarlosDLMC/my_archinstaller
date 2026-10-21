@@ -1,61 +1,19 @@
 #!/usr/bin/env bash
-# Toggle the touchpad on/off (XF86TouchpadToggle).
+# Toggle the touchpad on/off (XF86TouchpadToggle, laptop.conf).
 #
-# With the Lua config `hyprctl keyword` no longer exists, so this flips the
-# per-device `enabled` flag through `hyprctl eval 'hl.device({...})'`.
-#
-# Which device is the touchpad comes from udev (ID_INPUT_TOUCHPAD=1), mapped to
-# Hyprland's device name (lowercase, spaces to dashes - what `hyprctl devices`
-# prints). Hyprland does not tag devices by type and touchpad names rarely
-# contain "touchpad" (this ThinkPad's is "synaptics-tm3276-022"), so a name
-# match alone is not enough; it is only the fallback.
+# mango switches every touchpad off with disable_trackpad=1. The setting goes
+# into a file on the runtime tmpfs that mango sources on laptops
+# (state/machine.conf, written by MachineConf.sh); mango reloads when it
+# changes. So a switched-off touchpad stays off across config reloads, and is
+# on again at the next login.
 
 notif="$HOME/.config/hypr/notify/images/ja.png"
+state="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/mango-touchpad.conf"
 
-export STATUS_FILE="$XDG_RUNTIME_DIR/touchpad.status"
-# The touchpads found below, for Laptops.lua to put the state back on after a
-# config reload - it has no udev to ask.
-DEVICES_FILE="$XDG_RUNTIME_DIR/touchpad.devices"
-
-touchpad_names() {
-    local e name found=0
-    for e in /sys/class/input/event*; do
-        if udevadm info -q property -n "/dev/input/$(basename "$e")" 2>/dev/null | grep -q '^ID_INPUT_TOUCHPAD=1'; then
-            name=$(tr 'A-Z ' 'a-z-' < "$e/device/name")
-            [ -n "$name" ] && { echo "$name"; found=1; }
-        fi
-    done
-    # fallback: anything Hyprland lists that looks like a touchpad
-    [ "$found" = 1 ] || hyprctl -j devices | jq -r '.mice[].name | select(test("touchpad|trackpad|synaptics|elan"; "i"))'
-}
-
-set_touchpads() {
-    local enabled="$1" dev names
-    names=$(touchpad_names)
-    printf '%s\n' "$names" >"$DEVICES_FILE"
-    while IFS= read -r dev; do
-        [ -n "$dev" ] || continue
-        hyprctl eval "hl.device({ name = '$dev', enabled = $enabled })" >/dev/null
-    done <<< "$names"
-}
-
-enable_touchpad() {
-    printf "true" >"$STATUS_FILE"
-    notify-send -t 1000 -u low -i $notif  "Сенсорная панель:" "включена"
-    set_touchpads true
-}
-
-disable_touchpad() {
-    printf "false" >"$STATUS_FILE"
-    notify-send -t 1000 -u low -i $notif "Сенсорная панель:" "выключена"
-    set_touchpads false
-}
-
-# No status file (it lives on the runtime tmpfs, gone at every login) means
-# enabled - Laptops.lua turns the touchpad on at startup. It used to take the
-# enable branch, so the first press of every session did nothing.
-if [ "$(cat "$STATUS_FILE" 2>/dev/null)" = "false" ]; then
-  enable_touchpad
+if grep -q '^disable_trackpad=1$' "$state" 2>/dev/null; then
+    printf 'disable_trackpad=0\n' >"$state"
+    notify-send -t 1000 -u low -i "$notif" "Сенсорная панель:" "включена"
 else
-  disable_touchpad
+    printf 'disable_trackpad=1\n' >"$state"
+    notify-send -t 1000 -u low -i "$notif" "Сенсорная панель:" "выключена"
 fi

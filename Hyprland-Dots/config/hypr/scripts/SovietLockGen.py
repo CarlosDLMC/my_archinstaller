@@ -160,22 +160,20 @@ def sh(*cmd):
 
 def monitors():
     """Logical size per monitor. hyprlock lays out in logical pixels, so a 4K
-    panel at scale 2 must be treated as 1920x1080, not 3840x2160."""
-    raw = sh("hyprctl", "monitors", "-j")
+    panel at scale 2 must be treated as 1920x1080, not 3840x2160. mango reports
+    exactly that: its sizes are logical, rotation and scale already applied.
+    A disabled monitor is listed with a zero size."""
+    raw = sh("mmsg", "get", "all-monitors")
     try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
+        data = json.loads(raw).get("monitors", [])
+    except (json.JSONDecodeError, AttributeError):
         return []
     out = []
     for m in data:
-        scale = m.get("scale") or 1.0
         w, h = m.get("width", 0), m.get("height", 0)
         if not w or not h:
             continue
-        transform = m.get("transform", 0) or 0
-        if transform in (1, 3, 5, 7):  # rotated 90/270
-            w, h = h, w
-        out.append({"name": m.get("name", ""), "w": w / scale, "h": h / scale})
+        out.append({"name": m.get("name", ""), "w": w, "h": h})
     return out
 
 
@@ -264,12 +262,16 @@ def layout_list():
                 return codes
         except (json.JSONDecodeError, KeyError, TypeError):
             pass
+    # The xkb_rules_layout line of mango's settings (kept on one line for this).
     try:
-        raw = json.loads(sh("hyprctl", "getoption", "-j", "input:kb_layout"))["str"]
-        codes = [c.strip().upper() for c in raw.split(",") if c.strip()]
-        if codes:
-            return codes
-    except (json.JSONDecodeError, KeyError):
+        with open(f"{HOME}/.config/mango/settings.conf", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("xkb_rules_layout="):
+                    raw = line.split("=", 1)[1].split(" #", 1)[0]
+                    codes = [c.strip().upper() for c in raw.split(",") if c.strip()]
+                    if codes:
+                        return codes
+    except OSError:
         pass
     return ["US"]
 

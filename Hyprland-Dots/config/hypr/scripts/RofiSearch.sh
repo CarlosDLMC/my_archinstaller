@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
 # For Searching via web browsers
 
-# The search engine lives in UserConfigs/01-UserDefaults.lua. It is a plain Lua
-# table (no hl.* calls), so the stock `lua` interpreter can read it.
-defaults_file="$HOME/.config/hypr/UserConfigs/01-UserDefaults.lua"
+# The search engine lives in mango's defaults.conf (var=search_engine,...).
+defaults_file="$HOME/.config/mango/defaults.conf"
 
 if [[ ! -f "$defaults_file" ]]; then
     echo "Error: $defaults_file not found!"
     exit 1
 fi
 
-Search_Engine=$(DEFAULTS="$defaults_file" lua -e 'print(dofile(os.getenv("DEFAULTS")).search_engine or "")')
+Search_Engine=$(sed -n 's/^var=search_engine,//p' "$defaults_file" | tail -n 1)
 
 if [[ -z "$Search_Engine" ]]; then
     echo "Error: search_engine is not set in $defaults_file!"

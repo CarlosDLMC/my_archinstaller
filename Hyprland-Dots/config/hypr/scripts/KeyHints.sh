@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Quick Cheat Sheet (SUPER H): a searchable window listing the keybinds
-# Hyprland has loaded right now. The window itself is KeyHints.py (GTK3,
+# are configured. The window itself is KeyHints.py (GTK3,
 # python-gobject); this wrapper only makes SUPER H a toggle and closes any
 # rofi/yad dialog that would sit on top of it.
 

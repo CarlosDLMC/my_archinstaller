@@ -26,10 +26,10 @@ on_ac() {
     return 1
 }
 
-HYPRCTL="${HYPRCTL:-hyprctl}"
-
 if pidof hyprlock >/dev/null 2>&1 && on_ac; then
     exit 0
 fi
 
-"$HYPRCTL" dispatch 'hl.dsp.dpms({ action = "off" })'
+# Every output off (wlr-output-power-management); hypridle's on-resume turns
+# them back on with `wlopm --on '*'`.
+wlopm --off '*'

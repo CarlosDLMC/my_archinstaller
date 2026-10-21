@@ -9,20 +9,20 @@ fi
 # Variables
 iDIR="$HOME/.config/hypr/notify/images"
 SCRIPTSDIR="$HOME/.config/hypr/scripts"
-animations_dir="$HOME/.config/hypr/animations"
-UserConfigs="$HOME/.config/hypr/UserConfigs"
+animations_dir="$HOME/.config/mango/animations"
+target="$HOME/.config/mango/animations.conf"
 rofi_theme="$HOME/.config/rofi/config-Animations.rasi"
-msg='Внимание: анимации будут скопированы в UserAnimations.lua'
+msg='Внимание: анимации будут скопированы в animations.conf'
 # list of animation files, sorted alphabetically with numbers first
-animations_list=$(find -L "$animations_dir" -maxdepth 1 -type f | sed 's/.*\///' | sed 's/\.lua$//' | sort -V)
+animations_list=$(find -L "$animations_dir" -maxdepth 1 -type f -name '*.conf' | sed 's/.*\///' | sed 's/\.conf$//' | sort -V)
 
 # Rofi Menu
 chosen_file=$(echo "$animations_list" | rofi -i -dmenu -config $rofi_theme -mesg "$msg")
 
 # Check if a file was selected
 if [[ -n "$chosen_file" ]]; then
-    full_path="$animations_dir/$chosen_file.lua"    
-    cp "$full_path" "$UserConfigs/UserAnimations.lua"    
+    # mango reloads its config when the file changes.
+    cp "$animations_dir/$chosen_file.conf" "$target"
     notify-send -t 1000 -u low -i "$iDIR/ja.png" "Анимации загружены:" "$chosen_file"
 fi
 
