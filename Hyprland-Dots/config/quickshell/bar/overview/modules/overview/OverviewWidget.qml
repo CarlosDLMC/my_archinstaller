@@ -47,6 +47,71 @@ Item {
         return (win && win.tags && win.tags.length > 0) ? win.tags[0] : 0
     }
 
+    // mango only lays out the workspace on screen: a window moved to another
+    // one (a drop here, SUPER+CTRL+number) keeps its old size and place there
+    // until that workspace is shown. On those workspaces the tiled windows are
+    // laid out here instead, as dwindle will: a lone one fills the work area,
+    // more are split in turn along the longer side. A workspace whose windows
+    // still tile it (nothing moved in or out) keeps mango's own layout.
+    readonly property int tileGap: 12  // the gap mango leaves around and between windows
+    function retileHidden(list) {
+        if (!monitor)
+            return list
+        const shown = monitor.active_tags
+        const byWs = {}
+        for (const win of list) {
+            const ws = workspaceOf(win)
+            if (shown.indexOf(ws) !== -1 || win.is_floating || win.is_fullscreen
+                    || win.is_maximized || win.is_global || win.is_scratchpad)
+                continue
+            if (!byWs[ws]) byWs[ws] = []
+            byWs[ws].push(win)
+        }
+        const g = tileGap
+        const area = { x: monitor.x + g, y: monitor.y + reservedTop,
+                       w: monitorWidth - 2 * g, h: monitorHeight - reservedTop - g }
+        const placed = {}
+        for (const ws in byWs) {
+            const tiled = byWs[ws]
+            let covered = 0, overlap = false
+            for (let i = 0; i < tiled.length; ++i) {
+                const a = tiled[i]
+                covered += a.width * a.height
+                for (let j = i + 1; j < tiled.length; ++j) {
+                    const b = tiled[j]
+                    if (a.x < b.x + b.width && b.x < a.x + a.width
+                            && a.y < b.y + b.height && b.y < a.y + a.height)
+                        overlap = true
+                }
+            }
+            // Gaps leave some of the area uncovered even when it is tiled.
+            if (tiled.length > 1 && !overlap && covered > 0.9 * area.w * area.h)
+                continue
+            // Reading order of where they are now keeps the old ones in place.
+            tiled.sort((a, b) => a.x !== b.x ? a.x - b.x : a.y - b.y)
+            let box = area
+            for (let i = 0; i < tiled.length; ++i) {
+                let mine = box
+                if (i < tiled.length - 1) {
+                    if (box.w >= box.h) {
+                        const w = (box.w - g) / 2
+                        mine = { x: box.x, y: box.y, w: w, h: box.h }
+                        box = { x: box.x + w + g, y: box.y, w: box.w - w - g, h: box.h }
+                    } else {
+                        const h = (box.h - g) / 2
+                        mine = { x: box.x, y: box.y, w: box.w, h: h }
+                        box = { x: box.x, y: box.y + h + g, w: box.w, h: box.h - h - g }
+                    }
+                }
+                placed[tiled[i].id] = mine
+            }
+        }
+        return list.map(win => {
+            const p = placed[win.id]
+            return p ? Object.assign({}, win, { x: p.x, y: p.y, width: p.w, height: p.h }) : win
+        })
+    }
+
     implicitWidth: overviewBackground.implicitWidth + Appearance.sizes.elevationMargin * 2
     implicitHeight: overviewBackground.implicitHeight + Appearance.sizes.elevationMargin * 2
 
@@ -158,12 +223,12 @@ Item {
                         const hi = (root.workspaceGroup + 1) * root.workspacesShown
                         // A group shows one tab; the hidden ones are left
                         // out (mango keeps their old workspace on them).
-                        return root.windows.filter(win => {
+                        return root.retileHidden(root.windows.filter(win => {
                             const ws = root.workspaceOf(win)
                             return root.monitor && win.monitor === root.monitor.name
                                 && !win.is_minimized && !(win.is_group && !win.is_group_focus)
                                 && lo < ws && ws <= hi
-                        }).sort((a, b) => {
+                        })).sort((a, b) => {
                             // Stacking order: windows on every workspace on top,
                             // then floating over tiled, then the focused one last.
                             if (a.is_global !== b.is_global)
@@ -190,15 +255,15 @@ Item {
 
                     property bool atInitPosition: (initX == x && initY == y)
 
-                    // A drag takes x/y over (the binding to initX/initY is gone),
-                    // so whenever mango's list comes in again - after a drop, the
-                    // window has moved to its new workspace - put the tile back
-                    // where the window is. Not while it is being dragged.
-                    onWindowDataChanged: {
-                        if (!window.Drag.active) {
-                            window.x = window.initX
-                            window.y = window.initY
-                        }
+                    // A drag takes x/y over (the binding to initX/initY is gone);
+                    // a release binds them again, so the tile follows the window
+                    // from then on - to its new workspace once mango's list says
+                    // it moved. (Setting x/y once from the list's change signal
+                    // read initX/initY before they had followed it, and left
+                    // tiles behind on the old workspace.)
+                    function followWindow() {
+                        window.x = Qt.binding(() => window.initX)
+                        window.y = Qt.binding(() => window.initY)
                     }
 
                     property int workspaceColIndex: (root.workspaceOf(windowData) - 1) % Config.options.overview.columns
@@ -230,15 +295,11 @@ Item {
                             window.pressed = false
                             window.Drag.active = false
                             root.draggingFromWorkspace = -1
-                            if (targetWorkspace !== -1 && targetWorkspace !== root.workspaceOf(windowData)) {
-                                // The window list streams in again with its new
-                                // workspace, which moves this tile there.
+                            // The window list streams in again with its new
+                            // workspace a few ms later, which moves this tile there.
+                            if (targetWorkspace !== -1 && targetWorkspace !== root.workspaceOf(windowData))
                                 Mango.dispatch("tagsilent," + targetWorkspace, windowData.id)
-                            }
-                            else {
-                                window.x = window.initX
-                                window.y = window.initY
-                            }
+                            window.followWindow()
                         }
                         onClicked: (event) => {
                             if (!windowData) return;

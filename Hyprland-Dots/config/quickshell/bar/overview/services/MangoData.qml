@@ -46,7 +46,7 @@ Singleton {
         for (var i = 0; i < root.windowList.length; ++i) {
             var w = root.windowList[i]
             if (w.foreign_toplevel_id && !w.is_minimized && !(w.is_group && !w.is_group_focus))
-                cmd.push(w.id + ":" + w.foreign_toplevel_id)
+                cmd.push(w.id + ":" + w.foreign_toplevel_id + ":" + w.width + "x" + w.height)
         }
         shots.command = cmd
         shots.running = true
