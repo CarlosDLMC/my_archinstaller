@@ -119,28 +119,60 @@ dunstctl set-paused true 2>/dev/null
 printf '\033]11;rgb:00/00/00\007\033[?25l\033[?1003h\033[?1006h'
 hyprctl eval 'hl.config({ cursor = { invisible = true } })' >/dev/null 2>&1
 
+# The machine's colours, the lock screen's and dunst's: ink on black, a dim
+# grey, a near-white, and red only for heat - sparks, fire, lightning, a
+# glitch. ttfx's own defaults are a different palette for every effect (orange
+# to lavender to mint, purple and cyan...); here every effect gets these
+# instead, and the art always settles in the ink, bright at the top.
+bright=F2F2EC ink=D8D8D0 dim=6E7066 dark=45463F red=C42B1C
+ramp="$bright $ink $dim"
+# 21 of ttfx's 37, picked by watching each one on the art
+declare -A colours=(
+  [binarypath]="--binary-colors $dark $dim $ink --final-gradient-stops $ramp"
+  # ttfx 0.5.0 ignores --star-colors: the explosion keeps its own rainbow
+  [blackhole]="--blackhole-color $bright --star-colors $red $bright $ink $dim --final-gradient-stops $ramp"
+  [bouncyballs]="--ball-colors $ink $dim $red --final-gradient-stops $ramp"
+  [burn]="--starting-color $dim --burn-colors $bright $red $dark --final-gradient-stops $ramp"
+  [decrypt]="--ciphertext-colors $dark $dim $ink --final-gradient-stops $ramp"
+  [expand]="--final-gradient-stops $ramp"
+  [fireworks]="--firework-colors $red $bright $ink --final-gradient-stops $ramp"
+  [highlight]="--final-gradient-stops $ramp"
+  [middleout]="--starting-color $bright --final-gradient-stops $ramp"
+  [orbittingvolley]="--final-gradient-stops $ramp"
+  [pour]="--starting-color $bright --final-gradient-stops $ramp"
+  [rain]="--rain-colors $dark $dim $ink --final-gradient-stops $ramp"
+  [scattered]="--final-gradient-stops $ramp"
+  [slice]="--final-gradient-stops $ramp"
+  [slide]="--final-gradient-stops $ramp"
+  [spray]="--final-gradient-stops $ramp"
+  [sweep]="--final-gradient-stops $ramp"
+  [synthgrid]="--grid-gradient-stops $red $dark --text-gradient-stops $ramp"
+  # The raindrops stay ttfx's light blue: there is no option for them
+  [thunderstorm]="--lightning-color $bright --glowing-text-color $red --spark-glow-color $red --final-gradient-stops $ramp"
+  [unstable]="--unstable-color $red --final-gradient-stops $ramp"
+  [vhstape]="--glitch-line-colors $bright $red $dim $bright --glitch-wave-colors $bright $red $dim $bright --noise-colors 000000 $dark $dim $ink $bright --final-gradient-stops $ramp"
+)
+effects=("${!colours[@]}")
+
 while true; do
-  # 21 of ttfx's 37, picked by watching each one on the art
-  effect=(--random-effect --include-effects binarypath blackhole bouncyballs
-    burn decrypt expand fireworks highlight middleout orbittingvolley pour
-    rain scattered slice slide spray sweep synthgrid thunderstorm
-    unstable vhstape)
   # The Mosfilm logo opens, always scattered; then a random piece with a
   # random effect, never the same piece twice in a row
   if [[ -z ${last_art:-} && -f $art_dir/mosfilm_logo.txt ]]; then
     art=$art_dir/mosfilm_logo.txt
-    effect=(scattered)
+    effect=scattered
   else
     art=${arts[RANDOM % ${#arts[@]}]}
     while ((${#arts[@]} > 1)) && [[ $art == "${last_art:-}" ]]; do
       art=${arts[RANDOM % ${#arts[@]}]}
     done
+    effect=${effects[RANDOM % ${#effects[@]}]}
   fi
   last_art=$art
+  read -ra opts <<<"${colours[$effect]}"
   ttfx -i "$art" --frame-rate 60 \
     --canvas-width 0 --canvas-height 0 --reuse-canvas \
     --anchor-canvas c --anchor-text c \
-    --no-eol --no-restore-cursor "${effect[@]}" &
+    --no-eol --no-restore-cursor "$effect" "${opts[@]}" &
   pid=$!
   while kill -0 "$pid" 2>/dev/null; do
     if read -rsn1 -t 1 || ! focused || pidof hyprlock >/dev/null; then
