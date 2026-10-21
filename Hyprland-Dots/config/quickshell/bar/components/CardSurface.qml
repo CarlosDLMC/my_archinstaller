@@ -49,9 +49,11 @@ PanelWindow {
         onWheel: wheel => wheel.accepted = true
     }
 
+    // Kept on the screen: a card near the edge (the network card under the
+    // wifi icon) slides back in, as Hyprland slid the popups it used to be.
     Item {
         id: card
-        x: surface.cardX
+        x: Math.max(0, Math.min(surface.cardX, surface.width - surface.cardWidth))
         y: surface.cardY
         width: surface.cardWidth
         height: surface.cardHeight
