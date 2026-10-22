@@ -1,0 +1,92 @@
+pragma Singleton
+
+import QtQuick
+import Quickshell
+import Quickshell.Io
+
+// Night-light state, watched rather than polled.
+//
+// NightLight.sh already records what it did in ~/.cache/.nightlight_state, and
+// it writes that file in place, so inotify sees every change - whether it came
+// from the bar or from a keybind. Watching it replaces a 2000ms Timer that
+// spawned `bash` + the script roughly 30 times a minute, per screen, to observe
+// something that changes twice a day. It is also a singleton now, so the state
+// is shared instead of each screen's bar keeping its own copy in sync.
+Singleton {
+    id: root
+
+    // What the state file says. This is intent: the toggle writes it.
+    property bool stateFileOn: false
+    // Whether wlsunset is actually alive. Only consulted to catch the one
+    // case the file cannot describe - it says "on" but the process has died.
+    property bool processAlive: true
+
+    readonly property bool isOn: stateFileOn && processAlive
+
+    readonly property string statePath: (Quickshell.env("HOME") || "") + "/.cache/.nightlight_state"
+
+    function applyState() {
+        root.stateFileOn = stateFile.text().trim() === "on"
+        // A fresh "on" is trusted until the next reconcile proves otherwise;
+        // otherwise clicking the toggle would leave the icon dark until the
+        // 60s timer caught up.
+        if (root.stateFileOn)
+            root.processAlive = true
+    }
+
+    FileView {
+        id: stateFile
+        // Missing until NightLight.sh has run once; that is off, not an error.
+        printErrors: false
+        path: root.statePath
+        watchChanges: true
+        // blockAllReads, NOT blockLoading. blockLoading only makes the *initial*
+        // load synchronous; after that reload() starts an async read and text()
+        // keeps returning the previous contents, so the reload() below read the
+        // state from before the toggle - every time.
+        //
+        // onLoadedChanged does not save it, which is what it looked like. That
+        // fires on the transition into `loaded`, and after the first read
+        // `loaded` is already true, so a reload never re-emits it. The effect
+        // was that the icon latched: once the file had said "on", applyState
+        // never saw "off" again and the toggle appeared dead, while the night
+        // light itself was starting and stopping perfectly.
+        blockAllReads: true
+        onFileChanged: {
+            reload()
+            root.applyState()
+        }
+        onLoadedChanged: if (loaded) root.applyState()
+        // No file yet means the script has never run: off, not an error.
+        onLoadFailed: root.stateFileOn = false
+    }
+
+    Process {
+        id: toggleProc
+        command: ["bash", "-c", "$HOME/.config/hypr/scripts/NightLight.sh toggle"]
+    }
+
+    function toggle() {
+        toggleProc.running = true
+    }
+
+    // The one thing the state file cannot tell us: wlsunset died on its own,
+    // leaving the file reading "on" while the screen is back to daylight.
+    // Only consulted while the file says "on".
+    Process {
+        id: aliveProc
+        command: ["sh", "-c", "pgrep -x wlsunset >/dev/null 2>&1 && echo yes || echo no"]
+        stdout: SplitParser {
+            onRead: data => {
+                if (data) root.processAlive = (data.trim() === "yes")
+            }
+        }
+    }
+
+    Timer {
+        interval: 60000
+        running: root.stateFileOn
+        repeat: true
+        onTriggered: aliveProc.running = true
+    }
+}

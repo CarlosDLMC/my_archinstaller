@@ -16,11 +16,11 @@ packages=(
   cliphist
   kvantum
   # rofi, not rofi-wayland: rofi-wayland was merged back into rofi and is what
-  # 01-hypr-pkgs.sh installs.
+  # 01-desktop-pkgs.sh installs.
   rofi
   imagemagick
   # dunst, not mako: dunst is the notification daemon this setup runs
-  # (configs/Startup_Apps.lua). Checking for mako made the final screen of every
+  # (mango/startup.conf). Checking for mako made the final screen of every
   # single install report a missing essential package.
   dunst
   awww
@@ -29,8 +29,11 @@ packages=(
   foot
   hypridle
   hyprlock
-  hyprland
+  mangowm
   hyprpolkitagent
+  # wlopm turns the screens off when idle and back on after sleep (hypridle.conf);
+  # without it they would stay lit.
+  wlopm
   # wtype: the clipboard picker pastes into the window that had focus, and
   # clip-paste.sh exits quietly when wtype is absent - so without it Enter
   # copies and nothing appears, with no error anywhere. Exactly the kind of
@@ -117,7 +120,7 @@ fi
 
 # Outcome checks: did each selected component actually produce what it exists
 # to produce? Package presence alone missed the failures that matter most. A
-# copy.sh that died left vanilla Hyprland with every package "installed"; a
+# copy.sh that died left vanilla mango with every package "installed"; a
 # locales.sh killed by set -e left LC_TIME pointing at a locale that was never
 # generated; a chsh that failed left bash as the login shell. None of those is
 # a package, so none of them stopped the reboot, and install.sh used to clear
@@ -214,28 +217,32 @@ if selected dots; then
     if [ -f Install-Logs/.dots-failed ]; then
         outcome_failures+=("the dotfiles copy failed for: $(tr '\n' ' ' < Install-Logs/.dots-failed)- the version already there was kept; fix the error in its log and re-run install-scripts/dotfiles-main.sh")
     fi
-    check_outcome "dotfiles not deployed: ~/.config/hypr/hyprland.lua is missing (install-scripts/dotfiles-main.sh)" \
-        test -f "$HOME/.config/hypr/hyprland.lua"
+    check_outcome "dotfiles not deployed: ~/.config/mango/config.conf is missing (install-scripts/dotfiles-main.sh)" \
+        test -f "$HOME/.config/mango/config.conf"
+    check_outcome "dotfiles not deployed: ~/.config/hypr/hyprlock.conf is missing - no lock screen (install-scripts/dotfiles-main.sh)" \
+        test -f "$HOME/.config/hypr/hyprlock.conf"
     check_outcome "dotfiles not deployed: ~/.config/quickshell/bar/shell.qml is missing (install-scripts/dotfiles-main.sh)" \
         test -f "$HOME/.config/quickshell/bar/shell.qml"
     # Both names: GtkReload.sh switches between them after every wallpaper change.
-    check_outcome "the Wallust GTK theme is missing from ~/.themes - GTK apps lose the wallpaper colours (Hyprland-Dots/copy.sh)" \
+    check_outcome "the Wallust GTK theme is missing from ~/.themes - GTK apps lose the wallpaper colours (dotfiles/copy.sh)" \
         test -f "$HOME/.themes/Wallust-A/gtk-3.0/gtk.css" -a -f "$HOME/.themes/Wallust-B/gtk-3.0/gtk.css"
     check_outcome "dotfiles not deployed: ~/.zshrc is missing (install-scripts/dotfiles-main.sh)" \
         test -f "$HOME/.zshrc"
-    check_outcome "wallpaper not seeded: ~/.config/hypr/wallpaper_effects/.wallpaper_current is missing (Hyprland-Dots/copy.sh)" \
+    check_outcome "wallpaper not seeded: ~/.config/hypr/wallpaper_effects/.wallpaper_current is missing (dotfiles/copy.sh)" \
         test -f "$HOME/.config/hypr/wallpaper_effects/.wallpaper_current"
-    check_outcome "dotfiles not deployed: ~/.config/zsh/herdr-layouts.zsh is missing - hdl/hds/hdlm/hsl will not exist (Hyprland-Dots/copy.sh)" \
+    check_outcome "dotfiles not deployed: ~/.config/zsh/herdr-layouts.zsh is missing - hdl/hds/hdlm/hsl will not exist (dotfiles/copy.sh)" \
         test -f "$HOME/.config/zsh/herdr-layouts.zsh"
-    # That the Hyprland this run installed accepts the config, not only that the
-    # file exists. hyprland.sh pins no version and the config is Lua - a key or
-    # hl.* call the new version rejects would otherwise first show at the
-    # graphical login, as an error overlay after the automatic reboot. Works
-    # offline, without a display; it only needs XDG_RUNTIME_DIR, which a TTY or
-    # SSH login has.
-    if command -v Hyprland &>/dev/null; then
-        check_outcome "Hyprland $(pacman -Q hyprland 2>/dev/null | cut -d' ' -f2) rejects the deployed config - see: Hyprland --verify-config -c ~/.config/hypr/hyprland.lua" \
-            bash -c 'export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-$(mktemp -d)}"; Hyprland --verify-config -c "$HOME/.config/hypr/hyprland.lua"'
+    # That the mango this run installed accepts the config, not only that the
+    # file exists. The config needs the patched mango (mango-patched.sh): a
+    # stock one left by a failed build, or an option a new version renamed,
+    # would otherwise first show at the graphical login, after the automatic
+    # reboot. -p only parses (every sourced file too): offline, with no display
+    # and no runtime directory needed. It exits 0 even when it reports errors
+    # (an unknown option or dispatcher drops that line and goes on), so the
+    # verdict is whether it printed any [ERROR].
+    if command -v mango &>/dev/null; then
+        check_outcome "mango $(pacman -Q mangowm 2>/dev/null | cut -d' ' -f2) rejects the deployed config - see: mango -c ~/.config/mango/config.conf -p" \
+            bash -c '_out=$(mango -c "$HOME/.config/mango/config.conf" -p 2>&1) && ! grep -qF "[ERROR]" <<<"$_out"'
     fi
 fi
 
@@ -255,10 +262,10 @@ if selected ly; then
     # /usr/share/wayland-sessions is ly's only source of sessions - and ly 1.4.1
     # does not guard an empty list (it indexes items[len - 1]), so a login
     # screen with nothing in it is undefined behaviour, not just an empty menu.
-    # hyprland.sh runs before ly_config.sh, so empty here means hyprland's
-    # session file is missing. ly_config.sh warns, but install.sh ignores its
-    # exit status, so this is what keeps the preset from rebooting into it.
-    check_outcome "ly has no session to offer: /usr/share/wayland-sessions has no .desktop file - hyprland's session file is missing (install-scripts/hyprland.sh, install-scripts/ly_config.sh)" \
+    # mango.sh runs before ly_config.sh, so empty here means mango's session
+    # file is missing. ly_config.sh warns, but install.sh ignores its exit
+    # status, so this is what keeps the preset from rebooting into it.
+    check_outcome "ly has no session to offer: /usr/share/wayland-sessions has no .desktop file - mango's session file is missing (install-scripts/mango.sh, install-scripts/ly_config.sh)" \
         bash -c 'compgen -G "/usr/share/wayland-sessions/*.desktop"'
 fi
 
@@ -360,9 +367,9 @@ if selected quickshell; then
         pacman -Qi quickshell
 fi
 
-if selected xdph; then
-    check_outcome "xdg-desktop-portal-hyprland is not installed (install-scripts/xdph.sh)" \
-        pacman -Qi xdg-desktop-portal-hyprland
+if selected portals; then
+    check_outcome "xdg-desktop-portal-wlr is not installed - no screen sharing (install-scripts/portals.sh)" \
+        pacman -Qi xdg-desktop-portal-wlr
 fi
 
 if selected printing; then
@@ -412,7 +419,7 @@ fi
 if selected herdr; then
     check_outcome "herdr is not installed at ~/.local/bin/herdr (install-scripts/herdr.sh)" \
         test -x "$HOME/.local/bin/herdr"
-    check_outcome "~/.config/herdr/config.toml is missing (Hyprland-Dots/copy.sh)" \
+    check_outcome "~/.config/herdr/config.toml is missing (dotfiles/copy.sh)" \
         test -f "$HOME/.config/herdr/config.toml"
     # An unsubstituted __HOME__ leaves every CTRL+ALT+N tab bind and the ALT+Q
     # close-workspace popup pointing at a path that does not exist. herdr reports
@@ -432,7 +439,7 @@ if selected herdr; then
     # same silent failure the __HOME__ check above exists to catch. Reading the
     # bindings out of the installed config rather than listing the helpers here
     # means a binding added later is covered without touching this file.
-    check_outcome "a herdr keybinding points at a helper script that is not installed or not executable (Hyprland-Dots/.local/bin, Hyprland-Dots/copy.sh)" \
+    check_outcome "a herdr keybinding points at a helper script that is not installed or not executable (dotfiles/.local/bin, dotfiles/copy.sh)" \
         python3 -c 'import tomllib, os, shlex, sys; cfg = os.path.expanduser("~/.config/herdr/config.toml"); d = tomllib.load(open(cfg, "rb")); cmds = d.get("keys", {}).get("command", []); missing = [c["command"] for c in cmds if not os.access(shlex.split(c["command"])[0], os.X_OK)]; print("\n".join(missing)); sys.exit(1 if missing else 0)'
 fi
 

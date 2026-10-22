@@ -59,22 +59,6 @@ case "$tier" in
     ;;
 esac
 
-# Obsolete NVIDIA-specific Hyprland forks. hyprland-git is deliberately NOT in
-# this list any more: it is not an NVIDIA fork, and when it was the Hyprland
-# that satisfied hyprland.sh (which then installed nothing) removing it here
-# left the machine with no Hyprland at all.
-_removed_fork=false
-for hyprnvi in hyprland-nvidia hyprland-nvidia-git hyprland-nvidia-hidpi-git; do
-  if pacman -Q "$hyprnvi" &>/dev/null; then
-    printf "${YELLOW} Removing obsolete ${hyprnvi}...${RESET}\n"
-    sudo pacman -R --noconfirm "$hyprnvi" 2>&1 | tee -a "$LOG" || true
-    _removed_fork=true
-  fi
-done
-if [ "$_removed_fork" = true ] && ! pacman -Q hyprland &>/dev/null && ! pacman -Q hyprland-git &>/dev/null; then
-  install_package hyprland "$LOG"
-fi
-
 # ------------------------------------------------------------ kernel modules
 # Installed kernels: a /usr/lib/modules/<kver>/ whose vmlinuz a package owns.
 # Not every directory with a pkgbase file - hooks that keep the running kernel's
@@ -393,7 +377,7 @@ fi
 # Look for the option itself, in any modprobe.d file, not for the file name.
 # CachyOS's chwd NVIDIA profile drops its own files under /etc/modprobe.d, and
 # one called nvidia.conf that does not carry modeset=1 used to be taken as
-# "already done" - Hyprland then started without DRM modeset.
+# "already done" - the compositor then started without DRM modeset.
 if grep -qsE '^\s*options\s+nvidia[_-]drm\s.*modeset=1' /etc/modprobe.d/*.conf; then
   printf "${INFO} ${YELLOW}nvidia_drm modeset=1${RESET} is already set in /etc/modprobe.d..moving on."
   printf "\n"

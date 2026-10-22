@@ -1,0 +1,244 @@
+import QtQuick
+import Quickshell
+import Quickshell.Wayland
+import ".."
+
+// Screenshot dialog: same box as the recording one, minus the audio row.
+// Two big buttons (whole monitor / drag a region) and the monitor picker,
+// which only appears when there is more than one screen to choose from.
+PanelWindow {
+    id: osd
+
+    property var modelData
+    screen: modelData
+
+    readonly property bool onFocusedMonitor:
+        !!modelData && Mango.focusedMonitorName === modelData.name
+
+    // OnDemand creates this window when the dialog opens, so it is born
+    // with the dialog already open. `ready` turns on just after creation:
+    // until then it does not count as shown, so the usual hidden-to-shown
+    // change still happens - open code and fade-in run as they always did.
+    property bool ready: false
+    Component.onCompleted: Qt.callLater(function () { osd.ready = true })
+    readonly property bool shown: ready && ShotState.dialogOpen && onFocusedMonitor
+
+    property bool windowVisible: false
+
+    readonly property int fadeMs: 160
+    readonly property real uiScale: 1.35
+
+    readonly property int btnWidth:    Math.round(210 * uiScale)
+    readonly property int btnHeight:   Math.round(150 * uiScale)
+    readonly property int btnRadius:   Math.round(5   * uiScale)
+    readonly property int btnIconSize: Math.round(52  * uiScale)
+    readonly property int btnTextSize: Math.round(17  * uiScale)
+
+    readonly property int monTileW:    Math.round(150 * uiScale)
+    readonly property int monTileH:    Math.round(58  * uiScale)
+
+    readonly property int titleSize:   Math.round(14 * uiScale)
+    readonly property int subSize:     Math.round(12 * uiScale)
+
+    readonly property int panelPad:    Math.round(28 * uiScale)
+    readonly property int panelRadius: Math.round(12 * uiScale)
+    readonly property int gap:         Math.round(14 * uiScale)
+
+    visible: windowVisible
+
+    anchors { top: true; bottom: true; left: true; right: true }
+    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    exclusionMode: ExclusionMode.Ignore
+    color: "transparent"
+
+    onShownChanged: {
+        if (shown) { windowVisible = true; goneTimer.stop() }
+        else goneTimer.restart()
+    }
+
+    Timer {
+        id: goneTimer
+        interval: osd.fadeMs
+        onTriggered: osd.windowVisible = false
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        color: Qt.rgba(0, 0, 0, 0.5)
+        opacity: osd.shown ? 1.0 : 0.0
+        Behavior on opacity { NumberAnimation { duration: osd.fadeMs } }
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: ShotState.close()
+        }
+    }
+
+    Item {
+        anchors.fill: parent
+        focus: osd.shown
+
+        Keys.onEscapePressed: ShotState.close()
+        Keys.onReturnPressed: ShotState.shotFullscreen()
+        Keys.onEnterPressed: ShotState.shotFullscreen()
+        // Letters by key position as well. With the Russian layout active Qt
+        // reports the Cyrillic letters (А on the F key, К on R, Ц on W), so
+        // Qt.Key_F never came and only Enter, Esc and the mouse worked.
+        // nativeScanCode is the XKB keycode (evdev + 8), the same key in every
+        // layout here (us, es, ru): F 41, R 27, W 25.
+        Keys.onPressed: event => {
+            const sc = event.nativeScanCode
+            if (event.key === Qt.Key_F || sc === 41) ShotState.shotFullscreen()
+            else if (event.key === Qt.Key_R || sc === 27) ShotState.shotRegion()
+            else if (event.key === Qt.Key_W || sc === 25) ShotState.shotWindow()
+        }
+
+        Rectangle {
+            id: panel
+            anchors.centerIn: parent
+            width: content.width + osd.panelPad * 2
+            height: content.height + osd.panelPad * 2
+            radius: osd.panelRadius
+            color: Theme.colBg
+
+            opacity: osd.shown ? 1.0 : 0.0
+            scale: osd.shown ? 1.0 : 0.96
+            Behavior on opacity { NumberAnimation { duration: osd.fadeMs; easing.type: Easing.OutCubic } }
+            Behavior on scale   { NumberAnimation { duration: osd.fadeMs; easing.type: Easing.OutCubic } }
+
+            MouseArea { anchors.fill: parent }
+
+            Column {
+                id: content
+                anchors.centerIn: parent
+                spacing: osd.gap
+
+                // The console's title: a lamp and the caption.
+                Row {
+                    spacing: 12
+
+                    ConsoleLamp {
+                        anchors.verticalCenter: parent.verticalCenter
+                        lit: true
+                        tint: Theme.colAccent
+                    }
+
+                    ConsoleCaption {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "СНИМОК ЭКРАНА"
+                        fontSize: osd.titleSize
+                    }
+                }
+
+                Row {
+                    spacing: osd.gap
+
+                    BigButton {
+                        width: osd.btnWidth
+                        height: osd.btnHeight
+                        radius: osd.btnRadius
+                        icon: "󰍹"
+                        label: "ВЕСЬ ЭКРАН"
+                        keyHint: "F"
+                        hint: Monitors.multiple ? ShotState.targetMonitor : ""
+                        iconSize: osd.btnIconSize
+                        textSize: osd.btnTextSize
+                        subTextSize: osd.subSize
+                        onActivated: ShotState.shotFullscreen()
+                    }
+
+                    BigButton {
+                        width: osd.btnWidth
+                        height: osd.btnHeight
+                        radius: osd.btnRadius
+                        icon: "󰆞"
+                        label: "ОБЛАСТЬ"
+                        hint: "выделите мышью"
+                        keyHint: "R"
+                        iconSize: osd.btnIconSize
+                        textSize: osd.btnTextSize
+                        subTextSize: osd.subSize
+                        onActivated: ShotState.shotRegion()
+                    }
+                }
+
+                Column {
+                    spacing: Math.round(osd.gap * 0.5)
+                    visible: Monitors.multiple
+
+                    ConsoleCaption {
+                        text: "МОНИТОР"
+                        fontSize: osd.titleSize
+                    }
+
+                    Row {
+                        spacing: Math.round(osd.gap * 0.6)
+
+                        Repeater {
+                            model: Monitors.list
+
+                            Rectangle {
+                                id: monTile
+                                required property var modelData
+
+                                readonly property bool isTarget:
+                                    modelData.name === ShotState.targetMonitor
+
+                                width: osd.monTileW
+                                height: osd.monTileH
+                                radius: osd.btnRadius
+                                // A key, like the mode buttons: the target one pushed in and lit.
+                                color: isTarget ? Theme.colAccent : Qt.lighter(Theme.colPlate, 1.25)
+
+                                Behavior on color { ColorAnimation { duration: 110 } }
+
+                                Column {
+                                    anchors.centerIn: parent
+                                    spacing: 2
+
+                                    Text {
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        text: monTile.modelData.name
+                                        color: monTile.isTarget ? Theme.colBg : Theme.colWhite
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: osd.subSize + 2
+                                        font.bold: monTile.isTarget
+                                    }
+
+                                    Text {
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        text: monTile.modelData.width + "x" + monTile.modelData.height
+                                              + "  " + monTile.modelData.refresh + " Гц"
+                                        color: monTile.isTarget ? Theme.colBg : Theme.colDim
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: osd.subSize
+                                    }
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: ShotState.targetMonitor = monTile.modelData.name
+                                    onDoubleClicked: {
+                                        ShotState.targetMonitor = monTile.modelData.name
+                                        ShotState.shotFullscreen()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // The keys the dialog answers to, as keycaps.
+                Row {
+                    spacing: osd.gap
+
+                    ConsoleKeycap { keys: "W"; label: "АКТИВНОЕ ОКНО · В РЕДАКТОР"; fontSize: osd.subSize }
+                    ConsoleKeycap { keys: "ESC"; label: "ОТМЕНА"; fontSize: osd.subSize }
+                }
+            }
+        }
+    }
+}

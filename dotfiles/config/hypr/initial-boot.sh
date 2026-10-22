@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+# A bash script designed to run only once dotfiles installed
+
+# THIS SCRIPT CAN BE DELETED ONCE SUCCESSFULLY BOOTED!! (it runs from ~/.config/mango/startup.conf)
+# NOT necessary to do since this script is only designed to run only once as long as the marker exists
+# marker file is located at ~/.config/hypr/.initial_startup_done
+# However, I do highly suggest not to touch it since again, as long as the marker exist, script wont run
+
+# Variables
+scriptsDir=$HOME/.config/hypr/scripts
+wallpaper=$HOME/.config/hypr/wallpaper_effects/.wallpaper_current
+# Kvantum's dark Adwaita (KvGnomeDark) in the wallust colours - generated into
+# ~/.config/Kvantum/Wallust by KvantumWallust.py below.
+kvantum_theme="Wallust"
+color_scheme="prefer-dark"
+# GTK3's own dark Adwaita in the wallust colours (~/.themes/Wallust-A, put there
+# by copy.sh); Wallust-B is the same theme under the name GtkReload.sh switches
+# to after a wallpaper change, so open GTK3 apps reload. Falls back to plain
+# Adwaita, built into gtk3, if the theme is missing. It must match
+# gtk-3.0/settings.ini: GTK3 apps read the theme from gsettings or from
+# settings.ini depending on how they are launched, so a mismatch between the two
+# means some windows are themed and others are not.
+gtk_theme="Wallust-A"
+# Flat-Remix recoloured with the wallpaper's accent - generated from
+# Flat-Remix-Blue-Dark by IconsWallust.py below, which falls back to the blue
+# one if it could not be built.
+icon_theme="Flat-Remix-Wallust-Dark"
+# The black cursor: the XCursor theme "default" (default-cursors, which inherits
+# Adwaita) - the one mango loads (cursor_theme in ~/.config/mango/settings.conf)
+# and GTK reads from gsettings. Bibata (white) is
+# still extracted by gtk_themes.sh for nwg-look, but not selected.
+cursor_theme="default"
+# GTK application fonts. These live in dconf, not in any file the dots ship, so
+# a fresh machine used to come up with gtk-3.0/settings.ini's 14pt (or the
+# portal's Cantarell default for GTK4 apps) instead of the 16pt in use here.
+gtk_font="JetBrainsMono Nerd Font 16"
+gtk_mono_font="JetBrainsMono Nerd Font Mono 16"
+
+awww="awww img"
+effect="--transition-bezier .43,1.19,1,.4 --transition-fps 30 --transition-type grow --transition-pos 0.925,0.977 --transition-duration 2"
+
+# Check if a marker file exists.
+if [ ! -f "$HOME/.config/hypr/.initial_startup_done" ]; then
+    sleep 1
+    # Initialize wallust and wallpaper
+	# Everything that has to land is checked, and the marker below is only
+	# written when it did. It used to be touched unconditionally, right after
+	# the gsettings calls had been sent to the background with their output
+	# thrown away - so a wallust failure, or dconf/D-Bus not being ready in the
+	# first second of the session, left the GTK theme, icons, cursor and fonts
+	# unapplied, and the marker made sure it was never tried again.
+	setup_ok=true
+	if [ -f "$wallpaper" ]; then
+		wallust run -s $wallpaper > /dev/null || setup_ok=false
+		# see RofiContrast.py - readable rofi text for whatever slots this
+		# wallpaper produced; must follow wallust, never run as its hook.
+		"$HOME/.config/hypr/scripts/RofiContrast.py" || true
+		# Builds the wallust icon theme from the palette just written. In the
+		# foreground: it has to exist before gsettings is pointed at it.
+		"$HOME/.config/hypr/scripts/IconsWallust.py" || true
+		# The Qt apps' Kvantum theme in the same accent, before kvantummanager
+		# selects it below - see KvantumWallust.py.
+		"$HOME/.config/hypr/scripts/KvantumWallust.py" || true
+		# btop's theme from the palette just written (omarchy's layout) - see
+		# BtopTheme.py.
+		"$HOME/.config/hypr/scripts/BtopTheme.py" || true
+		# awww-daemon does not fork: `query || daemon && img` would block here forever
+		# when the daemon is not up yet. Start it in the background, then set the image.
+		awww query >/dev/null 2>&1 || { awww-daemon --format argb >/dev/null 2>&1 & sleep 0.5; }
+		$awww $wallpaper $effect
+	    "$scriptsDir/WallustSwww.sh" > /dev/null 2>&1 & 
+	fi
+     
+    # initiate GTK dark mode and apply icon and cursor theme
+    #
+    # In the foreground, and checked. The session bus that dconf rides on may
+    # not be answering yet this early, so give the first write a few seconds.
+    _gs() { gsettings set org.gnome.desktop.interface "$@" > /dev/null 2>&1; }
+    for _try in 1 2 3 4 5 6 7 8 9 10; do
+        _gs color-scheme "$color_scheme" && break
+        sleep 1
+    done
+    _gs color-scheme "$color_scheme" || setup_ok=false
+    [ -f "$HOME/.themes/$gtk_theme/gtk-3.0/gtk.css" ] || gtk_theme="Adwaita"
+    _gs gtk-theme "$gtk_theme" || setup_ok=false
+    [ -f "$HOME/.icons/$icon_theme/index.theme" ] || icon_theme="Flat-Remix-Blue-Dark"
+    _gs icon-theme "$icon_theme" || setup_ok=false
+    _gs cursor-theme "$cursor_theme" || setup_ok=false
+    _gs cursor-size 24 || setup_ok=false
+    _gs font-name "$gtk_font" || setup_ok=false
+    _gs monospace-font-name "$gtk_mono_font" || setup_ok=false
+
+     # NIXOS initiate GTK dark mode and apply icon and cursor theme
+	if [ -n "$(grep -i nixos < /etc/os-release)" ]; then
+      gsettings set org.gnome.desktop.interface color-scheme "'$color_scheme'" > /dev/null 2>&1 &
+      dconf write /org/gnome/desktop/interface/gtk-theme "'$gtk_theme'" > /dev/null 2>&1 &
+      dconf write /org/gnome/desktop/interface/icon-theme "'$icon_theme'" > /dev/null 2>&1 &
+      dconf write /org/gnome/desktop/interface/cursor-theme "'$cursor_theme'" > /dev/null 2>&1 &
+      dconf write /org/gnome/desktop/interface/cursor-size "24" > /dev/null 2>&1 &
+      dconf write /org/gnome/desktop/interface/font-name "'$gtk_font'" > /dev/null 2>&1 &
+      dconf write /org/gnome/desktop/interface/monospace-font-name "'$gtk_mono_font'" > /dev/null 2>&1 &
+	fi
+       
+    # initiate kvantum theme
+    kvantummanager --set "$kvantum_theme" > /dev/null 2>&1 &
+
+    # No "initiate the kb_layout" call here: cycling to the next layout put every
+    # keyboard on Spanish at first login (layouts us,es,ru). mango already starts
+    # on the first layout; the bar's SUPER+SPACE owns switching.
+
+    # (Screensaver art is not made here: ~/.config/mango/startup.conf runs ScreensaverArt.sh
+    # --new at every login, so a re-run's new images get theirs too.)
+
+    # Create a marker file to indicate that the script has been executed - only
+    # if it worked, so a failed first login is retried at the next one.
+    if [ "$setup_ok" = true ]; then
+        touch "$HOME/.config/hypr/.initial_startup_done"
+    else
+        notify-send -u critical "First-boot setup incomplete" \
+            "wallust or gsettings failed - it will be retried at the next login." > /dev/null 2>&1 || true
+    fi
+
+    exit
+fi

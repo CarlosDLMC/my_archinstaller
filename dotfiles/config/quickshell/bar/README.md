@@ -1,0 +1,140 @@
+# Quickshell Bar for mango
+
+A modern, feature-rich status bar for [mango](https://github.com/mangowm/mango) (it started out on Hyprland) built with [Quickshell](https://quickshell.outfoxxed.me/). Features a clean design with notch-style dropdown popups, weather integration, system monitoring, and more.
+
+![Quickshell Bar](https://img.shields.io/badge/mango-Ready-blue)
+![QML](https://img.shields.io/badge/Built%20with-QML-green)
+
+## Preview
+
+![Bar Preview](screenshots/bar-preview.png)
+
+## Features
+
+- **Workspaces**: The workspaces of each monitor, numbered
+- **Overview** (SUPER+A): every workspace with a picture of each window; click to go there, drag a window to move it
+- **Window Info**: Current window title display
+- **Weather Widget**: Click-to-open popup with detailed forecast, temperature coloring, hourly rain predictions, and offline caching
+- **System Stats**: CPU, memory, disk usage, volume (with audio sink detection), and battery
+- **Network**: WiFi status with real-time upload/download speeds
+- **Control panel (ПУЛЬТ, ⚙)**: Bluetooth on/off with paired devices and in-card search/pairing, night light, power profiles, and a switch that shows or hides the CPU/RAM readings
+- **DND Toggle**: Do Not Disturb mode via dunst (`dunstctl`)
+- **Power Menu**: Lock, logout, reboot, and shutdown options
+- **Notch Design**: Elegant dropdown popups with concave corner notches connecting to the bar
+
+## Dependencies
+
+- [Quickshell](https://quickshell.outfoxxed.me/) - The shell framework
+- [mango](https://github.com/mangowm/mango) - Wayland compositor (`mmsg` and its IPC socket)
+- `nmcli` - WiFi management
+- `bluetoothctl` - Bluetooth management
+- `busctl` (systemd) - Power profile switching, over D-Bus (power-profiles-daemon or tuned-ppd)
+- `dunst` / `dunstctl` - Notification daemon with DND support
+- `wpctl` / `pactl` - Audio control
+- `wlr-randr` - the monitor list for the capture dialogs
+- `grim` - the overview's window pictures
+- `jq` - JSON parsing
+- A [Nerd Font](https://www.nerdfonts.com/) - For icons (Material Design Icons range recommended)
+
+### Included
+
+- `scripts/weather-fetch.sh` - Weather entry point. Reads the city preference the VPN widget writes to `~/.cache/quickshell/weather_city` and calls `weather-location.py` with it, or without it for IP-based location. This is what `CenterInfo.qml` runs.
+- `scripts/weather-location.py` - Fetches from Open-Meteo (forecast + air quality) and prints the JSON the bar parses. Needs `python-requests`.
+
+## Installation
+
+Nothing to do by hand in this repo. `dotfiles/copy.sh` deploys this folder
+to `~/.config/quickshell/bar`, and mango starts it as `qs -c bar`
+(`mango/startup.conf`). A bare `quickshell` would look for
+`~/.config/quickshell/shell.qml`, which does not exist here.
+
+To restart it, press SUPER+CTRL+B (the overview restarts with it - it is part of
+the bar). From a terminal, `setsid -f qs -c bar` after stopping the running one:
+a bar started as a plain job of the terminal dies when the terminal closes.
+
+## Configuration
+
+### Theme
+
+Edit `Theme.qml` to customize colors, fonts, and sizes:
+
+```qml
+pragma Singleton
+import QtQuick
+
+QtObject {
+    property color colBg: "#1e1e2e"
+    property color colFg: "#cdd6f4"
+    property color colMuted: "#6c7086"
+    // ... more colors
+
+    property int fontSize: 13
+    property string fontFamily: "JetBrainsMono Nerd Font"
+}
+```
+
+### Adding Widgets
+
+See `CLAUDE.md` for detailed documentation on the architecture and how to create new widgets.
+
+## File Structure
+
+```
+shell.qml              # Main entry point, assembles the bar and scales it
+Theme.qml              # Colour/font theme singleton
+LayoutState.qml        # Keyboard-layout MRU state (GNOME-style switching)
+qmldir                 # QML module definition
+components/
+  ├── DropdownWidget.qml     # Base for dropdown widgets (notch design)
+  ├── WorkspaceBar.qml       # Workspace indicators ([N] marks the active one)
+  ├── WindowInfo.qml         # Active window title
+  ├── CenterInfo.qml         # Clock, DND toggle, weather
+  ├── CalendarPopup.qml      # Calendar, opened from the clock
+  ├── WeatherStatItem.qml    # Stat row inside the weather popup
+  ├── CpuWidget.qml          # CPU usage and temperature
+  ├── MemoryWidget.qml       # Memory used, in GB
+  ├── DiskWidget.qml         # Disk usage (not currently in the bar)
+  ├── VolumeWidget.qml       # Volume/mute via Pipewire
+  ├── BatteryWidget.qml      # Battery average, per-pack detail in dropdown
+  ├── WifiWidget.qml         # WiFi status, scanning and connecting
+  ├── PultWidget.qml         # ПУЛЬТ: bluetooth, night light, power profile, CPU/RAM switch
+  ├── PultSwitch.qml         # One on/off line of the ПУЛЬТ card
+  ├── KeyboardLayoutWidget.qml # Current keyboard layout
+  ├── LayoutOsd.qml          # Centred layout-switcher OSD, one per screen
+  ├── VpnWidget.qml          # VPN selector; Time and Weather toggles
+  ├── PowerWidget.qml        # Power menu
+  ├── Clock.qml              # Time display
+  ├── SlackWidget.qml        # Slack indicator
+  ├── WhatsAppWidget.qml     # WhatsApp indicator
+  └── Separator.qml          # Pipe divider
+scripts/
+  ├── weather-fetch.sh       # Picks the city, falls back to IP location
+  ├── weather-location.py    # Weather fetch for a named city
+  ├── weather-fetch.sh       # Weather entry point (city preference -> weather-location.py)
+  ├── weather-location.py    # Open-Meteo fetch, prints the JSON the bar parses
+  ├── layouts.py             # Keyboard layout enumeration
+  ├── vpn-sync.sh            # Point the clock and/or the weather at the VPN exit
+  └── vpn-reset.sh           # Send the clock and/or the weather back home
+```
+
+## Key Patterns
+
+- **Hot Reload**: Changes are applied automatically on save
+- **Process + SplitParser**: Shell commands for data fetching (but prefer event payloads and FileView - see CLAUDE.md)
+- **CardSurface**: each card sits on a full-screen layer that takes the keyboard and closes the card on a click outside
+- **Notch Design**: Dropdowns use Canvas-drawn shapes with concave corners
+
+## Credits & Inspiration
+
+- **[quickshell-btw](https://github.com/tonybanters/quickshell-btw)** by Tony Banters - Major inspiration for this configuration
+- **[Quickshell](https://quickshell.outfoxxed.me/)** - The amazing shell framework by outfoxxed
+- **[mango](https://github.com/mangowm/mango)** - The Wayland compositor (dwl/wlroots) it runs on now
+- **[Hyprland](https://hyprland.org/)** - The compositor it was written for
+
+## License
+
+MIT License - Feel free to use, modify, and distribute.
+
+## Contributing
+
+Contributions are welcome! Feel free to open issues or submit pull requests.

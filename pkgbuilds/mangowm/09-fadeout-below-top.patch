@@ -1,0 +1,130 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: CarlosDLMC <delamorenacoco.carlos@gmail.com>
+Date: Thu, 22 Oct 2026 08:20:59 +0200
+Subject: [PATCH 09/15] animation: closing windows can fade out under the top
+ layer
+
+fadeout_below_top=1 stacks the fade-out layer right below the top layer
+(below the special workspace's top layer while it is shown), so a closing
+window no longer draws over the bar, launchers or notifications for the
+length of its close animation; Hyprland draws a closing window in its own
+layer.
+---
+ include/mango/config/parse.h   |  1 +
+ include/mango/manage/monitor.h |  1 +
+ src/config/option_defs.c       |  4 ++++
+ src/config/reapply.c           |  1 +
+ src/main.c                     |  1 +
+ src/manage/monitor.c           | 21 +++++++++++++++++++++
+ 6 files changed, 29 insertions(+)
+
+diff --git a/include/mango/config/parse.h b/include/mango/config/parse.h
+index 5565ea48..a88a8b3f 100644
+--- a/include/mango/config/parse.h
++++ b/include/mango/config/parse.h
+@@ -320,6 +320,7 @@ typedef struct {
+ 	int32_t group_keep_single;
+ 	int32_t group_auto_join;
+ 	int32_t group_focus_wrap;
++	int32_t fadeout_below_top;
+ 	int32_t animation_fade_out;
+ 	int32_t tag_animation_direction;
+ 	float zoom_initial_ratio;
+diff --git a/include/mango/manage/monitor.h b/include/mango/manage/monitor.h
+index 0e976d23..44a02f29 100644
+--- a/include/mango/manage/monitor.h
++++ b/include/mango/manage/monitor.h
+@@ -123,6 +123,7 @@ bool is_centertile_layout(Monitor *m);
+ bool is_overcircle_mode(const Monitor *m);
+ void special_update_dim(Monitor *m);
+ void special_sync_top_layer(bool special_active);
++void fadeout_layer_sync(void);
+ uint32_t get_tag_status(uint32_t tag, Monitor *m);
+ uint32_t get_tags_first_tag_num(uint32_t source_tags);
+ uint32_t get_tags_first_tag(uint32_t source_tags);
+diff --git a/src/config/option_defs.c b/src/config/option_defs.c
+index a223871f..550a594a 100644
+--- a/src/config/option_defs.c
++++ b/src/config/option_defs.c
+@@ -81,6 +81,8 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
+ 		config->group_auto_join = atoi(value);
+ 	} else if (strcmp(key, "group_focus_wrap") == 0) {
+ 		config->group_focus_wrap = atoi(value);
++	} else if (strcmp(key, "fadeout_below_top") == 0) {
++		config->fadeout_below_top = atoi(value);
+ 	} else if (strcmp(key, "animation_fade_out") == 0) {
+ 		config->animation_fade_out = atoi(value);
+ 	} else if (strcmp(key, "tag_animation_direction") == 0) {
+@@ -2439,6 +2441,7 @@ void set_value_default() {
+ 	config.group_keep_single = 0;
+ 	config.group_auto_join = 0;
+ 	config.group_focus_wrap = 0;
++	config.fadeout_below_top = 0;
+ 	config.animation_fade_out = 1;
+ 	config.tag_animation_direction = HORIZONTAL;
+ 	config.zoom_initial_ratio = 0.4f;
+@@ -2802,6 +2805,7 @@ void override_config(void) {
+ 	config.group_keep_single = CLAMP_INT(config.group_keep_single, 0, 1);
+ 	config.group_auto_join = CLAMP_INT(config.group_auto_join, 0, 1);
+ 	config.group_focus_wrap = CLAMP_INT(config.group_focus_wrap, 0, 1);
++	config.fadeout_below_top = CLAMP_INT(config.fadeout_below_top, 0, 1);
+ 	config.animation_fade_out = CLAMP_INT(config.animation_fade_out, 0, 1);
+ 	config.zoom_initial_ratio =
+ 		CLAMP_FLOAT(config.zoom_initial_ratio, 0.1f, 1.0f);
+diff --git a/src/config/reapply.c b/src/config/reapply.c
+index b4aa09b1..e96da4f0 100644
+--- a/src/config/reapply.c
++++ b/src/config/reapply.c
+@@ -169,6 +169,7 @@ void reapply_options(bool run_execs) {
+ 	set_env_display();
+ 	if (run_execs)
+ 		run_exec();
++	fadeout_layer_sync();
+ 
+ 	reapply_cursor_style();
+ 	reapply_property();
+diff --git a/src/main.c b/src/main.c
+index 8c785737..bb07389b 100644
+--- a/src/main.c
++++ b/src/main.c
+@@ -540,6 +540,7 @@ void setup(void) {
+ 	server.drag_icon = wlr_scene_tree_create(&server.scene->tree);
+ 	wlr_scene_node_place_below(&server.drag_icon->node,
+ 							   &server.layers_wrap[LyrBlock]->node);
++	fadeout_layer_sync();
+ 
+ 	/* Create a renderer with the default implementation */
+ 	if (!(server.renderer = fx_renderer_create(server.backend)))
+diff --git a/src/manage/monitor.c b/src/manage/monitor.c
+index b7009233..99be1432 100644
+--- a/src/manage/monitor.c
++++ b/src/manage/monitor.c
+@@ -150,7 +150,28 @@ bool is_overcircle_mode(const Monitor *m) {
+ 		   !m->ov_normal_mode;
+ }
+ 
++/*
++ * fadeout_below_top: closing windows fade out under the top layer (the bar,
++ * launchers, notifications) instead of over everything, as Hyprland draws a
++ * closing window in its own layer. The special workspace lifts the top layer
++ * above itself, and the fade-out layer goes along.
++ */
++static bool fadeout_special_active;
++void fadeout_layer_sync(void) {
++	struct wlr_scene_node *node = &server.layers_wrap[LyrFadeOut]->node;
++	if (!config.fadeout_below_top)
++		wlr_scene_node_place_below(
++			node, &server.layers_wrap[LyrSpecialOverlay]->node);
++	else if (fadeout_special_active)
++		wlr_scene_node_place_below(node,
++								   &server.layers_wrap[LyrSpecialTop]->node);
++	else
++		wlr_scene_node_place_below(node, &server.layers_wrap[LyrTop]->node);
++}
++
+ void special_sync_top_layer(bool special_active) {
++	fadeout_special_active = special_active;
++	fadeout_layer_sync();
+ 	if (special_active) {
+ 		wlr_scene_node_reparent(&server.layers[LyrTop]->node,
+ 								server.layers_wrap[LyrSpecialTop]);

@@ -31,7 +31,7 @@ if [[ $EUID -eq 0 ]]; then
 fi
 
 # Everything below is relative to the repo root (Install-Logs/, install-scripts/,
-# Hyprland-Dots/), so run from there wherever the script was invoked from. A
+# dotfiles/), so run from there wherever the script was invoked from. A
 # relative --preset path is resolved first, against the caller's directory.
 #
 # A --preset with no file, or one readlink cannot resolve (its folder does not
@@ -79,7 +79,7 @@ if [ ! -d Install-Logs ]; then
 fi
 
 # Set the name of the log file to include the current date and time
-LOG="Install-Logs/01-Hyprland-Install-Scripts-$(date +%Y%m%d-%H%M%S).log"
+LOG="Install-Logs/01-Install-Scripts-$(date +%Y%m%d-%H%M%S).log"
 
 # Authenticate sudo once, first thing, and keep the timestamp alive for the whole
 # run. This used to happen halfway down, after hardware detection - but the
@@ -208,7 +208,7 @@ quickshell="OFF"
 # have no menu entry, no preset-loop entry, no case branch and no install
 # script - setting sddm="ON" in a preset did precisely nothing, silently. The
 # unknown-key warning in load_preset() now reports that instead of hiding it.
-xdph="OFF"
+portals="OFF"
 zsh="OFF"
 pokemon="OFF"
 # "auto" on the hardware-gated options, not "OFF".
@@ -267,7 +267,7 @@ omarchy_apps="OFF"
 # Every option name the installer acts on. Kept next to load_preset() because
 # its only job is to catch a preset key that no longer matches one - see below.
 known_options="ly nvidia nouveau gtk_themes bluetooth thunar \
-quickshell xdph zsh pokemon rog dots handy nopasswd_sudo printing plymouth \
+quickshell portals zsh pokemon rog dots handy nopasswd_sudo printing plymouth \
 text_boot limine hackbgrt docker herdr neovim hunk ly_flag thp_madvise keyd_nav \
 omarchy_apps"
 # The ones that also take "auto" (resolved from the hardware further down).
@@ -293,6 +293,11 @@ load_preset() {
         # Without its CRs: a preset saved with Windows line endings made every
         # blank line a command named $'\r' ("command not found").
         source <(tr -d '\r' < "$1")
+        # Renamed options: an older preset's name still counts, unless the
+        # preset sets the new one too. xdph became portals.
+        if [ -n "${xdph+x}" ] && ! tr -d '\r' < "$1" | grep -qE '^[[:space:]]*portals='; then
+            portals="$xdph"
+        fi
 
         # Collect any key the preset sets that this installer does not use.
         #
@@ -310,6 +315,7 @@ load_preset() {
         while IFS= read -r _key; do
             [ -n "$_key" ] || continue
             [[ " $known_options " == *" $_key "* ]] && continue
+            [ "$_key" = xdph ] && continue # renamed to portals, mapped above
             preset_unknown_keys+=("$_key")
         # No [[:space:]] before the '=': a shell assignment cannot have one, so
         # `docker = "OFF"` is not setting docker at all (it tries to *run*
@@ -395,10 +401,10 @@ fi
 # interactive path is unchanged.
 if [ "$preset_mode" != "true" ]; then
     # Welcome message using whiptail (for displaying information)
-    whiptail --title "Hyprland Install Script" \
-        --msgbox "Welcome to the Hyprland install script!\n\n\
+    whiptail --title "mango Install Script" \
+        --msgbox "Welcome to the mango install script!\n\n\
 ATTENTION: Run a full system update and Reboot first !!! (Highly Recommended)\n\n\
-NOTE: If you are installing on a VM, ensure to enable 3D acceleration else Hyprland may NOT start!" \
+NOTE: If you are installing on a VM, ensure to enable 3D acceleration else mango may NOT start!" \
         15 80
 
     # Ask if the user wants to proceed
@@ -763,11 +769,11 @@ options_command+=(
     "bluetooth" "Do you want script to configure Bluetooth?" "OFF"
     "thunar" "Do you want Thunar file manager to be installed?" "OFF"
     "quickshell" "Install quickshell for Desktop-Like Overview?" "OFF"
-    "xdph" "Install XDG-DESKTOP-PORTAL-HYPRLAND (for screen share)?" "OFF"
+    "portals" "Install the XDG desktop portals (wlr + gtk, for screen share)?" "OFF"
     "zsh" "Install zsh shell with Oh-My-Zsh?" "OFF"
     "pokemon" "Add Pokemon color scripts to your terminal?" "OFF"
     "rog" "Are you installing on Asus ROG laptops?" "OFF"
-    "dots" "Install the pre-configured Hyprland dotfiles?" "OFF"
+    "dots" "Install the pre-configured dotfiles (mango, bar, theming)?" "OFF"
     "handy" "Install Handy speech-to-text (CTRL+SUPER+F8 toggle)?" "OFF"
     "nopasswd_sudo" "Passwordless sudo for wheel? (needed by the bar's VPN widget)" "OFF"
     "printing" "Install CUPS printing? (nothing else pulls in a print stack)" "OFF"
@@ -792,7 +798,7 @@ options_command+=(
 if [ "$preset_mode" == "true" ]; then
     selected_options=""
     for _opt in ly nvidia nouveau gtk_themes bluetooth thunar \
-                quickshell xdph zsh pokemon rog dots handy nopasswd_sudo \
+                quickshell portals zsh pokemon rog dots handy nopasswd_sudo \
                 printing plymouth text_boot thp_madvise keyd_nav limine hackbgrt docker herdr neovim hunk \
                 omarchy_apps; do
         [ "${!_opt}" == "ON" ] || continue
@@ -844,7 +850,7 @@ if [ "$preset_mode" == "true" ]; then
         if [ "$_opt" = "ly" ]; then echo "   - ly (flag: $ly_flag)" | tee -a "$LOG"; else echo "   - $_opt" | tee -a "$LOG"; fi
     done
     if [[ " $selected_options " != *" dots "* ]]; then
-        echo "${WARN} 'dots' is not enabled, so none of the configs in Hyprland-Dots will be installed." | tee -a "$LOG"
+        echo "${WARN} 'dots' is not enabled, so none of the configs in dotfiles will be installed." | tee -a "$LOG"
     fi
     printf "\n%.0s" {1..1}
 else
@@ -894,8 +900,8 @@ while true; do
     # If "dots" is not selected, show a note and ask the user to proceed or return to choices
     if [[ "$dots_selected" == "OFF" ]]; then
         # Show a note about not selecting the "dots" option
-        if ! whiptail --title "Hyprland Dotfiles" --yesno \
-        "You have not selected to install the pre-configured Hyprland dotfiles.\n\nNOTE: without them Hyprland starts with its default vanilla configuration - none of the bar, keybinds, theming or scripts in this repo will be in place.\n\nContinue without the dotfiles, or return to the options?" \
+        if ! whiptail --title "Dotfiles" --yesno \
+        "You have not selected to install the pre-configured dotfiles.\n\nNOTE: without them mango starts with its default vanilla configuration - none of the bar, keybinds, theming or scripts in this repo will be in place.\n\nContinue without the dotfiles, or return to the options?" \
         --yes-button "Continue" --no-button "Return" 15 90; then
             echo "🔙 Returning to options..." | tee -a "$LOG"
             continue
@@ -1012,7 +1018,7 @@ while true; do
         continue 
     fi
 
-    echo "👌 ${OK} You confirmed your choices. Proceeding with the ${SKY_BLUE}Hyprland installation...${RESET}" | tee -a "$LOG"
+    echo "👌 ${OK} You confirmed your choices. Proceeding with the ${SKY_BLUE}installation...${RESET}" | tee -a "$LOG"
     break  
 done
 fi
@@ -1170,12 +1176,12 @@ echo "${INFO} Installing ${SKY_BLUE}pipewire and pipewire-audio...${RESET}" | te
 sleep 1
 execute_script "pipewire.sh"
 
-# Run the Hyprland related scripts
-echo "${INFO} Installing ${SKY_BLUE}additional Hyprland packages...${RESET}" | tee -a "$LOG"
+# The desktop's packages
+echo "${INFO} Installing ${SKY_BLUE}the desktop packages...${RESET}" | tee -a "$LOG"
 sleep 1
-execute_script "01-hypr-pkgs.sh"
+execute_script "01-desktop-pkgs.sh"
 
-# After 01-hypr-pkgs.sh, which installs the stock rofi this replaces.
+# After 01-desktop-pkgs.sh, which installs the stock rofi this replaces.
 echo "${INFO} Building ${SKY_BLUE}rofi with on-demand keyboard focus...${RESET}" | tee -a "$LOG"
 sleep 1
 execute_script "rofi-ondemand.sh"
@@ -1208,9 +1214,11 @@ echo "${INFO} Installing ${SKY_BLUE}necessary fonts...${RESET}" | tee -a "$LOG"
 sleep 1
 execute_script "fonts.sh"
 
-echo "${INFO} Installing ${SKY_BLUE}Hyprland...${RESET}"
+echo "${INFO} Installing ${SKY_BLUE}mango...${RESET}"
 sleep 1
-execute_script "hyprland.sh"
+execute_script "mango.sh"
+# The patched build the mango config needs (pkgbuilds/mangowm).
+execute_script "mango-patched.sh"
 
 # Clean up the selected options (remove quotes and trim spaces)
 selected_options=$(echo "$selected_options" | tr -d '"' | tr -s ' ')
@@ -1254,7 +1262,7 @@ for option in "${options[@]}"; do
         nouveau)
             # Only on top of a working NVIDIA driver. Ticking nouveau without
             # nvidia (or a preset forcing nouveau="ON" while nvidia resolved OFF)
-            # used to blacklist it anyway: no GPU driver at all, Hyprland on
+            # used to blacklist it anyway: no GPU driver at all, mango on
             # simpledrm, and the final check - whose NVIDIA checks only run when
             # nvidia is selected - passed and let the preset reboot.
             if [[ " $selected_options " != *" nvidia "* ]]; then
@@ -1283,9 +1291,9 @@ for option in "${options[@]}"; do
             echo "${INFO} Installing ${SKY_BLUE}quickshell for Desktop Overview...${RESET}" | tee -a "$LOG"
             execute_script "quickshell.sh"
             ;;
-        xdph)
-            echo "${INFO} Installing ${SKY_BLUE}xdg-desktop-portal-hyprland...${RESET}" | tee -a "$LOG"
-            execute_script "xdph.sh"
+        portals)
+            echo "${INFO} Installing ${SKY_BLUE}the XDG desktop portals (wlr + gtk)...${RESET}" | tee -a "$LOG"
+            execute_script "portals.sh"
             ;;
         bluetooth)
             echo "${INFO} Configuring ${SKY_BLUE}Bluetooth...${RESET}" | tee -a "$LOG"
@@ -1311,7 +1319,7 @@ for option in "${options[@]}"; do
             execute_script "rog.sh"
             ;;
         dots)
-            echo "${INFO} Installing the pre-configured ${SKY_BLUE}Hyprland dotfiles...${RESET}" | tee -a "$LOG"
+            echo "${INFO} Installing the pre-configured ${SKY_BLUE}dotfiles...${RESET}" | tee -a "$LOG"
             execute_script "dotfiles-main.sh"
             ;;
         handy)
@@ -1450,7 +1458,7 @@ if [ ! -f "$HOME/.config/fastfetch/arch.png" ]; then
     # mkdir first: with dots off, ~/.config need not exist yet, and
     # `cp -r dir ~/.config/` into a missing directory fails.
     mkdir -p "$HOME/.config"
-    cp -r Hyprland-Dots/config/fastfetch "$HOME/.config/"
+    cp -r dotfiles/config/fastfetch "$HOME/.config/"
 fi
 
 # No `clear` here, on purpose. It used to wipe the screen right before the
@@ -1473,25 +1481,23 @@ fi
 
 printf "\n%.0s" {1..1}
 
-# Check if hyprland or hyprland-git is installed
-if pacman -Q hyprland &> /dev/null || pacman -Q hyprland-git &> /dev/null; then
+# Check if mangowm or mangowm-git is installed
+if pacman -Q mangowm &> /dev/null || pacman -Q mangowm-git &> /dev/null; then
     if [ "$install_complete" == "true" ]; then
-        printf "\n ${OK} 👌 Hyprland is installed and every package checked out."
+        printf "\n ${OK} 👌 mango is installed and every package checked out."
     else
-        printf "\n ${WARN} Hyprland is installed, but ${WARNING}the final check found problems${RESET} - see the list above."
+        printf "\n ${WARN} mango is installed, but ${WARNING}the final check found problems${RESET} - see the list above."
     fi
     printf "\n"
     sleep 2
     printf "\n%.0s" {1..2}
 
     # Only after a passing check: it used to sit between "the final check found
-    # problems" and "NOT rebooting", and told you to type a bare `Hyprland`
-    # (if SDDM was not installed - this setup uses ly), which Hyprland 0.56
-    # itself warns against.
+    # problems" and "NOT rebooting".
     if [ "$install_complete" == "true" ]; then
         printf "${SKY_BLUE}Installation complete.${RESET} ${YELLOW}Enjoy!${RESET}"
         printf "\n%.0s" {1..2}
-        printf "\n${NOTE} Reboot to log in through ly. To try it before that, run ${SKY_BLUE}start-hyprland${RESET} from a TTY.\n\n"
+        printf "\n${NOTE} Reboot to log in through ly. To try it before that, run ${SKY_BLUE}mango${RESET} from a TTY.\n\n"
     fi
 
     # Repeated here because the warning from hardware detection is an hour of
@@ -1599,7 +1605,7 @@ if pacman -Q hyprland &> /dev/null || pacman -Q hyprland-git &> /dev/null; then
     done
 else
     # Print error message if neither package is installed
-    printf "\n${WARN} Hyprland is NOT installed. Please check 00_CHECK-time_installed.log and other files in the Install-Logs/ directory..."
+    printf "\n${WARN} mango is NOT installed. Please check 00_CHECK-time_installed.log and other files in the Install-Logs/ directory..."
     printf "\n%.0s" {1..3}
     exit 1
 fi

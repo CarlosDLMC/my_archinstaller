@@ -1,0 +1,110 @@
+# Vendored from Arch's mangowm package:
+#   https://gitlab.archlinux.org/archlinux/packaging/packages/mangowm
+# with fifteen patches that make mango look and behave like the Hyprland setup
+# this desktop came from. Every one is an option (or a new dispatcher) that is
+# off by default - stock behaviour stays until the config turns it on; the
+# config in dotfiles/config/mango/ turns them all on.
+#
+# 01 native-content: a window that moves or resizes keeps its content at its
+#    native size, cropped or with its edge pixels extended, as Hyprland draws
+#    it (animation_native_content). Stock mango stretched the new, smaller
+#    frame of a window shrinking beside a new one: it seemed to grow, then
+#    shrink back. Opening windows scale into place (Hyprland's popin).
+# 02 bind-repeat: only binde binds repeat while held (bind_repeat_flagged_only).
+# 03 keep-layout: reloads and setoption keep the keyboard layout (EN/ES/RU) -
+#    every wallpaper change used to reset it - and setoption runs no exec lines.
+# 04 layer-fade: layer surfaces (rofi, notifications) fade with their own
+#    timing and curves, as Hyprland's fadeLayersIn/Out.
+# 05 shadow-colours: focused and unfocused shadow colours; a reload recolours
+#    borders and shadows at once (the wallust colours of a new wallpaper).
+# 06 fullscreen-takeover: a new window takes over a fullscreen one
+#    (misc:on_focus_under_fullscreen 1); hide_cursor dispatcher.
+# 07 groups: SUPER+G on a lone window makes a group of one, new windows join
+#    the focused group after the current tab, tab focus wraps; grouptoggle and
+#    groupmove dispatchers (togglegroup, movegroupwindow).
+# 08 group-bar: gaps between tabs, a medium font for the focused tab only.
+# 09 fadeout-below-top: closing windows fade out under the bar and launchers.
+# 10 special-slide: the special workspace slides in from the right, fading.
+# 11 zoom: desktop zoom around the cursor (zoom_by, SUPER+ALT+wheel).
+# 12 border-fade: the border colour fades on its own timing (539 ms) while a
+#    terminal's opacity fades on the focus one (300 ms), as Hyprland's border
+#    and fadeSwitch.
+# 13 group-bar-slide: the tabs slide out with their window on a workspace
+#    switch (they vanished at its first frame).
+# 14 group-switch-fade: switching tabs crossfades (Hyprland's fadeSwitch).
+# 15 group-bar-clip: the tabs keep their places on the window and are clipped
+#    at the monitor edge, so they slide rigidly with it.
+#
+# install-scripts/mango-patched.sh builds this with makepkg and puts mangowm
+# in pacman's IgnorePkg: a stock mango from the repos would not know the
+# options and binds the config uses. depends names the scenefx and wlroots
+# libraries by soname, so pacman refuses a library update this build would not
+# survive instead of leaving a mango that cannot start; rebuild it then. To
+# follow a new mango, set pkgver and the tarball's sha256, re-apply the patches
+# (the source tree they come from is a git branch on 0.18.2, one commit each).
+#
+# Maintainer: Robin Candau <antiz@archlinux.org>
+# Contributor: Matt Quintanilla <matt @ matt quintanilla .xyz>
+
+pkgname=mangowm
+_pkgname=mango
+pkgver=0.18.2
+pkgrel=103
+pkgdesc="Lightweight, feature rich modern wayland compositor (patched to match a Hyprland setup)"
+url="https://mangowm.github.io"
+arch=('x86_64')
+license=('GPL-3.0-or-later')
+depends=('glibc' 'wayland-protocols' 'pango' 'wayland' 'libinput' 'libdrm' 'cairo'
+         'pixman' 'libdisplay-info' 'libliftoff' 'seatd' 'xorg-xwayland' 'glib2'
+         'libxcb' 'libxkbcommon' 'pcre2' 'libwlroots-0.20.so' 'libscenefx-0.5.so'
+         'cjson' 'xcb-util-wm')
+makedepends=('meson' 'wlroots0.20' 'scenefx')
+source=("${pkgname}-${pkgver}.tar.gz::https://github.com/mangowm/mango/archive/refs/tags/${pkgver}.tar.gz"
+        '01-native-content.patch'
+        '02-bind-repeat.patch'
+        '03-keep-layout.patch'
+        '04-layer-fade.patch'
+        '05-shadow-colours.patch'
+        '06-fullscreen-takeover.patch'
+        '07-groups.patch'
+        '08-group-bar.patch'
+        '09-fadeout-below-top.patch'
+        '10-special-slide.patch'
+        '11-zoom.patch'
+        '12-border-fade.patch'
+        '13-group-bar-slide.patch'
+        '14-group-switch-fade.patch'
+        '15-group-bar-clip.patch')
+sha256sums=('04c8a6bb168307360383670daf0f96ffa7587df6680b9030587f084121105dd3'
+            'ba35c9142a20c5d5298312a1559ae1906436500087269725aeb05752ddbcc64c'
+            '87de5c562bd5d85cde2e8674fb387b5a77f49a424176b56fd28f3e9a4621eafb'
+            '4a2475095081cbf8d6420999cc571431913449e01fcb0208120f6a1084c46eab'
+            '7d9f40b1c396b5e5333e9785223033b074e52cbcb04780e6e4e351d0099666c7'
+            '67d9dde119ede3a709e7028e7c5e71b4ab1003fbed55ab2bdf11080021aee31e'
+            'bc14b0f27e46e2b1d9663f7608f3c83dafd2094ded7a2707128788b7f61f80dd'
+            'fa7a3d6bf7e174444d1dbefd159d00f161f9b00e433f6acc087460b3a6ecfdfb'
+            '191fd77601c7fc3a6bafd84511989046c7c58eeea6b4f017b957e957ad64fab3'
+            '22b0c3b48073dd19c8ba4e042db6b303fe40411f8e1c50afa7ecb9ae0b60e2e9'
+            'ab02623e62259e617f504e66ac9645192aa69bfadbb043ec0c3ed4d1f4b4e1bd'
+            '2b466682c94c34e7d9a13260c7e917b92c58bbe7bf77afca8adfaa84a0de05ab'
+            'cc594a9dc04bb416fa8cdb3f3323aa322fe777b27450e076b7d3993efc4b5f86'
+            '3a60d40eed0c1d5c2daa5c4dfaec2e9ae11d412a93dd2f6a0b2ab6899ce8af77'
+            '0a38682d7c1b9ac8b6c7c2011dfc5e684992e4c6356f79227efb06da4396ddf6'
+            'cf3a7d9f4caf138afc0ae88d1bb4f63beb7e55e55caabddb3eead7ba6cc20801')
+
+prepare() {
+	cd "${_pkgname}-${pkgver}"
+	local p
+	for p in "${srcdir}"/*.patch; do
+		patch -Np1 -i "$p"
+	done
+}
+
+build() {
+	arch-meson "${_pkgname}-${pkgver}" build
+	meson compile -C build
+}
+
+package() {
+	meson install -C build --destdir "${pkgdir}"
+}

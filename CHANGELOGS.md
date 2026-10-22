@@ -2,6 +2,73 @@
 
 ## October 2026
 
+Changed (2026-10-22) - mango only. Hyprland is gone from the installer and the
+repo: nothing installs or configures it, and a re-run on a machine that has it
+removes `hyprland`, `xdg-desktop-portal-hyprland` and `hyprsunset`
+(`mango.sh`; hyprlock, hypridle, hyprpolkitagent and the hyprland-qt-support
+Qt style stay - they are what the desktop uses on mango).
+
+- `Hyprland-Dots/` is now `dotfiles/`, `01-hypr-pkgs.sh` is
+  `01-desktop-pkgs.sh`, and the preset option `xdph` is `portals`
+  (`portals.sh`); an older preset that still says `xdph` is read as `portals`.
+- The final check fails on a mango config with errors: `mango -p` exits 0
+  even when it reports one, so it now looks for `[ERROR]` (diagnose.sh too).
+  mango-patched.sh records a failure on every early exit, and pins mangowm in
+  IgnorePkg only once the patched build is installed.
+- The Hyprland migration is gone: `copy.sh` no longer carries a wallpaper,
+  video wallpaper or palette over from a Hyprland-era `hypr/` backup, and
+  ly_config.sh and pacman.sh no longer handle Hyprland's sessions (the uwsm
+  `NoExtract` line an earlier run added to `/etc/pacman.conf` is harmless and
+  can be deleted). A machine on the Hyprland version gets mango on a re-run,
+  with the wallpaper picked again.
+
+Changed (2026-10-22, branch `mango`) - mango is patched to behave like the
+Hyprland setup: built from `pkgbuilds/mangowm` (Arch's 0.18.2 plus fifteen
+patches, each an option the config turns on) by
+`install-scripts/mango-patched.sh`, and kept off `-Syu` by `IgnorePkg`.
+
+- Windows keep their content at native size while they move or resize: a
+  window shrinking beside a new one no longer stretches, and swaps and moves
+  glide again. Opening windows scale in from 87%.
+- Only the volume, brightness and resize binds repeat when held (`binde`);
+  `Once.sh` is gone. Reloads and option changes keep the keyboard layout.
+- Tab groups as on Hyprland: SUPER+G makes a group of one that new windows join,
+  tabs wrap and reorder, 5 px gaps between tabs, a medium title on the active
+  tab only; switching tabs crossfades, and the tabs slide with their window on
+  a workspace switch.
+- Hyprland's timings: border colour 539 ms apart from the 300 ms opacity fade,
+  layer fades 303 ms. Focused and unfocused shadow colours from wallust; closing
+  windows fade under the bar; the special workspace slides in from the right; a
+  new window takes over a fullscreen one; desktop zoom on SUPER+ALT+scroll.
+- These replace the earlier known differences (no single-window groups, no tab
+  gaps, no zoom); the overview keeps its stills.
+
+Changed (2026-10-21, branch `mango`) - the desktop runs on mango (mangowm), not
+Hyprland, and looks and behaves the same: the same bar, cards and dialogs, lock
+screen, keybinds, tab groups, animations, wallust theming and scripts.
+
+- `install-scripts/mango.sh` (was `hyprland.sh`) installs mangowm with hypridle
+  and hyprlock, which stay. The config is `Hyprland-Dots/config/mango/`
+  (`key=value` files that mango reloads by itself); the scripts stay in
+  `~/.config/hypr/scripts`. `xdph` installs xdg-desktop-portal-wlr, the night
+  light is wlsunset, the screens go off through wlopm, and wdisplays replaces
+  nwg-displays.
+- The quickshell bar talks to mango's IPC (`bar/Mango.qml`) and the keybinds call
+  it through `qs -c bar ipc call`; the cards are layer surfaces of their own. The
+  workspace overview became part of the bar (one process less), with a still of
+  every window taken when it opens.
+- Where stock mango falls short, scripts make up the difference: binds that
+  fire once per press (mango repeats every held bind), tabs moved within a
+  group, windows that float over their own tile, the layout kept across config
+  reloads, the dropdown terminal on mango's named scratchpad.
+- Known differences: no gap between group tabs and no single-window groups
+  (SUPER+G joins the nearest window); the overview shows stills, not live
+  windows; no desktop zoom; mango uses each screen's preferred mode where
+  Hyprland took the highest resolution and refresh.
+- A machine set up by the Hyprland version moves over on a re-run: copy.sh keeps
+  the wallpaper (a video one too) and fills mango's colours from the live
+  palette; ly offers mango and points a saved Hyprland choice at it.
+
 Added (2026-10-17) - herdr agents notify the desktop. An agent that finishes or
 is blocked while the herdr window is not focused sends a dunst notice stamped
 АГЕНТ (red when blocked) naming its workspace, tab and conversation, and it

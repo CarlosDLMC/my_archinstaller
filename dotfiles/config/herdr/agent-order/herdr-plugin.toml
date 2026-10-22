@@ -1,0 +1,15 @@
+# Orders the Agents tab blocked -> working -> done -> idle - see agent-order.py.
+# Linked by install-scripts/herdr.sh (herdr plugin link ~/.config/herdr/agent-order).
+id = "agent-order"
+name = "Agent order"
+description = "Sort the Agents tab blocked, working, done, idle"
+version = "0.1.0"
+min_herdr_version = "0.9.0"
+platforms = ["linux"]
+
+[[startup]]
+command = ["python3", "agent-order.py"]
+
+[[events]]
+on = "pane.agent_status_changed"
+command = ["python3", "agent-order.py"]

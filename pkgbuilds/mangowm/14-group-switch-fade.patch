@@ -1,0 +1,202 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: CarlosDLMC <delamorenacoco.carlos@gmail.com>
+Date: Thu, 22 Oct 2026 10:33:35 +0200
+Subject: [PATCH 14/15] group: switching tabs crossfades (group_switch_fade)
+
+The tab switched away from fades out while the new one fades in, both on the
+focus timing (Hyprland's fadeSwitch: 300 ms smoothOut in this setup). The old
+tab is a fade-out copy taken while it is still shown, stacked right below the
+new tab in the window's own layer.
+---
+ include/mango/animation/client.h |  1 +
+ include/mango/config/parse.h     |  1 +
+ include/mango/manage/client.h    |  4 +++
+ src/animation/client.c           | 60 ++++++++++++++++++++++++++++++++
+ src/config/option_defs.c         |  4 +++
+ src/manage/client.c              | 13 +++++++
+ 6 files changed, 83 insertions(+)
+
+diff --git a/include/mango/animation/client.h b/include/mango/animation/client.h
+index b4baec84..4d32bb02 100644
+--- a/include/mango/animation/client.h
++++ b/include/mango/animation/client.h
+@@ -47,6 +47,7 @@ void client_animation_resume(Client *c, double remaining);
+ void fadeout_client_animation_next_tick(Client *c);
+ void client_animation_next_tick(Client *c);
+ void init_fadeout_client(Client *c);
++Client *init_group_switch_fadeout(Client *old);
+ bool client_animations_enabled(const Client *c);
+ 
+ /* Applies the final window state when animation is disabled: position,
+diff --git a/include/mango/config/parse.h b/include/mango/config/parse.h
+index a94d3f83..32c75667 100644
+--- a/include/mango/config/parse.h
++++ b/include/mango/config/parse.h
+@@ -322,6 +322,7 @@ typedef struct {
+ 	int32_t group_focus_wrap;
+ 	int32_t fadeout_below_top;
+ 	int32_t special_slide_fade;
++	int32_t group_switch_fade;
+ 	int32_t animation_duration_zoom;
+ 	double animation_curve_zoom[4];
+ 	int32_t animation_fade_out;
+diff --git a/include/mango/manage/client.h b/include/mango/manage/client.h
+index 4475a22d..b74ec0aa 100644
+--- a/include/mango/manage/client.h
++++ b/include/mango/manage/client.h
+@@ -236,6 +236,10 @@ struct Client {
+ 	Client *group_join_target;
+ 	/* special_slide_fade: 1 fading in, -1 fading out with the slide. */
+ 	int32_t special_fade;
++	/* group_switch_fade: this tab is fading in (shown since that time, 0:
++	 * not), or this fade-out copy is the old tab fading out. */
++	uint32_t group_fade_in_started;
++	bool group_switch_fadeout;
+ 
+ 	/* auto tab chain; state kept fully separate from group */
+ 	MangoBarDecoration *tab_bar;
+diff --git a/src/animation/client.c b/src/animation/client.c
+index cf39de9a..2e2b11af 100644
+--- a/src/animation/client.c
++++ b/src/animation/client.c
+@@ -1276,6 +1276,9 @@ void fadeout_client_animation_next_tick(Client *c) {
+ 		find_animation_curve_at(animation_passed, OPAFADEOUT);
+ 	double percent = config.fadeout_begin_opacity -
+ 					 (opacity_eased_progress * config.fadeout_begin_opacity);
++	if (c->group_switch_fadeout)
++		percent = 1.0 - find_animation_curve_at(MANGO_MIN(animation_passed, 1.0),
++												FOCUS);
+ 	double opacity = MANGO_MAX(percent, 0);
+ 
+ 	if (config.animation_fade_out && !c->no_fade_out)
+@@ -1456,6 +1459,46 @@ void init_fadeout_client(Client *c) {
+ 
+ 	request_fresh_all_monitors();
+ }
++/*
++ * group_switch_fade: a copy of the tab being switched away from, fading out in
++ * place on the focus timing (Hyprland's fadeSwitch) while the new tab fades in
++ * - in the window's own layer; the caller puts it right below the new tab.
++ */
++Client *init_group_switch_fadeout(Client *old) {
++	if (!old->mon || !old->scene || client_is_unmanaged(old) ||
++		(old->shield_when_capture && server.active_capture_count > 0))
++		return NULL;
++
++	Client *f = ecalloc(1, sizeof(*f));
++	f->animation_type_open = ANIM_TYPE_UNSET;
++	f->animation_type_close = ANIM_TYPE_FADE;
++	f->group_switch_fadeout = true;
++
++	old->snapshot_temp_visible = true;
++	client_update_visibility(old);
++	f->scene = wlr_scene_tree_snapshot(&old->scene->node,
++									   server.layers[client_target_layer(old)]);
++	old->snapshot_temp_visible = false;
++	client_update_visibility(old);
++	if (!f->scene) {
++		free(f);
++		return NULL;
++	}
++
++	f->animation.duration = config.animation_duration_focus;
++	f->geom = f->animainit_geom = old->animation.current;
++	f->animation.initial = f->current = (struct wlr_box){0};
++	f->mon = old->mon;
++	f->animation.action = CLOSE;
++	f->bw = old->bw;
++	f->animation.time_started = get_now_in_ms();
++	wlr_scene_node_set_enabled(&f->scene->node, true);
++	wl_list_insert(&server.fadeout_clients, &f->fadeout_link);
++
++	request_fresh_all_monitors();
++	return f;
++}
++
+ void client_apply_finish_geometry(Client *c) {
+ 	if (!c || !c->scene)
+ 		return;
+@@ -1846,6 +1889,23 @@ void client_set_focused_opacity_animation(Client *c) {
+ }
+ 
+ bool client_apply_focus_opacity(Client *c) {
++	/* group_switch_fade: the tab just shown fades in on the focus timing. */
++	if (c->group_fade_in_started) {
++		float base =
++			(server.selected_monitor && c == server.selected_monitor->sel)
++				? c->focused_opacity
++				: c->unfocused_opacity;
++		uint32_t passed = get_now_in_ms() - c->group_fade_in_started;
++		double linear = config.animation_duration_focus
++							? (double)passed / config.animation_duration_focus
++							: 1.0;
++		if (linear < 1.0) {
++			client_set_opacity(c, base * find_animation_curve_at(linear, FOCUS));
++			return true;
++		}
++		c->group_fade_in_started = 0;
++		client_set_opacity(c, base);
++	}
+ 	/* special_slide_fade: the window fades with its special workspace slide,
+ 	 * on the slide's curve. */
+ 	if (c->special_fade) {
+diff --git a/src/config/option_defs.c b/src/config/option_defs.c
+index 1e327baa..695a9a8e 100644
+--- a/src/config/option_defs.c
++++ b/src/config/option_defs.c
+@@ -85,6 +85,8 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
+ 		config->fadeout_below_top = atoi(value);
+ 	} else if (strcmp(key, "special_slide_fade") == 0) {
+ 		config->special_slide_fade = atoi(value);
++	} else if (strcmp(key, "group_switch_fade") == 0) {
++		config->group_switch_fade = atoi(value);
+ 	} else if (strcmp(key, "animation_duration_zoom") == 0) {
+ 		config->animation_duration_zoom = atoi(value);
+ 	} else if (strcmp(key, "animation_curve_zoom") == 0) {
+@@ -2467,6 +2469,7 @@ void set_value_default() {
+ 	config.group_focus_wrap = 0;
+ 	config.fadeout_below_top = 0;
+ 	config.special_slide_fade = 0;
++	config.group_switch_fade = 0;
+ 	/* Hyprland's zoomFactor animation unconfigured: global, 800 ms, its
+ 	 * "default" curve. */
+ 	config.animation_duration_zoom = 800;
+@@ -2841,6 +2844,7 @@ void override_config(void) {
+ 	config.group_focus_wrap = CLAMP_INT(config.group_focus_wrap, 0, 1);
+ 	config.fadeout_below_top = CLAMP_INT(config.fadeout_below_top, 0, 1);
+ 	config.special_slide_fade = CLAMP_INT(config.special_slide_fade, 0, 1);
++	config.group_switch_fade = CLAMP_INT(config.group_switch_fade, 0, 1);
+ 	config.animation_duration_zoom =
+ 		CLAMP_INT(config.animation_duration_zoom, 0, 50000);
+ 	config.animation_fade_out = CLAMP_INT(config.animation_fade_out, 0, 1);
+diff --git a/src/manage/client.c b/src/manage/client.c
+index f3040cdc..f4aa4413 100644
+--- a/src/manage/client.c
++++ b/src/manage/client.c
+@@ -4431,6 +4431,13 @@ bool client_group_swap_focus(Client *c) {
+ 	if (cur_focusing->mon->isoverview)
+ 		return false;
+ 
++	/* group_switch_fade: a copy of the old tab, taken while it is still
++	 * shown, fades out under the new one fading in. */
++	Client *fade = NULL;
++	if (config.group_switch_fade && client_animations_enabled(c) &&
++		VISIBLEON(cur_focusing, cur_focusing->mon))
++		fade = init_group_switch_fadeout(cur_focusing);
++
+ 	cur_focusing->is_group_focus = false;
+ 	c->mon = cur_focusing->mon;
+ 	client_replace(c, cur_focusing, true, false);
+@@ -4441,6 +4448,12 @@ bool client_group_swap_focus(Client *c) {
+ 
+ 	client_reparent_group(c);
+ 
++	if (fade) {
++		if (c->scene && c->scene->node.parent == fade->scene->node.parent)
++			wlr_scene_node_place_below(&fade->scene->node, &c->scene->node);
++		c->group_fade_in_started = get_now_in_ms();
++	}
++
+ 	return true;
+ }
+ 

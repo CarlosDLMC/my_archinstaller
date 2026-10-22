@@ -1,0 +1,141 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: CarlosDLMC <delamorenacoco.carlos@gmail.com>
+Date: Thu, 22 Oct 2026 08:23:17 +0200
+Subject: [PATCH 10/15] animation: the special workspace can slide in from the
+ right and fade
+
+special_slide_fade=1: special workspace windows come in from a monitor width
+to the right and leave the same way, fading in and out on the tag curve, as
+Hyprland's specialWorkspace animation with no style. Stock mango slides them
+down from above and back up.
+---
+ include/mango/config/parse.h  |  1 +
+ include/mango/manage/client.h |  2 ++
+ src/animation/client.c        | 23 +++++++++++++++++++++++
+ src/animation/tag.c           | 17 +++++++++++++++--
+ src/config/option_defs.c      |  4 ++++
+ 5 files changed, 45 insertions(+), 2 deletions(-)
+
+diff --git a/include/mango/config/parse.h b/include/mango/config/parse.h
+index a88a8b3f..c2581342 100644
+--- a/include/mango/config/parse.h
++++ b/include/mango/config/parse.h
+@@ -321,6 +321,7 @@ typedef struct {
+ 	int32_t group_auto_join;
+ 	int32_t group_focus_wrap;
+ 	int32_t fadeout_below_top;
++	int32_t special_slide_fade;
+ 	int32_t animation_fade_out;
+ 	int32_t tag_animation_direction;
+ 	float zoom_initial_ratio;
+diff --git a/include/mango/manage/client.h b/include/mango/manage/client.h
+index b26edc76..4475a22d 100644
+--- a/include/mango/manage/client.h
++++ b/include/mango/manage/client.h
+@@ -234,6 +234,8 @@ struct Client {
+ 	/* group_auto_join: the group window that had the focus when this one
+ 	 * mapped; it joins that group once its rules are applied. */
+ 	Client *group_join_target;
++	/* special_slide_fade: 1 fading in, -1 fading out with the slide. */
++	int32_t special_fade;
+ 
+ 	/* auto tab chain; state kept fully separate from group */
+ 	MangoBarDecoration *tab_bar;
+diff --git a/src/animation/client.c b/src/animation/client.c
+index 127421ac..b4ce4d4e 100644
+--- a/src/animation/client.c
++++ b/src/animation/client.c
+@@ -1830,6 +1830,29 @@ void client_set_focused_opacity_animation(Client *c) {
+ }
+ 
+ bool client_apply_focus_opacity(Client *c) {
++	/* special_slide_fade: the window fades with its special workspace slide,
++	 * on the slide's curve. */
++	if (c->special_fade) {
++		float base =
++			(server.selected_monitor && c == server.selected_monitor->sel)
++				? c->focused_opacity
++				: c->unfocused_opacity;
++		if (c->animation.running &&
++			(c->animation.tagining || c->animation.tagouting)) {
++			struct timespec now;
++			clock_gettime(CLOCK_MONOTONIC, &now);
++			int32_t passed = timespec_to_ms(&now) - c->animation.time_started;
++			double linear = c->animation.duration
++								? (double)passed / (double)c->animation.duration
++								: 1.0;
++			double eased = find_animation_curve_at(MANGO_MIN(linear, 1.0), TAG);
++			double alpha = c->special_fade > 0 ? eased : 1.0 - eased;
++			client_set_opacity(c, base * alpha);
++			return true;
++		}
++		c->special_fade = 0;
++		client_set_opacity(c, base);
++	}
+ 	if (config.blur && !c->no_blur && c->blur_opacity != 1.0f &&
+ 		c->animation.action != OPEN) {
+ 		c->blur_opacity = 1.0f;
+diff --git a/src/animation/tag.c b/src/animation/tag.c
+index 483f6472..ae204b1b 100644
+--- a/src/animation/tag.c
++++ b/src/animation/tag.c
+@@ -103,7 +103,14 @@ void set_arrange_visible(Monitor *m, Client *c, bool want_animation) {
+ 		if (want_animation && client_animations_enabled(c)) {
+ 			c->animation.tagining = true;
+ 			c->animainit_geom = c->geom;
+-			c->animainit_geom.y = c->mon->m.y - c->geom.height;
++			if (config.special_slide_fade) {
++				/* Hyprland's special workspace: in from the right, a monitor
++				 * width away, fading in. */
++				c->animainit_geom.x = c->geom.x + c->mon->m.width;
++				c->special_fade = 1;
++			} else {
++				c->animainit_geom.y = c->mon->m.y - c->geom.height;
++			}
+ 		} else {
+ 			c->animainit_geom.x = c->animation.current.x;
+ 			c->animainit_geom.y = c->animation.current.y;
+@@ -206,7 +213,13 @@ void set_arrange_hidden(Monitor *m, Client *c, bool want_animation) {
+ 			c->animation.tagouting = true;
+ 			c->animation.tagining = false;
+ 			c->pending = c->geom;
+-			c->pending.y = c->mon->m.y - c->geom.height;
++			if (config.special_slide_fade) {
++				/* Out to the right, fading out. */
++				c->pending.x = c->geom.x + c->mon->m.width;
++				c->special_fade = -1;
++			} else {
++				c->pending.y = c->mon->m.y - c->geom.height;
++			}
+ 			resize(c, c->geom, (ResizeOpts){.interact = 0});
+ 		} else {
+ 			c->animation.running = false;
+diff --git a/src/config/option_defs.c b/src/config/option_defs.c
+index 550a594a..2939c177 100644
+--- a/src/config/option_defs.c
++++ b/src/config/option_defs.c
+@@ -83,6 +83,8 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
+ 		config->group_focus_wrap = atoi(value);
+ 	} else if (strcmp(key, "fadeout_below_top") == 0) {
+ 		config->fadeout_below_top = atoi(value);
++	} else if (strcmp(key, "special_slide_fade") == 0) {
++		config->special_slide_fade = atoi(value);
+ 	} else if (strcmp(key, "animation_fade_out") == 0) {
+ 		config->animation_fade_out = atoi(value);
+ 	} else if (strcmp(key, "tag_animation_direction") == 0) {
+@@ -2442,6 +2444,7 @@ void set_value_default() {
+ 	config.group_auto_join = 0;
+ 	config.group_focus_wrap = 0;
+ 	config.fadeout_below_top = 0;
++	config.special_slide_fade = 0;
+ 	config.animation_fade_out = 1;
+ 	config.tag_animation_direction = HORIZONTAL;
+ 	config.zoom_initial_ratio = 0.4f;
+@@ -2806,6 +2809,7 @@ void override_config(void) {
+ 	config.group_auto_join = CLAMP_INT(config.group_auto_join, 0, 1);
+ 	config.group_focus_wrap = CLAMP_INT(config.group_focus_wrap, 0, 1);
+ 	config.fadeout_below_top = CLAMP_INT(config.fadeout_below_top, 0, 1);
++	config.special_slide_fade = CLAMP_INT(config.special_slide_fade, 0, 1);
+ 	config.animation_fade_out = CLAMP_INT(config.animation_fade_out, 0, 1);
+ 	config.zoom_initial_ratio =
+ 		CLAMP_FLOAT(config.zoom_initial_ratio, 0.1f, 1.0f);

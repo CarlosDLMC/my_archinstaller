@@ -1,5 +1,5 @@
 #!/bin/bash
-# Hyprland-Dots to download from main #
+# dotfiles to download from main #
 
 
 ## WARNING: DO NOT EDIT BEYOND THIS LINE IF YOU DON'T KNOW WHAT YOU ARE DOING! ##
@@ -15,16 +15,16 @@ if ! source "$SCRIPT_DIR/Global_functions.sh"; then
   exit 1
 fi
 
-# Install customized Hyprland-Dots from local directory
-printf "${NOTE} Installing ${SKY_BLUE}Customized Hyprland Dots${RESET}....\n"
+# Install customized dotfiles from local directory
+printf "${NOTE} Installing ${SKY_BLUE}the customized dotfiles${RESET}....\n"
 
 # Debug: Show current directory
 printf "${INFO} Current directory: $(pwd)\n"
-printf "${INFO} Looking for Hyprland-Dots in: $(pwd)/Hyprland-Dots\n"
+printf "${INFO} Looking for dotfiles in: $(pwd)/dotfiles\n"
 
-if [ -d Hyprland-Dots ]; then
-  printf "${OK} Found Hyprland-Dots directory\n"
-  cd Hyprland-Dots || { echo "${ERROR} Failed to cd into Hyprland-Dots"; exit 1; }
+if [ -d dotfiles ]; then
+  printf "${OK} Found dotfiles directory\n"
+  cd dotfiles || { echo "${ERROR} Failed to cd into dotfiles"; exit 1; }
 
   printf "${INFO} Now in directory: $(pwd)\n"
 
@@ -48,17 +48,17 @@ if [ -d Hyprland-Dots ]; then
       exit 1
     fi
   else
-    echo -e "${ERROR} copy.sh not found in Hyprland-Dots directory"
-    printf "${INFO} Contents of Hyprland-Dots:\n"
+    echo -e "${ERROR} copy.sh not found in dotfiles directory"
+    printf "${INFO} Contents of dotfiles:\n"
     ls -la
     exit 1
   fi
 else
-  echo -e "${ERROR} Hyprland-Dots directory not found. Cannot install dotfiles."
-  echo -e "${NOTE} Please ensure the Hyprland-Dots folder exists in the installation directory."
+  echo -e "${ERROR} dotfiles directory not found. Cannot install dotfiles."
+  echo -e "${NOTE} Please ensure the dotfiles folder exists in the installation directory."
   printf "${INFO} Current directory contents:\n"
   ls -la
-  printf "${INFO} Expected location: $(pwd)/Hyprland-Dots\n"
+  printf "${INFO} Expected location: $(pwd)/dotfiles\n"
   exit 1
 fi
 

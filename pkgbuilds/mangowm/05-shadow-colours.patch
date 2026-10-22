@@ -1,0 +1,186 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: CarlosDLMC <delamorenacoco.carlos@gmail.com>
+Date: Thu, 22 Oct 2026 08:10:57 +0200
+Subject: [PATCH 05/15] decoration: shadows_color_inactive; reloads recolour
+ borders and shadows
+
+The focused window's shadow takes shadows_color, the others
+shadows_color_inactive (unset: shadows_color), fading with the border colour
+when the focus moves, as Hyprland's col.shadow / col.shadow_inactive. A
+config reload now recolours every window's border and shadow at once; before,
+a window kept its old colours until its focus changed.
+---
+ include/mango/animation/common.h |  3 +++
+ include/mango/config/parse.h     |  2 ++
+ include/mango/manage/client.h    |  2 ++
+ src/animation/client.c           | 11 +++++++++++
+ src/config/option_defs.c         | 13 +++++++++++++
+ src/config/reapply.c             |  3 +++
+ src/manage/client.c              | 21 +++++++++++++++++++++
+ 7 files changed, 55 insertions(+)
+
+diff --git a/include/mango/animation/common.h b/include/mango/animation/common.h
+index 60c0c74e..9e8005ca 100644
+--- a/include/mango/animation/common.h
++++ b/include/mango/animation/common.h
+@@ -63,6 +63,9 @@ struct mango_opacity_animation {
+ 	float current_dim_color[4];
+ 	float target_dim_color[4];
+ 	float initial_dim_color[4];
++	float current_shadow_color[4];
++	float target_shadow_color[4];
++	float initial_shadow_color[4];
+ };
+ 
+ typedef struct {
+diff --git a/include/mango/config/parse.h b/include/mango/config/parse.h
+index 8e312d1d..8eda6893 100644
+--- a/include/mango/config/parse.h
++++ b/include/mango/config/parse.h
+@@ -479,6 +479,8 @@ typedef struct {
+ 	int32_t shadows_position_x;
+ 	int32_t shadows_position_y;
+ 	float shadowscolor[4];
++	float shadowscolor_inactive[4]; /* unfocused windows; unset = shadowscolor */
++	bool shadowscolor_inactive_set;
+ 	int32_t dim_enable;
+ 	float dim_focused_color[4];
+ 	float dim_unfocused_color[4];
+diff --git a/include/mango/manage/client.h b/include/mango/manage/client.h
+index 42c937b3..343c4792 100644
+--- a/include/mango/manage/client.h
++++ b/include/mango/manage/client.h
+@@ -352,6 +352,8 @@ Client *client_focus_top(Monitor *m);
+ Client *get_next_stack_client(Client *c, bool reverse);
+ float *get_border_color(Client *c);
+ float *get_dim_color(Client *c);
++float *get_shadow_color(Client *c);
++void client_set_shadow_color(Client *c, const float color[4]);
+ 
+ int32_t is_single_bit_set(uint32_t x);
+ bool client_only_in_one_tag(Client *c);
+diff --git a/src/animation/client.c b/src/animation/client.c
+index b47f5ff6..c8d615dc 100644
+--- a/src/animation/client.c
++++ b/src/animation/client.c
+@@ -1747,6 +1747,11 @@ void client_start_focus_animation(Client *c, bool focused) {
+ 		   sizeof(c->opacity_animation.target_border_color));
+ 	memcpy(c->opacity_animation.target_dim_color, dim_color,
+ 		   sizeof(c->opacity_animation.target_dim_color));
++	memcpy(c->opacity_animation.target_shadow_color, get_shadow_color(c),
++		   sizeof(c->opacity_animation.target_shadow_color));
++	memcpy(c->opacity_animation.initial_shadow_color,
++		   c->opacity_animation.current_shadow_color,
++		   sizeof(c->opacity_animation.initial_shadow_color));
+ 	c->opacity_animation.initial_opacity = c->opacity_animation.current_opacity;
+ 	memcpy(c->opacity_animation.initial_border_color,
+ 		   c->opacity_animation.current_border_color,
+@@ -1779,6 +1784,11 @@ static void client_interpolate_focus_animation(Client *c,
+ 			(c->opacity_animation.target_dim_color[i] -
+ 			 c->opacity_animation.initial_dim_color[i]) *
+ 				eased_progress;
++		c->opacity_animation.current_shadow_color[i] =
++			c->opacity_animation.initial_shadow_color[i] +
++			(c->opacity_animation.target_shadow_color[i] -
++			 c->opacity_animation.initial_shadow_color[i]) *
++				eased_progress;
+ 	}
+ }
+ 
+@@ -1788,6 +1798,7 @@ bool client_step_focus_animation(Client *c, double linear_progress) {
+ 	client_set_opacity(c, c->opacity_animation.current_opacity);
+ 	client_set_state_colors(c, c->opacity_animation.current_border_color,
+ 							c->opacity_animation.current_dim_color);
++	client_set_shadow_color(c, c->opacity_animation.current_shadow_color);
+ 
+ 	c->opacity_animation.running = linear_progress < 1.0;
+ 	return c->opacity_animation.running;
+diff --git a/src/config/option_defs.c b/src/config/option_defs.c
+index 6468b622..d728c73e 100644
+--- a/src/config/option_defs.c
++++ b/src/config/option_defs.c
+@@ -1002,6 +1002,18 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
+ 		} else {
+ 			convert_hex_to_rgba(config->shadowscolor, color);
+ 		}
++	} else if (strcmp(key, "shadows_color_inactive") == 0) {
++		int64_t color = parse_color(value);
++		if (color == -1) {
++			mango_error(false, WLR_ERROR,
++						"Invalid shadows_color_inactive "
++						"format: \033[1m\033[31m%s\033[0m\n",
++						value);
++			return false;
++		} else {
++			convert_hex_to_rgba(config->shadowscolor_inactive, color);
++			config->shadowscolor_inactive_set = true;
++		}
+ 	} else if (strcmp(key, "dim_enable") == 0) {
+ 		config->dim_enable = atoi(value);
+ 	} else if (strcmp(key, "dim_focused_color") == 0) {
+@@ -2595,6 +2607,7 @@ void set_value_default() {
+ 	config.shadowscolor[1] = 0.0f;
+ 	config.shadowscolor[2] = 0.0f;
+ 	config.shadowscolor[3] = 1.0f;
++	config.shadowscolor_inactive_set = false;
+ 
+ 	config.dim_enable = 0;
+ 	config.dim_focused_color[0] = 0.0f;
+diff --git a/src/config/reapply.c b/src/config/reapply.c
+index 9fe0911e..b4aa09b1 100644
+--- a/src/config/reapply.c
++++ b/src/config/reapply.c
+@@ -122,6 +122,9 @@ void reapply_property(void) {
+ 			}
+ 			client_set_group_config(c);
+ 			client_apply_tab_bar_config(c);
++			/* New border and shadow colours (wallust rewrites them on a
++			 * wallpaper change) show at once, not at the next focus change. */
++			client_update_border_color(c);
+ 		}
+ 	}
+ }
+diff --git a/src/manage/client.c b/src/manage/client.c
+index a86f7c8e..afc08042 100644
+--- a/src/manage/client.c
++++ b/src/manage/client.c
+@@ -1276,6 +1276,21 @@ float *get_border_color(Client *c) {
+ 	}
+ }
+ 
++/* As Hyprland's col.shadow / col.shadow_inactive: the focused window's shadow
++ * and everyone else's. */
++float *get_shadow_color(Client *c) {
++	if (c->mon == server.selected_monitor && server.selected_monitor &&
++		c == server.selected_monitor->sel)
++		return config.shadowscolor;
++	return config.shadowscolor_inactive_set ? config.shadowscolor_inactive
++											: config.shadowscolor;
++}
++
++void client_set_shadow_color(Client *c, const float color[4]) {
++	if (c->shadow)
++		wlr_scene_shadow_set_color(c->shadow, color);
++}
++
+ float *get_dim_color(Client *c) {
+ 
+ 	if (server.selected_monitor && server.selected_monitor->sel == c) {
+@@ -3758,11 +3773,17 @@ void client_update_border_color(Client *c) {
+ 
+ 	float *border_color = get_border_color(c);
+ 	float *dim_color = get_dim_color(c);
++	float *shadow_color = get_shadow_color(c);
+ 	memcpy(c->opacity_animation.target_border_color, border_color,
+ 		   sizeof(c->opacity_animation.target_border_color));
+ 	memcpy(c->opacity_animation.target_dim_color, dim_color,
+ 		   sizeof(c->opacity_animation.target_dim_color));
++	memcpy(c->opacity_animation.target_shadow_color, shadow_color,
++		   sizeof(c->opacity_animation.target_shadow_color));
++	memcpy(c->opacity_animation.current_shadow_color, shadow_color,
++		   sizeof(c->opacity_animation.current_shadow_color));
+ 	client_set_state_colors(c, border_color, dim_color);
++	client_set_shadow_color(c, shadow_color);
+ }
+ 
+ void client_add_dim_node(Client *c) {

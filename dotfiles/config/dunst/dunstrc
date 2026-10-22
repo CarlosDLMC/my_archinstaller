@@ -1,0 +1,265 @@
+[global]
+    # ------------------------------------------------------------------
+    # Look: a slip off the central terminal, in the fixed palette of the
+    # «ПУСК · ПУЛЬТ» power menu and the lock screen (PowerState.qml,
+    # hyprlock.conf): black, ink, a dim frame, red only for an alarm.
+    # Square, opaque and text only - the bar tells widgets apart by their
+    # label, never by a brand colour, and the cards do the same.
+    #
+    # Fixed on purpose, like the power menu: no wallust template to render
+    # and no dunst reload after every wallpaper change.
+    # ------------------------------------------------------------------
+    origin = top-center
+    # 12 px down: the bar reserves 12 px less than its height (the windows'
+    # top gap fills the rest, quickshell/bar/shell.qml), and dunst starts at
+    # the reserved edge - with no offset it overlapped the bar's bottom.
+    offset = (0, 12)
+    width = 600
+    height = (0, 400)
+    font = JetBrainsMono Nerd Font 16
+    alignment = left
+    corner_radius = 0
+    frame_width = 1
+    frame_color = "#6E7066"
+    background = "#000000"
+    foreground = "#D8D8D0"
+    padding = 14
+    horizontal_padding = 18
+    # Hyprland's gaps_in, so a stack is spaced like the tiles.
+    gap_size = 6
+    show_age_threshold = -1
+
+    # Default lifetime, in seconds, for a notification that does not ask for
+    # one of its own. This is what the toggle scripts in this repo get - a
+    # touchpad or gamemode toast is acknowledging something you just did, so
+    # it has no business staying on screen. A client that does ask (the
+    # `notify-send -t` in ScreenShot.sh, ScreenRecord.sh, handy) is honoured
+    # as sent, and messages are held open by the [messages] rule below.
+    timeout = 5
+
+    # Never let a client close its own notification. Without this an
+    # application can withdraw a notification before it has been read, which
+    # defeats the point of the never-expiring rules below.
+    ignore_dbusclose = true
+
+    # Default (20). Notifications past the limit are queued, not dropped.
+    notification_limit = 20
+
+    # Enable actions
+    enable_posix_regex = true
+
+    # No icons: the scripts send JaKooLit's colour PNGs and apps their brand
+    # icons. The stamp at the top of each card says who is talking instead.
+    icon_position = off
+
+    # Progress bar (volume, brightness): a flat ink meter across the card.
+    progress_bar = true
+    progress_bar_height = 8
+    progress_bar_frame_width = 1
+    progress_bar_corner_radius = 0
+    progress_bar_min_width = 150
+    progress_bar_max_width = 564
+    progress_bar_horizontal_alignment = left
+
+    # A reverse-video stamp with the sender, like the title tab of a TUI
+    # window, beside the summary in white; the body follows in ink. The
+    # [look_*] rules below swap the stamp for the desktop's own messages
+    # and for critical ones.
+    format = "<span font_desc='Terminess Nerd Font Bold 13' background='#6E7066' foreground='#000000' letter_spacing='1024' text_transform='uppercase'> %a </span>  <span foreground='#F2F2EC'><b>%s</b></span>\n%b"
+
+    # Layer - keep on top
+    layer = overlay
+
+    # Mouse actions. Left click is the dismiss gesture.
+    # Left click runs a notification's default action first - opens the chat of
+    # a message, takes you to the agent of a herdr notice (agent-notify.py) -
+    # then closes it. A notification without actions just closes, as before.
+    mouse_left_click = do_action, close_current
+    mouse_middle_click = close_all
+    # Right click dismisses a notification without running its action.
+    mouse_right_click = close_current
+
+    # History settings
+    sticky_history = yes
+    history_length = 20
+
+    # Nothing times out while the session has been idle this long, so stepping
+    # away does not cost you the notifications that arrived while you were
+    # gone. They resume counting down on your first keypress.
+    idle_threshold = 120
+
+[experimental]
+    pause_on_mouse_over = true
+
+# Urgency is told apart by brightness, as in the bar: a toast's frame is a
+# step darker than a notification's. Red is spent on critical alone.
+[urgency_low]
+    background = "#000000"
+    foreground = "#D8D8D0"
+    frame_color = "#45463F"
+    highlight = "#D8D8D0"
+
+[urgency_normal]
+    background = "#000000"
+    foreground = "#D8D8D0"
+    frame_color = "#6E7066"
+    highlight = "#D8D8D0"
+
+[urgency_critical]
+    background = "#000000"
+    foreground = "#F2F2EC"
+    frame_color = "#C42B1C"
+    highlight = "#C42B1C"
+
+# ------------------------------------------------------------------
+# Stamps. Only the look changes in this block - none of these rules
+# touches a timeout, so the lifetimes below behave exactly as before.
+#
+# Every script in this repo notifies through notify-send, which would
+# stamp them all NOTIFY-SEND. They are the desktop's own messages, so
+# they say СИСТЕМА, and they are set as one line: the scripts split one
+# sentence across summary and body ("Громкость:" + "62 %"), so on one
+# line it reads as that sentence again. (Upstream's own strings also
+# start each half with a space, left from swaync's centred layout - on
+# one line that is only a gap between the words.)
+#
+# A critical one gets a red ТРЕВОГА stamp instead, followed by the
+# sender when it is an application.
+# ------------------------------------------------------------------
+[look_system]
+    appname = "^notify-send$"
+    format = "<span font_desc='Terminess Nerd Font Bold 13' background='#6E7066' foreground='#000000' letter_spacing='1024'> СИСТЕМА </span>  <span foreground='#F2F2EC'><b>%s</b></span>  %b"
+
+[look_critical]
+    msg_urgency = critical
+    format = "<span font_desc='Terminess Nerd Font Bold 13' background='#C42B1C' foreground='#F2F2EC' letter_spacing='1024'> ТРЕВОГА </span><span font_desc='Terminess Nerd Font Bold 13' foreground='#C42B1C' letter_spacing='1024' text_transform='uppercase'> %a </span> <span foreground='#F2F2EC'><b>%s</b></span>\n%b"
+
+[look_critical_system]
+    msg_urgency = critical
+    appname = "^notify-send$"
+    format = "<span font_desc='Terminess Nerd Font Bold 13' background='#C42B1C' foreground='#F2F2EC' letter_spacing='1024'> ТРЕВОГА </span>  <span foreground='#F2F2EC'><b>%s</b></span>  %b"
+
+# herdr's agent notices (~/.config/herdr/agent-notify) stamp themselves АГЕНТ,
+# boxed by the normal format above. A blocked agent is sent critical, and there
+# ТРЕВОГА followed by a bare red АГЕНТ reads as a stamp with a stray word after
+# it - so it keeps the one АГЕНТ box, turned red.
+[look_agent_blocked]
+    appname = "^Агент$"
+    msg_urgency = critical
+    format = "<span font_desc='Terminess Nerd Font Bold 13' background='#C42B1C' foreground='#F2F2EC' letter_spacing='1024' text_transform='uppercase'> %a </span>  <span foreground='#F2F2EC'><b>%s</b></span>\n%b"
+
+# Messages from people are stamped like telegrams instead of with the app's
+# name: a personal chat (Telegram, WhatsApp) is a ТЕЛЕГРАММА, work (Slack)
+# is СЛУЖЕБНАЯ - an official one. A message the app itself sends critical
+# is a МОЛНИЯ, the express telegram, so that ТРЕВОГА stays the machine's own
+# alarm; none of these apps sends one today. The order matters: МОЛНИЯ
+# comes last so that it wins over both.
+[look_telegram]
+    appname = "^([Tt]elegram.*|ZapZap|[Ww]hats[Aa]pp.*)$"
+    format = "<span font_desc='Terminess Nerd Font Bold 13' background='#6E7066' foreground='#000000' letter_spacing='1024'> ТЕЛЕГРАММА </span>  <span foreground='#F2F2EC'><b>%s</b></span>\n%b"
+
+[look_official]
+    appname = "^[Ss]lack$"
+    format = "<span font_desc='Terminess Nerd Font Bold 13' background='#6E7066' foreground='#000000' letter_spacing='1024'> СЛУЖЕБНАЯ </span>  <span foreground='#F2F2EC'><b>%s</b></span>\n%b"
+
+[look_molniya]
+    appname = "^([Tt]elegram.*|ZapZap|[Ww]hats[Aa]pp.*|[Ss]lack)$"
+    msg_urgency = critical
+    format = "<span font_desc='Terminess Nerd Font Bold 13' background='#C42B1C' foreground='#F2F2EC' letter_spacing='1024'> МОЛНИЯ </span>  <span foreground='#F2F2EC'><b>%s</b></span>\n%b"
+
+# ------------------------------------------------------------------
+# One second: the toasts that only confirm an action you just took.
+#
+# A screenshot, a recording starting or stopping, the handy
+# transcription toggle. You already know what you did - the toast is
+# read at a glance or not at all. The scripts ask for far longer
+# (ScreenShot.sh 10s, ScreenRecord.sh 5s, the handy bind 1.5s), so
+# the request has to be overridden rather than left to `timeout`.
+# `set_transient = yes` lets them expire while the session is idle
+# too, so none of them survive to greet you when you come back.
+#
+# A rule's filters are ANDed, so each field needs its own rule. They
+# all sit above [messages] on purpose: a chat notification that
+# happens to say "Recording" is still held open by the rules below.
+# ------------------------------------------------------------------
+[flash_screenshot]
+    stack_tag = "^shot-notify$"
+    override_dbus_timeout = 1s
+    set_transient = yes
+
+# The "не сохранён" (not saved) paths send no stack tag. "Screenshot"
+# still matches the English originals.
+[flash_screenshot_untagged]
+    summary = "Screenshot|Снимок"
+    override_dbus_timeout = 1s
+    set_transient = yes
+
+[flash_recording]
+    stack_tag = "^record-notify$"
+    override_dbus_timeout = 1s
+    set_transient = yes
+
+# Covers the ScreenRecord.sh messages that are sent without a stack tag
+# ("Запись отменена", "Запись не идёт", "Запись уже идёт", "Ошибка
+# записи"); "Recording" still matches the English originals.
+[flash_recording_untagged]
+    summary = "Recording|Запис|запис"
+    override_dbus_timeout = 1s
+    set_transient = yes
+
+# The screenshot annotation tool confirming its own save.
+[flash_satty]
+    appname = "^satty$"
+    override_dbus_timeout = 1s
+    set_transient = yes
+
+# Matched on the body, not the summary: handy-start.sh sends its
+# first-run "pick a model" hint under the same "Handy" summary, and
+# that one is worth reading.
+[flash_handy_toggle]
+    body = "^(Toggling transcription|Переключение диктовки)$"
+    override_dbus_timeout = 1s
+    set_transient = yes
+
+# The other end: what a person sent you waits until it is clicked (left click
+# dismisses one, middle click dismisses all).
+#
+# `override_dbus_timeout = 0` is what actually enforces the waiting: a client's
+# own requested duration beats the `timeout` setting, so it has to be
+# overridden explicitly. `set_transient = no` stops a client marking a
+# notification transient, which would expire it regardless.
+#
+# Patterns are POSIX EREs, because enable_posix_regex = true above, so `.*` is
+# match-anything and `*` alone is not valid.
+#
+# Matching is on appname because that is the field that separates the two
+# classes here: every script in this repo notifies through `notify-send` and
+# says so, while a chat client reports its own name. `dunstctl history` prints
+# the appname of anything you want to add to this list.
+#
+# Disable temporarily with: dunstctl rule messages disable
+[messages]
+    appname = "^([Ss]lack|[Dd]iscord|[Tt]elegram.*|[Ss]ignal.*|Element|[Tt]hunderbird|[Ww]hats[Aa]pp|Beeper|Ferdium|Evolution|[Gg]eary)$"
+    override_dbus_timeout = 0
+    set_transient = no
+
+# The same, for any client that labels its notification as a message using the
+# freedesktop categories, so a chat app not named above is still covered.
+[messages_by_category]
+    category = "^(im|im\.received|email|email\.arrived)$"
+    override_dbus_timeout = 0
+    set_transient = no
+
+# herdr's agent notices: an agent that finished, or is waiting on you, is only
+# ever told to you this once, so it waits until it is clicked, like a message.
+[agent_notices]
+    appname = "^Агент$"
+    override_dbus_timeout = 0
+    set_transient = no
+
+# An error or a warning is not feedback you can afford to miss, whichever tool
+# raised it. Last rule, so it wins over everything above.
+[critical_never_expires]
+    msg_urgency = critical
+    override_dbus_timeout = 0
+    set_transient = no

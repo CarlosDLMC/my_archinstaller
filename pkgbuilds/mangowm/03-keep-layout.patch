@@ -1,0 +1,99 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: CarlosDLMC <delamorenacoco.carlos@gmail.com>
+Date: Thu, 22 Oct 2026 08:05:42 +0200
+Subject: [PATCH 03/15] config: reloads keep the keyboard layout; setoption
+ runs no exec lines
+
+reset_keyboard_layout set modifiers.group by hand after the new keymap had
+reset the xkb state, and gave every keyboard group 0: each reload and each
+setoption went back to the first layout. The current layout now goes through
+wlr_keyboard_notify_modifiers. setoption re-applies the config without running
+the exec= lines again (a reload still runs them, as Hyprland's exec).
+---
+ include/mango/config/parse.h |  1 +
+ src/config/reapply.c         | 10 ++++++++--
+ src/dispatch/bind.c          |  2 +-
+ src/input/keyboard.c         | 11 +++++++----
+ 4 files changed, 17 insertions(+), 7 deletions(-)
+
+diff --git a/include/mango/config/parse.h b/include/mango/config/parse.h
+index 4978de5b..369c2750 100644
+--- a/include/mango/config/parse.h
++++ b/include/mango/config/parse.h
+@@ -718,6 +718,7 @@ char **config_get_file_paths(int *count);
+ void reapply_tagrule(void);
+ 
+ void reset_option(void);
++void reapply_options(bool run_execs);
+ 
+ void reset_tag(int old_tag_num);
+ 
+diff --git a/src/config/reapply.c b/src/config/reapply.c
+index 2e3236e8..9fe0911e 100644
+--- a/src/config/reapply.c
++++ b/src/config/reapply.c
+@@ -152,14 +152,20 @@ void reapply_tagrule(void) {
+ 	}
+ }
+ 
+-void reset_option(void) {
++/* A config reload: everything, exec= lines included (as Hyprland's exec). */
++void reset_option(void) { reapply_options(true); }
++
++/* setoption applies one option: it re-applies the config as a reload does,
++ * but does not run the exec= lines again. */
++void reapply_options(bool run_execs) {
+ 	init_baked_points();
+ 	pointer_cursor_activity();
+ 	reset_keyboard_layout();
+ 	reset_blur_params();
+ 	set_env_without_display();
+ 	set_env_display();
+-	run_exec();
++	if (run_execs)
++		run_exec();
+ 
+ 	reapply_cursor_style();
+ 	reapply_property();
+diff --git a/src/dispatch/bind.c b/src/dispatch/bind.c
+index a64df77d..103b40ab 100644
+--- a/src/dispatch/bind.c
++++ b/src/dispatch/bind.c
+@@ -2276,7 +2276,7 @@ int32_t zoom(const Arg *arg) {
+ int32_t setoption(const Arg *arg) {
+ 	parse_option(&config, arg->v, arg->v2, 0);
+ 	override_config();
+-	reset_option();
++	reapply_options(false);
+ 	return 0;
+ }
+ 
+diff --git a/src/input/keyboard.c b/src/input/keyboard.c
+index 7d1f380c..b144d163 100644
+--- a/src/input/keyboard.c
++++ b/src/input/keyboard.c
+@@ -942,8 +942,11 @@ void reset_keyboard_layout(void) {
+ 
+ 	wlr_keyboard_set_keymap(keyboard, new_keymap);
+ 
+-	wlr_keyboard_notify_modifiers(keyboard, depressed, latched, locked_mods, 0);
+-	keyboard->modifiers.group = current; // Keep the same layout index
++	/* The new keymap's state starts on the first layout: hand the current
++	 * one back through the modifiers, which updates the xkb state too
++	 * (setting modifiers.group alone left keys and keybinds on layout 1). */
++	wlr_keyboard_notify_modifiers(keyboard, depressed, latched, locked_mods,
++								  current);
+ 
+ 	// Update seat
+ 	wlr_seat_set_keyboard(server.seat, keyboard);
+@@ -960,8 +963,8 @@ void reset_keyboard_layout(void) {
+ 		struct wlr_keyboard *tkb = (struct wlr_keyboard *)id->device_data;
+ 
+ 		wlr_keyboard_set_keymap(tkb, keyboard->keymap);
+-		wlr_keyboard_notify_modifiers(tkb, depressed, latched, locked_mods, 0);
+-		tkb->modifiers.group = 0;
++		wlr_keyboard_notify_modifiers(tkb, depressed, latched, locked_mods,
++									  current);
+ 
+ 		// 7. Update the seat
+ 		wlr_seat_set_keyboard(server.seat, tkb);

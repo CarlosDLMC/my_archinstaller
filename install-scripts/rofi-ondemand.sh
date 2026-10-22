@@ -12,7 +12,7 @@
 # quote-entry (a row with a " or \ in it no longer breaks the launcher's
 # preview hook). See pkgbuilds/rofi/PKGBUILD.
 #
-# Runs after 01-hypr-pkgs.sh, which installs the stock rofi. If this build
+# Runs after 01-desktop-pkgs.sh, which installs the stock rofi. If this build
 # fails, that stock rofi stays and the launcher works without click-to-focus,
 # so a failure is a warning here, not a failed package for the final check.
 

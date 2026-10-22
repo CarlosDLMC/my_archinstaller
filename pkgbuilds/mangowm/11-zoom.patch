@@ -1,0 +1,321 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: CarlosDLMC <delamorenacoco.carlos@gmail.com>
+Date: Thu, 22 Oct 2026 08:26:42 +0200
+Subject: [PATCH 11/15] output: desktop zoom around the cursor (zoom_by)
+
+zoom_by F multiplies the focused monitor's zoom by F, kept within 1..10, as
+Hyprland's cursor:zoom_factor (zoom_rigid off): the frame is magnified around
+the cursor, the point under it stays put and the view stays on the output.
+After the scene renders, a second pass draws that region of the frame over
+the whole output. While zoomed the scene redraws whole frames and the cursor
+is drawn in software, so it is magnified with them. The factor animates over
+animation_duration_zoom (800 ms) on animation_curve_zoom (Hyprland's default
+curve 0,0.75,0.15,1).
+---
+ include/mango/config/parse.h   |   2 +
+ include/mango/dispatch/bind.h  |   1 +
+ include/mango/manage/monitor.h |   9 +++
+ src/config/binding_parse.c     |   3 +
+ src/config/option_defs.c       |  19 +++++
+ src/dispatch/bind.c            |  21 ++++++
+ src/manage/monitor.c           | 124 +++++++++++++++++++++++++++++++++
+ 7 files changed, 179 insertions(+)
+
+diff --git a/include/mango/config/parse.h b/include/mango/config/parse.h
+index c2581342..afb25550 100644
+--- a/include/mango/config/parse.h
++++ b/include/mango/config/parse.h
+@@ -322,6 +322,8 @@ typedef struct {
+ 	int32_t group_focus_wrap;
+ 	int32_t fadeout_below_top;
+ 	int32_t special_slide_fade;
++	int32_t animation_duration_zoom;
++	double animation_curve_zoom[4];
+ 	int32_t animation_fade_out;
+ 	int32_t tag_animation_direction;
+ 	float zoom_initial_ratio;
+diff --git a/include/mango/dispatch/bind.h b/include/mango/dispatch/bind.h
+index 750b20d6..5beab6dc 100644
+--- a/include/mango/dispatch/bind.h
++++ b/include/mango/dispatch/bind.h
+@@ -119,6 +119,7 @@ int32_t destroy_all_virtual_output(const Arg *arg);
+ int32_t focus_last(const Arg *arg);
+ int32_t toggle_trackpad_enable(const Arg *arg);
+ int32_t hide_cursor(const Arg *arg);
++int32_t zoom_by(const Arg *arg);
+ int32_t setoption(const Arg *arg);
+ int32_t disable_monitor(const Arg *arg);
+ int32_t enable_monitor(const Arg *arg);
+diff --git a/include/mango/manage/monitor.h b/include/mango/manage/monitor.h
+index 44a02f29..4703e734 100644
+--- a/include/mango/manage/monitor.h
++++ b/include/mango/manage/monitor.h
+@@ -93,6 +93,14 @@ struct Monitor {
+ 	struct wlr_color_transform
+ 		*icc_transform; /* ICC transform loaded from the ICC file. */
+ 	char icc_path[PATH_MAX];
++	/* Desktop zoom around the cursor (zoom_by): the factor now, where it
++	 * animates from and to, and whether the cursor is drawn in software (so
++	 * it is magnified with the frame). */
++	double zoom_current;
++	double zoom_from;
++	double zoom_target;
++	uint32_t zoom_time_started;
++	bool zoom_cursor_locked;
+ };
+ 
+ struct Pertag {
+@@ -124,6 +132,7 @@ bool is_overcircle_mode(const Monitor *m);
+ void special_update_dim(Monitor *m);
+ void special_sync_top_layer(bool special_active);
+ void fadeout_layer_sync(void);
++bool monitor_zoom_step(Monitor *m);
+ uint32_t get_tag_status(uint32_t tag, Monitor *m);
+ uint32_t get_tags_first_tag_num(uint32_t source_tags);
+ uint32_t get_tags_first_tag(uint32_t source_tags);
+diff --git a/src/config/binding_parse.c b/src/config/binding_parse.c
+index 983ac24c..7c33434a 100644
+--- a/src/config/binding_parse.c
++++ b/src/config/binding_parse.c
+@@ -638,6 +638,9 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
+ 		func = toggle_trackpad_enable;
+ 	} else if (strcmp(func_name, "hide_cursor") == 0) {
+ 		func = hide_cursor;
++	} else if (strcmp(func_name, "zoom_by") == 0) {
++		func = zoom_by;
++		(*arg).f = atof(arg_value);
+ 	} else if (strcmp(func_name, "setoption") == 0) {
+ 		func = setoption;
+ 
+diff --git a/src/config/option_defs.c b/src/config/option_defs.c
+index 2939c177..c84efb90 100644
+--- a/src/config/option_defs.c
++++ b/src/config/option_defs.c
+@@ -85,6 +85,16 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
+ 		config->fadeout_below_top = atoi(value);
+ 	} else if (strcmp(key, "special_slide_fade") == 0) {
+ 		config->special_slide_fade = atoi(value);
++	} else if (strcmp(key, "animation_duration_zoom") == 0) {
++		config->animation_duration_zoom = atoi(value);
++	} else if (strcmp(key, "animation_curve_zoom") == 0) {
++		if (parse_double_array(value, config->animation_curve_zoom, 4) != 4) {
++			mango_error(false, WLR_ERROR,
++						"Failed to parse animation_curve_zoom: "
++						"\033[1m\033[31m%s\033[0m\n",
++						value);
++			return false;
++		}
+ 	} else if (strcmp(key, "animation_fade_out") == 0) {
+ 		config->animation_fade_out = atoi(value);
+ 	} else if (strcmp(key, "tag_animation_direction") == 0) {
+@@ -2445,6 +2455,13 @@ void set_value_default() {
+ 	config.group_focus_wrap = 0;
+ 	config.fadeout_below_top = 0;
+ 	config.special_slide_fade = 0;
++	/* Hyprland's zoomFactor animation unconfigured: global, 800 ms, its
++	 * "default" curve. */
++	config.animation_duration_zoom = 800;
++	config.animation_curve_zoom[0] = 0.0;
++	config.animation_curve_zoom[1] = 0.75;
++	config.animation_curve_zoom[2] = 0.15;
++	config.animation_curve_zoom[3] = 1.0;
+ 	config.animation_fade_out = 1;
+ 	config.tag_animation_direction = HORIZONTAL;
+ 	config.zoom_initial_ratio = 0.4f;
+@@ -2810,6 +2827,8 @@ void override_config(void) {
+ 	config.group_focus_wrap = CLAMP_INT(config.group_focus_wrap, 0, 1);
+ 	config.fadeout_below_top = CLAMP_INT(config.fadeout_below_top, 0, 1);
+ 	config.special_slide_fade = CLAMP_INT(config.special_slide_fade, 0, 1);
++	config.animation_duration_zoom =
++		CLAMP_INT(config.animation_duration_zoom, 0, 50000);
+ 	config.animation_fade_out = CLAMP_INT(config.animation_fade_out, 0, 1);
+ 	config.zoom_initial_ratio =
+ 		CLAMP_FLOAT(config.zoom_initial_ratio, 0.1f, 1.0f);
+diff --git a/src/dispatch/bind.c b/src/dispatch/bind.c
+index a3432a74..a0da0529 100644
+--- a/src/dispatch/bind.c
++++ b/src/dispatch/bind.c
+@@ -2419,6 +2419,27 @@ int32_t zoom(const Arg *arg) {
+ 	return 0;
+ }
+ 
++/* Desktop zoom around the cursor, as Hyprland's cursor:zoom_factor: the
++ * focused monitor's factor times arg->f, kept within 1..10, animated. */
++int32_t zoom_by(const Arg *arg) {
++	Monitor *m = server.selected_monitor;
++	if (!m || arg->f <= 0.0f)
++		return 0;
++	if (m->zoom_target < 1.0)
++		m->zoom_target = 1.0;
++	if (m->zoom_current < 1.0)
++		m->zoom_current = 1.0;
++	double target = m->zoom_target * arg->f;
++	target = target < 1.0 ? 1.0 : target > 10.0 ? 10.0 : target;
++	if (target == m->zoom_target)
++		return 0;
++	m->zoom_from = m->zoom_current;
++	m->zoom_target = target;
++	m->zoom_time_started = get_now_in_ms();
++	wlr_output_schedule_frame(m->wlr_output);
++	return 0;
++}
++
+ /* Hides the cursor now, until the pointer moves (a screensaver starting). */
+ int32_t hide_cursor(const Arg *arg) {
+ 	(void)arg;
+diff --git a/src/manage/monitor.c b/src/manage/monitor.c
+index 99be1432..700adbd3 100644
+--- a/src/manage/monitor.c
++++ b/src/manage/monitor.c
+@@ -23,6 +23,9 @@
+ #include "mango/manage/title-message-bar.h"
+ #include "mango/manage/xwayland_primary.h"
+ #include <fcntl.h>
++#include <wlr/render/swapchain.h>
++#include <wlr/render/wlr_renderer.h>
++#include <wlr/types/wlr_damage_ring.h>
+ #include <scenefx/render/fx_renderer/fx_renderer.h>
+ #include <scenefx/types/wlr_scene.h>
+ #include <unistd.h>
+@@ -381,6 +384,123 @@ bool blur_layer_on_wallpaper(uint32_t layer) {
+ 	}
+ }
+ 
++/* y of the CSS cubic-bezier (x1, y1, x2, y2) at x. */
++static double zoom_curve_at(double x) {
++	const double *p = config.animation_curve_zoom;
++	double lo = 0.0, hi = 1.0, t = x;
++	for (int32_t i = 0; i < 40; i++) {
++		t = (lo + hi) / 2;
++		double bx = 3 * t * (1 - t) * (1 - t) * p[0] +
++					3 * t * t * (1 - t) * p[2] + t * t * t;
++		if (bx < x)
++			lo = t;
++		else
++			hi = t;
++	}
++	return 3 * t * (1 - t) * (1 - t) * p[1] + 3 * t * t * (1 - t) * p[3] +
++		   t * t * t;
++}
++
++/*
++ * Advances the monitor's zoom animation. While zoomed, the scene renders the
++ * whole frame each time (the magnifying pass reads all of it, and the
++ * swapchain buffers it hands out hold magnified frames), and the cursor is
++ * drawn in software so it is magnified too. Returns whether another frame is
++ * needed for the animation.
++ */
++bool monitor_zoom_step(Monitor *m) {
++	if (m->zoom_target < 1.0)
++		m->zoom_target = 1.0;
++	if (m->zoom_current < 1.0)
++		m->zoom_current = 1.0;
++
++	bool animating = m->zoom_current != m->zoom_target;
++	bool was_zoomed = m->zoom_current > 1.0;
++	if (animating) {
++		uint32_t passed = get_now_in_ms() - m->zoom_time_started;
++		double t = config.animation_duration_zoom > 0
++					   ? (double)passed / config.animation_duration_zoom
++					   : 1.0;
++		if (t >= 1.0) {
++			m->zoom_current = m->zoom_target;
++			animating = false;
++		} else {
++			m->zoom_current = m->zoom_from + (m->zoom_target - m->zoom_from) *
++												 zoom_curve_at(t);
++		}
++	}
++
++	bool zoomed = m->zoom_current > 1.0;
++	if (zoomed != m->zoom_cursor_locked) {
++		wlr_output_lock_software_cursors(m->wlr_output, zoomed);
++		m->zoom_cursor_locked = zoomed;
++	}
++	if (zoomed || was_zoomed)
++		wlr_damage_ring_add_whole(&m->scene_output->damage_ring);
++	return animating;
++}
++
++/* Replaces the frame in state with the part of it around the cursor,
++ * magnified m->zoom_current times: the point under the cursor stays put, and
++ * the region is kept on the output (Hyprland's zoom, zoom_rigid off). */
++static void monitor_zoom_apply(Monitor *m, struct wlr_output_state *state) {
++	struct wlr_output *output = m->wlr_output;
++	if (!(state->committed & WLR_OUTPUT_STATE_BUFFER) || !state->buffer ||
++		!output->swapchain || output->transform != WL_OUTPUT_TRANSFORM_NORMAL)
++		return;
++
++	double f = m->zoom_current;
++	double w = state->buffer->width, h = state->buffer->height;
++	double cx = (server.cursor->x - m->m.x) * output->scale;
++	double cy = (server.cursor->y - m->m.y) * output->scale;
++	cx = cx < 0 ? 0 : cx > w ? w : cx;
++	cy = cy < 0 ? 0 : cy > h ? h : cy;
++	struct wlr_fbox src = {
++		.x = cx - cx / f,
++		.y = cy - cy / f,
++		.width = w / f,
++		.height = h / f,
++	};
++	src.x = src.x < 0 ? 0 : src.x > w - src.width ? w - src.width : src.x;
++	src.y = src.y < 0 ? 0 : src.y > h - src.height ? h - src.height : src.y;
++
++	struct wlr_texture *texture =
++		wlr_texture_from_buffer(server.renderer, state->buffer);
++	if (!texture)
++		return;
++	struct wlr_buffer *dst = wlr_swapchain_acquire(output->swapchain);
++	if (!dst) {
++		wlr_texture_destroy(texture);
++		return;
++	}
++	struct wlr_render_pass *pass =
++		wlr_renderer_begin_buffer_pass(server.renderer, dst, NULL);
++	if (!pass) {
++		wlr_buffer_unlock(dst);
++		wlr_texture_destroy(texture);
++		return;
++	}
++	wlr_render_pass_add_texture(
++		pass, &(struct wlr_render_texture_options){
++				  .texture = texture,
++				  .src_box = src,
++				  .dst_box = {.width = (int32_t)w, .height = (int32_t)h},
++				  .filter_mode = WLR_SCALE_FILTER_BILINEAR,
++			  });
++	bool ok = wlr_render_pass_submit(pass);
++	wlr_texture_destroy(texture);
++	if (!ok) {
++		wlr_buffer_unlock(dst);
++		return;
++	}
++	wlr_output_state_set_buffer(state, dst);
++	wlr_buffer_unlock(dst);
++	pixman_region32_t damage;
++	pixman_region32_init_rect(&damage, 0, 0, (int32_t)w, (int32_t)h);
++	wlr_output_state_set_damage(state, &damage);
++	pixman_region32_fini(&damage);
++}
++
+ bool mango_scene_output_commit(struct wlr_scene_output *scene_output,
+ 							   struct wlr_output_state *state) {
+ 	struct wlr_output *wlr_output = scene_output->output;
+@@ -413,6 +533,9 @@ bool mango_scene_output_commit(struct wlr_scene_output *scene_output,
+ 	if (!wlr_scene_output_build_state(scene_output, state, &opts))
+ 		return false;
+ 
++	if (m->zoom_current > 1.0)
++		monitor_zoom_apply(m, state);
++
+ 	if (frame_allow_tearing) {
+ 		state->tearing_page_flip = true;
+ 	} else {
+@@ -1394,6 +1517,7 @@ void handle_output_frame(struct wl_listener *listener, void *data) {
+ 		monitor_stop_skip_frame_timer(m);
+ 	}
+ 
++	need_more_frames = monitor_zoom_step(m) || need_more_frames;
+ 	mango_scene_output_commit(m->scene_output, &m->pending);
+ 
+ skip:

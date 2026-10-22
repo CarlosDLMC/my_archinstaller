@@ -64,7 +64,7 @@ else
 
   git clone "https://aur.archlinux.org/$pkg.git" "$BUILD_DIR" || { printf "%s - Failed to clone ${YELLOW}$pkg${RESET} from AUR\n" "${ERROR}"; exit 1; }
 
-  # rust first, by name, for the reason in 01-hypr-pkgs.sh: paru makedepends on
+  # rust first, by name, for the reason in 01-desktop-pkgs.sh: paru makedepends on
   # cargo, and on CachyOS `makepkg -s` would satisfy that with cachyos-extra's
   # rustup, which has no default toolchain - paru's prepare() runs a bare
   # `cargo update` / `cargo fetch` with no RUSTUP_TOOLCHAIN, so the build failed
