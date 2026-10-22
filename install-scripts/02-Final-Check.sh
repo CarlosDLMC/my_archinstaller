@@ -233,7 +233,8 @@ if selected dots; then
     check_outcome "dotfiles not deployed: ~/.config/zsh/herdr-layouts.zsh is missing - hdl/hds/hdlm/hsl will not exist (Hyprland-Dots/copy.sh)" \
         test -f "$HOME/.config/zsh/herdr-layouts.zsh"
     # That the mango this run installed accepts the config, not only that the
-    # file exists. mango.sh pins no version - an option the new version renamed
+    # file exists. The config needs the patched mango (mango-patched.sh): a
+    # stock one left by a failed build, or an option a new version renamed,
     # would otherwise first show at the graphical login, after the automatic
     # reboot. -p only parses (every sourced file too) and exits non-zero on an
     # error: offline, with no display and no runtime directory needed.

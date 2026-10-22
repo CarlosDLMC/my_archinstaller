@@ -1,0 +1,232 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: CarlosDLMC <delamorenacoco.carlos@gmail.com>
+Date: Thu, 22 Oct 2026 08:18:25 +0200
+Subject: [PATCH 08/12] group bar: gaps between tabs, a font for the focused
+ tab
+
+group_bar_gap: pixels between the tabs (Hyprland's groupbar:gaps_in);
+the tab width is the bar minus the gaps, shared out.
+group_bar_decorate_focus_font_desc: the focused tab's font, so the active
+title can be medium and the others normal (font_weight_active/inactive);
+unset, every tab uses group_bar_decorate_font_desc.
+---
+ include/mango/config/parse.h   |  1 +
+ include/mango/draw/text-node.h |  3 +++
+ src/animation/client.c         | 11 ++++++++---
+ src/config/cleanup.c           |  4 ++++
+ src/config/load.c              |  1 +
+ src/config/option_defs.c       |  8 ++++++++
+ src/draw/text-node.c           | 21 +++++++++++++++------
+ 7 files changed, 40 insertions(+), 9 deletions(-)
+
+diff --git a/include/mango/config/parse.h b/include/mango/config/parse.h
+index 7b7a0ebc..5565ea48 100644
+--- a/include/mango/config/parse.h
++++ b/include/mango/config/parse.h
+@@ -504,6 +504,7 @@ typedef struct {
+ 	uint32_t special_gappov;
+ 	uint32_t borderpx;
+ 	uint32_t group_bar_height;
++	int32_t group_bar_gap; /* between tabs, as Hyprland's groupbar:gaps_in */
+ 	uint32_t tab_bar_height;
+ 	uint32_t title_message_bar_height;
+ 	uint32_t title_message_bar_gap;
+diff --git a/include/mango/draw/text-node.h b/include/mango/draw/text-node.h
+index ec9d8022..668cd909 100644
+--- a/include/mango/draw/text-node.h
++++ b/include/mango/draw/text-node.h
+@@ -24,6 +24,8 @@ typedef struct {
+ 	int32_t padding_x;
+ 	int32_t padding_y;
+ 	const char *font_desc;
++	/* The focused bar's font; NULL: font_desc. */
++	const char *focus_font_desc;
+ } DecorateDrawData;
+ 
+ struct mango_text_buffer {
+@@ -95,6 +97,7 @@ typedef struct MangoBarDecoration {
+ 	int32_t padding_x;
+ 	int32_t padding_y;
+ 	char *font_desc;
++	char *focus_font_desc;
+ 
+ 	int32_t target_width;
+ 	int32_t target_height;
+diff --git a/src/animation/client.c b/src/animation/client.c
+index c8d615dc..127421ac 100644
+--- a/src/animation/client.c
++++ b/src/animation/client.c
+@@ -535,15 +535,20 @@ void client_draw_group_bar(Client *c, struct ivec2 offsets) {
+ 		client_check_tab_node_visible(c);
+ 	}
+ 
+-	int32_t bar_w = tw / count;
+-	int32_t rem = tw % count;
++	/* group_bar_gap between the tabs, as Hyprland's groupbar:gaps_in. */
++	int32_t gap = config.group_bar_gap;
++	if (gap * (count - 1) >= tw)
++		gap = 0;
++	int32_t bars_w = tw - gap * (count - 1);
++	int32_t bar_w = bars_w / count;
++	int32_t rem = bars_w % count;
+ 	int32_t x = tab_x;
+ 	cur = client_group_head(c);
+ 
+ 	for (int i = 0; i < count && cur; i++) {
+ 		int32_t w = bar_w + (i < rem ? 1 : 0);
+ 		global_draw_group_bar(cur, x, tab_y, w, th);
+-		x += w;
++		x += w + gap;
+ 		cur = cur->group_next;
+ 	}
+ }
+diff --git a/src/config/cleanup.c b/src/config/cleanup.c
+index f564ddfd..71012fea 100644
+--- a/src/config/cleanup.c
++++ b/src/config/cleanup.c
+@@ -327,6 +327,10 @@ void free_config(void) {
+ 		free((void *)config.groupbardata.font_desc);
+ 		config.groupbardata.font_desc = NULL;
+ 	}
++	if (config.groupbardata.focus_font_desc) {
++		free((void *)config.groupbardata.focus_font_desc);
++		config.groupbardata.focus_font_desc = NULL;
++	}
+ 
+ 	if (config.tabbardata.font_desc) {
+ 		free((void *)config.tabbardata.font_desc);
+diff --git a/src/config/load.c b/src/config/load.c
+index 8b2c2750..de78cba5 100644
+--- a/src/config/load.c
++++ b/src/config/load.c
+@@ -383,6 +383,7 @@ bool parse_config(void) {
+ 	config.cursor_theme = NULL;
+ 	config.jumplabeldata.font_desc = NULL;
+ 	config.groupbardata.font_desc = NULL;
++	config.groupbardata.focus_font_desc = NULL;
+ 	config.title_message_bardata.font_desc = NULL;
+ 	config.jump_labels = NULL;
+ 	strcpy(config.keymode, "default");
+diff --git a/src/config/option_defs.c b/src/config/option_defs.c
+index 01ced5dc..a223871f 100644
+--- a/src/config/option_defs.c
++++ b/src/config/option_defs.c
+@@ -602,6 +602,12 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
+ 		if (config->groupbardata.font_desc)
+ 			free((void *)config->groupbardata.font_desc);
+ 		config->groupbardata.font_desc = strdup(value);
++	} else if (strcmp(key, "group_bar_decorate_focus_font_desc") == 0) {
++		if (config->groupbardata.focus_font_desc)
++			free((void *)config->groupbardata.focus_font_desc);
++		config->groupbardata.focus_font_desc = strdup(value);
++	} else if (strcmp(key, "group_bar_gap") == 0) {
++		config->group_bar_gap = atoi(value);
+ 	} else if (strcmp(key, "group_bar_decorate_fg_color") == 0) {
+ 		int64_t color = parse_color(value);
+ 		if (color == -1) {
+@@ -2540,6 +2546,7 @@ void set_value_default() {
+ 
+ 	config.borderpx = 4;
+ 	config.group_bar_height = 33;
++	config.group_bar_gap = 0;
+ 	config.tab_bar_height = 33;
+ 	config.title_message_bar_height = 52;
+ 	config.title_message_bar_gap = 20;
+@@ -2990,6 +2997,7 @@ void override_config(void) {
+ 	config.special_gappov = CLAMP_INT(config.special_gappov, 0, 1000);
+ 	config.borderpx = CLAMP_INT(config.borderpx, 0, 200);
+ 	config.group_bar_height = CLAMP_INT(config.group_bar_height, 0, 500);
++	config.group_bar_gap = CLAMP_INT(config.group_bar_gap, 0, 500);
+ 	config.tab_bar_height = CLAMP_INT(config.tab_bar_height, 0, 500);
+ 	config.title_message_bar_height =
+ 		CLAMP_INT(config.title_message_bar_height, 0, 500);
+diff --git a/src/draw/text-node.c b/src/draw/text-node.c
+index 00c23179..82ac95fd 100644
+--- a/src/draw/text-node.c
++++ b/src/draw/text-node.c
+@@ -661,6 +661,8 @@ MangoBarDecoration *mango_bar_decoration_create(void *cdata, uint32_t type,
+ 	mangobar->padding_y = data.padding_y;
+ 	mangobar->font_desc =
+ 		g_strdup(data.font_desc ? data.font_desc : "monospace Bold 13");
++	mangobar->focus_font_desc =
++		data.focus_font_desc ? g_strdup(data.focus_font_desc) : NULL;
+ 
+ 	mangobar->target_width = width;
+ 	mangobar->target_height = height;
+@@ -707,6 +709,7 @@ void mango_bar_decoration_destroy(MangoBarDecoration *node) {
+ 	measure_finish(&node->measure);
+ 
+ 	g_free(node->font_desc);
++	g_free(node->focus_font_desc);
+ 	g_free(node->cached_text);
+ 	g_free(node->cached_font_desc);
+ 	g_free(node->last_text);
+@@ -917,12 +920,15 @@ void mango_bar_decoration_update(MangoBarDecoration *node, const char *text,
+ 
+ 	const float *fg_color =
+ 		node->focused ? node->focus_fg_color : node->fg_color;
++	const char *font_desc = node->focused && node->focus_font_desc
++								? node->focus_font_desc
++								: node->font_desc;
+ 
+ 	int32_t avail_w = bar_decoration_avail_width(node);
+ 	int32_t avail_pixel_w = (int32_t)(avail_w * scale + 0.5f);
+ 
+ 	int32_t natural_pixel_w = 0, natural_pixel_h = 0;
+-	measure_text(&node->measure, node->font_desc, text, scale, &natural_pixel_w,
++	measure_text(&node->measure, font_desc, text, scale, &natural_pixel_w,
+ 				 &natural_pixel_h);
+ 
+ 	bool overlong = avail_pixel_w > 0 && natural_pixel_w > avail_pixel_w;
+@@ -931,7 +937,7 @@ void mango_bar_decoration_update(MangoBarDecoration *node, const char *text,
+ 	bool dirty =
+ 		node->cached_scale != scale || !node->cached_text ||
+ 		strcmp(node->cached_text, text) != 0 || !node->cached_font_desc ||
+-		strcmp(node->cached_font_desc, node->font_desc) != 0 ||
++		strcmp(node->cached_font_desc, font_desc) != 0 ||
+ 		memcmp(node->cached_fg_color, fg_color, sizeof(node->fg_color)) != 0 ||
+ 		node->cached_focused != node->focused ||
+ 		node->cached_center_secondary_line != node->center_secondary_line ||
+@@ -941,7 +947,7 @@ void mango_bar_decoration_update(MangoBarDecoration *node, const char *text,
+ 		char *ellipsized = NULL;
+ 		const char *display = text;
+ 		if (overlong) {
+-			ellipsized = text_ellipsize(&node->measure, node->font_desc, text,
++			ellipsized = text_ellipsize(&node->measure, font_desc, text,
+ 										scale, avail_pixel_w);
+ 			display = ellipsized;
+ 		}
+@@ -949,7 +955,7 @@ void mango_bar_decoration_update(MangoBarDecoration *node, const char *text,
+ 		g_free(node->cached_text);
+ 		node->cached_text = g_strdup(text);
+ 		g_free(node->cached_font_desc);
+-		node->cached_font_desc = g_strdup(node->font_desc);
++		node->cached_font_desc = g_strdup(font_desc);
+ 		node->cached_scale = scale;
+ 		memcpy(node->cached_fg_color, fg_color, sizeof(node->cached_fg_color));
+ 		node->cached_focused = node->focused;
+@@ -962,12 +968,12 @@ void mango_bar_decoration_update(MangoBarDecoration *node, const char *text,
+ 		if (second_line) {
+ 			char *first = g_strndup(display, second_line - display);
+ 			surface = text_surface_create_two_lines(
+-				&node->measure, node->font_desc, first, second_line + 1, scale,
++				&node->measure, font_desc, first, second_line + 1, scale,
+ 				fg_color, &node->surface_pixel_w, &node->surface_pixel_h);
+ 			g_free(first);
+ 		} else {
+ 			surface = text_surface_create(
+-				&node->measure, node->font_desc, display, scale, fg_color,
++				&node->measure, font_desc, display, scale, fg_color,
+ 				&node->surface_pixel_w, &node->surface_pixel_h);
+ 		}
+ 		text_node_install(node->scene_buffer, &node->buffer, surface,
+@@ -1112,6 +1118,9 @@ void mango_bar_decoration_apply_config(MangoBarDecoration *node,
+ 	g_free(node->font_desc);
+ 	node->font_desc =
+ 		g_strdup(data->font_desc ? data->font_desc : "monospace Bold 13");
++	g_free(node->focus_font_desc);
++	node->focus_font_desc =
++		data->focus_font_desc ? g_strdup(data->focus_font_desc) : NULL;
+ 
+ 	if (node->last_text) {
+ 		float scale = node->last_scale > 0.0f ? node->last_scale : 1.0f;

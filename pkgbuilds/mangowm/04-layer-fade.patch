@@ -1,0 +1,256 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: CarlosDLMC <delamorenacoco.carlos@gmail.com>
+Date: Thu, 22 Oct 2026 08:08:36 +0200
+Subject: [PATCH 04/12] animation: layer surfaces get their own fade timing and
+ curves
+
+animation_duration_layer_open/close and animation_curve_layer_fade_in/out;
+unset, they fall back to the window open/close durations and fade curves as
+before. Hyprland times layer fades apart from windows (fadeLayersIn/Out).
+---
+ include/mango/animation/common.h | 14 +++++++++++++-
+ include/mango/common/server.h    |  2 ++
+ include/mango/config/parse.h     |  8 ++++++++
+ src/animation/common.c           | 22 ++++++++++++++++++++++
+ src/animation/layer.c            |  9 ++++++---
+ src/config/cleanup.c             |  8 ++++++++
+ src/config/option_defs.c         | 32 ++++++++++++++++++++++++++++++++
+ src/manage/layer.c               |  4 +++-
+ 8 files changed, 94 insertions(+), 5 deletions(-)
+
+diff --git a/include/mango/animation/common.h b/include/mango/animation/common.h
+index e0b664ac..60c0c74e 100644
+--- a/include/mango/animation/common.h
++++ b/include/mango/animation/common.h
+@@ -11,7 +11,19 @@
+ #define BAKED_POINTS_COUNT 256
+ 
+ /* What is currently being animated / which animation phase is running. */
+-enum { NONE, OPEN, MOVE, CLOSE, TAG, FOCUS, OPAFADEIN, OPAFADEOUT, OVERVIEW };
++enum {
++	NONE,
++	OPEN,
++	MOVE,
++	CLOSE,
++	TAG,
++	FOCUS,
++	OPAFADEIN,
++	OPAFADEOUT,
++	OVERVIEW,
++	LAYERFADEIN,
++	LAYERFADEOUT
++};
+ 
+ struct dvec2 {
+ 	double x, y;
+diff --git a/include/mango/common/server.h b/include/mango/common/server.h
+index 007d43ae..ac1c21dc 100644
+--- a/include/mango/common/server.h
++++ b/include/mango/common/server.h
+@@ -197,6 +197,8 @@ struct MangoServer {
+ 	struct dvec2 *baked_points_focus;
+ 	struct dvec2 *baked_points_opafadein;
+ 	struct dvec2 *baked_points_opafadeout;
++	struct dvec2 *baked_points_layerfadein;
++	struct dvec2 *baked_points_layerfadeout;
+ 
+ 	/* Cursor hiding / input keep-alive */
+ 	struct wl_event_source *hide_cursor_source;
+diff --git a/include/mango/config/parse.h b/include/mango/config/parse.h
+index 369c2750..8e312d1d 100644
+--- a/include/mango/config/parse.h
++++ b/include/mango/config/parse.h
+@@ -334,6 +334,14 @@ typedef struct {
+ 	double animation_curve_focus[4];
+ 	double animation_curve_opafadein[4];
+ 	double animation_curve_opafadeout[4];
++	/* Layer surfaces: their own fade timing and curves; -1 / unset fall
++	 * back to the window ones. */
++	int32_t animation_duration_layer_open;
++	int32_t animation_duration_layer_close;
++	double animation_curve_layer_fade_in[4];
++	double animation_curve_layer_fade_out[4];
++	bool layer_fade_in_curve_set;
++	bool layer_fade_out_curve_set;
+ 
+ 	int32_t scroller_structs;
+ 	float scroller_default_proportion;
+diff --git a/src/animation/common.c b/src/animation/common.c
+index d5418437..7a6c4bde 100644
+--- a/src/animation/common.c
++++ b/src/animation/common.c
+@@ -25,6 +25,14 @@ struct dvec2 calculate_animation_curve_at(double t, int32_t type) {
+ 		animation_curve = config.animation_curve_opafadein;
+ 	} else if (type == OPAFADEOUT) {
+ 		animation_curve = config.animation_curve_opafadeout;
++	} else if (type == LAYERFADEIN) {
++		animation_curve = config.layer_fade_in_curve_set
++							  ? config.animation_curve_layer_fade_in
++							  : config.animation_curve_opafadein;
++	} else if (type == LAYERFADEOUT) {
++		animation_curve = config.layer_fade_out_curve_set
++							  ? config.animation_curve_layer_fade_out
++							  : config.animation_curve_opafadeout;
+ 	} else {
+ 		animation_curve = config.animation_curve_move;
+ 	}
+@@ -57,6 +65,10 @@ void init_baked_points(void) {
+ 		calloc(BAKED_POINTS_COUNT, sizeof(*server.baked_points_opafadein));
+ 	server.baked_points_opafadeout =
+ 		calloc(BAKED_POINTS_COUNT, sizeof(*server.baked_points_opafadeout));
++	server.baked_points_layerfadein =
++		calloc(BAKED_POINTS_COUNT, sizeof(*server.baked_points_layerfadein));
++	server.baked_points_layerfadeout =
++		calloc(BAKED_POINTS_COUNT, sizeof(*server.baked_points_layerfadeout));
+ 
+ 	for (int32_t i = 0; i < BAKED_POINTS_COUNT; i++) {
+ 		server.baked_points_move[i] = calculate_animation_curve_at(
+@@ -86,6 +98,12 @@ void init_baked_points(void) {
+ 		server.baked_points_opafadeout[i] = calculate_animation_curve_at(
+ 			(double)i / (BAKED_POINTS_COUNT - 1), OPAFADEOUT);
+ 	}
++	for (int32_t i = 0; i < BAKED_POINTS_COUNT; i++) {
++		server.baked_points_layerfadein[i] = calculate_animation_curve_at(
++			(double)i / (BAKED_POINTS_COUNT - 1), LAYERFADEIN);
++		server.baked_points_layerfadeout[i] = calculate_animation_curve_at(
++			(double)i / (BAKED_POINTS_COUNT - 1), LAYERFADEOUT);
++	}
+ }
+ double find_animation_curve_at(double t, int32_t type) {
+ 	int32_t down = 0;
+@@ -107,6 +125,10 @@ double find_animation_curve_at(double t, int32_t type) {
+ 		baked_points = server.baked_points_opafadein;
+ 	} else if (type == OPAFADEOUT) {
+ 		baked_points = server.baked_points_opafadeout;
++	} else if (type == LAYERFADEIN) {
++		baked_points = server.baked_points_layerfadein;
++	} else if (type == LAYERFADEOUT) {
++		baked_points = server.baked_points_layerfadeout;
+ 	} else {
+ 		baked_points = server.baked_points_move;
+ 	}
+diff --git a/src/animation/layer.c b/src/animation/layer.c
+index 936abdfa..f15991a0 100644
+--- a/src/animation/layer.c
++++ b/src/animation/layer.c
+@@ -363,7 +363,7 @@ void fadeout_layer_animation_next_tick(LayerSurface *l) {
+ 	};
+ 
+ 	double opacity_eased_progress =
+-		find_animation_curve_at(animation_passed, OPAFADEOUT);
++		find_animation_curve_at(animation_passed, LAYERFADEOUT);
+ 
+ 	double percent = config.fadeout_begin_opacity -
+ 					 (opacity_eased_progress * config.fadeout_begin_opacity);
+@@ -408,7 +408,7 @@ void layer_animation_next_tick(LayerSurface *l) {
+ 				(l->current.y - l->animation.initial.y) * factor;
+ 
+ 	double opacity_eased_progress =
+-		find_animation_curve_at(animation_passed, OPAFADEIN);
++		find_animation_curve_at(animation_passed, LAYERFADEIN);
+ 
+ 	double opacity = MANGO_MIN(config.fadein_begin_opacity +
+ 								   opacity_eased_progress *
+@@ -492,7 +492,10 @@ void init_fadeout_layers(LayerSurface *l) {
+ 		return;
+ 	}
+ 
+-	fadeout_layer->animation.duration = config.animation_duration_close;
++	fadeout_layer->animation.duration =
++		config.animation_duration_layer_close >= 0
++			? config.animation_duration_layer_close
++			: config.animation_duration_close;
+ 	fadeout_layer->geom = fadeout_layer->current =
+ 		fadeout_layer->animainit_geom = fadeout_layer->animation.initial =
+ 			l->animation.current;
+diff --git a/src/config/cleanup.c b/src/config/cleanup.c
+index 21cbb438..f564ddfd 100644
+--- a/src/config/cleanup.c
++++ b/src/config/cleanup.c
+@@ -47,6 +47,14 @@ void free_baked_points(void) {
+ 		free(server.baked_points_opafadein);
+ 		server.baked_points_opafadein = NULL;
+ 	}
++	if (server.baked_points_layerfadein) {
++		free(server.baked_points_layerfadein);
++		server.baked_points_layerfadein = NULL;
++	}
++	if (server.baked_points_layerfadeout) {
++		free(server.baked_points_layerfadeout);
++		server.baked_points_layerfadeout = NULL;
++	}
+ 	if (server.baked_points_opafadeout) {
+ 		free(server.baked_points_opafadeout);
+ 		server.baked_points_opafadeout = NULL;
+diff --git a/src/config/option_defs.c b/src/config/option_defs.c
+index 035d2a67..6468b622 100644
+--- a/src/config/option_defs.c
++++ b/src/config/option_defs.c
+@@ -93,6 +93,30 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
+ 		config->animation_duration_tag = atoi(value);
+ 	} else if (strcmp(key, "animation_duration_close") == 0) {
+ 		config->animation_duration_close = atoi(value);
++	} else if (strcmp(key, "animation_duration_layer_open") == 0) {
++		config->animation_duration_layer_open = atoi(value);
++	} else if (strcmp(key, "animation_duration_layer_close") == 0) {
++		config->animation_duration_layer_close = atoi(value);
++	} else if (strcmp(key, "animation_curve_layer_fade_in") == 0) {
++		if (parse_double_array(value, config->animation_curve_layer_fade_in,
++							   4) != 4) {
++			mango_error(false, WLR_ERROR,
++						"Failed to parse animation_curve_layer_fade_in: "
++						"\033[1m\033[31m%s\033[0m\n",
++						value);
++			return false;
++		}
++		config->layer_fade_in_curve_set = true;
++	} else if (strcmp(key, "animation_curve_layer_fade_out") == 0) {
++		if (parse_double_array(value, config->animation_curve_layer_fade_out,
++							   4) != 4) {
++			mango_error(false, WLR_ERROR,
++						"Failed to parse animation_curve_layer_fade_out: "
++						"\033[1m\033[31m%s\033[0m\n",
++						value);
++			return false;
++		}
++		config->layer_fade_out_curve_set = true;
+ 	} else if (strcmp(key, "animation_duration_focus") == 0) {
+ 		config->animation_duration_focus = atoi(value);
+ 	} else if (strcmp(key, "animation_curve_move") == 0) {
+@@ -2395,6 +2419,10 @@ void set_value_default() {
+ 	config.animation_duration_open = 400;
+ 	config.animation_duration_tag = 300;
+ 	config.animation_duration_close = 300;
++	config.animation_duration_layer_open = -1;
++	config.animation_duration_layer_close = -1;
++	config.layer_fade_in_curve_set = false;
++	config.layer_fade_out_curve_set = false;
+ 	config.animation_duration_focus = 0;
+ 
+ 	config.axis_bind_apply_timeout = 100;
+@@ -2753,6 +2781,10 @@ void override_config(void) {
+ 		CLAMP_INT(config.animation_duration_tag, 0, 50000);
+ 	config.animation_duration_close =
+ 		CLAMP_INT(config.animation_duration_close, 0, 50000);
++	config.animation_duration_layer_open =
++		CLAMP_INT(config.animation_duration_layer_open, -1, 50000);
++	config.animation_duration_layer_close =
++		CLAMP_INT(config.animation_duration_layer_close, -1, 50000);
+ 	config.animation_duration_focus =
+ 		CLAMP_INT(config.animation_duration_focus, 0, 50000);
+ 	config.scroller_default_proportion =
+diff --git a/src/manage/layer.c b/src/manage/layer.c
+index 2981f9d7..b5332a3f 100644
+--- a/src/manage/layer.c
++++ b/src/manage/layer.c
+@@ -260,7 +260,9 @@ void handle_layer_surface_map(struct wl_listener *listener, void *data) {
+ 
+ 	// Initializes the animation.
+ 	if (config.animations && config.layer_animations && !l->no_animation) {
+-		l->animation.duration = config.animation_duration_open;
++		l->animation.duration = config.animation_duration_layer_open >= 0
++									? config.animation_duration_layer_open
++									: config.animation_duration_open;
+ 		l->animation.action = OPEN;
+ 		layer_set_pending_state(l);
+ 	} else {

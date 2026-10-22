@@ -66,10 +66,8 @@ focused() {
   mmsg get focusing-client | jq -e --arg id "$app_id" '.appid == $id' >/dev/null 2>&1
 }
 
-# The pointer: mango has no switch that hides it for good, so it hides one
-# second after the last pointer movement while this runs - and moving the
-# mouse ends the screensaver anyway. 0 is the config's own (never hide).
-cursor_hide() { mmsg dispatch "setoption,cursor_hide_timeout,$1" >/dev/null 2>&1; }
+# The pointer hides at once and comes back when the mouse moves - which ends
+# the screensaver anyway (hide_cursor, patched mango).
 
 finish() {
   trap '' INT TERM HUP QUIT # once is enough
@@ -91,7 +89,6 @@ finish() {
   fi
   printf '\033[?1003l\033[?1006l\033[?25h' # mouse reporting off, cursor back
   stty echo 2>/dev/null
-  cursor_hide 0
   # Notifications back - unless Do Not Disturb was already on
   [[ ${was_paused:-} == false ]] && dunstctl set-paused false
   exit 0
@@ -112,7 +109,7 @@ was_paused=$(dunstctl is-paused 2>/dev/null)
 dunstctl set-paused true 2>/dev/null
 # Report all mouse motion as input, so moving the mouse wakes it like a key.
 printf '\033]11;rgb:00/00/00\007\033[?25l\033[?1003h\033[?1006h'
-cursor_hide 1
+mmsg dispatch hide_cursor >/dev/null 2>&1
 
 # The machine's colours, the lock screen's and dunst's: ink on black, a dim
 # grey, a near-white, and red only for heat - sparks, fire, lightning, a

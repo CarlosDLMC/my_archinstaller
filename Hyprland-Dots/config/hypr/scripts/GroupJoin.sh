@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Join the focused window into the workspace's group (one group per workspace).
-# No group on the workspace yet -> the focused window and its nearest neighbour
-# become one (GroupToggle.sh; mango has no single-window groups).
+# No group on the workspace yet -> the focused window becomes the group.
 # The group need not be adjacent: the window walks towards it until it joins.
 
 active=$(mmsg get focusing-client)
@@ -15,7 +14,7 @@ group=$(mmsg get all-clients | jq -c --argjson me "$active" '
     | first // empty')
 
 if [ -z "$group" ]; then
-    exec "$HOME/.config/hypr/scripts/GroupToggle.sh"
+    exec mmsg dispatch grouptoggle >/dev/null
 fi
 
 for _ in 1 2 3 4 5 6; do

@@ -248,7 +248,17 @@ first prompt.
 ## What Gets Installed
 
 ### Core System
-- mango (mangowm), hypridle, hyprlock
+- mango (mangowm), hypridle, hyprlock. mango is built from `pkgbuilds/mangowm` by
+  `install-scripts/mango-patched.sh`: Arch's mango 0.18.2 plus twelve patches that
+  make it behave like the Hyprland setup this desktop came from - windows keep their
+  content at native size while they move (no stretch), only the volume, brightness
+  and resize binds repeat when held, reloads keep the keyboard layout, Hyprland's tab
+  groups and tab bar, Hyprland's fade timings, focused and unfocused shadow colours,
+  the special workspace sliding in from the right, desktop zoom. Each patch is an
+  option the config turns on. `mangowm` is in `IgnorePkg` in `/etc/pacman.conf` - a
+  stock mango does not know those options - so update it by bumping the vendored
+  PKGBUILD and re-running the script. The package depends on scenefx and wlroots by
+  library version, so pacman refuses an update of those that would break it
 - ly display manager with large font. Its session is mango's own
   (`mango.desktop`, from the package). On a machine that still has Hyprland
   from before, Hyprland stays in the list, and a saved Hyprland choice is
@@ -1490,9 +1500,12 @@ those three commands — the VPN widget is the only thing here that depends on i
   tap toggles between the last two (US ⇄ ES); press again while the popup is
   open to go further (RU)
 - `SUPER + SHIFT + SPACE` - Float current window (over its own tile, as on Hyprland)
-- `SUPER + G` - Tab group on or off. mango groups need two windows, so a window
-  outside a group joins its nearest neighbour; `SUPER + Tab` / `SUPER + CTRL + Tab`
-  step through the tabs, `SUPER + SHIFT + Tab` / `SUPER + ALT + Tab` move a tab
+- `SUPER + G` - Tab group on or off: a window becomes a group of one, and the
+  windows opened from it join it as tabs; on a group it breaks the group up.
+  `SUPER + Tab` / `SUPER + CTRL + Tab` step through the tabs (round from the last to
+  the first), `SUPER + SHIFT + Tab` / `SUPER + ALT + Tab` move a tab
+- `SUPER + ALT + scroll` - Zoom the desktop in and out around the cursor (up to 10x;
+  four-finger swipes up and down on a touchpad)
 - `SUPER + CTRL + ALT + B` - Toggle quickshell bar
 - `SUPER + CTRL + F8` - Handy: toggle speech-to-text (press once to start recording, press again to stop and transcribe into the focused field)
 - `SUPER + ALT + <1-0>` - Move *every* window of the current workspace to that workspace, keeping the tiling layout intact (`SUPER + CTRL + <1-0>` still moves one window silently)
@@ -1521,8 +1534,8 @@ filters by action or keys. `SUPER SHIFT K` shows the same list in rofi.
 The mango config is `key=value` files in `~/.config/mango/` (`config.conf` sources the rest),
 and mango reloads by itself when one of them changes. `mango -c ~/.config/mango/config.conf -p`
 checks it without touching the running session; scripts talk to mango with `mmsg`
-(`mmsg dispatch …`, `mmsg get all-clients`). mango repeats every bind while its key is held,
-so the binds that must fire once per press go through `hypr/scripts/Once.sh`.
+(`mmsg dispatch …`, `mmsg get all-clients`). A held key runs its bind once; only the
+`binde` binds (volume, brightness, resizing) repeat, as on Hyprland.
 
 **Two binds do nothing on a fresh install.** `SUPER + T` launches Telegram and
 `SUPER + R` launches RustRover (`mango/keybinds.conf`), and

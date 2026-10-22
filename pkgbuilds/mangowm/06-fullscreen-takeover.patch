@@ -1,0 +1,138 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: CarlosDLMC <delamorenacoco.carlos@gmail.com>
+Date: Thu, 22 Oct 2026 08:12:29 +0200
+Subject: [PATCH 06/12] client: new windows can take over fullscreen;
+ hide_cursor dispatcher
+
+new_window_takes_over_fullscreen=1: a new tiled window that opens over a
+fullscreen (or maximized) one takes its place fullscreen, while the old one
+goes back into the layout - Hyprland's misc:on_focus_under_fullscreen 1.
+Stock mango only takes the old one out of fullscreen.
+
+hide_cursor hides the cursor at once, until the pointer moves.
+---
+ include/mango/config/parse.h  |  1 +
+ include/mango/dispatch/bind.h |  1 +
+ src/config/binding_parse.c    |  2 ++
+ src/config/option_defs.c      |  5 +++++
+ src/dispatch/bind.c           |  7 +++++++
+ src/manage/client.c           | 13 ++++++++++++-
+ 6 files changed, 28 insertions(+), 1 deletion(-)
+
+diff --git a/include/mango/config/parse.h b/include/mango/config/parse.h
+index 8eda6893..b10dfb82 100644
+--- a/include/mango/config/parse.h
++++ b/include/mango/config/parse.h
+@@ -316,6 +316,7 @@ typedef struct {
+ 	int32_t animation_fade_in;
+ 	int32_t animation_native_content;
+ 	int32_t bind_repeat_flagged_only;
++	int32_t new_window_takes_over_fullscreen;
+ 	int32_t animation_fade_out;
+ 	int32_t tag_animation_direction;
+ 	float zoom_initial_ratio;
+diff --git a/include/mango/dispatch/bind.h b/include/mango/dispatch/bind.h
+index 46a4114e..6a594bc6 100644
+--- a/include/mango/dispatch/bind.h
++++ b/include/mango/dispatch/bind.h
+@@ -115,6 +115,7 @@ int32_t create_virtual_output(const Arg *arg);
+ int32_t destroy_all_virtual_output(const Arg *arg);
+ int32_t focus_last(const Arg *arg);
+ int32_t toggle_trackpad_enable(const Arg *arg);
++int32_t hide_cursor(const Arg *arg);
+ int32_t setoption(const Arg *arg);
+ int32_t disable_monitor(const Arg *arg);
+ int32_t enable_monitor(const Arg *arg);
+diff --git a/src/config/binding_parse.c b/src/config/binding_parse.c
+index 58b47323..1026646e 100644
+--- a/src/config/binding_parse.c
++++ b/src/config/binding_parse.c
+@@ -631,6 +631,8 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
+ 		}
+ 	} else if (strcmp(func_name, "toggle_trackpad_enable") == 0) {
+ 		func = toggle_trackpad_enable;
++	} else if (strcmp(func_name, "hide_cursor") == 0) {
++		func = hide_cursor;
+ 	} else if (strcmp(func_name, "setoption") == 0) {
+ 		func = setoption;
+ 
+diff --git a/src/config/option_defs.c b/src/config/option_defs.c
+index d728c73e..04f96fa2 100644
+--- a/src/config/option_defs.c
++++ b/src/config/option_defs.c
+@@ -73,6 +73,8 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
+ 		config->animation_native_content = atoi(value);
+ 	} else if (strcmp(key, "bind_repeat_flagged_only") == 0) {
+ 		config->bind_repeat_flagged_only = atoi(value);
++	} else if (strcmp(key, "new_window_takes_over_fullscreen") == 0) {
++		config->new_window_takes_over_fullscreen = atoi(value);
+ 	} else if (strcmp(key, "animation_fade_out") == 0) {
+ 		config->animation_fade_out = atoi(value);
+ 	} else if (strcmp(key, "tag_animation_direction") == 0) {
+@@ -2421,6 +2423,7 @@ void set_value_default() {
+ 	config.animation_fade_in = 1;
+ 	config.animation_native_content = 0;
+ 	config.bind_repeat_flagged_only = 0;
++	config.new_window_takes_over_fullscreen = 0;
+ 	config.animation_fade_out = 1;
+ 	config.tag_animation_direction = HORIZONTAL;
+ 	config.zoom_initial_ratio = 0.4f;
+@@ -2778,6 +2781,8 @@ void override_config(void) {
+ 		CLAMP_INT(config.animation_native_content, 0, 1);
+ 	config.bind_repeat_flagged_only =
+ 		CLAMP_INT(config.bind_repeat_flagged_only, 0, 1);
++	config.new_window_takes_over_fullscreen =
++		CLAMP_INT(config.new_window_takes_over_fullscreen, 0, 1);
+ 	config.animation_fade_out = CLAMP_INT(config.animation_fade_out, 0, 1);
+ 	config.zoom_initial_ratio =
+ 		CLAMP_FLOAT(config.zoom_initial_ratio, 0.1f, 1.0f);
+diff --git a/src/dispatch/bind.c b/src/dispatch/bind.c
+index 103b40ab..3dad6ab9 100644
+--- a/src/dispatch/bind.c
++++ b/src/dispatch/bind.c
+@@ -2273,6 +2273,13 @@ int32_t zoom(const Arg *arg) {
+ 	return 0;
+ }
+ 
++/* Hides the cursor now, until the pointer moves (a screensaver starting). */
++int32_t hide_cursor(const Arg *arg) {
++	(void)arg;
++	pointer_hide_cursor(NULL);
++	return 0;
++}
++
+ int32_t setoption(const Arg *arg) {
+ 	parse_option(&config, arg->v, arg->v2, 0);
+ 	override_config();
+diff --git a/src/manage/client.c b/src/manage/client.c
+index afc08042..6e6121ae 100644
+--- a/src/manage/client.c
++++ b/src/manage/client.c
+@@ -1782,15 +1782,26 @@ void client_apply_rules(Client *c, Monitor **rule_mon, uint32_t *rule_tags) {
+ 
+ 	/*
+ 	if there is a new non-floating window in the current tag, the fullscreen
+-	window in the current tag will exit fullscreen and participate in tiling
++	window in the current tag will exit fullscreen and participate in tiling.
++	With new_window_takes_over_fullscreen the new window takes its place
++	fullscreen (or maximized), as Hyprland's misc:on_focus_under_fullscreen 1.
+ 	 */
++	int32_t takeover_fullscreen = 0, takeover_maximized = 0;
+ 	wl_list_for_each(fc, &server.clients,
+ 					 link) if (fc && fc != c && c->tags & fc->tags && c->mon &&
+ 							   VISIBLEON(fc, c->mon) && ISFULLSCREEN(fc) &&
+ 							   !c->isfloating) {
++		takeover_fullscreen |= fc->isfullscreen;
++		takeover_maximized |= fc->ismaximizescreen;
+ 		clear_fullscreen_flag(fc);
+ 		arrange(c->mon, false, false);
+ 	}
++	if (config.new_window_takes_over_fullscreen && !c->isfullscreen) {
++		if (takeover_fullscreen)
++			client_apply_fullscreen(c, 1, true);
++		else if (takeover_maximized)
++			client_set_maximize_screen(c, 1, true);
++	}
+ 
+ 	if (c->isfloating && !c->iscustompos && !c->isnamedscratchpad) {
+ 		wl_list_safe_reinsert_prev(&server.clients, &c->link);

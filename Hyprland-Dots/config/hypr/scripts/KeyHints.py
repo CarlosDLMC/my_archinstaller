@@ -91,7 +91,7 @@ def load_binds():
     rows, seen = [], set()
     for key, value in config_lines(CONFIG, set()):
         value, desc = strip_comment(value)
-        if re.fullmatch(r"bind[slrpc]*", key):
+        if re.fullmatch(r"bind[slrpce]*", key):
             kind = "key"
         elif key in ("mousebind", "axisbind", "gesturebind"):
             kind = key

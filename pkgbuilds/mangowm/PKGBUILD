@@ -1,0 +1,99 @@
+# Vendored from Arch's mangowm package:
+#   https://gitlab.archlinux.org/archlinux/packaging/packages/mangowm
+# with twelve patches that make mango look and behave like the Hyprland setup
+# this desktop came from. Every one is an option (or a new dispatcher) that is
+# off by default - stock behaviour stays until the config turns it on; the
+# config in Hyprland-Dots/config/mango/ turns them all on.
+#
+# 01 native-content: a window that moves or resizes keeps its content at its
+#    native size, cropped or with its edge pixels extended, as Hyprland draws
+#    it (animation_native_content). Stock mango stretched the new, smaller
+#    frame of a window shrinking beside a new one: it seemed to grow, then
+#    shrink back. Opening windows scale into place (Hyprland's popin).
+# 02 bind-repeat: only binde binds repeat while held (bind_repeat_flagged_only).
+# 03 keep-layout: reloads and setoption keep the keyboard layout (EN/ES/RU) -
+#    every wallpaper change used to reset it - and setoption runs no exec lines.
+# 04 layer-fade: layer surfaces (rofi, notifications) fade with their own
+#    timing and curves, as Hyprland's fadeLayersIn/Out.
+# 05 shadow-colours: focused and unfocused shadow colours; a reload recolours
+#    borders and shadows at once (the wallust colours of a new wallpaper).
+# 06 fullscreen-takeover: a new window takes over a fullscreen one
+#    (misc:on_focus_under_fullscreen 1); hide_cursor dispatcher.
+# 07 groups: SUPER+G on a lone window makes a group of one, new windows join
+#    the focused group after the current tab, tab focus wraps; grouptoggle and
+#    groupmove dispatchers (togglegroup, movegroupwindow).
+# 08 group-bar: gaps between tabs, a medium font for the focused tab only.
+# 09 fadeout-below-top: closing windows fade out under the bar and launchers.
+# 10 special-slide: the special workspace slides in from the right, fading.
+# 11 zoom: desktop zoom around the cursor (zoom_by, SUPER+ALT+wheel).
+# 12 border-fade: the border colour fades on its own timing (539 ms) while a
+#    terminal's opacity fades on the focus one (300 ms), as Hyprland's border
+#    and fadeSwitch.
+#
+# install-scripts/mango-patched.sh builds this with makepkg and puts mangowm
+# in pacman's IgnorePkg: a stock mango from the repos would not know the
+# options and binds the config uses. depends names the scenefx and wlroots
+# libraries by soname, so pacman refuses a library update this build would not
+# survive instead of leaving a mango that cannot start; rebuild it then. To
+# follow a new mango, set pkgver and the tarball's sha256, re-apply the patches
+# (the source tree they come from is a git branch on 0.18.2, one commit each).
+#
+# Maintainer: Robin Candau <antiz@archlinux.org>
+# Contributor: Matt Quintanilla <matt @ matt quintanilla .xyz>
+
+pkgname=mangowm
+_pkgname=mango
+pkgver=0.18.2
+pkgrel=101
+pkgdesc="Lightweight, feature rich modern wayland compositor (patched to match a Hyprland setup)"
+url="https://mangowm.github.io"
+arch=('x86_64')
+license=('GPL-3.0-or-later')
+depends=('glibc' 'wayland-protocols' 'pango' 'wayland' 'libinput' 'libdrm' 'cairo'
+         'pixman' 'libdisplay-info' 'libliftoff' 'seatd' 'xorg-xwayland' 'glib2'
+         'libxcb' 'libxkbcommon' 'pcre2' 'libwlroots-0.20.so' 'libscenefx-0.5.so'
+         'cjson' 'xcb-util-wm')
+makedepends=('meson' 'wlroots0.20' 'scenefx')
+source=("${pkgname}-${pkgver}.tar.gz::https://github.com/mangowm/mango/archive/refs/tags/${pkgver}.tar.gz"
+        '01-native-content.patch'
+        '02-bind-repeat.patch'
+        '03-keep-layout.patch'
+        '04-layer-fade.patch'
+        '05-shadow-colours.patch'
+        '06-fullscreen-takeover.patch'
+        '07-groups.patch'
+        '08-group-bar.patch'
+        '09-fadeout-below-top.patch'
+        '10-special-slide.patch'
+        '11-zoom.patch'
+        '12-border-fade.patch')
+sha256sums=('04c8a6bb168307360383670daf0f96ffa7587df6680b9030587f084121105dd3'
+            '0f72d5c30705d21d9d4e58fc64051efd8df321069c1d235a13b59637a0d7f1d0'
+            'acbb1baa2461d74efa44473cf27e45559e2ea44e40c197b29690eef7fec41085'
+            '0d5a1170de8c19ff41a69215eab250c09a260d58ab17787eca0be4bbcc309e9b'
+            '386a7503281296d995f9d0c814167e7f6b05f87542283ee5ae614ac0a23f8a95'
+            'dfa181914dbd1926aad94df922611d8a0c28a23efc7a66b699b9f50d82660026'
+            '51cbd74c41d8a2c0be29b95f91e2cdac65410f50538276c87ba8207152339a8e'
+            '620b26854e09ebf62daefcebce69954ec0549ec575006553e84b0cd0dab8909b'
+            'ee724621b433b7eeb3bf506035d9c1b14cddf5b328f5799b7589d7339765fe6c'
+            '39fd694854a41e19db94c6489b75d2c001f97b9795c21f24edd4c627e470e6a3'
+            'f3633f73d11ce4ac0426660191abd0e6819900776978d079b9c9291edc13dae1'
+            '703c9079a1a1e6381bcc56e0beafa6c2234954ea4470af4126067afbb48abd03'
+            'df4e00f174d1d243bf197924210e3f40286cecd2c793f3fb9f1cc1ff73c778e2')
+
+prepare() {
+	cd "${_pkgname}-${pkgver}"
+	local p
+	for p in "${srcdir}"/*.patch; do
+		patch -Np1 -i "$p"
+	done
+}
+
+build() {
+	arch-meson "${_pkgname}-${pkgver}" build
+	meson compile -C build
+}
+
+package() {
+	meson install -C build --destdir "${pkgdir}"
+}

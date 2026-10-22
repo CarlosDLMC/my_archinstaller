@@ -2,6 +2,26 @@
 
 ## October 2026
 
+Changed (2026-10-22, branch `mango`) - mango is patched to behave like the
+Hyprland setup: built from `pkgbuilds/mangowm` (Arch's 0.18.2 plus twelve
+patches, each an option the config turns on) by
+`install-scripts/mango-patched.sh`, and kept off `-Syu` by `IgnorePkg`.
+
+- Windows keep their content at native size while they move or resize: a
+  window shrinking beside a new one no longer stretches, and swaps and moves
+  glide again. Opening windows scale in from 87%.
+- Only the volume, brightness and resize binds repeat when held (`binde`);
+  `Once.sh` is gone. Reloads and option changes keep the keyboard layout.
+- Tab groups as on Hyprland: SUPER+G makes a group of one that new windows join,
+  tabs wrap and reorder, 5 px gaps between tabs, a medium title on the active
+  tab only.
+- Hyprland's timings: border colour 539 ms apart from the 300 ms opacity fade,
+  layer fades 303 ms. Focused and unfocused shadow colours from wallust; closing
+  windows fade under the bar; the special workspace slides in from the right; a
+  new window takes over a fullscreen one; desktop zoom on SUPER+ALT+scroll.
+- These replace the earlier known differences (no single-window groups, no tab
+  gaps, no zoom); the overview keeps its stills.
+
 Changed (2026-10-21, branch `mango`) - the desktop runs on mango (mangowm), not
 Hyprland, and looks and behaves the same: the same bar, cards and dialogs, lock
 screen, keybinds, tab groups, animations, wallust theming and scripts.
