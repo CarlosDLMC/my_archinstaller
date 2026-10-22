@@ -45,7 +45,8 @@ printf "\n${INFO} Checking the mango configuration...\n"
 if [ -f ~/.config/mango/config.conf ]; then
     if ! command -v mango &>/dev/null; then
         problems=$((problems + 1)); printf "  ${ERROR} ~/.config/mango/config.conf is there, but mango is not installed\n"
-    elif mango -c ~/.config/mango/config.conf -p &>/dev/null; then
+    # mango -p exits 0 even when it reports errors: the verdict is any [ERROR].
+    elif _mango_out=$(mango -c ~/.config/mango/config.conf -p 2>&1) && ! grep -qF "[ERROR]" <<<"$_mango_out"; then
         printf "  ${OK} Using the custom mango config, and mango accepts it\n"
     else
         problems=$((problems + 1)); printf "  ${ERROR} mango rejects ~/.config/mango/config.conf - see: mango -c ~/.config/mango/config.conf -p\n"

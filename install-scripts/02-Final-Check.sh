@@ -236,11 +236,13 @@ if selected dots; then
     # file exists. The config needs the patched mango (mango-patched.sh): a
     # stock one left by a failed build, or an option a new version renamed,
     # would otherwise first show at the graphical login, after the automatic
-    # reboot. -p only parses (every sourced file too) and exits non-zero on an
-    # error: offline, with no display and no runtime directory needed.
+    # reboot. -p only parses (every sourced file too): offline, with no display
+    # and no runtime directory needed. It exits 0 even when it reports errors
+    # (an unknown option or dispatcher drops that line and goes on), so the
+    # verdict is whether it printed any [ERROR].
     if command -v mango &>/dev/null; then
         check_outcome "mango $(pacman -Q mangowm 2>/dev/null | cut -d' ' -f2) rejects the deployed config - see: mango -c ~/.config/mango/config.conf -p" \
-            mango -c "$HOME/.config/mango/config.conf" -p
+            bash -c '_out=$(mango -c "$HOME/.config/mango/config.conf" -p 2>&1) && ! grep -qF "[ERROR]" <<<"$_out"'
     fi
 fi
 

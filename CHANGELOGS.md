@@ -10,7 +10,11 @@ Qt style stay - they are what the desktop uses on mango).
 
 - `Hyprland-Dots/` is now `dotfiles/`, `01-hypr-pkgs.sh` is
   `01-desktop-pkgs.sh`, and the preset option `xdph` is `portals`
-  (`portals.sh`) - an older preset that still says `xdph` installs no portals.
+  (`portals.sh`); an older preset that still says `xdph` is read as `portals`.
+- The final check fails on a mango config with errors: `mango -p` exits 0
+  even when it reports one, so it now looks for `[ERROR]` (diagnose.sh too).
+  mango-patched.sh records a failure on every early exit, and pins mangowm in
+  IgnorePkg only once the patched build is installed.
 - The Hyprland migration is gone: `copy.sh` no longer carries a wallpaper,
   video wallpaper or palette over from a Hyprland-era `hypr/` backup, and
   ly_config.sh and pacman.sh no longer handle Hyprland's sessions (the uwsm
