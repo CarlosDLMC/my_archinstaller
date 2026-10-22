@@ -98,6 +98,65 @@ then continue with the [Installation Steps](#installation-steps) below.
 - **Text Boot**: the kernel and systemd `[  OK  ]` lines on screen instead of the CachyOS splash - or, with `plymouth="ON"`, a **Boot Splash** with the repo logo (Plymouth, wired into boot where the distro did not set it up)
 - **All Essential Packages** pre-configured
 
+## Window manager
+
+The desktop runs on **[mango](https://github.com/mangowm/mango)** (mangowm), a
+wlroots-based Wayland compositor that grew out of dwl.
+
+It started out on **Hyprland**. The move to mango kept every piece of the
+desktop and how it behaves: the same keybinds, the Quickshell bar with its
+cards and the overview (SUPER+A), tab groups, the window and workspace
+animations, the lock screen, and the wallust theming that follows the
+wallpaper. Where stock mango behaved differently, it is patched:
+`pkgbuilds/mangowm` is Arch's mango 0.18.2 plus fifteen patches, built by
+`install-scripts/mango-patched.sh`, each one an option the config turns on:
+
+- windows keep their content at native size while they move or resize (no
+  stretch), and new windows pop in;
+- a held key repeats only the `binde` binds (volume, brightness, resizing);
+- config reloads (every wallpaper change) keep the keyboard layout;
+- tab groups as on Hyprland - a group of one, new windows joining it, tabs
+  that wrap, reorder, crossfade and slide with their window - and the same
+  tab bar;
+- Hyprland's fade timings for borders, opacity and layer surfaces, focused
+  and unfocused shadow colours, closing windows that fade under the bar, the
+  special workspace sliding in from the right, a new window taking over a
+  fullscreen one, and desktop zoom (SUPER+ALT+scroll).
+
+Both were recorded doing the same things side by side - opening, swapping and
+closing windows, workspace slides, tab switches, focus changes, the special
+workspace, rofi, zoom - and match to within a few pixels and milliseconds.
+What stays different: the overview shows a still of each window rather than a
+live one, blur has no "vibrancy", the mouse wheel zooms at most one step every
+300 ms, and two binds were dropped (SUPER+P pseudo-tiling, SUPER+CTRL+O
+opacity toggle).
+
+### Hyprland vs mango: resources
+
+Measured on the desktop this repo was built on: **AMD Ryzen 5 7600, Radeon
+RX 6700 XT, 32 GB RAM, one 2560x1440 monitor, CachyOS** (kernel
+linux-cachyos). The same script ran under each compositor, on the same freshly
+logged-in, idle desktop: the Quickshell bar, dunst, the wallpaper daemon and
+one terminal. "RAM in use" is the system-wide *used* figure from `free`
+(kernel, drivers and everything running), minus the Claude Code session the
+measurement was run from - so the ~1.2 GB is the whole desktop at rest, not
+mango alone. CPU is the processes' own CPU time while the desktop sat idle for 30 s,
+and over 40 workspace switches (1 <-> 9, with four terminals open).
+
+| | Hyprland | mango | Change |
+|---|---|---|---|
+| RAM in use, idle desktop | 1349 MB | 1205 MB | **-144 MB (-11%)** |
+| Compositor memory (PSS) | 153 MB | 70 MB | **-83 MB (-54%)** |
+| Bar memory (PSS) | 123 MB | 131 MB | +8 MB (the overview now lives in the bar) |
+| Bar processes | 2 (bar + overview) | 1 | one fewer |
+| Compositor CPU, 30 s idle | 300 ms | 260 ms | -13% |
+| Bar CPU, 30 s idle | 60 ms | 40 ms | -33% |
+| Compositor CPU, 40 workspace switches | 270 ms | 40 ms | **-85%** |
+| Bar CPU, 40 workspace switches | 100 ms | 70 ms | -30% |
+
+The mango figures are from stock mango 0.18.2; the patched build's own memory
+measured the same (70 MB).
+
 ## Quick Install (Fresh Arch System)
 
 ### Prerequisites
