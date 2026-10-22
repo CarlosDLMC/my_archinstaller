@@ -157,6 +157,45 @@ and over 40 workspace switches (1 <-> 9, with four terminals open).
 The mango figures are from stock mango 0.18.2; the patched build's own memory
 measured the same (70 MB).
 
+**Where the ~1.2 GB goes** (mango, on the machine above; each process's own
+memory, then what the kernel and the AMD driver hold - from the processes'
+memory maps, the kernel's counters in `/proc/meminfo` and the amdgpu kernel
+log):
+
+| Part | Memory |
+|---|---|
+| quickshell (`qs -c bar`) - the bar, its cards and the overview | 92 MB |
+| **mango** - the compositor (window manager, rendering, input) | **29 MB** |
+| **Xwayland** - X11 compatibility, for apps that are not Wayland (Steam, some games) | **19 MB** |
+| keyd - the Caps Lock navigation layer | 35 MB |
+| PipeWire (`pipewire`, `pipewire-pulse`, WirePlumber, the noise filter) - audio | 22 MB |
+| foot - one terminal | 8 MB |
+| xdg-desktop-portal (+ gtk, wlr) - file pickers, screen sharing | 9 MB |
+| systemd (journald, udevd, logind, the user manager) | 7 MB |
+| NetworkManager + wpa_supplicant - network | 5 MB |
+| dunst - notifications | 6 MB |
+| ly - the login screen | 6 MB |
+| ananicy-cpp, polkitd, bluetoothd, cupsd, dbus - system services | 9 MB |
+| hypridle, the wallpaper daemon, gvfsd, wl-paste | ~1 MB |
+| Kernel slab, vmalloc, stacks and page tables | ~235 MB |
+| amdgpu VRAM bookkeeping (`HMM registered 12272MB device memory`: 64 B per 4 KB page of the 12 GB card) | ~190 MB |
+| Other amdgpu memory with no counter (firmware, ring buffers, display state) | ~260 MB |
+| GPU buffers in system RAM (the wallpaper image among them) | ~90 MB |
+| Shared libraries, locked memory and the rest | ~250 MB |
+| **Total** | **~1.27 GB** |
+
+The processes were measured on the running desktop with browsers open (the
+browsers themselves are left out), so they add up to a little more than on the
+idle desktop of the comparison (~190 MB, which gives the ~1.2 GB). Counted the
+same way as in the resources table (with the shared libraries they use), mango
+is 70 MB where Hyprland was 153 MB.
+
+About half of it is the kernel and the AMD driver, the same under Hyprland or
+mango. That is why it does not go under 1 GB by changing the desktop: removing
+the bar entirely would save ~130 MB, and the VRAM bookkeeping only exists on a
+GPU with a lot of VRAM (it serves GPU compute, ROCm/OpenCL). A machine with a
+smaller or integrated GPU idles lower.
+
 ## Quick Install (Fresh Arch System)
 
 ### Prerequisites
