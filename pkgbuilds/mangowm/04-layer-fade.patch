@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: CarlosDLMC <delamorenacoco.carlos@gmail.com>
 Date: Thu, 22 Oct 2026 08:08:36 +0200
-Subject: [PATCH 04/12] animation: layer surfaces get their own fade timing and
+Subject: [PATCH 04/15] animation: layer surfaces get their own fade timing and
  curves
 
 animation_duration_layer_open/close and animation_curve_layer_fade_in/out;

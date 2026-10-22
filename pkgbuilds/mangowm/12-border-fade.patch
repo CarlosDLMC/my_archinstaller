@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: CarlosDLMC <delamorenacoco.carlos@gmail.com>
 Date: Thu, 22 Oct 2026 08:33:32 +0200
-Subject: [PATCH 12/12] animation: the border colour fades on its own timing
+Subject: [PATCH 12/15] animation: the border colour fades on its own timing
  and curve
 
 animation_duration_border / animation_curve_border time the border (and

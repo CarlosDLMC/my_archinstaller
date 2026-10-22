@@ -1,0 +1,139 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: CarlosDLMC <delamorenacoco.carlos@gmail.com>
+Date: Thu, 22 Oct 2026 10:47:24 +0200
+Subject: [PATCH 15/15] group bar: tabs keep their places and are clipped at
+ the monitor edge
+
+A window partly past its monitor (a workspace slide) had its whole tab strip
+squeezed into the visible part, so the tabs changed width every frame and
+seemed to slide on their own. The tabs now keep their places on the whole
+window and move with it; the part past the edge is clipped - background to
+the visible part, the title cropped, still centred on its tab.
+---
+ include/mango/draw/text-node.h |  6 +++++
+ src/animation/client.c         | 20 ++++++++------
+ src/draw/text-node.c           | 49 +++++++++++++++++++++++++++++++---
+ 3 files changed, 64 insertions(+), 11 deletions(-)
+
+diff --git a/include/mango/draw/text-node.h b/include/mango/draw/text-node.h
+index 668cd909..50b19469 100644
+--- a/include/mango/draw/text-node.h
++++ b/include/mango/draw/text-node.h
+@@ -118,6 +118,10 @@ typedef struct MangoBarDecoration {
+ 	char *last_text;
+ 	float last_scale;
+ 
++	/* Pixels cut off at the left and right (a tab partly off its monitor):
++	 * the tab keeps its place and size, only what shows is clipped. */
++	int32_t clip_left;
++	int32_t clip_right;
+ 	int32_t text_logical_w;
+ 	int32_t text_logical_h;
+ 	int32_t logical_width;
+@@ -158,6 +162,8 @@ MangoBarDecoration *mango_bar_decoration_create(void *cdata, uint32_t type,
+ 												DecorateDrawData data,
+ 												int32_t width, int32_t height);
+ void mango_bar_decoration_destroy(MangoBarDecoration *node);
++void mango_bar_decoration_set_hclip(MangoBarDecoration *node, int32_t left,
++									 int32_t right);
+ void mango_bar_decoration_set_size(MangoBarDecoration *node, int32_t width,
+ 								   int32_t height);
+ void mango_bar_decoration_update(MangoBarDecoration *node, const char *text,
+diff --git a/src/animation/client.c b/src/animation/client.c
+index 2e2b11af..0a6eee06 100644
+--- a/src/animation/client.c
++++ b/src/animation/client.c
+@@ -516,14 +516,14 @@ void client_draw_group_bar(Client *c, struct ivec2 offsets) {
+ 		th = th - GEZERO(bottom_over - c->animation.current.height);
+ 	}
+ 
+-	if (right_over > 0)
+-		tw = tw - right_over;
+-	if (left_over > 0) {
+-		tab_x = c->mon->m.x;
+-		tw = tw - left_over;
+-	}
+-
+-	if (tw <= 0 || th <= 0) {
++	/* The tabs keep their places on the whole window and move with it (a
++	 * workspace slide); what is past the monitor's edge is clipped, as the
++	 * window is. Shrinking the strip to the visible part made the tabs
++	 * squeeze and slide on their own. */
++	int32_t vis_l = tab_x + GEZERO(left_over);
++	int32_t vis_r = tab_x + tw - GEZERO(right_over);
++
++	if (tw <= 0 || th <= 0 || vis_r <= vis_l) {
+ 		cur = client_group_head(c);
+ 		while (cur) {
+ 			if (cur->group_bar)
+@@ -548,6 +548,10 @@ void client_draw_group_bar(Client *c, struct ivec2 offsets) {
+ 	for (int i = 0; i < count && cur; i++) {
+ 		int32_t w = bar_w + (i < rem ? 1 : 0);
+ 		global_draw_group_bar(cur, x, tab_y, w, th);
++		if (cur->group_bar)
++			mango_bar_decoration_set_hclip(cur->group_bar,
++										   GEZERO(vis_l - x),
++										   GEZERO(x + w - vis_r));
+ 		x += w + gap;
+ 		cur = cur->group_next;
+ 	}
+diff --git a/src/draw/text-node.c b/src/draw/text-node.c
+index 82ac95fd..ea3bd8d3 100644
+--- a/src/draw/text-node.c
++++ b/src/draw/text-node.c
+@@ -765,9 +765,52 @@ static void bar_decoration_apply_geometry(MangoBarDecoration *node) {
+ 		offset_y = 0;
+ 	}
+ 
+-	wlr_scene_node_set_position(&node->scene_buffer->node,
+-								border + node->padding_x + offset_x,
+-								border + node->padding_y + offset_y);
++	int32_t text_x = border + node->padding_x + offset_x;
++	int32_t text_y = border + node->padding_y + offset_y;
++	wlr_scene_node_set_position(&node->scene_buffer->node, text_x, text_y);
++
++	if (node->clip_left <= 0 && node->clip_right <= 0) {
++		wlr_scene_node_set_enabled(&node->scene_buffer->node, true);
++		return;
++	}
++
++	/* Clipped: the background covers only the visible part, and the title,
++	 * still centred on the whole tab, is cropped to it. */
++	int32_t vis_l = node->clip_left > 0 ? node->clip_left : 0;
++	int32_t vis_r = width - (node->clip_right > 0 ? node->clip_right : 0);
++	int32_t bg_l = vis_l > border ? vis_l : border;
++	int32_t bg_r = vis_r < border + inner_w ? vis_r : border + inner_w;
++	rect_apply(node->bg, node->focused ? node->focus_bg_color : node->bg_color,
++			   0, bg_l, border, bg_r > bg_l ? bg_r - bg_l : 0, inner_h);
++
++	int32_t t_l = text_x > vis_l ? text_x : vis_l;
++	int32_t t_r = text_x + node->text_logical_w < vis_r
++					  ? text_x + node->text_logical_w
++					  : vis_r;
++	if (t_r <= t_l || node->text_logical_w <= 0) {
++		wlr_scene_node_set_enabled(&node->scene_buffer->node, false);
++		return;
++	}
++	const struct wlr_fbox box = {
++		.x = (t_l - text_x) * scale,
++		.y = 0,
++		.width = (t_r - t_l) * scale,
++		.height = node->text_logical_h * scale,
++	};
++	wlr_scene_buffer_set_source_box(node->scene_buffer, &box);
++	wlr_scene_buffer_set_dest_size(node->scene_buffer, t_r - t_l,
++								   node->text_logical_h);
++	wlr_scene_node_set_position(&node->scene_buffer->node, t_l, text_y);
++	wlr_scene_node_set_enabled(&node->scene_buffer->node, true);
++}
++
++void mango_bar_decoration_set_hclip(MangoBarDecoration *node, int32_t left,
++									int32_t right) {
++	if (!node || (node->clip_left == left && node->clip_right == right))
++		return;
++	node->clip_left = left;
++	node->clip_right = right;
++	bar_decoration_apply_geometry(node);
+ }
+ 
+ void mango_bar_decoration_set_size(MangoBarDecoration *node, int32_t width,

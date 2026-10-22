@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: CarlosDLMC <delamorenacoco.carlos@gmail.com>
 Date: Thu, 22 Oct 2026 08:05:42 +0200
-Subject: [PATCH 03/12] config: reloads keep the keyboard layout; setoption
+Subject: [PATCH 03/15] config: reloads keep the keyboard layout; setoption
  runs no exec lines
 
 reset_keyboard_layout set modifiers.group by hand after the new keymap had

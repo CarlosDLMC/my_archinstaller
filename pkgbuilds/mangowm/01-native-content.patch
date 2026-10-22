@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: CarlosDLMC <delamorenacoco.carlos@gmail.com>
 Date: Thu, 22 Oct 2026 08:02:10 +0200
-Subject: [PATCH 01/12] animation: native-size content, as Hyprland
+Subject: [PATCH 01/15] animation: native-size content, as Hyprland
  (animation_native_content)
 
 A moving or resizing window keeps its content at native size: cropped where

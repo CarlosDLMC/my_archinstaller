@@ -1,6 +1,6 @@
 # Vendored from Arch's mangowm package:
 #   https://gitlab.archlinux.org/archlinux/packaging/packages/mangowm
-# with twelve patches that make mango look and behave like the Hyprland setup
+# with fifteen patches that make mango look and behave like the Hyprland setup
 # this desktop came from. Every one is an option (or a new dispatcher) that is
 # off by default - stock behaviour stays until the config turns it on; the
 # config in Hyprland-Dots/config/mango/ turns them all on.
@@ -29,6 +29,11 @@
 # 12 border-fade: the border colour fades on its own timing (539 ms) while a
 #    terminal's opacity fades on the focus one (300 ms), as Hyprland's border
 #    and fadeSwitch.
+# 13 group-bar-slide: the tabs slide out with their window on a workspace
+#    switch (they vanished at its first frame).
+# 14 group-switch-fade: switching tabs crossfades (Hyprland's fadeSwitch).
+# 15 group-bar-clip: the tabs keep their places on the window and are clipped
+#    at the monitor edge, so they slide rigidly with it.
 #
 # install-scripts/mango-patched.sh builds this with makepkg and puts mangowm
 # in pacman's IgnorePkg: a stock mango from the repos would not know the
@@ -44,7 +49,7 @@
 pkgname=mangowm
 _pkgname=mango
 pkgver=0.18.2
-pkgrel=101
+pkgrel=103
 pkgdesc="Lightweight, feature rich modern wayland compositor (patched to match a Hyprland setup)"
 url="https://mangowm.github.io"
 arch=('x86_64')
@@ -66,20 +71,26 @@ source=("${pkgname}-${pkgver}.tar.gz::https://github.com/mangowm/mango/archive/r
         '09-fadeout-below-top.patch'
         '10-special-slide.patch'
         '11-zoom.patch'
-        '12-border-fade.patch')
+        '12-border-fade.patch'
+        '13-group-bar-slide.patch'
+        '14-group-switch-fade.patch'
+        '15-group-bar-clip.patch')
 sha256sums=('04c8a6bb168307360383670daf0f96ffa7587df6680b9030587f084121105dd3'
-            '0f72d5c30705d21d9d4e58fc64051efd8df321069c1d235a13b59637a0d7f1d0'
-            'acbb1baa2461d74efa44473cf27e45559e2ea44e40c197b29690eef7fec41085'
-            '0d5a1170de8c19ff41a69215eab250c09a260d58ab17787eca0be4bbcc309e9b'
-            '386a7503281296d995f9d0c814167e7f6b05f87542283ee5ae614ac0a23f8a95'
-            'dfa181914dbd1926aad94df922611d8a0c28a23efc7a66b699b9f50d82660026'
-            '51cbd74c41d8a2c0be29b95f91e2cdac65410f50538276c87ba8207152339a8e'
-            '620b26854e09ebf62daefcebce69954ec0549ec575006553e84b0cd0dab8909b'
-            'ee724621b433b7eeb3bf506035d9c1b14cddf5b328f5799b7589d7339765fe6c'
-            '39fd694854a41e19db94c6489b75d2c001f97b9795c21f24edd4c627e470e6a3'
-            'f3633f73d11ce4ac0426660191abd0e6819900776978d079b9c9291edc13dae1'
-            '703c9079a1a1e6381bcc56e0beafa6c2234954ea4470af4126067afbb48abd03'
-            'df4e00f174d1d243bf197924210e3f40286cecd2c793f3fb9f1cc1ff73c778e2')
+            'ba35c9142a20c5d5298312a1559ae1906436500087269725aeb05752ddbcc64c'
+            '87de5c562bd5d85cde2e8674fb387b5a77f49a424176b56fd28f3e9a4621eafb'
+            '4a2475095081cbf8d6420999cc571431913449e01fcb0208120f6a1084c46eab'
+            '7d9f40b1c396b5e5333e9785223033b074e52cbcb04780e6e4e351d0099666c7'
+            '67d9dde119ede3a709e7028e7c5e71b4ab1003fbed55ab2bdf11080021aee31e'
+            'bc14b0f27e46e2b1d9663f7608f3c83dafd2094ded7a2707128788b7f61f80dd'
+            'fa7a3d6bf7e174444d1dbefd159d00f161f9b00e433f6acc087460b3a6ecfdfb'
+            '191fd77601c7fc3a6bafd84511989046c7c58eeea6b4f017b957e957ad64fab3'
+            '22b0c3b48073dd19c8ba4e042db6b303fe40411f8e1c50afa7ecb9ae0b60e2e9'
+            'ab02623e62259e617f504e66ac9645192aa69bfadbb043ec0c3ed4d1f4b4e1bd'
+            '2b466682c94c34e7d9a13260c7e917b92c58bbe7bf77afca8adfaa84a0de05ab'
+            'cc594a9dc04bb416fa8cdb3f3323aa322fe777b27450e076b7d3993efc4b5f86'
+            '3a60d40eed0c1d5c2daa5c4dfaec2e9ae11d412a93dd2f6a0b2ab6899ce8af77'
+            '0a38682d7c1b9ac8b6c7c2011dfc5e684992e4c6356f79227efb06da4396ddf6'
+            'cf3a7d9f4caf138afc0ae88d1bb4f63beb7e55e55caabddb3eead7ba6cc20801')
 
 prepare() {
 	cd "${_pkgname}-${pkgver}"

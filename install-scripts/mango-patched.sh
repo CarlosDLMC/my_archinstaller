@@ -1,7 +1,7 @@
 #!/bin/bash
 # The patched mango, built from pkgbuilds/mangowm/.
 #
-# Arch's mangowm plus twelve patches that make mango look and behave like the
+# Arch's mangowm plus fifteen patches that make mango look and behave like the
 # Hyprland setup this desktop came from: windows that keep their content at
 # native size while they move (no stretch), binds that repeat only when
 # flagged (binde), reloads that keep the keyboard layout, Hyprland's groups

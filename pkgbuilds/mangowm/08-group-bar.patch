@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: CarlosDLMC <delamorenacoco.carlos@gmail.com>
 Date: Thu, 22 Oct 2026 08:18:25 +0200
-Subject: [PATCH 08/12] group bar: gaps between tabs, a font for the focused
+Subject: [PATCH 08/15] group bar: gaps between tabs, a font for the focused
  tab
 
 group_bar_gap: pixels between the tabs (Hyprland's groupbar:gaps_in);

@@ -249,11 +249,11 @@ first prompt.
 
 ### Core System
 - mango (mangowm), hypridle, hyprlock. mango is built from `pkgbuilds/mangowm` by
-  `install-scripts/mango-patched.sh`: Arch's mango 0.18.2 plus twelve patches that
+  `install-scripts/mango-patched.sh`: Arch's mango 0.18.2 plus fifteen patches that
   make it behave like the Hyprland setup this desktop came from - windows keep their
   content at native size while they move (no stretch), only the volume, brightness
   and resize binds repeat when held, reloads keep the keyboard layout, Hyprland's tab
-  groups and tab bar, Hyprland's fade timings, focused and unfocused shadow colours,
+  groups and tab bar (with the crossfade between tabs), Hyprland's fade timings, focused and unfocused shadow colours,
   the special workspace sliding in from the right, desktop zoom. Each patch is an
   option the config turns on. `mangowm` is in `IgnorePkg` in `/etc/pacman.conf` - a
   stock mango does not know those options - so update it by bumping the vendored

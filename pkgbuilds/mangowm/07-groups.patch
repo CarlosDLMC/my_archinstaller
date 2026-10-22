@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: CarlosDLMC <delamorenacoco.carlos@gmail.com>
 Date: Thu, 22 Oct 2026 08:16:38 +0200
-Subject: [PATCH 07/12] group: Hyprland's group behaviour behind options;
+Subject: [PATCH 07/15] group: Hyprland's group behaviour behind options;
  grouptoggle, groupmove
 
 group_keep_single: a group stays a group with one window (made by the new

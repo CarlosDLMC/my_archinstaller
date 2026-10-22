@@ -3,7 +3,7 @@
 ## October 2026
 
 Changed (2026-10-22, branch `mango`) - mango is patched to behave like the
-Hyprland setup: built from `pkgbuilds/mangowm` (Arch's 0.18.2 plus twelve
+Hyprland setup: built from `pkgbuilds/mangowm` (Arch's 0.18.2 plus fifteen
 patches, each an option the config turns on) by
 `install-scripts/mango-patched.sh`, and kept off `-Syu` by `IgnorePkg`.
 
@@ -14,7 +14,8 @@ patches, each an option the config turns on) by
   `Once.sh` is gone. Reloads and option changes keep the keyboard layout.
 - Tab groups as on Hyprland: SUPER+G makes a group of one that new windows join,
   tabs wrap and reorder, 5 px gaps between tabs, a medium title on the active
-  tab only.
+  tab only; switching tabs crossfades, and the tabs slide with their window on
+  a workspace switch.
 - Hyprland's timings: border colour 539 ms apart from the 300 ms opacity fade,
   layer fades 303 ms. Focused and unfocused shadow colours from wallust; closing
   windows fade under the bar; the special workspace slides in from the right; a

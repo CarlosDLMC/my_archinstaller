@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: CarlosDLMC <delamorenacoco.carlos@gmail.com>
 Date: Thu, 22 Oct 2026 08:04:52 +0200
-Subject: [PATCH 02/12] input: only binde binds repeat
+Subject: [PATCH 02/15] input: only binde binds repeat
  (bind_repeat_flagged_only)
 
 New bind flag e (binde, TOML flag "repeat"): the bind runs again while its
