@@ -35,9 +35,8 @@ ly_install() { # mode src dst
 # unless `shell = false`, the xinitrc entry unless `xinitrc = null`, then the
 # *.desktop files of the waylandsessions, xsessions and custom_sessions
 # directories. Each directory is listed in READDIR order (ls -U), because
-# that is what ly's crawl() walks and it never sorts: a sorted glob orders
-# hyprland.desktop and hyprland-uwsm.desktop by locale instead, and would get
-# the numbers below wrong. A key the file does not set takes ly's built-in
+# that is what ly's crawl() walks and it never sorts: a sorted glob orders the
+# files by locale instead, and would get the numbers below wrong. A key the file does not set takes ly's built-in
 # default.
 ly_conf_get() { # file key default
   local v
@@ -70,8 +69,8 @@ ly_sessions() { # config.ini
 }
 
 # Taken BEFORE config.ini is replaced: the numbers in /etc/ly/save.txt index
-# the list this produces, and the new config.ini (and the uwsm entry going,
-# below) changes that list. See "Session list" further down.
+# the list this produces, and the new config.ini changes that list. See "Keep
+# save.txt pointing at the same sessions" further down.
 _old_sessions=""
 [ -r /etc/ly/config.ini ] && _old_sessions=$(ly_sessions /etc/ly/config.ini)
 
@@ -94,71 +93,28 @@ ly_install 644 "$PARENT_DIR/assets/ly/config.ini" /etc/ly/config.ini
 printf "${NOTE} Installing ly start script...\n"
 ly_install 755 "$PARENT_DIR/assets/ly/start.sh" /etc/ly/start.sh
 
-# Session list: mango (and Hyprland's own entry, on a machine that still has it)
-#
-# mangowm ships one session file, mango.desktop (Exec=mango). The rest of this
-# block is for a machine that still has Hyprland from before the switch.
-#
-# The hyprland package ships two session files: hyprland.desktop
-# (Exec=/usr/bin/start-hyprland, what this setup logs in with) and
-# hyprland-uwsm.desktop (Exec=uwsm start ...). Other display managers hide the
-# second through its TryExec=uwsm, but ly 1.4.1 never reads TryExec and
-# nothing here installs uwsm, so ly listed a "Hyprland (uwsm-managed)" that
-# drops straight back to the login screen. Worse, with no save.txt yet ly
-# preselects the LAST session it adds, and which of the two readdir returns
-# last depends on the filesystem's hash seed: on this laptop's ext4 it was the
-# uwsm one, so the first login after the install bounced (ly.log, Sep 13).
-#
-# pacman.sh adds `NoExtract` for the file, and runs before any Hyprland install,
-# so a fresh install never gets it at all. This removes the copy an earlier install
-# already put there - NoExtract only governs future extraction - and pacman -Qk
-# counts a missing NoExtract file as intended, not as damage.
-_uwsm_entry=/usr/share/wayland-sessions/hyprland-uwsm.desktop
-if pacman -Q uwsm &>/dev/null; then
-  # Checked, not assumed: pacman.sh's NoExtract from a run before uwsm was
-  # installed keeps the file off disk, and a hyprland reinstall does not bring
-  # it back while that line is there.
-  if [ -e "$_uwsm_entry" ]; then
-    echo "${NOTE} uwsm is installed, so ${_uwsm_entry##*/} works - leaving it in ly's session list." | tee -a "$LOG"
-  else
-    echo "${WARN} uwsm is installed but ${_uwsm_entry} is not on disk, so ly has no uwsm session. If /etc/pacman.conf has NoExtract for it, delete that line, then: sudo pacman -S hyprland" | tee -a "$LOG"
-  fi
-else
-  if [ -e "$_uwsm_entry" ]; then
-    sudo rm -f "$_uwsm_entry" 2>&1 | tee -a "$LOG"
-    if [ -e "$_uwsm_entry" ]; then
-      echo "${WARN} Could not remove $_uwsm_entry - ly will list a uwsm session that cannot start." | tee -a "$LOG"
-    else
-      echo "${OK} Removed ${_uwsm_entry##*/}: ly lists no uwsm session without uwsm." | tee -a "$LOG"
-    fi
-  fi
-  if ! grep -qE '^[[:space:]]*NoExtract[[:space:]]*=.*usr/share/wayland-sessions/hyprland-uwsm\.desktop' /etc/pacman.conf 2>/dev/null; then
-    echo "${WARN} /etc/pacman.conf has no NoExtract for ${_uwsm_entry##*/} (pacman.sh adds it) - the next hyprland upgrade puts the entry back." | tee -a "$LOG"
-  fi
-fi
+# Session list: mango. mangowm ships one session file, mango.desktop
+# (Exec=mango); mango.sh, which ran before this, removed any other desktop's.
 
 # Keep save.txt pointing at the same sessions.
 #
 # ly stores each user's last session as an INDEX into that list, not a name
-# (/etc/ly/save.txt, "user:N"). config.ini now hides shell and xinitrc and the
-# uwsm entry is gone, so every entry shifts - this laptop's "mentefria:2" was
-# Hyprland behind shell(0) and xinitrc(1), and Hyprland is now 0. ly clamps an
-# out-of-range index to the LAST entry (main.zig: @min(index, len - 1)), so
-# with Hyprland alone that would still land right; but the stale 2 stays in
-# the file, and once more sessions are ever installed it points at whatever
-# happens to sit there. With other sessions already installed, an index can
-# land in range on the wrong one straight away.
+# (/etc/ly/save.txt, "user:N"). config.ini hides shell and xinitrc, and a
+# re-run may remove a session (mango.sh uninstalls an old desktop), so the
+# entries shift. ly clamps an out-of-range index to the LAST entry (main.zig:
+# @min(index, len - 1)), but the stale number stays in the file, and once more
+# sessions are ever installed it points at whatever happens to sit there. With
+# other sessions already installed, an index can land in range on the wrong
+# one straight away.
 #
 # So when the list changes, rewrite each index to the same session's new
-# position, and a session that no longer exists (shell, xinitrc, uwsm) to
-# mango's. An index already past the end of the list is stale whatever
+# position, and a session that no longer exists (shell, xinitrc, a removed
+# desktop) to mango's. An index already past the end of the list is stale whatever
 # happened - ly never corrects one it clamped - so it goes to mango too,
 # which on the next re-run also mends an old index that a running ly wrote
 # back (see below). Anything else is left exactly as it is, so a re-run on an
 # unchanged list writes nothing. The first line, the index of the last user,
-# is not touched. Hyprland, where it is still installed, counts as replaced:
-# a user whose last session was Hyprland gets mango, the desktop that took its
-# place; Hyprland stays in the list for whoever picks it once.
+# is not touched.
 #
 # One caveat: a running ly holds the OLD list in memory and rewrites save.txt
 # from it at the next login. A preset run reboots before that happens; after
@@ -195,8 +151,7 @@ if [ -n "$_old_sessions" ] && [ -n "$_new_sessions" ] && [ -s /etc/ly/save.txt ]
     {
       user = $0; sub(/:[0-9]+$/, "", user)
       k = substr($0, length(user) + 2) + 0
-      if (k < nold && old[k + 1] == "wayland:hyprland") idx = fallback
-      else if (same && k < n) idx = k
+      if (same && k < n) idx = k
       else if (k < nold && (old[k + 1] in at)) idx = at[old[k + 1]]
       else idx = fallback
       print user ":" idx

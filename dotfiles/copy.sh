@@ -22,52 +22,6 @@ BACKUP_STAMP="$(date +%Y%m%d-%H%M%S)"
 # into file:///home/John, labelled "Doe/Documents".
 HOME_URI=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$HOME" 2>/dev/null) || HOME_URI="$HOME"
 
-# The video wallpaper picked last lives in hypr/wallpaper_effects/.wallpaper_video
-# (WallpaperSelect.sh writes the path, WallpaperStart.sh plays it at login).
-# Under Hyprland it was three lines of hypr/configs/Startup_Apps.lua instead -
-# livewallpaper = "<path>" and the mpvpaper line live - so a backup from then
-# carries it there. This reads it out of such a file into <video-file>: the
-# path as a Lua string (\\, \" and \NNN escapes, the last for every byte that is
-# not printable ASCII), with $HOME at its start the way WallpaperSelect.sh saved
-# it. LC_ALL=C and grep -a: a line saved by an older WallpaperSelect.sh can
-# hold raw bytes that are not valid UTF-8. Returns 0 carried over, 1 no video
-# in <from>, 2 a video is on in <from> but its path cannot be read.
-video_wallpaper_from_lua() { # Startup_Apps.lua video-file
-    local _from="$1" _to="$2" _path
-    [ -f "$_from" ] || return 1
-    LC_ALL=C grep -aqE '^\s*run\("mpvpaper ' "$_from" || return 1
-    _path=$(python3 - "$_from" "$HOME" <<'PY'
-import re
-import sys
-data = open(sys.argv[1], 'rb').read()
-m = re.search(rb'^[ \t]*local[ \t]+livewallpaper[ \t]*=[ \t]*"((?:[^"\\]|\\.)*)"', data, re.M)
-if not m:
-    sys.exit(1)
-lit, out, i = m.group(1), bytearray(), 0
-while i < len(lit):
-    if lit[i] == 0x5C and i + 1 < len(lit):
-        d = re.match(rb'[0-9]{1,3}', lit[i + 1:])
-        if d:
-            out.append(int(d.group(0)) & 0xFF)
-            i += 1 + len(d.group(0))
-        else:
-            out.append(lit[i + 1])
-            i += 2
-        continue
-    out.append(lit[i])
-    i += 1
-path = bytes(out)
-if path.startswith(b'$HOME'):
-    path = sys.argv[2].encode() + path[5:]
-if not path:
-    sys.exit(1)
-sys.stdout.buffer.write(path)
-PY
-) || return 2
-    [ -n "$_path" ] || return 2
-    mkdir -p "$(dirname "$_to")" && printf '%s\n' "$_path" >"$_to"
-}
-
 # Is <file> one of the animation presets Animations.sh copies in? Only then is
 # a mango/animations.conf a CHOICE; an untouched copy of an older repo version
 # is not, and must not be kept over the updated one.
@@ -169,13 +123,13 @@ wallust_targets=(
 # hypr/ holds the scripts every bind runs, the lock screen and the wallpaper
 # state; the compositor's own config is mango/ (restore_mango_state).
 restore_hypr_state() { # backup
-    local _bak="$1" _state _rc
+    local _bak="$1" _state
     # Only from a backup of THIS setup. Another one's ~/.config/hypr - JaKooLit's
-    # Hyprland-Dots uses the same .initial_startup_done marker - handed its
+    # dotfiles uses the same .initial_startup_done marker - handed its
     # marker over, and initial-boot.sh then never ran for this config: no
     # wallust palette, no GTK/icon themes, no fonts. SovietLockGen.py is this
-    # setup's own, and hyprland.lua marks one from before the switch to mango.
-    if [ ! -f "$_bak/scripts/SovietLockGen.py" ] && [ ! -f "$_bak/hyprland.lua" ]; then
+    # setup's own.
+    if [ ! -f "$_bak/scripts/SovietLockGen.py" ]; then
         echo "  ${NOTE} $(basename "$_bak") is not this setup's - nothing in it is carried over"
         return 0
     fi
@@ -187,18 +141,6 @@ restore_hypr_state() { # backup
             cp "$_bak/$_state" "$HOME/.config/hypr/$_state" && echo "  ${OK} Kept your $_state from the previous install"
         fi
     done
-
-    # A video wallpaper picked under Hyprland, from that setup's
-    # Startup_Apps.lua. Without this the first mango login showed a still image.
-    if [ -f "$_bak/configs/Startup_Apps.lua" ] && [ ! -s "$HOME/.config/hypr/wallpaper_effects/.wallpaper_video" ]; then
-        video_wallpaper_from_lua "$_bak/configs/Startup_Apps.lua" "$HOME/.config/hypr/wallpaper_effects/.wallpaper_video"
-        _rc=$?
-        if [ "$_rc" -eq 0 ]; then
-            echo "  ${OK} Kept your video wallpaper from the previous install"
-        elif [ "$_rc" -eq 2 ]; then
-            echo "  ${WARN} Your Startup_Apps.lua had mpvpaper on, but the video could not be carried over (no livewallpaper line this script can read). It is in $(basename "$_bak"); pick it again with SUPER+W."
-        fi
-    fi
 }
 
 # Put mango/'s machine state back from its backup: what the repo's copy holds
@@ -862,29 +804,7 @@ fi
 # desktop to the snapshot palette - and it would STAY there, because
 # initial-boot.sh is guarded by ~/.config/hypr/.initial_startup_done and does
 # not run a second time. Nothing would repaint until the next wallpaper change.
-#
-# mango's colours are new to a machine that ran this setup under Hyprland: no
-# backup of them exists, but that machine's hypr/ backup holds the same live
-# palette for Hyprland (wallust-hyprland.lua, colorN = "rgb(RRGGBB)"), and the
-# mango template is filled in from it.
 printf "\n${INFO} Seeding wallust output files...\n"
-# Fill a wallust template's {{colorN | strip}} placeholders from a Hyprland-era
-# palette file. Fails if the palette lacks a colour the template uses.
-render_from_lua_palette() { # template lua-palette dest
-    python3 - "$@" <<'PY'
-import re
-import sys
-template, lua, dest = sys.argv[1:4]
-pal = dict(re.findall(r'^\s*(\w+)\s*=\s*"rgb\(([0-9A-Fa-f]{6})\)"', open(lua).read(), re.M))
-def fill(m):
-    return pal[m.group(1)]
-try:
-    out = re.sub(r'\{\{\s*(\w+)\s*\|\s*strip\s*\}\}', fill, open(template).read())
-except KeyError:
-    sys.exit(1)
-open(dest, 'w').write(out)
-PY
-}
 # (wallust_targets is defined at the top; restore_state already put a backed-up
 # palette back as each directory was copied, so this mostly seeds a fresh install.)
 
@@ -909,13 +829,6 @@ for _target in "${wallust_targets[@]}"; do
             continue
         fi
         echo "  ${WARN} Could not recover $_target from the backup - falling back to the shipped default"
-    fi
-
-    _lua="${BACKUP_OF[hypr]:+${BACKUP_OF[hypr]}/wallust/wallust-hyprland.lua}"
-    if [ "$_target" = "mango/wallust/colors.conf" ] && [ -n "$_lua" ] && [ -f "$_lua" ] \
-       && render_from_lua_palette "$SCRIPT_DIR/config/wallust/templates/colors-mango.conf" "$_lua" "$_dest"; then
-        echo "  ${OK} Kept your current palette for $_target (from the Hyprland one)"
-        continue
     fi
 
     if [ ! -f "$_seed" ]; then

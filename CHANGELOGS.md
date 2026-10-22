@@ -2,6 +2,22 @@
 
 ## October 2026
 
+Changed (2026-10-22) - mango only. Hyprland is gone from the installer and the
+repo: nothing installs or configures it, and a re-run on a machine that has it
+removes `hyprland`, `xdg-desktop-portal-hyprland` and `hyprsunset`
+(`mango.sh`; hyprlock, hypridle, hyprpolkitagent and the hyprland-qt-support
+Qt style stay - they are what the desktop uses on mango).
+
+- `Hyprland-Dots/` is now `dotfiles/`, `01-hypr-pkgs.sh` is
+  `01-desktop-pkgs.sh`, and the preset option `xdph` is `portals`
+  (`portals.sh`) - an older preset that still says `xdph` installs no portals.
+- The Hyprland migration is gone: `copy.sh` no longer carries a wallpaper,
+  video wallpaper or palette over from a Hyprland-era `hypr/` backup, and
+  ly_config.sh and pacman.sh no longer handle Hyprland's sessions (the uwsm
+  `NoExtract` line an earlier run added to `/etc/pacman.conf` is harmless and
+  can be deleted). A machine on the Hyprland version gets mango on a re-run,
+  with the wallpaper picked again.
+
 Changed (2026-10-22, branch `mango`) - mango is patched to behave like the
 Hyprland setup: built from `pkgbuilds/mangowm` (Arch's 0.18.2 plus fifteen
 patches, each an option the config turns on) by

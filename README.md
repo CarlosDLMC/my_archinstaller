@@ -1,7 +1,8 @@
 # My Arch Installer
 
-Automated Arch Linux installation with a custom mango (Wayland) setup. It used to be Hyprland;
-the desktop looks and behaves the same, on mango ([mangowm](https://github.com/mangowm/mango)).
+Automated Arch Linux installation with a custom [mango](https://github.com/mangowm/mango)
+(Wayland) desktop. The setup began on Hyprland; mango is built here with a few patches so
+it keeps that look and feel (see `pkgbuilds/mangowm`).
 
 Dates and times run on a Russian time locale (`LC_TIME=ru_RU.UTF-8`), which is
 what gives the 24-hour clock, the Monday-first calendar and the Cyrillic day and
@@ -49,7 +50,7 @@ select exactly this and nothing else:
   (especially **Hyprland** and the **Mango** editions - they bring SDDM or a shell
   of their own, which would fight ly and the Quickshell bar), Firefox, both
   printing groups and accessibility. If a Mango edition is installed anyway,
-  `01-hypr-pkgs.sh` removes its settings package and keeps mango itself.
+  `01-desktop-pkgs.sh` removes its settings package and keeps mango itself.
 
 If the machine has an NVIDIA GPU, the CachyOS installer already puts its
 prebuilt kernel module (`linux-cachyos-nvidia-open`) on it. `nvidia.sh` sees
@@ -211,7 +212,7 @@ first prompt.
 4. **Fill in your machine-local secrets.**
 
    The installer creates `~/.config/zsh/secrets.zsh` for you from
-   `Hyprland-Dots/config/zsh/secrets.zsh`, mode `600`, with **every line
+   `dotfiles/config/zsh/secrets.zsh`, mode `600`, with **every line
    commented out** and fake values. Open it, uncomment the keys you use and
    replace their values with the real ones:
 
@@ -219,7 +220,7 @@ first prompt.
    ${EDITOR:-nano} ~/.config/zsh/secrets.zsh
    ```
 
-   The tracked copy in `Hyprland-Dots/config/zsh/secrets.zsh` is a template:
+   The tracked copy in `dotfiles/config/zsh/secrets.zsh` is a template:
    every value in it is fake, and it must stay that way. Anything committed to
    git is recoverable from the history forever, even after a later commit
    deletes it, and this repo is pushed to GitHub — so real keys only ever go in
@@ -260,14 +261,8 @@ first prompt.
   PKGBUILD and re-running the script. The package depends on scenefx and wlroots by
   library version, so pacman refuses an update of those that would break it
 - ly display manager with large font. Its session is mango's own
-  (`mango.desktop`, from the package). On a machine that still has Hyprland
-  from before, Hyprland stays in the list, and a saved Hyprland choice is
-  pointed at mango. Hyprland's second session file, the uwsm one, would bounce
-  straight back to the login screen (ly ignores `TryExec` and uwsm is not
-  installed), so `pacman.sh` adds
-  `NoExtract = usr/share/wayland-sessions/hyprland-uwsm.desktop` to
-  `/etc/pacman.conf`, and `ly_config.sh` removes any copy already on disk.
-  Delete that line if you ever install uwsm. The login-screen flag is cut per
+  (`mango.desktop`, from the package); a re-run on a machine that has Hyprland
+  removes it (`mango.sh`), so mango is the only desktop ly offers. The login-screen flag is cut per
   console grid (768p, 900p, 1080p, 1440p, 2160p), and the largest cut that fits
   the panel is installed. Which flag waves is the preset's `ly_flag` (or, when
   ly is ticked, an fzf picker with a live preview of each flag), one of the
@@ -364,7 +359,7 @@ first prompt.
 
 ## Configuration
 
-All configurations are stored in `Hyprland-Dots/config/` and will be copied to `~/.config/` during installation.
+All configurations are stored in `dotfiles/config/` and will be copied to `~/.config/` during installation.
 
 ### Locales
 
@@ -412,7 +407,7 @@ GTK takes its font from gsettings, which `initial-boot.sh` sets, rather than
 from `settings.ini`.
 
 To change the bar's font, edit `fontFamily` in
-`Hyprland-Dots/config/quickshell/bar/Theme.qml` — every widget renders through
+`dotfiles/config/quickshell/bar/Theme.qml` — every widget renders through
 it — and add the package to `fonts.sh` and the family to `required_families`
 in the same file.
 
@@ -427,8 +422,8 @@ install broke. (The overview, part of the bar, takes its fonts from
 The GTK theme is **Wallust-A**: GTK3's own dark Adwaita in the wallpaper's
 colours (see below). It is set in two places that have to agree:
 
-- `Hyprland-Dots/config/gtk-3.0/settings.ini` — `gtk-theme-name`
-- `Hyprland-Dots/config/hypr/initial-boot.sh` — `gtk_theme`, applied over `gsettings`
+- `dotfiles/config/gtk-3.0/settings.ini` — `gtk-theme-name`
+- `dotfiles/config/hypr/initial-boot.sh` — `gtk_theme`, applied over `gsettings`
 
 Both matter because GTK3 applications read the theme from *either* source
 depending on how they were launched, so a mismatch means some windows are
@@ -475,7 +470,7 @@ its white text. It runs after every `wallust run` (about 15 ms), from
 read their theme when they start, so an open one changes at its next start.
 
 The GTK apps and btop follow the wallpaper too, through wallust templates.
-GTK3 apps get the `Wallust-A` theme (`Hyprland-Dots/themes/`, installed into
+GTK3 apps get the `Wallust-A` theme (`dotfiles/themes/`, installed into
 `~/.themes` by `copy.sh`), which imports wallust's generated
 `~/.config/gtk-3.0/wallust.css`: selections, focus rings, checked boxes and
 switches, sliders, highlighted buttons and links take the same accent. Its
@@ -660,7 +655,7 @@ only iwd saved; reconnecting to it once through the bar or nmcli fixes that.
 
 ### DNS
 
-`01-hypr-pkgs.sh` installs `systemd-resolvconf`, which replaces the classic
+`01-desktop-pkgs.sh` installs `systemd-resolvconf`, which replaces the classic
 `resolvconf` with a shim over `resolvectl` — and that shim only works while
 `systemd-resolved` is running. Arch's NetworkManager never goes through
 resolvconf (it is built to write `/etc/resolv.conf` itself), so ordinary DNS
@@ -1281,19 +1276,18 @@ Stable was verified rather than assumed: the exported QML API of 0.3.1 was
 diffed against the `0.3.0.r6.gb66495f` build this bar was developed on — 118 →
 119 types and 1056 → 1057 members, with nothing removed or renamed. The bar
 only uses `PanelWindow`, `PopupWindow`, `Variants`, `ShellRoot`, `Singleton`,
-`Process`, `Timer`, `Socket` and `IpcHandler`, all unchanged. (Since the move to
-mango it no longer uses the `Quickshell.Hyprland` module at all.)
+`Process`, `Timer`, `Socket` and `IpcHandler`, all unchanged.
 
 ### Wallpapers
 
-`Hyprland-Dots/wallpapers/` is copied to `~/Pictures/wallpapers/`, which is the
+`dotfiles/wallpapers/` is copied to `~/Pictures/wallpapers/`, which is the
 directory `WallpaperSelect.sh`, `WallpaperRandom.sh` and the rofi picker all read.
 It ships the full set in use on this machine (51 files, about 138 MB,
 including the `Dynamic-Wallpapers/` light and dark pair) so the picker on a
 fresh install offers the same choices. The copy is additive: wallpapers you add
 locally are never removed by a re-run.
 The default wallpaper is set by `DEFAULT_WALLPAPER` near the bottom of
-`Hyprland-Dots/copy.sh` — currently `sovietpunk/sovietpunk_2k_2560x1440.png`.
+`dotfiles/copy.sh` — currently `sovietpunk/sovietpunk_2k_2560x1440.png`.
 copy.sh seeds it into `~/.config/hypr/wallpaper_effects/.wallpaper_current`, which
 is what `initial-boot.sh` loads on first login and what wallust derives the bar
 and terminal colours from.
@@ -1317,8 +1311,7 @@ These are machine-specific, so a fresh install starts without them:
   file (try a layout live with `wdisplays` first; `wlr-randr` lists names and
   modes - the file has examples). A re-run of the installer keeps it: `copy.sh`
   restores `monitors.conf` from the `mango` backup instead of resetting it to
-  the template. A Hyprland `monitors.lua` from before the switch is not
-  converted - write the mango rules once.
+  the template.
 - **`/etc/wireguard/*.conf`** — your VPN configs. They contain private keys, so
   they must never be committed. See below for how to move them across.
 - **`/etc/cups/printers.conf`** and its PPD — the printer queue. The device URI
@@ -1344,7 +1337,7 @@ These are machine-specific, so a fresh install starts without them:
   `colors-rofi.rasi` — a missing file there is an error on first launch, not a silent fallback.
   (mango's `colors.conf` is the exception: `config.conf` sources it with
   `source_optional`, and `settings.conf` holds a fallback palette.) So a rendered snapshot
-  of each lives in **`Hyprland-Dots/defaults/`**, mirroring its path under
+  of each lives in **`dotfiles/defaults/`**, mirroring its path under
   `~/.config/`, and `copy.sh` puts it in place. `initial-boot.sh` runs wallust on
   first login and overwrites all of them from your actual wallpaper.
 
@@ -1499,7 +1492,7 @@ those three commands — the VPN widget is the only thing here that depends on i
 - `SUPER + SPACE` - Switch keyboard layout. Most recent first, like Alt+Tab: a
   tap toggles between the last two (US ⇄ ES); press again while the popup is
   open to go further (RU)
-- `SUPER + SHIFT + SPACE` - Float current window (over its own tile, as on Hyprland)
+- `SUPER + SHIFT + SPACE` - Float current window (over its own tile)
 - `SUPER + G` - Tab group on or off: a window becomes a group of one, and the
   windows opened from it join it as tabs; on a group it breaks the group up.
   `SUPER + Tab` / `SUPER + CTRL + Tab` step through the tabs (round from the last to
@@ -1526,7 +1519,7 @@ those three commands — the VPN widget is the only thing here that depends on i
   this is the only way Herdr can have the key. Window cycling stays on
   `SUPER + J` / `SUPER + K`.
 
-See `Hyprland-Dots/config/mango/keybinds.conf` for all keybindings, or press
+See `dotfiles/config/mango/keybinds.conf` for all keybindings, or press
 `SUPER H` for the cheat sheet: a window listing every bind in the mango config (laptop keys
 included where they are loaded) with a search box, so typing `screenshot` or `super shift`
 filters by action or keys. `SUPER SHIFT K` shows the same list in rofi.
@@ -1535,7 +1528,7 @@ The mango config is `key=value` files in `~/.config/mango/` (`config.conf` sourc
 and mango reloads by itself when one of them changes. `mango -c ~/.config/mango/config.conf -p`
 checks it without touching the running session; scripts talk to mango with `mmsg`
 (`mmsg dispatch …`, `mmsg get all-clients`). A held key runs its bind once; only the
-`binde` binds (volume, brightness, resizing) repeat, as on Hyprland.
+`binde` binds (volume, brightness, resizing) repeat.
 
 **Two binds do nothing on a fresh install.** `SUPER + T` launches Telegram and
 `SUPER + R` launches RustRover (`mango/keybinds.conf`), and
@@ -1569,7 +1562,7 @@ Handy is offline speech-to-text — no audio leaves your machine. `wtype` inject
 
 `handy-start.sh` opens Handy visibly while `selected_model` is empty — so you get the model picker on a fresh machine — and switches to `--start-hidden` once a model is set.
 
-**Paste settings are pinned.** Before Handy starts, the keybind and `handy-start.sh` both run `UserScripts/handy-paste-settings.sh`, which sets Handy's paste method to **External Script** with `UserScripts/handy-type.sh` as the script: it waits **700 ms**, then types the transcript with `wtype`. Ctrl+V paste does not reach terminals, so typing it is. The wait mattered under Hyprland, which matched binds by key position: with SUPER/CTRL still held from the stop press, a long transcript fired binds (`a` → SUPER+4, `t` → SUPER+Q, `p` → SUPER+CTRL+R). mango ignores binds from a virtual keyboard; the wait stays so the bind's keys are let go before the typing starts. Handy's own **Direct** method cannot do this: it types at once, and its paste-delay setting only applies to the clipboard methods. The script edits `settings_store.json` only while Handy is not running, and only once the file exists, so the very first Handy session after an install still uses Handy's defaults.
+**Paste settings are pinned.** Before Handy starts, the keybind and `handy-start.sh` both run `UserScripts/handy-paste-settings.sh`, which sets Handy's paste method to **External Script** with `UserScripts/handy-type.sh` as the script: it waits **700 ms**, then types the transcript with `wtype`. Ctrl+V paste does not reach terminals, so typing it is. The wait lets the bind's keys go before the typing starts (mango ignores binds from a virtual keyboard). Handy's own **Direct** method cannot do this: it types at once, and its paste-delay setting only applies to the clipboard methods. The script edits `settings_store.json` only while Handy is not running, and only once the file exists, so the very first Handy session after an install still uses Handy's defaults.
 
 ### Herdr (terminal workspace manager)
 
@@ -1628,7 +1621,7 @@ past the end.
 
 #### What the config changes
 
-`~/.config/herdr/config.toml`, from `Hyprland-Dots/config/herdr/`:
+`~/.config/herdr/config.toml`, from `dotfiles/config/herdr/`:
 
 - **Sidebar legibility.** `status_indicators = "symbols"` gives each state a
   distinct glyph instead of relying on colour alone, and `[theme.custom]`
@@ -1916,7 +1909,7 @@ separate from idle.
 blank while locked *and* on AC, so the panel stays readable at the desk but still
 blanks on battery.
 
-**Files** (in `~/.config/hypr/`, from `Hyprland-Dots/config/hypr/`):
+**Files** (in `~/.config/hypr/`, from `dotfiles/config/hypr/`):
 - `hyprlock.conf` — colours and background only
 - `hyprlock-monitors.conf` — generated, do not edit
 - `scripts/SovietLock.py` — draws the panel, date, footer
@@ -1981,7 +1974,7 @@ Calls* and others — made for each machine's own screen. The screensaver opens 
 `mosfilm_logo` drawn by `scattered`, and after that shows a random piece with a random
 effect each time, never the same piece twice in a row.
 
-The repo ships only the images, `Hyprland-Dots/.local/share/screensaver/images/`, which
+The repo ships only the images, `dotfiles/.local/share/screensaver/images/`, which
 `copy.sh` puts in `~/.local/share/screensaver/images/`. At every login
 `mango/startup.conf` runs `~/.config/hypr/scripts/ScreensaverArt.sh --new`, which makes
 art only for the images that never had any: all of them at the first login, later just
@@ -2001,7 +1994,7 @@ would). With
 no `.txt` in `art/`, the screensaver uses `~/.local/share/screensaver/art.txt`. The art
 lives outside `~/.config/hypr` because an installer re-run replaces that whole folder;
 the repo has no `.txt` art, so a re-run never overwrites yours. `ttfx` comes from the AUR and is built without its tests (see
-`install-scripts/01-hypr-pkgs.sh`): on CachyOS one bit-exact test fails by a last-bit
+`install-scripts/01-desktop-pkgs.sh`): on CachyOS one bit-exact test fails by a last-bit
 rounding difference in glibc, so an update through yay there needs
 `yay -S ttfx --mflags --nocheck`.
 
@@ -2271,9 +2264,9 @@ sidebar bookmarks, and files of your own in `environment.d`,
 `fontconfig`, `Kvantum` and `MangoHud`. Everything else under a copied
 `~/.config` directory is reset to the repo version — edits you made there
 (`mango/keybinds.conf`, say) are in the `<dir>.backup-<stamp>` copy next to it.
-A machine set up by this repo's Hyprland version moves over on a re-run: its
-`hypr/` is backed up and replaced, and the wallpaper, a video wallpaper and the
-current palette carry over to mango.
+A machine set up by this repo's older Hyprland version is not migrated: a
+re-run removes Hyprland, and its `hypr/` is backed up and replaced like any
+other directory - pick the wallpaper again with SUPER+W afterwards.
 
 #### "Validating source files with sha256sums... FAILED"
 
@@ -2366,7 +2359,7 @@ The diagnostic will tell you exactly what's wrong and how to fix it.
 If dotfiles weren't copied:
 
 ```bash
-cd ~/Documents/my_archinstaller/Hyprland-Dots
+cd ~/Documents/my_archinstaller/dotfiles
 ./copy.sh
 mmsg dispatch quit  # leave mango, then log in again through ly
 ```
@@ -2395,7 +2388,7 @@ chmod +x install.sh
 - ✅ ly (lightweight TUI display manager)
 - ✅ gtk_themes (the Flat-Remix icons the wallust icon theme is made from)
 - ✅ bluetooth (if you need it)
-- ✅ xdph (XDG portals for screen sharing - the name is from Hyprland's portal)
+- ✅ portals (XDG portals for screen sharing)
 - ✅ handy (offline speech-to-text, SUPER + CTRL + F8)
 - ✅ nopasswd_sudo (passwordless sudo for wheel — the bar's VPN widget
   silently does nothing without it; see [VPN configs](#vpn-configs-the-bars-vpn-selector)

@@ -535,7 +535,7 @@ PY
   fi
 fi
 
-# systemd-resolved, because 01-hypr-pkgs.sh installs systemd-resolvconf.
+# systemd-resolved, because 01-desktop-pkgs.sh installs systemd-resolvconf.
 #
 # systemd-resolvconf replaces the classic resolvconf with a shim over
 # resolvectl, and that shim only works while systemd-resolved is running.
@@ -658,7 +658,7 @@ else
   fi
 fi
 
-# avahi-daemon is enabled HERE, not only by thunar.sh. 01-hypr-pkgs.sh always
+# avahi-daemon is enabled HERE, not only by thunar.sh. 01-desktop-pkgs.sh always
 # installs avahi, and the block below hands mDNS to it - so with thunar="OFF" the
 # daemon was installed but never started, resolved's responder was switched off,
 # and nothing answered .local names or printer discovery at all.

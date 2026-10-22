@@ -1,7 +1,6 @@
 #!/bin/bash
 # XDG desktop portals for mango: wlr (screen sharing and screenshots) and gtk
-# (file pickers and the rest). The option kept its name, xdph, from when it
-# installed xdg-desktop-portal-hyprland, so older presets still select it.
+# (file pickers and the rest). The option is `portals`.
 # mangowm ships mango-portals.conf, which picks these two.
 
 xdg=(
@@ -24,7 +23,7 @@ fi
 
 
 # Set the name of the log file to include the current date and time
-LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_xdph.log"
+LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_portals.log"
 
 printf "${NOTE} Installing ${SKY_BLUE}xdg-desktop-portal-wlr${RESET} and ${SKY_BLUE}-gtk${RESET}\n"
 for xdgs in "${xdg[@]}"; do

@@ -16,7 +16,7 @@ packages=(
   cliphist
   kvantum
   # rofi, not rofi-wayland: rofi-wayland was merged back into rofi and is what
-  # 01-hypr-pkgs.sh installs.
+  # 01-desktop-pkgs.sh installs.
   rofi
   imagemagick
   # dunst, not mako: dunst is the notification daemon this setup runs
@@ -224,13 +224,13 @@ if selected dots; then
     check_outcome "dotfiles not deployed: ~/.config/quickshell/bar/shell.qml is missing (install-scripts/dotfiles-main.sh)" \
         test -f "$HOME/.config/quickshell/bar/shell.qml"
     # Both names: GtkReload.sh switches between them after every wallpaper change.
-    check_outcome "the Wallust GTK theme is missing from ~/.themes - GTK apps lose the wallpaper colours (Hyprland-Dots/copy.sh)" \
+    check_outcome "the Wallust GTK theme is missing from ~/.themes - GTK apps lose the wallpaper colours (dotfiles/copy.sh)" \
         test -f "$HOME/.themes/Wallust-A/gtk-3.0/gtk.css" -a -f "$HOME/.themes/Wallust-B/gtk-3.0/gtk.css"
     check_outcome "dotfiles not deployed: ~/.zshrc is missing (install-scripts/dotfiles-main.sh)" \
         test -f "$HOME/.zshrc"
-    check_outcome "wallpaper not seeded: ~/.config/hypr/wallpaper_effects/.wallpaper_current is missing (Hyprland-Dots/copy.sh)" \
+    check_outcome "wallpaper not seeded: ~/.config/hypr/wallpaper_effects/.wallpaper_current is missing (dotfiles/copy.sh)" \
         test -f "$HOME/.config/hypr/wallpaper_effects/.wallpaper_current"
-    check_outcome "dotfiles not deployed: ~/.config/zsh/herdr-layouts.zsh is missing - hdl/hds/hdlm/hsl will not exist (Hyprland-Dots/copy.sh)" \
+    check_outcome "dotfiles not deployed: ~/.config/zsh/herdr-layouts.zsh is missing - hdl/hds/hdlm/hsl will not exist (dotfiles/copy.sh)" \
         test -f "$HOME/.config/zsh/herdr-layouts.zsh"
     # That the mango this run installed accepts the config, not only that the
     # file exists. The config needs the patched mango (mango-patched.sh): a
@@ -365,8 +365,8 @@ if selected quickshell; then
         pacman -Qi quickshell
 fi
 
-if selected xdph; then
-    check_outcome "xdg-desktop-portal-wlr is not installed - no screen sharing (install-scripts/xdph.sh)" \
+if selected portals; then
+    check_outcome "xdg-desktop-portal-wlr is not installed - no screen sharing (install-scripts/portals.sh)" \
         pacman -Qi xdg-desktop-portal-wlr
 fi
 
@@ -417,7 +417,7 @@ fi
 if selected herdr; then
     check_outcome "herdr is not installed at ~/.local/bin/herdr (install-scripts/herdr.sh)" \
         test -x "$HOME/.local/bin/herdr"
-    check_outcome "~/.config/herdr/config.toml is missing (Hyprland-Dots/copy.sh)" \
+    check_outcome "~/.config/herdr/config.toml is missing (dotfiles/copy.sh)" \
         test -f "$HOME/.config/herdr/config.toml"
     # An unsubstituted __HOME__ leaves every CTRL+ALT+N tab bind and the ALT+Q
     # close-workspace popup pointing at a path that does not exist. herdr reports
@@ -437,7 +437,7 @@ if selected herdr; then
     # same silent failure the __HOME__ check above exists to catch. Reading the
     # bindings out of the installed config rather than listing the helpers here
     # means a binding added later is covered without touching this file.
-    check_outcome "a herdr keybinding points at a helper script that is not installed or not executable (Hyprland-Dots/.local/bin, Hyprland-Dots/copy.sh)" \
+    check_outcome "a herdr keybinding points at a helper script that is not installed or not executable (dotfiles/.local/bin, dotfiles/copy.sh)" \
         python3 -c 'import tomllib, os, shlex, sys; cfg = os.path.expanduser("~/.config/herdr/config.toml"); d = tomllib.load(open(cfg, "rb")); cmds = d.get("keys", {}).get("command", []); missing = [c["command"] for c in cmds if not os.access(shlex.split(c["command"])[0], os.X_OK)]; print("\n".join(missing)); sys.exit(1 if missing else 0)'
 fi
 

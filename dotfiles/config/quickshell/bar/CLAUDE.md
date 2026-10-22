@@ -220,7 +220,7 @@ components/         # Modular widget components
   `scripts/clip-paste.sh` is kept from the old rofi script: picking an entry
   pastes it into the window that had focus (`Ctrl+Shift+V` for terminals,
   `Ctrl+V` elsewhere), which is better than merely filling the clipboard. That
-  needs `wtype`, now in `01-hypr-pkgs.sh` - it was a silent dependency before.
+  needs `wtype`, now in `01-desktop-pkgs.sh` - it was a silent dependency before.
 
   Three things here are about speed, and each was measured rather than guessed:
 
@@ -749,7 +749,7 @@ singleton that the widgets render; only the rendering should be per-screen. See
   base64-decodes to a keyboard mash), identifies the fast.com app rather than the user,
   and is overridable with `FAST_TOKEN`
 - `scripts/network-qr.sh` emits `meta` + a 0/1 matrix for a Wi-Fi join QR, drawn by the card
-  as plain rectangles. Needs `qrencode` (now in `01-hypr-pkgs.sh`); without it, it prints one
+  as plain rectangles. Needs `qrencode` (now in `01-desktop-pkgs.sh`); without it, it prints one
   `error` line the card shows instead of failing silently
 - `scripts/wallpapers.py` (python3) for the wallpaper carousel's list, thumbnails and apply.
   Thumbnails need `magick` (imagemagick) and, for video wallpapers, `ffmpeg`; applying needs

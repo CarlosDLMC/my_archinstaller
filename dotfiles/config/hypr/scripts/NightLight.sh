@@ -16,10 +16,6 @@ STATE_FILE="$HOME/.cache/.nightlight_state"
 TARGET_TEMP="${NIGHTLIGHT_TEMP:-3000}"
 
 ensure_state() {
-  # The state hyprsunset (the Hyprland night light) left, if any.
-  if [[ ! -f "$STATE_FILE" && -f "$HOME/.cache/.hyprsunset_state" ]]; then
-    mv -f "$HOME/.cache/.hyprsunset_state" "$STATE_FILE"
-  fi
   [[ -f "$STATE_FILE" ]] || echo "off" > "$STATE_FILE"
 }
 

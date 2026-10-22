@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Screen Recording script for Hyprland
+# Screen recording (wf-recorder)
 
 # variables
 # ISO-ish and all-numeric: lexical order == chronological order, and no

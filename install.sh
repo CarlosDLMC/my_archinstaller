@@ -31,7 +31,7 @@ if [[ $EUID -eq 0 ]]; then
 fi
 
 # Everything below is relative to the repo root (Install-Logs/, install-scripts/,
-# Hyprland-Dots/), so run from there wherever the script was invoked from. A
+# dotfiles/), so run from there wherever the script was invoked from. A
 # relative --preset path is resolved first, against the caller's directory.
 #
 # A --preset with no file, or one readlink cannot resolve (its folder does not
@@ -208,7 +208,7 @@ quickshell="OFF"
 # have no menu entry, no preset-loop entry, no case branch and no install
 # script - setting sddm="ON" in a preset did precisely nothing, silently. The
 # unknown-key warning in load_preset() now reports that instead of hiding it.
-xdph="OFF"
+portals="OFF"
 zsh="OFF"
 pokemon="OFF"
 # "auto" on the hardware-gated options, not "OFF".
@@ -267,7 +267,7 @@ omarchy_apps="OFF"
 # Every option name the installer acts on. Kept next to load_preset() because
 # its only job is to catch a preset key that no longer matches one - see below.
 known_options="ly nvidia nouveau gtk_themes bluetooth thunar \
-quickshell xdph zsh pokemon rog dots handy nopasswd_sudo printing plymouth \
+quickshell portals zsh pokemon rog dots handy nopasswd_sudo printing plymouth \
 text_boot limine hackbgrt docker herdr neovim hunk ly_flag thp_madvise keyd_nav \
 omarchy_apps"
 # The ones that also take "auto" (resolved from the hardware further down).
@@ -763,7 +763,7 @@ options_command+=(
     "bluetooth" "Do you want script to configure Bluetooth?" "OFF"
     "thunar" "Do you want Thunar file manager to be installed?" "OFF"
     "quickshell" "Install quickshell for Desktop-Like Overview?" "OFF"
-    "xdph" "Install the XDG desktop portals (wlr + gtk, for screen share)?" "OFF"
+    "portals" "Install the XDG desktop portals (wlr + gtk, for screen share)?" "OFF"
     "zsh" "Install zsh shell with Oh-My-Zsh?" "OFF"
     "pokemon" "Add Pokemon color scripts to your terminal?" "OFF"
     "rog" "Are you installing on Asus ROG laptops?" "OFF"
@@ -792,7 +792,7 @@ options_command+=(
 if [ "$preset_mode" == "true" ]; then
     selected_options=""
     for _opt in ly nvidia nouveau gtk_themes bluetooth thunar \
-                quickshell xdph zsh pokemon rog dots handy nopasswd_sudo \
+                quickshell portals zsh pokemon rog dots handy nopasswd_sudo \
                 printing plymouth text_boot thp_madvise keyd_nav limine hackbgrt docker herdr neovim hunk \
                 omarchy_apps; do
         [ "${!_opt}" == "ON" ] || continue
@@ -844,7 +844,7 @@ if [ "$preset_mode" == "true" ]; then
         if [ "$_opt" = "ly" ]; then echo "   - ly (flag: $ly_flag)" | tee -a "$LOG"; else echo "   - $_opt" | tee -a "$LOG"; fi
     done
     if [[ " $selected_options " != *" dots "* ]]; then
-        echo "${WARN} 'dots' is not enabled, so none of the configs in Hyprland-Dots will be installed." | tee -a "$LOG"
+        echo "${WARN} 'dots' is not enabled, so none of the configs in dotfiles will be installed." | tee -a "$LOG"
     fi
     printf "\n%.0s" {1..1}
 else
@@ -1173,9 +1173,9 @@ execute_script "pipewire.sh"
 # The desktop's packages
 echo "${INFO} Installing ${SKY_BLUE}the desktop packages...${RESET}" | tee -a "$LOG"
 sleep 1
-execute_script "01-hypr-pkgs.sh"
+execute_script "01-desktop-pkgs.sh"
 
-# After 01-hypr-pkgs.sh, which installs the stock rofi this replaces.
+# After 01-desktop-pkgs.sh, which installs the stock rofi this replaces.
 echo "${INFO} Building ${SKY_BLUE}rofi with on-demand keyboard focus...${RESET}" | tee -a "$LOG"
 sleep 1
 execute_script "rofi-ondemand.sh"
@@ -1285,9 +1285,9 @@ for option in "${options[@]}"; do
             echo "${INFO} Installing ${SKY_BLUE}quickshell for Desktop Overview...${RESET}" | tee -a "$LOG"
             execute_script "quickshell.sh"
             ;;
-        xdph)
+        portals)
             echo "${INFO} Installing ${SKY_BLUE}the XDG desktop portals (wlr + gtk)...${RESET}" | tee -a "$LOG"
-            execute_script "xdph.sh"
+            execute_script "portals.sh"
             ;;
         bluetooth)
             echo "${INFO} Configuring ${SKY_BLUE}Bluetooth...${RESET}" | tee -a "$LOG"
@@ -1452,7 +1452,7 @@ if [ ! -f "$HOME/.config/fastfetch/arch.png" ]; then
     # mkdir first: with dots off, ~/.config need not exist yet, and
     # `cp -r dir ~/.config/` into a missing directory fails.
     mkdir -p "$HOME/.config"
-    cp -r Hyprland-Dots/config/fastfetch "$HOME/.config/"
+    cp -r dotfiles/config/fastfetch "$HOME/.config/"
 fi
 
 # No `clear` here, on purpose. It used to wipe the screen right before the

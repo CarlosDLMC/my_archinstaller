@@ -15,20 +15,20 @@ __pycache__/
 # First-boot marker. If this is ever committed, copy.sh deploys it onto the new
 # machine and initial-boot.sh skips itself: no wallpaper, no GTK/icon/cursor
 # theme, no Kvantum theme, no wallust run, no keyboard-layout init.
-Hyprland-Dots/config/hypr/.initial_startup_done
+dotfiles/config/hypr/.initial_startup_done
 
 # Wallpaper runtime state, not config. .wallpaper_current is a copy of whatever
 # wallpaper is active and .wallpaper_modified is the effects output, so both are
 # large binaries that churn on every wallpaper change. copy.sh seeds them from
 # the default wallpaper instead.
-Hyprland-Dots/config/hypr/wallpaper_effects/.wallpaper_current
-Hyprland-Dots/config/hypr/wallpaper_effects/.wallpaper_modified
+dotfiles/config/hypr/wallpaper_effects/.wallpaper_current
+dotfiles/config/hypr/wallpaper_effects/.wallpaper_modified
 # The video wallpaper picked last (WallpaperSelect.sh), played at login.
-Hyprland-Dots/config/hypr/wallpaper_effects/.wallpaper_video
+dotfiles/config/hypr/wallpaper_effects/.wallpaper_video
 
 # What mango's own scripts write at login and on a wallpaper change
 # (MachineConf.sh: this machine's settings; WallustSwww.sh: the group tab tint).
-Hyprland-Dots/config/mango/state/
+dotfiles/config/mango/state/
 
 # Install logs are per-run output. Tracking them meant every install left the
 # working tree dirty, which auto-install.sh then refuses to pull over.
@@ -39,7 +39,7 @@ GTK-themes-icons/*.log
 *.backup
 
 # Wallust output. Every one of these paths is a `target` in
-# Hyprland-Dots/config/wallust/wallust.toml, rewritten in full on every
+# dotfiles/config/wallust/wallust.toml, rewritten in full on every
 # wallpaper change - so tracking them meant the palette of whatever wallpaper
 # happened to be up got committed, and the next wallpaper change dirtied the
 # tree again. auto-install.sh refuses to pull over a dirty tree, so this was on
@@ -48,20 +48,20 @@ GTK-themes-icons/*.log
 # They still have to EXIST on a fresh machine: twelve rofi themes @theme
 # colors-rofi.rasi - a missing file there is a config error, not a fallback -
 # and mango's borders would start on settings.conf's fallback palette. So a rendered snapshot of each lives in
-# Hyprland-Dots/defaults/ and copy.sh seeds it when the real file is absent.
+# dotfiles/defaults/ and copy.sh seeds it when the real file is absent.
 # initial-boot.sh then runs wallust on first login and overwrites all of them.
-Hyprland-Dots/config/cava/config
-Hyprland-Dots/config/mango/wallust/colors.conf
-Hyprland-Dots/config/rofi/wallust/colors-rofi.rasi
-Hyprland-Dots/config/quickshell/bar/wallust-colors.json
-Hyprland-Dots/config/btop/themes/wallust.theme
-Hyprland-Dots/config/btop/themes/wallust-palette.json
-Hyprland-Dots/config/gtk-3.0/wallust.css
-Hyprland-Dots/config/gtk-4.0/wallust.css
+dotfiles/config/cava/config
+dotfiles/config/mango/wallust/colors.conf
+dotfiles/config/rofi/wallust/colors-rofi.rasi
+dotfiles/config/quickshell/bar/wallust-colors.json
+dotfiles/config/btop/themes/wallust.theme
+dotfiles/config/btop/themes/wallust-palette.json
+dotfiles/config/gtk-3.0/wallust.css
+dotfiles/config/gtk-4.0/wallust.css
 
 # Symlink to the active wallpaper, pointed at by WallustSwww.sh on every
 # wallpaper change and used as the rofi background. Tracked, it was an absolute
 # symlink into /home/mentefria aimed at a wallpaper this repo does not even
 # ship - dead on arrival on any other machine. copy.sh links it to the default
 # wallpaper instead.
-Hyprland-Dots/config/rofi/.current_wallpaper
+dotfiles/config/rofi/.current_wallpaper

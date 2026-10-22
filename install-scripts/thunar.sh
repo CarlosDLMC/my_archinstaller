@@ -37,7 +37,7 @@ printf "\n%.0s" {1..1}
 
  # Check for existing configs and copy if does not exist
  #
- # Sourced from Hyprland-Dots/config/, not from assets/. assets/ used to carry a
+ # Sourced from dotfiles/config/, not from assets/. assets/ used to carry a
  # second copy of Thunar/ and xfce4/ and both had drifted from the dotfiles they
  # duplicate - assets/Thunar/accels.scm and assets/xfce4/helpers.rc were each a
  # different file from the one copy.sh deploys, so which keyboard shortcuts and
@@ -65,7 +65,7 @@ for DIR1 in "${DIRS_TO_COPY[@]}"; do
     echo -e "${NOTE} Config for ${MAGENTA}$DIR1${RESET} found, no need to copy." 2>&1 | tee -a "$LOG"
   else
     echo -e "${NOTE} Config for ${YELLOW}$DIR1${RESET} not found, copying from the dotfiles." 2>&1 | tee -a "$LOG"
-    cp -r "Hyprland-Dots/config/$DIR1" ~/.config/ && echo "${OK} Copy $DIR1 completed!" || echo "${ERROR} Failed to copy $DIR1 config files." 2>&1 | tee -a "$LOG"
+    cp -r "dotfiles/config/$DIR1" ~/.config/ && echo "${OK} Copy $DIR1 completed!" || echo "${ERROR} Failed to copy $DIR1 config files." 2>&1 | tee -a "$LOG"
     # The tracked bookmarks say file://$HOME/...; copy.sh expands that, but
     # copy.sh only runs with dots. Copied raw, $HOME parses as a URI host and
     # every sidebar bookmark was dead.

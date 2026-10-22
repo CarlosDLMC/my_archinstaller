@@ -1,7 +1,7 @@
 # Gaming
 
 Short notes for a fresh install. Packages (`mangohud`, `lib32-mangohud`,
-`gamescope`) come from `install-scripts/01-hypr-pkgs.sh`. Steam is **not**
+`gamescope`) come from `install-scripts/01-desktop-pkgs.sh`. Steam is **not**
 installed by this repo — `sudo pacman -S steam`.
 
 ## 1. Turn on Proton
@@ -100,8 +100,8 @@ mango takes those before gamescope sees them.
 ## 3. Where the config lives
 
 ```
-~/.config/MangoHud/MangoHud.conf     ← deployed by Hyprland-Dots/copy.sh
-Hyprland-Dots/config/MangoHud/       ← repo copy, edit this one
+~/.config/MangoHud/MangoHud.conf     ← deployed by dotfiles/copy.sh
+dotfiles/config/MangoHud/       ← repo copy, edit this one
 /usr/share/doc/mangohud/MangoHud.conf.example   ← every option
 ```
 
@@ -138,7 +138,7 @@ low stays clear of it; MangoHud shows that as the second number in
 `fps_metrics`.
 
 FreeSync itself needs no launch option. It comes from `vrr:1` in
-`config/mango/monitors.conf` - always on, as it was on Hyprland: switching it
+`config/mango/monitors.conf` - always on: switching it
 per fullscreen window made the Samsung go black for ~2 s at every toggle - and
 works whether or not MangoHud is loaded. Fullscreen still gives the cleanest
 result, since nothing else on screen is drawing. Check with

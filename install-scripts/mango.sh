@@ -38,10 +38,29 @@ else
 fi
 
 # CachyOS's Mango editions install mangowm as a dependency of their own
-# settings package, which 01-hypr-pkgs.sh removes: without this, the next
+# settings package, which 01-desktop-pkgs.sh removes: without this, the next
 # orphan clean-up (pacman -Qtdq) would take the compositor with it.
 if pacman -Qq mangowm >/dev/null 2>&1; then
   sudo pacman -D --asexplicit mangowm >>"$LOG" 2>&1
+fi
+
+# Hyprland, on a machine that had it before mango: removed, with its own
+# portal and night light (the desktop uses xdg-desktop-portal-wlr and
+# wlsunset). -ns also takes the libraries only these used; hyprlock and
+# hypridle, kept below, hold on to theirs.
+_hyprland_pkgs=()
+for _p in hyprland xdg-desktop-portal-hyprland hyprsunset; do
+  if pacman -Q "$_p" >/dev/null 2>&1; then
+    _hyprland_pkgs+=("$_p")
+  fi
+done
+if [ ${#_hyprland_pkgs[@]} -gt 0 ]; then
+  printf "${NOTE} - Removing ${YELLOW}${_hyprland_pkgs[*]}${RESET}: the desktop is mango.\n"
+  if sudo pacman -Rns --noconfirm "${_hyprland_pkgs[@]}" >>"$LOG" 2>&1; then
+    echo "${OK} Removed ${_hyprland_pkgs[*]}." | tee -a "$LOG"
+  else
+    echo "${WARN} Could not remove ${_hyprland_pkgs[*]} (see $LOG) - remove them by hand: sudo pacman -Rns ${_hyprland_pkgs[*]}" | tee -a "$LOG"
+  fi
 fi
 
 printf "${NOTE} - Installing ${SKY_BLUE}hypridle and hyprlock${RESET} .......\n"

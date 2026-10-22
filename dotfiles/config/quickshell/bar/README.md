@@ -43,7 +43,7 @@ A modern, feature-rich status bar for [mango](https://github.com/mangowm/mango) 
 
 ## Installation
 
-Nothing to do by hand in this repo. `Hyprland-Dots/copy.sh` deploys this folder
+Nothing to do by hand in this repo. `dotfiles/copy.sh` deploys this folder
 to `~/.config/quickshell/bar`, and mango starts it as `qs -c bar`
 (`mango/startup.conf`). A bare `quickshell` would look for
 `~/.config/quickshell/shell.qml`, which does not exist here.

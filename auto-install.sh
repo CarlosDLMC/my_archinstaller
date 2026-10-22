@@ -19,7 +19,7 @@ RESET="$(tput sgr0)"
 # Variables
 # This must clone THIS repo. Cloning the upstream project it was originally
 # forked from would install a stock system and silently discard every change in
-# Hyprland-Dots/ and install-scripts/.
+# dotfiles/ and install-scripts/.
 # HTTPS on purpose: a freshly installed machine has no SSH key yet.
 Distro="my_archinstaller"
 Github_URL="https://github.com/CarlosDLMC/$Distro.git"

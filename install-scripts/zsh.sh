@@ -108,7 +108,7 @@ if command -v zsh >/dev/null; then
   
   # Copying the preconfigured .zshrc, .zprofile and pokefetch_perfect
   #
-  # These come from Hyprland-Dots/, which is the single source for every shell
+  # These come from dotfiles/, which is the single source for every shell
   # file: it is what copy.sh deploys, so it is the version that actually ends up
   # on the machine. assets/ used to carry a second copy of .zshrc that drifted -
   # it kept the unguarded `source $ZSH/oh-my-zsh.sh` and `source <(fzf --zsh)`
@@ -129,12 +129,12 @@ if command -v zsh >/dev/null; then
   else
       _shell_stamp="$(date +%Y%m%d-%H%M%S)"
       for _file in .zshrc .zprofile pokefetch_perfect; do
-          [ -f "Hyprland-Dots/$_file" ] || continue
-          if [ -f "$HOME/$_file" ] && ! cmp -s "Hyprland-Dots/$_file" "$HOME/$_file"; then
+          [ -f "dotfiles/$_file" ] || continue
+          if [ -f "$HOME/$_file" ] && ! cmp -s "dotfiles/$_file" "$HOME/$_file"; then
               cp "$HOME/$_file" "$HOME/$_file.backup-$_shell_stamp" &&
                   echo "${NOTE} Backed up existing $_file to $_file.backup-$_shell_stamp" | tee -a "$LOG"
           fi
-          cp "Hyprland-Dots/$_file" "$HOME/" && echo "${OK} Copied $_file" | tee -a "$LOG"
+          cp "dotfiles/$_file" "$HOME/" && echo "${OK} Copied $_file" | tee -a "$LOG"
       done
       if [ -f "$HOME/pokefetch_perfect" ]; then chmod +x "$HOME/pokefetch_perfect"; fi
   fi
@@ -146,14 +146,14 @@ if command -v zsh >/dev/null; then
   # Without dots this is its only deploy, and it backs up the same way.
   if [[ " ${INSTALL_SELECTED_OPTIONS:-} " == *" dots "* ]]; then
       echo "${NOTE} pokefetch-merge comes with the dotfiles (dots selected), not copied here." 2>&1 | tee -a "$LOG"
-  elif [ -f 'Hyprland-Dots/.local/bin/pokefetch-merge' ]; then
+  elif [ -f 'dotfiles/.local/bin/pokefetch-merge' ]; then
       mkdir -p ~/.local/bin
-      if [ -f ~/.local/bin/pokefetch-merge ] && ! cmp -s 'Hyprland-Dots/.local/bin/pokefetch-merge' ~/.local/bin/pokefetch-merge; then
+      if [ -f ~/.local/bin/pokefetch-merge ] && ! cmp -s 'dotfiles/.local/bin/pokefetch-merge' ~/.local/bin/pokefetch-merge; then
           _pm_bak="$HOME/.local/bin/pokefetch-merge.backup-$(date +%Y%m%d-%H%M%S)"
           cp ~/.local/bin/pokefetch-merge "$_pm_bak" && chmod -x "$_pm_bak" &&
               echo "${NOTE} Backed up your pokefetch-merge to $(basename "$_pm_bak")" | tee -a "$LOG"
       fi
-      cp 'Hyprland-Dots/.local/bin/pokefetch-merge' ~/.local/bin/
+      cp 'dotfiles/.local/bin/pokefetch-merge' ~/.local/bin/
       chmod +x ~/.local/bin/pokefetch-merge
   fi
 
@@ -165,9 +165,9 @@ if command -v zsh >/dev/null; then
   # left a fastfetch.backup-<stamp> holding this one file on every fresh install.
   if [[ " ${INSTALL_SELECTED_OPTIONS:-} " == *" dots "* ]]; then
       echo "${NOTE} pokefetch.jsonc comes with the dotfiles (dots selected), not copied here." 2>&1 | tee -a "$LOG"
-  elif [ -f 'Hyprland-Dots/config/fastfetch/pokefetch.jsonc' ]; then
+  elif [ -f 'dotfiles/config/fastfetch/pokefetch.jsonc' ]; then
       mkdir -p ~/.config/fastfetch
-      cp 'Hyprland-Dots/config/fastfetch/pokefetch.jsonc' ~/.config/fastfetch/
+      cp 'dotfiles/config/fastfetch/pokefetch.jsonc' ~/.config/fastfetch/
   fi
 
   # Prefer the zsh listed in /etc/shells over `command -v zsh`.

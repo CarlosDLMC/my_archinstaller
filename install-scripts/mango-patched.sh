@@ -9,7 +9,7 @@
 # desktop zoom and more - see pkgbuilds/mangowm/PKGBUILD.
 #
 # Runs after mango.sh, which installs the stock mangowm and with it the
-# libraries this build links against. The config in Hyprland-Dots/config/mango
+# libraries this build links against. The config in dotfiles/config/mango
 # uses the patches' options and binds, which stock mango does not know - so a
 # failed build is an error here (the final check lists it), not a warning.
 #

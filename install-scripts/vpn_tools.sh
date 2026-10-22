@@ -15,7 +15,7 @@
 #       to pick from when called without a name; re-runs itself through sudo.
 #
 # The scripts themselves live in assets/vpn/. wg-quick comes from
-# wireguard-tools (01-hypr-pkgs.sh). iptables is installed below, but only when
+# wireguard-tools (01-desktop-pkgs.sh). iptables is installed below, but only when
 # nothing provides it yet: `iptables` (the nft backend) and `iptables-legacy`
 # conflict, and --noconfirm cannot answer the "replace it?" prompt, so asking
 # for `iptables` on a legacy machine would fail the transaction.

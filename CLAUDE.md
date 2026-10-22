@@ -4,16 +4,15 @@
 
 This repo is a personal Arch/CachyOS installer and dotfiles set. It is meant to
 be run on **every fresh install of CachyOS or Arch Linux** to reproduce *this
-computer's* setup — the desktop (mango, formerly Hyprland), apps, theming, and configuration —
+computer's* setup — the desktop (mango), apps, theming, and configuration —
 so a brand-new machine ends up behaving exactly like the one this repo was
 built from.
 
 The top-level `*.sh` scripts (`install.sh`, `auto-install.sh`, plus helpers
 like `diagnose.sh` and `verify-before-transfer.sh`) drive the install. The
-actual desktop configuration lives under `Hyprland-Dots/config/`, which mirrors
-`~/.config/` on the running machine (e.g. `Hyprland-Dots/config/mango` →
-`~/.config/mango`, `Hyprland-Dots/config/rofi` → `~/.config/rofi`, and so on).
-The `Hyprland-Dots` name stayed from before the switch to mango.
+actual desktop configuration lives under `dotfiles/config/`, which mirrors
+`~/.config/` on the running machine (e.g. `dotfiles/config/mango` →
+`~/.config/mango`, `dotfiles/config/rofi` → `~/.config/rofi`, and so on).
 
 ## Working with Claude (important)
 
@@ -30,7 +29,7 @@ When a fix seems obvious, propose it and wait.
 
 There are **two copies** of every config file: the **live machine** copy under
 `~/.config/...` and the **repo** copy under
-`~/Documents/my_archinstaller/Hyprland-Dots/config/...`. The keybinds and the
+`~/Documents/my_archinstaller/dotfiles/config/...`. The keybinds and the
 running desktop use the *live* copy, so editing only the repo changes nothing
 until it is deployed.
 
@@ -40,7 +39,7 @@ Always work in this order:
    in the real running desktop. Keybinds run the live file immediately, so most
    changes can be tried right away.
 2. **Once I confirm the change works**, copy the same change into the repo
-   (`Hyprland-Dots/config/...`) so it becomes part of the installer and lands on
+   (`dotfiles/config/...`) so it becomes part of the installer and lands on
    the next fresh install.
 
 Do not commit or push a change to the repo before it has been confirmed working on the
@@ -56,8 +55,11 @@ do. Back up a live file before overwriting it.
 
 ## Notes
 
-- The compositor is **mango** (mangowm, wlroots/dwl-based), not Hyprland. Its
-  config is `key=value` files under `Hyprland-Dots/config/mango/`
+- The compositor is **mango** (mangowm, wlroots/dwl-based), patched to behave
+  like the Hyprland setup this desktop came from: `pkgbuilds/mangowm` (one
+  patch per behaviour, each an option the config turns on), built by
+  `install-scripts/mango-patched.sh` and kept in pacman's `IgnorePkg`. Its
+  config is `key=value` files under `dotfiles/config/mango/`
   (`keybinds.conf`, `startup.conf`, `rules.conf`, `settings.conf`, ...), all
   sourced by `config.conf`. mango reloads by itself when any of them changes;
   check one with `mango -c ~/.config/mango/config.conf -p`. Control it with
@@ -67,7 +69,7 @@ do. Back up a live file before overwriting it.
   (hyprlock and hypridle are kept on mango).
 - The wallpaper daemon (swww) ships here under the renamed binary `awww` /
   `awww-daemon`. Theming after a wallpaper change goes through `wallust`.
-- The bar is `quickshell` (QML) under `Hyprland-Dots/config/quickshell/bar/`;
+- The bar is `quickshell` (QML) under `dotfiles/config/quickshell/bar/`;
   the overview (SUPER+A) is part of the bar now (`bar/overview/`). It talks to
   mango through `bar/Mango.qml` (the IPC socket) and gets the keybinds' calls
   through `qs -c bar ipc call <target> <function>`.

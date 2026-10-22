@@ -26,7 +26,7 @@ fi
 all_good=true
 
 # What a run actually reads. A fixed list of 8 files used to pass trees the new
-# machine could not install from: a copy without Hyprland-Dots/wallpapers (the
+# machine could not install from: a copy without dotfiles/wallpapers (the
 # obvious thing to drop) or yay-bin/PKGBUILD got "All critical files and
 # directories are present!", and install.sh then stopped at "No working AUR
 # helper", or the wallpaper check failed. The scripts come from install.sh itself
@@ -57,15 +57,15 @@ done < <(grep -oE '(execute_script|run_required) "[^"$]+\.sh"' install.sh | sed 
 printf "\n${INFO} Checking what those scripts read...\n"
 for _file in install-scripts/Global_functions.sh install-scripts/nvidia_detect.sh \
              install-scripts/checksum-skip.conf custom-preset.conf yay-bin/PKGBUILD \
-             Hyprland-Dots/copy.sh Hyprland-Dots/.zshrc Hyprland-Dots/pokefetch_perfect \
-             Hyprland-Dots/.local/bin/pokefetch-merge diagnose.sh; do
+             dotfiles/copy.sh dotfiles/.zshrc dotfiles/pokefetch_perfect \
+             dotfiles/.local/bin/pokefetch-merge diagnose.sh; do
     check_file "$_file"
 done
 # icons/: the logo cuts plymouth.sh and hackbgrt.sh render from. GTK-themes-icons/:
 # the GTK theme, icons and cursor gtk_themes.sh extracts.
-for _dir in assets icons GTK-themes-icons Hyprland-Dots/wallpapers Hyprland-Dots/.local/bin Hyprland-Dots/config/hypr \
-            Hyprland-Dots/config/mango Hyprland-Dots/config/quickshell/bar Hyprland-Dots/config/wallust \
-            Hyprland-Dots/config/foot Hyprland-Dots/config/rofi; do
+for _dir in assets icons GTK-themes-icons dotfiles/wallpapers dotfiles/.local/bin dotfiles/config/hypr \
+            dotfiles/config/mango dotfiles/config/quickshell/bar dotfiles/config/wallust \
+            dotfiles/config/foot dotfiles/config/rofi; do
     check_dir "$_dir"
 done
 
@@ -93,8 +93,8 @@ fi
 # Show directory size
 printf "\n${INFO} Directory size:\n"
 du -sh . 2>/dev/null | sed 's/^/  /'
-printf "\n${INFO} Hyprland-Dots size:\n"
-du -sh Hyprland-Dots/ 2>/dev/null | sed 's/^/  /'
+printf "\n${INFO} dotfiles size:\n"
+du -sh dotfiles/ 2>/dev/null | sed 's/^/  /'
 
 # Summary
 printf "\n${NOTE} ========== SUMMARY ==========\n"

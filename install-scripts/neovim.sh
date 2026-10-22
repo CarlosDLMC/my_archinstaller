@@ -156,7 +156,7 @@ fi
 # The PyCharm-matched colorscheme, so a fresh machine looks like this one rather
 # than like LazyVim's default tokyonight. Colours are JetBrains' new-UI "Dark",
 # read out of app.jar!/themes/expUI/expUI_darkScheme.xml, and foot and herdr are
-# configured from the same values - see Hyprland-Dots/config/{foot,herdr}.
+# configured from the same values - see dotfiles/config/{foot,herdr}.
 #
 # Two files, treated differently on purpose:
 #

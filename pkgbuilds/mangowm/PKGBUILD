@@ -3,7 +3,7 @@
 # with fifteen patches that make mango look and behave like the Hyprland setup
 # this desktop came from. Every one is an option (or a new dispatcher) that is
 # off by default - stock behaviour stays until the config turns it on; the
-# config in Hyprland-Dots/config/mango/ turns them all on.
+# config in dotfiles/config/mango/ turns them all on.
 #
 # 01 native-content: a window that moves or resizes keeps its content at its
 #    native size, cropped or with its edge pixels extended, as Hyprland draws

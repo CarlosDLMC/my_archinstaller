@@ -14,7 +14,7 @@ fi
 
 LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_power_profiles.log"
 
-# Why this is not just another entry in 01-hypr-pkgs.sh
+# Why this is not just another entry in 01-desktop-pkgs.sh
 #
 # The bar's control panel (PultWidget.qml) reads and sets the profile with
 # `busctl` over net.hadess.PowerProfiles on the system bus. What it needs is

@@ -221,7 +221,7 @@ fi
 
 
 # Set the name of the log file to include the current date and time
-LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_hypr-pkgs.log"
+LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_desktop-pkgs.log"
 
 # conflicting packages removal
 overall_failed=0

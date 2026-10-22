@@ -11,7 +11,7 @@
 
 tunnel_up() { [ -n "$(ip -br link show type wireguard 2>/dev/null)" ]; }
 
-# dunst is started by the same hyprland.start handler and may not own the
+# dunst is started at login next to this (mango/startup.conf) and may not own the
 # notification bus yet. A notification sent before it does makes D-Bus start
 # dunst a second time, through systemd.
 for _ in $(seq 1 50); do
