@@ -12,6 +12,10 @@
 # Through the portal the dialog is xdg-desktop-portal-gtk's GTK chooser, which
 # follows the wallust GTK theme. omawrite itself already does this switch for
 # omarchy's "gtk3" (src/main.cpp) - just not for qt6ct.
+# The wrapper also runs omawrite in its own systemd scope capped at 4G RAM and
+# no swap: a 16 MB file with megabyte-long lines (a Claude .jsonl) made the
+# wrapped, highlighted layout grow to ~30G and systemd-oomd killed the whole
+# login session. Now only omawrite dies.
 #
 # And five patches:
 #  - single-line-return.patch: Return ends a paragraph with one line break
@@ -42,7 +46,7 @@
 
 pkgname=omawrite
 pkgver=0.7.1
-pkgrel=8
+pkgrel=9
 pkgdesc='Dead-simple Markdown writing app built with Qt Quick'
 arch=('x86_64' 'aarch64')
 url='https://github.com/omacom/omawrite'
@@ -95,7 +99,13 @@ package() {
   install -dm755 "$pkgdir/usr/bin"
   printf '%s\n' '#!/bin/sh' \
     '# Portal file dialogs instead of Qt Quick'"'"'s fallback - see the PKGBUILD.' \
-    'QT_QPA_PLATFORMTHEME=xdgdesktopportal exec /usr/lib/omawrite/omawrite "$@"' \
+    'export QT_QPA_PLATFORMTHEME=xdgdesktopportal' \
+    '# Own scope capped at 4G, no swap: a huge file kills omawrite, not the session.' \
+    'if systemd-run --user --quiet true 2>/dev/null; then' \
+    '  exec systemd-run --user --scope --quiet --collect -p MemoryMax=4G -p MemorySwapMax=0 \' \
+    '    /usr/lib/omawrite/omawrite "$@"' \
+    'fi' \
+    'exec /usr/lib/omawrite/omawrite "$@"' \
     > "$pkgdir/usr/bin/omawrite"
   chmod 755 "$pkgdir/usr/bin/omawrite"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
