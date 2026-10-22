@@ -18,13 +18,14 @@
 #   - .local/bin/herdr-watch-workspace-numbers  the daemon behind the unit below
 #   - config/herdr/agent-notify/        plugin: dunst notices for agents
 #   - config/herdr/agent-awake/         plugin: no idle while an agent works
+#   - config/herdr/agent-order/         plugin: Agents tab blocked, working, done, idle
 #   - config/hypr/UserConfigs/UserKeybinds.lua  unbinds ALT+Tab so herdr gets it
 #
 # This script owns four things the dotfiles cannot:
 #   1. the binary itself
 #   2. the systemd --user unit (it names an absolute ExecStart)
 #   3. rewriting __HOME__ in the copied config.toml
-#   4. registering the agent-notify and agent-awake plugins with herdr
+#   4. registering the agent-notify, agent-awake and agent-order plugins
 #
 # On (3): herdr's [[keys.command]] entries take a command string, and a tracked
 # dotfile cannot contain this machine's $HOME. The dotfiles ship __HOME__ and
@@ -181,18 +182,21 @@ else
 fi
 
 # ------------------------------------------------------------ agent plugins
-# Two herdr plugins, hooks herdr runs on every agent status change:
+# Three herdr plugins, hooks herdr runs on every agent status change:
 #   agent-notify  a dunst notification when an agent finishes or is blocked
 #                 while the herdr window is not focused (see agent-notify.py
 #                 for why herdr's own popups cannot)
 #   agent-awake   an idle inhibitor while any agent is working, so the
 #                 screensaver waits, as for a video (see agent-awake.py)
+#   agent-order   sorts the Agents tab blocked, working, done, idle, which
+#                 neither of herdr's own orders does (see agent-order.py)
 # copy.sh puts the files in place, but herdr only runs a plugin it has
 # registered. `plugin link` works with no server running (unlink does not).
 # Linked only when absent: linking again re-enables it, and a re-run should
 # not undo `herdr plugin disable <id>`.
 for _plugin in "agent-notify:notices for finished/blocked agents" \
-               "agent-awake:no idle while an agent is working"; do
+               "agent-awake:no idle while an agent is working" \
+               "agent-order:Agents tab blocked, working, done, idle"; do
   _id=${_plugin%%:*}
   PLUGIN="$HOME/.config/herdr/$_id"
   if [ -f "$PLUGIN/herdr-plugin.toml" ]; then

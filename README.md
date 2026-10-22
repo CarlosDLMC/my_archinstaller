@@ -1678,6 +1678,14 @@ past the end.
   `systemd-inhibit --list` shows it as "herdr … An agent is working"; starts and
   releases are logged to `~/.local/state/herdr/plugins/agent-awake/awake.log`. Turn it
   off with `herdr plugin disable agent-awake`.
+- **The agent-order plugin** (`~/.config/herdr/agent-order`). Sorts the Agents tab
+  blocked, then working, then done, then idle; agents in the same state keep their
+  workspace/tab/pane order. Neither of herdr's own orders does this (`"priority"` puts
+  done above working), so the plugin installs a sorted agent view and tags each agent
+  with a `$agent_order` token on every status change and at server start. Done and idle
+  share a tag and are told apart by herdr's attention score, because looking at a done
+  agent turns it idle without any event. `agent_panel_sort = "priority"` stays as the
+  fallback; turn the plugin off with `herdr plugin disable agent-order`.
 - **`herdr-workspace-numbers.service`.** Herdr has no built-in workspace-number
   token, so the sidebar reads a custom `$num` written into workspace metadata —
   and that metadata does not survive a server restart. This user unit runs

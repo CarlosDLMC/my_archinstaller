@@ -27,6 +27,7 @@ droid = "off"
 [ui]
 sidebar_width = 30
 status_indicators = "symbols"   # distinct glyphs instead of color-only dots
+agent_panel_sort = "priority"    # fallback; the agent-order plugin sorts blocked, working, done, idle
 
 # Brighten the muted greys the theme uses for secondary text.
 [theme.custom]
