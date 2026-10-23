@@ -15,6 +15,10 @@
 # Runs after 01-desktop-pkgs.sh, which installs the stock rofi. If this build
 # fails, that stock rofi stays and the launcher works without click-to-focus,
 # so a failure is a warning here, not a failed package for the final check.
+#
+# Once the patched rofi is installed, rofi goes into IgnorePkg: a newer stock
+# rofi from the repos would replace it on the next -Syu and the launcher would
+# lose the patches. Update it from pkgbuilds/rofi (this script) instead.
 
 PKG=rofi
 
@@ -37,6 +41,21 @@ if [ ! -f "$SRC/PKGBUILD" ]; then
   exit 0
 fi
 
+# Only once the patched rofi is installed: a stock one that is kept (a failed
+# build, or a newer one from the repos) goes on updating as usual.
+pin_ignorepkg() {
+  if pacman-conf IgnorePkg 2>/dev/null | grep -qxF "$PKG"; then
+    return 0
+  fi
+  if sudo cp -p /etc/pacman.conf "/etc/pacman.conf.bak-$(date +%Y%m%d-%H%M%S)" \
+     && sudo sed -i "/^\[options\]/a # Built from pkgbuilds/rofi by my_archinstaller (install-scripts/rofi-ondemand.sh) - the launcher needs its patches\nIgnorePkg = $PKG" /etc/pacman.conf \
+     && pacman-conf IgnorePkg 2>/dev/null | grep -qxF "$PKG"; then
+    echo "${OK} $PKG added to IgnorePkg in /etc/pacman.conf - updated from pkgbuilds/rofi, never by -Syu." | tee -a "$LOG"
+  else
+    echo "${WARN} Could not add $PKG to IgnorePkg in /etc/pacman.conf - a newer stock rofi could replace the patched one on -Syu." | tee -a "$LOG"
+  fi
+}
+
 # The version the vendored PKGBUILD builds, read in a subshell so its variables
 # and functions stay out of this script.
 WANT=$( set +e; source "$SRC/PKGBUILD" >/dev/null 2>&1; echo "${pkgver}-${pkgrel}" )
@@ -47,6 +66,7 @@ HAVE=$(pacman -Q "$PKG" 2>/dev/null | awk '{print $2}')
 if [ -n "$HAVE" ] && [ "$(vercmp "$HAVE" "$WANT")" -ge 0 ]; then
   if [ "$HAVE" = "$WANT" ]; then
     echo "${INFO} The patched ${MAGENTA}rofi${RESET} $HAVE is already installed. Skipping..." | tee -a "$LOG"
+    pin_ignorepkg
   else
     echo "${NOTE} ${MAGENTA}rofi${RESET} $HAVE is newer than the vendored $WANT - keeping it (no click-to-focus in the launcher until pkgbuilds/rofi is updated)." | tee -a "$LOG"
   fi
@@ -88,6 +108,7 @@ rm -rf "$TMPD"
 
 if [ "$(pacman -Q "$PKG" 2>/dev/null | awk '{print $2}')" = "$WANT" ]; then
   echo "${OK} The patched ${YELLOW}rofi${RESET} $WANT is installed." | tee -a "$LOG"
+  pin_ignorepkg
 else
   echo "${WARN} The patched rofi did not install - keeping the stock one. See $LOG." | tee -a "$LOG"
 fi
