@@ -34,6 +34,11 @@
 # 14 group-switch-fade: switching tabs crossfades (Hyprland's fadeSwitch).
 # 15 group-bar-clip: the tabs keep their places on the window and are clipped
 #    at the monitor edge, so they slide rigidly with it.
+# 16 activation: an app raising itself from a clicked notification comes
+#    forward (activation_unfocused_tokens): mango answers xdg-activation itself
+#    and honours a token with a real input serial even when its window has no
+#    focus, as Hyprland does; a hidden group tab gets its workspace shown and
+#    its tab brought forward.
 #
 # install-scripts/mango-patched.sh builds this with makepkg and puts mangowm
 # in pacman's IgnorePkg: a stock mango from the repos would not know the
@@ -49,7 +54,7 @@
 pkgname=mangowm
 _pkgname=mango
 pkgver=0.18.2
-pkgrel=103
+pkgrel=105
 pkgdesc="Lightweight, feature rich modern wayland compositor (patched to match a Hyprland setup)"
 url="https://mangowm.github.io"
 arch=('x86_64')
@@ -74,7 +79,8 @@ source=("${pkgname}-${pkgver}.tar.gz::https://github.com/mangowm/mango/archive/r
         '12-border-fade.patch'
         '13-group-bar-slide.patch'
         '14-group-switch-fade.patch'
-        '15-group-bar-clip.patch')
+        '15-group-bar-clip.patch'
+        '16-activation.patch')
 sha256sums=('04c8a6bb168307360383670daf0f96ffa7587df6680b9030587f084121105dd3'
             'ba35c9142a20c5d5298312a1559ae1906436500087269725aeb05752ddbcc64c'
             '87de5c562bd5d85cde2e8674fb387b5a77f49a424176b56fd28f3e9a4621eafb'
@@ -90,7 +96,8 @@ sha256sums=('04c8a6bb168307360383670daf0f96ffa7587df6680b9030587f084121105dd3'
             'cc594a9dc04bb416fa8cdb3f3323aa322fe777b27450e076b7d3993efc4b5f86'
             '3a60d40eed0c1d5c2daa5c4dfaec2e9ae11d412a93dd2f6a0b2ab6899ce8af77'
             '0a38682d7c1b9ac8b6c7c2011dfc5e684992e4c6356f79227efb06da4396ddf6'
-            'cf3a7d9f4caf138afc0ae88d1bb4f63beb7e55e55caabddb3eead7ba6cc20801')
+            'cf3a7d9f4caf138afc0ae88d1bb4f63beb7e55e55caabddb3eead7ba6cc20801'
+            '6425f9775d95d71966ad90b645cfd1d4fe5e00f2c9f7d94105e375fb31d19ae1')
 
 prepare() {
 	cd "${_pkgname}-${pkgver}"
