@@ -121,8 +121,8 @@ def file_url(path):
 
 
 def playing_video():
-    """The file mpvpaper is playing, if it is running: a video wallpaper never
-    goes through WallustSwww.sh, so the link above still names the last image."""
+    """The file mpvpaper is playing, if it is running: for a video wallpaper
+    WallustSwww.sh points the link above at its first frame, not the video."""
     for pid in os.listdir("/proc"):
         if not pid.isdigit():
             continue

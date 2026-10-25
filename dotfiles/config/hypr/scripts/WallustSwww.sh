@@ -37,6 +37,24 @@ if [[ -z "${wallpaper_path:-}" || ! -f "$wallpaper_path" ]]; then
   exit 0
 fi
 
+# A video wallpaper (mpvpaper): wallust and magick read pictures, so take the
+# video's first frame and carry on with that. The frame also becomes the
+# "current wallpaper" below, so the effects menu and Game Mode's awww get a
+# picture rather than a video. Through a temp file, so a failed ffmpeg never
+# leaves a half-written frame behind.
+if [[ "${wallpaper_path,,}" =~ \.(mp4|mkv|mov|webm)$ ]]; then
+  video_frame="$HOME/.config/hypr/wallpaper_effects/.wallpaper_video_frame.png"
+  mkdir -p "$(dirname "$video_frame")"
+  if ffmpeg -nostdin -v error -y -i "$wallpaper_path" -frames:v 1 -update 1 "$video_frame.tmp.png" </dev/null \
+    && [[ -s "$video_frame.tmp.png" ]]; then
+    mv -f "$video_frame.tmp.png" "$video_frame"
+    wallpaper_path="$video_frame"
+  else
+    rm -f "$video_frame.tmp.png"
+    exit 0
+  fi
+fi
+
 # Update helpers that depend on the path - unless what awww shows is an effect
 # image (WallpaperEffects.sh's .wallpaper_modified, made FROM .wallpaper_current).
 # Callers without a path (Game Mode, the animations menu, monitor profiles) used

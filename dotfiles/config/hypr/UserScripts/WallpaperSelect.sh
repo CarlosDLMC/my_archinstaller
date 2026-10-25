@@ -294,6 +294,12 @@ apply_video_wallpaper() {
 
   # Apply video wallpaper using mpvpaper
   mpvpaper '*' -o "load-scripts=no no-audio --loop" "$video_path" &
+
+  # The colours follow the video too: WallustSwww.sh runs wallust on its
+  # first frame.
+  "$SCRIPTSDIR/WallustSwww.sh" "$video_path"
+  sleep 2
+  "$SCRIPTSDIR/Refresh.sh"
 }
 
 # Main function
