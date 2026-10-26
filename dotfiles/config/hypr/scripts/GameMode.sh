@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Game Mode (SUPER+SHIFT+G). Turns off animations, blur, shadows, gaps and
-# rounding, makes windows opaque and stops the wallpaper daemon.
+# rounding, makes windows opaque and stops the wallpaper - awww's picture or
+# mpvpaper's video, which would otherwise keep decoding behind the game.
 #
 # The overrides go into a file on the runtime tmpfs that mango sources last
 # (state/machine.conf, written by MachineConf.sh); mango reloads when it
@@ -37,14 +38,22 @@ unfocused_opacity=1.0
 window_rule=focused_opacity:1.0,unfocused_opacity:1.0,app_id:.*
 CONF
     qs -c bar ipc call gamemode set true >/dev/null 2>&1
-    awww kill
+    awww kill 2>/dev/null
+    pkill -x mpvpaper
     notify-send -t 1000 -e -u low -i "$notif" "Игровой режим:" "включён"
     exit
 fi
 
 rm -f "$state"
 qs -c bar ipc call gamemode set false >/dev/null 2>&1
-awww-daemon --format argb && awww img "$HOME/.config/rofi/.current_wallpaper" &
+# The wallpaper comes back the way it starts at login: WallpaperStart.sh loops
+# the video picked last, or starts awww-daemon, which shows its last image by
+# itself (an effect image too). Starting awww here showed that cached still on
+# top of a video, and WallustSwww.sh below then themed the desktop from it.
+# Not when a wallpaper was picked during game mode: that one already runs.
+if ! pgrep -x mpvpaper >/dev/null && ! pgrep -x awww-daemon >/dev/null; then
+    setsid -f "$SCRIPTSDIR/WallpaperStart.sh" >/dev/null 2>&1
+fi
 sleep 0.1
 "$SCRIPTSDIR/WallustSwww.sh"
 sleep 0.5
