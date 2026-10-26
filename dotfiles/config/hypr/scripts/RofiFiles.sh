@@ -235,7 +235,7 @@ preview_open() {
     is_browser "$app" && return
     case $app in
         mpv.desktop) mpv_preview "$1" ;;
-        imv.desktop) imv_preview "$1" ;;
+        imv.desktop|imv-dir.desktop) imv_preview "$1" ;;
         *)           setsid -f xdg-open "$1" >/dev/null 2>&1 ;;
     esac
 }
