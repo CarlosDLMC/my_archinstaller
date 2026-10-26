@@ -113,3 +113,13 @@ button.link > label:not(#wallust),
 link:not(#wallust) {
     color: @wal_accent;
 }
+
+/* Thunar's file pane (the standard view, icons or list) a step darker than
+   the sidebar and toolbar, like Finder's: the wallpaper's own background
+   colour rather than Adwaita's grey. Selected files keep the rule above. */
+.standard-view:not(#wallust),
+.standard-view .view:not(:selected):not(#wallust),
+.standard-view ExoIconView:not(#wallust),
+.standard-view treeview.view:not(:selected):not(#wallust) {
+    background-color: @wal_bg;
+}
