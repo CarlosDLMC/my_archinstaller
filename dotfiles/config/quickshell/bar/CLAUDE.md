@@ -42,6 +42,7 @@ PolkitState.qml     # Singleton: the polkit agent (replaces hyprpolkitagent) + w
 PowerState.qml      # Singleton: power menu (CTRL+ALT+P) - orders, 5 s armed countdown, uptime; IPC "power"
 WallpaperState.qml  # Singleton: wallpaper carousel - the tree, thumbnails, folders; IPC "wallpaper"
 NightLight.qml      # Singleton: night-light state, watched off NightLight.sh's state file (wlsunset)
+KeepAwake.qml       # Singleton: ПУЛЬТ "НЕ ЗАСЫПАТЬ" switch - holds a logind idle inhibitor while on
 BarCards.qml        # Singleton: IPC "cards" toggle(<card>), what SUPER+CTRL+<letter> calls
 LayoutState.qml     # Singleton: keyboard-layout MRU switcher; IPC "layout" (next, restore)
 overview/           # The workspace overview (SUPER+A, IPC "overview"): MangoData.qml lists the windows while it is open
@@ -79,7 +80,7 @@ components/         # Modular widget components
   ├── ConsoleKeycap.qml    # Console dialogs: a key hint - the key on a small raised cap, its action beside it
   ├── SegmentGauge.qml     # Console cards: a segmented gauge with an optional marker tick
   ├── WifiWidget.qml       # WiFi status with network speeds (extends DropdownWidget)
-  ├── PultWidget.qml       # ПУЛЬТ (⚙): bluetooth + search/pairing, night light, power profile, CPU/RAM switch
+  ├── PultWidget.qml       # ПУЛЬТ (⚙): bluetooth + search/pairing, night light, НЕ ЗАСЫПАТЬ, power profile, CPU/RAM switch
   ├── PultSwitch.qml       # ПУЛЬТ card: one on/off line - lamp, glyph, label, latching button
   ├── PowerWidget.qml      # Power menu: lock, logout, reboot, shutdown (extends DropdownWidget)
   ├── RecordOsd.qml        # Screen-recording dialog (centred box, big buttons, audio toggles)
@@ -130,6 +131,10 @@ components/         # Modular widget components
   `watchChanges` sees every change instantly - whether it came from the bar or from
   `SUPER + N`. A 60s check against `pgrep` runs only while the file says "on", to
   catch wlsunset having died and left the file lying.
+- **KeepAwake.qml**: the ПУЛЬТ card's "НЕ ЗАСЫПАТЬ" switch. While on, the bar runs
+  `systemd-inhibit --what=idle`, which hypridle honours, so the screensaver and lock never
+  come. The choice is kept in `$XDG_RUNTIME_DIR/quickshell-keep-awake`: it survives a bar
+  reload, not a logout. The inhibitor's child exits once the bar or systemd-inhibit is gone.
 - **AgentWidget.qml / AgentPanel.qml / AgentUsage.qml**: Claude Code usage.
   The bar shows the share of the 5-hour session spent (the number that says
   whether you are about to be cut off); the card adds the plan, weekly and

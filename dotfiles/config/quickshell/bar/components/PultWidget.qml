@@ -435,6 +435,13 @@ DropdownWidget {
                 }
 
                 PultSwitch {
+                    icon: "󰅶"
+                    label: "НЕ ЗАСЫПАТЬ"
+                    on: KeepAwake.on
+                    onToggled: KeepAwake.toggle()
+                }
+
+                PultSwitch {
                     icon: "󰍛"
                     label: "ЦП · ОЗУ НА ПАНЕЛИ"
                     on: SystemStats.shown
