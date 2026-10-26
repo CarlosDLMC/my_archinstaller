@@ -1628,14 +1628,19 @@ checks it without touching the running session; scripts talk to mango with `mmsg
 (`mmsg dispatch …`, `mmsg get all-clients`). A held key runs its bind once; only the
 `binde` binds (volume, brightness, resizing) repeat.
 
-**Two binds do nothing on a fresh install.** `SUPER + T` launches Telegram and
-`SUPER + R` launches RustRover (`mango/keybinds.conf`), and
-neither application is installed by this repo — applications beyond the desktop
-itself are deliberately out of scope, see
+**One bind does nothing on a fresh install.** `SUPER + T` launches Telegram
+(`mango/keybinds.conf`), and the application is not installed by this repo —
+applications beyond the desktop itself are deliberately out of scope, see
 [What is deliberately NOT in this repo](#what-is-deliberately-not-in-this-repo).
 A bind pointing at a missing binary fails silently in mango: no error, no
-notification, the key just does nothing. Install `telegram-desktop` and
-`rustrover` if you want them, or delete the two lines.
+notification, the key just does nothing. Install `telegram-desktop` if you want
+it, or delete the line.
+
+**`SUPER + R` rotates the tiled windows** of the workspace one slot along the
+layout, all at once: terminal on the left half, browser top right and Thunar
+bottom right become Thunar, terminal, browser, and focus stays on the app it was
+on (`RotateWindows.sh`; mango only swaps two windows, so the script does it once
+per window minus one).
 
 ### Speech-to-Text (Handy)
 
