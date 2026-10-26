@@ -5,6 +5,7 @@
 terminal=foot
 wallpaper_current="$HOME/.config/hypr/wallpaper_effects/.wallpaper_current"
 wallpaper_output="$HOME/.config/hypr/wallpaper_effects/.wallpaper_modified"
+video_file="$HOME/.config/hypr/wallpaper_effects/.wallpaper_video"
 SCRIPTSDIR="$HOME/.config/hypr/scripts"
 rofi_theme="$HOME/.config/rofi/config-wallpaper-effect.rasi"
 
@@ -83,11 +84,6 @@ main() {
             # Apply selected effect
             notify-send -u normal -i "$iDIR/ja.png"  "Применяется эффект:" "$choice"
             eval "${effects[$choice]}"
-            
-            # intial kill process
-            for pid in swaybg mpvpaper; do
-            killall -SIGUSR1 "$pid"
-            done
 
             sleep 1
             awww img "$wallpaper_output" $SWWW_PARAMS &
@@ -119,6 +115,16 @@ main() {
 # Check if rofi is already running and kill it
 if pidof rofi > /dev/null; then
     pkill rofi
+fi
+
+# A video wallpaper (mpvpaper, recorded in .wallpaper_video by
+# WallpaperSelect.sh) has no picture to put an effect on: the effects work on
+# .wallpaper_current and are shown by awww, which is not running then. Applying
+# one used to kill mpvpaper (SIGUSR1 is fatal to it) and leave a bare grey
+# desktop themed from an older still - so the video stays and nothing changes.
+if [ -s "$video_file" ] || pgrep -x mpvpaper >/dev/null; then
+    notify-send -u low -i "$iDIR/ja.png" "Эффекты обоев:" "только для картинок, а сейчас на обоях видео"
+    exit 0
 fi
 
 main
