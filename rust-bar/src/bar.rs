@@ -38,6 +38,11 @@ pub enum Action {
     Workspace(i64),
     LayoutCycle,
     Pult,
+    Agent,
+    Volume,
+    Battery,
+    Wifi,
+    Vpn,
     Bell,
     Weather,
     Clock,
@@ -117,6 +122,11 @@ enum Slot {
     Mem,
     Layout,
     Pult,
+    Agent,
+    Volume,
+    Battery,
+    Wifi,
+    Vpn,
 }
 
 fn workspace_items(svc: &Services, screen: &str) -> (Vec<(i64, bool, bool)>, i64) {
@@ -162,12 +172,22 @@ pub fn draw(scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, svc: &Services,
     scene.scale(ui, ui);
     let mut p = Painter { scene, fonts, theme, hits: Vec::new(), ui, pointer: ctx.pointer };
 
-    let stats = svc.stats.shown;
+    // shell.qml's order; a hidden widget takes its separator with it.
     let mut slots = vec![Slot::Pad(12.0), Slot::Logo, Slot::Workspaces, Slot::Sep, Slot::Title, Slot::Center];
-    if stats {
+    if svc.agent_installed {
+        slots.extend([Slot::Agent, Slot::Sep]);
+    }
+    if svc.stats.shown {
         slots.extend([Slot::Cpu, Slot::Sep, Slot::Mem, Slot::Sep]);
     }
-    slots.extend([Slot::Layout, Slot::Sep, Slot::Pult, Slot::Pad(8.0)]);
+    slots.push(Slot::Volume);
+    if svc.battery.present {
+        slots.extend([Slot::Sep, Slot::Battery]);
+    }
+    if svc.wifi.has {
+        slots.extend([Slot::Sep, Slot::Wifi]);
+    }
+    slots.extend([Slot::Sep, Slot::Vpn, Slot::Sep, Slot::Layout, Slot::Sep, Slot::Pult, Slot::Pad(8.0)]);
 
     // Widths first; the centre takes what is left (Layout.fillWidth).
     let ws = workspace_items(svc, ctx.name).0;
@@ -184,6 +204,11 @@ pub fn draw(scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, svc: &Services,
             Slot::Mem => mem_width(p, svc),
             Slot::Layout => p.line(&layout_label(&svc.mango.keyboard_layout), true, FONT_SIZE).width,
             Slot::Pult => p.fonts.layout("\u{f0493}", theme::bar_font(false), FONT_SIZE + 2.0, 0.0).width,
+            Slot::Agent => p.line(AGENT_ICON, true, FONT_SIZE).width,
+            Slot::Volume => p.line(&volume_text(svc), true, FONT_SIZE).width,
+            Slot::Battery => p.line(&battery_text(svc), true, FONT_SIZE).width,
+            Slot::Wifi => p.line(wifi_icon(svc), true, FONT_SIZE + 4.0).width,
+            Slot::Vpn => vpn_slot_width(p),
         }
     };
     let widths: Vec<f32> = slots.iter().map(|s| width_of(&mut p, s)).collect();
@@ -241,9 +266,35 @@ pub fn draw(scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, svc: &Services,
             }
             Slot::Pult => {
                 let line = p.fonts.layout("\u{f0493}", theme::bar_font(false), FONT_SIZE + 2.0, 0.0);
-                let ty = qround((DESIGN_HEIGHT - line.height()) / 2.0);
-                p.label(&line, x, ty, theme.col_grey);
-                p.hit(x, 0.0, line.width, DESIGN_HEIGHT, Action::Pult);
+                icon_slot(&mut p, &line, x, theme.col_grey, Action::Pult);
+            }
+            Slot::Agent => {
+                let line = p.line(AGENT_ICON, true, FONT_SIZE);
+                icon_slot(&mut p, &line, x, theme.col_white, Action::Agent);
+            }
+            Slot::Volume => {
+                let line = p.line(&volume_text(svc), true, FONT_SIZE);
+                let muted = svc.audio.0.muted;
+                icon_slot(&mut p, &line, x, if muted { theme.col_grey } else { theme.col_white }, Action::Volume);
+            }
+            Slot::Battery => {
+                let line = p.line(&battery_text(svc), true, FONT_SIZE);
+                let b = &svc.battery;
+                let alert = b.charge_state == "discharging" && b.level <= 15;
+                icon_slot(&mut p, &line, x, if alert { theme.col_alert } else { theme.col_white }, Action::Battery);
+            }
+            Slot::Wifi => {
+                let line = p.line(wifi_icon(svc), true, FONT_SIZE + 4.0);
+                let c = if svc.wifi.connected { theme.col_white } else { theme.col_grey };
+                icon_slot(&mut p, &line, x, c, Action::Wifi);
+            }
+            Slot::Vpn => {
+                let w = vpn_slot_width(&mut p);
+                let on = !svc.vpn.is_empty();
+                let line = p.line(if on { VPN_UP } else { VPN_DOWN }, true, FONT_SIZE + 4.0);
+                let tx = ((w - line.width) / 2.0 + 0.5).floor();
+                p.label(&line, x + tx, qround((DESIGN_HEIGHT - line.height()) / 2.0), if on { theme.col_alert } else { theme.col_grey });
+                p.hit(x, 0.0, w, DESIGN_HEIGHT, Action::Vpn);
             }
         }
         x += if matches!(s, Slot::Center) { center_w } else { *w };
@@ -251,6 +302,132 @@ pub fn draw(scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, svc: &Services,
     let hits = std::mem::take(&mut p.hits);
     scene.restore();
     hits
+}
+
+const AGENT_ICON: &str = "\u{f16a3}";
+const VPN_UP: &str = "\u{f0582}";
+const VPN_DOWN: &str = "\u{f099c}";
+
+/// A DropdownWidget's icon: a Text centred vertically in the 34 px slot.
+fn icon_slot(p: &mut Painter, line: &Line, x: f32, color: Color, action: Action) {
+    p.label(line, x, qround((DESIGN_HEIGHT - line.height()) / 2.0), color);
+    p.hit(x, 0.0, line.width, DESIGN_HEIGHT, action);
+}
+
+fn volume_text(svc: &Services) -> String {
+    let (audio, info) = &svc.audio;
+    let level = if audio.ready { (audio.volume * 100.0).round() as i64 } else { 0 };
+    let icon = if audio.muted {
+        "\u{f0581}"
+    } else {
+        let s = info.as_ref().map(|i| format!("{} {} {}", i.name, i.description, i.nick).to_lowercase()).unwrap_or_default();
+        if s.contains("headphone") || s.contains("headset") {
+            "\u{f02cb}"
+        } else if s.contains("bluez") || s.contains("bluetooth") {
+            "\u{f00b0}"
+        } else if s.contains("hdmi") || s.contains("displayport") {
+            "\u{f0841}"
+        } else {
+            "\u{f057e}"
+        }
+    };
+    format!("{icon} {level}%")
+}
+
+fn battery_text(svc: &Services) -> String {
+    let b = &svc.battery;
+    let icon = if b.charge_state == "holding" {
+        "\u{f06a5}"
+    } else if b.charge_state == "charging" {
+        "\u{f0084}"
+    } else {
+        const STEPS: [&str; 10] = ["\u{f008e}", "\u{f007a}", "\u{f007b}", "\u{f007c}", "\u{f007d}", "\u{f007e}", "\u{f007f}", "\u{f0080}", "\u{f0081}", "\u{f0082}"];
+        match b.level {
+            l if l <= 10 => STEPS[0],
+            l if l <= 20 => STEPS[1],
+            l if l <= 30 => STEPS[2],
+            l if l <= 40 => STEPS[3],
+            l if l <= 50 => STEPS[4],
+            l if l <= 60 => STEPS[5],
+            l if l <= 70 => STEPS[6],
+            l if l <= 80 => STEPS[7],
+            l if l <= 90 => STEPS[8],
+            l if l < 100 => STEPS[9],
+            _ => "\u{f0079}",
+        }
+    };
+    format!("{icon} {}%", b.level)
+}
+
+fn wifi_icon(svc: &Services) -> &'static str {
+    if svc.wifi.connected { "\u{f05a9}" } else { "\u{f05aa}" }
+}
+
+/// Math.ceil(max(boundingRect.width)) of the two VPN glyphs: their ink widths.
+fn vpn_slot_width(p: &mut Painter) -> f32 {
+    let a = p.fonts.ink_width(VPN_UP, theme::bar_font(true), FONT_SIZE + 4.0);
+    let b = p.fonts.ink_width(VPN_DOWN, theme::bar_font(true), FONT_SIZE + 4.0);
+    a.max(b).ceil()
+}
+
+/// CenterInfo.getTempColor
+fn temp_color(text: &str, theme: &Theme) -> Color {
+    let num: String = {
+        let mut s = String::new();
+        let mut it = text.chars().peekable();
+        while let Some(c) = it.next() {
+            if c.is_ascii_digit() || (c == '-' && it.peek().map_or(false, |n| n.is_ascii_digit())) {
+                s.push(c);
+                while let Some(&d) = it.peek() {
+                    if d.is_ascii_digit() {
+                        s.push(d);
+                        it.next();
+                    } else {
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+        s
+    };
+    let Ok(t) = num.parse::<i64>() else { return theme.pal_fg };
+    let hex = match t {
+        t if t <= 0 => "#8be9fd",
+        t if t <= 10 => "#6db3f2",
+        t if t <= 18 => "#50fa7b",
+        t if t <= 25 => "#f1fa8c",
+        t if t <= 32 => "#ffb86c",
+        _ => "#ff5555",
+    };
+    Color::parse(hex).unwrap()
+}
+
+/// barIcon / barTemp / barLocation of CenterInfo, from the weather text.
+fn weather_parts(text: &str) -> (String, String, String) {
+    if text.is_empty() {
+        return Default::default();
+    }
+    let icon = text.split_once(char::is_whitespace).map(|(a, _)| a.to_string()).unwrap_or_default();
+    let mut temp = String::new();
+    let mut loc = String::new();
+    let chars: Vec<char> = text.chars().collect();
+    for i in 0..chars.len() {
+        let start_ok = chars[i].is_ascii_digit() || (chars[i] == '-' && chars.get(i + 1).map_or(false, |c| c.is_ascii_digit()));
+        if !start_ok {
+            continue;
+        }
+        let mut j = i + 1;
+        while j < chars.len() && chars[j].is_ascii_digit() {
+            j += 1;
+        }
+        if chars.get(j) == Some(&'°') {
+            temp = chars[i..=j].iter().collect();
+            loc = chars[j + 1..].iter().collect::<String>().trim_start().to_string();
+            break;
+        }
+    }
+    (icon, temp, loc)
 }
 
 fn ws_text(id: i64, active: bool) -> String {
@@ -297,7 +474,7 @@ fn draw_mem(p: &mut Painter, svc: &Services, x: f32) {
     p.label(&b, x + a.width + 4.0, y, p.theme.col_value);
 }
 
-/// CenterInfo: bell (+ weather pill) right of centre, "|" on the screen's
+/// CenterInfo: bell + weather pill right of centre, "|" on the screen's
 /// centre line, the clock pill after it.
 fn draw_center(p: &mut Painter, svc: &Services, x0: f32, width: f32, design_width: f32) {
     let theme = p.theme;
@@ -307,15 +484,46 @@ fn draw_center(p: &mut Painter, svc: &Services, x0: f32, width: f32, design_widt
     let time_block = 8.0 + (time.width + 16.0) + 12.0;
     let max_x = width - sep.width - time_block;
     let sep_x = center_x.min(max_x.max(0.0));
-    let sep_y = qround((DESIGN_HEIGHT - sep.height()) / 2.0);
-    // No weather yet: the "|" and the weather pill are hidden; the bell stays.
-    let bell = p.line("\u{f009a}  ", true, FONT_SIZE);
-    let bell_x = x0 + sep_x - 8.0 - bell.width;
-    p.label(&bell, bell_x, ((DESIGN_HEIGHT - bell.height()) / 2.0).round(), theme.col_grey);
-    p.hit(bell_x, 0.0, bell.width, DESIGN_HEIGHT, Action::Bell);
-    let _ = sep_y;
+    let has_weather = !svc.weather.text.is_empty();
+    if has_weather {
+        p.scene.text(p.fonts, &sep, x0 + sep_x, qround((DESIGN_HEIGHT - sep.height()) / 2.0) + sep.ascent, theme.col_separator, TextStyle::Normal);
+    }
+
+    // leftContent: Row { bell, weather pill }, its right edge 8 left of the "|".
+    let bell_icon = if !svc.dnd_available { "\u{f009c}  " } else if svc.dnd_enabled { "\u{f009b}  " } else { "\u{f009a}  " };
+    let bell_color = if !svc.dnd_available { theme.col_warn } else if svc.dnd_enabled { theme.col_alert } else { theme.col_grey };
+    let bell = p.line(bell_icon, true, FONT_SIZE);
+    let (icon, temp, loc) = weather_parts(&svc.weather.text);
+    let parts: Vec<(Line, Color)> = [(icon, true), (temp, true), (loc, false)]
+        .into_iter()
+        .filter(|(s, _)| !s.is_empty())
+        .map(|(s, tinted)| {
+            let l = p.line(&s, true, FONT_SIZE);
+            (l, if tinted { temp_color(&svc.weather.text, theme) } else { theme.col_white })
+        })
+        .collect();
+    let row_w: f32 = parts.iter().map(|(l, _)| l.width).sum::<f32>() + 5.0 * (parts.len().saturating_sub(1)) as f32;
+    let pill_w = if has_weather { row_w + 16.0 } else { 0.0 };
+    let row_h: f32 = if has_weather { 26.0f32.max(bell.height()) } else { bell.height() };
+    let row_y = qround((DESIGN_HEIGHT - row_h) / 2.0);
+    let left_x = x0 + sep_x - 8.0 - (bell.width + pill_w);
+    p.label(&bell, left_x, row_y + qround((row_h - bell.height()) / 2.0), bell_color);
+    p.hit(left_x, 0.0, bell.width, DESIGN_HEIGHT, Action::Bell);
+    if has_weather {
+        let px = left_x + bell.width;
+        let py = row_y + qround((row_h - 26.0) / 2.0);
+        let mut tx = px + qround((pill_w - row_w) / 2.0);
+        let row_text_h = parts.iter().map(|(l, _)| l.height()).fold(0.0, f32::max);
+        let ty = py + qround((26.0 - row_text_h) / 2.0);
+        for (l, c) in &parts {
+            p.label(l, tx, ty + qround((row_text_h - l.height()) / 2.0), *c);
+            tx += l.width + 5.0;
+        }
+        p.hit(px, py, pill_w, 26.0, Action::Weather);
+    }
+
     let pill_x = x0 + sep_x + sep.width + 8.0;
-    let pill_y = (DESIGN_HEIGHT - 26.0) / 2.0;
+    let pill_y = qround((DESIGN_HEIGHT - 26.0) / 2.0);
     let pill_w = time.width + 16.0;
     p.label(&time, pill_x + qround((pill_w - time.width) / 2.0), pill_y + qround((26.0 - time.height()) / 2.0), theme.col_white);
     p.hit(pill_x, pill_y, pill_w, 26.0, Action::Clock);
@@ -330,6 +538,7 @@ pub fn activate(app: &mut App, strip: usize, action: Action, _button: u32) {
             services::mango_dispatch(app, &format!("viewcrossmon,{id},^{name}$"));
         }
         Action::LayoutCycle => crate::ipc::layout_next(app),
+        Action::Bell => services::dnd_toggle(app),
         _ => {}
     }
     let _ = FontKey { family: "", bold: false };

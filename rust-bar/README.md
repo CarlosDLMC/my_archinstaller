@@ -35,15 +35,16 @@ from libQt6Quick, uniforms and textures read back from Qt's GL calls):
 | `src/text.rs` | fonts (fontconfig match, mmapped), FreeType outlines, distance fields, Qt metrics, layout, elide |
 | `src/color.rs`, `src/theme.rs` | QColor maths; Theme.qml's roles from `wallust-colors.json` |
 | `src/app.rs` | Wayland (sctk layer shell), event loop, one strip per output, frame-callback redraws, helper processes |
-| `src/services.rs` | Mango.qml streams, SystemStats, clock |
+| `src/services.rs` | Mango.qml streams, SystemStats, clock, weather, DND, battery, Wi-Fi, VPN, agent check |
+| `src/pw.rs` | PipeWire: default sink/source volume and mute (needs clang to build) |
 | `src/bar.rs` | shell.qml's strip |
 | `src/ipc.rs` | `rust-bar msg <target> <function> [args]` - the keybinds' calls |
 
 ## Status
 
 - [x] Engine, text parity (≥99.6 % of pixels within 8/255 of Qt on the test sets)
-- [x] Strip: logo, workspaces, dividers, title, clock, bell, CPU, memory, layout, ПУЛЬТ icon
-- [ ] Strip: volume (PipeWire), battery, Wi-Fi (blink while connecting), VPN, agent, weather pill, colour emoji in titles
+- [x] Strip: every widget - logo, workspaces, dividers, title, clock, bell (DND), weather pill, agent, CPU, memory, volume (PipeWire, event-driven), battery (sysfs), Wi-Fi (nmcli monitor), VPN, layout, ПУЛЬТ icon; matches the QML strip in the sandbox
+- [ ] Strip: Wi-Fi blink while connecting, colour emoji in titles, battery change events (netlink instead of udevadm)
 - [ ] Animations (Qt easing curves), cursor shape on hover changes, click-on-release
 - [ ] Cards (notch canvas, CardSurface, CardKeys) - calendar, weather, audio, network, power, battery, ПУЛЬТ, VPN, agent
 - [ ] Overlays: layout OSD, clipboard, polkit agent, power menu, screenshot, recording

@@ -86,6 +86,7 @@ pub struct App {
     pub strips: Vec<Strip>,
     pub svc: Services,
     running: HashMap<String, Instant>,
+    timers: HashMap<&'static str, smithay_client_toolkit::reexports::calloop::RegistrationToken>,
     pub exit: bool,
 }
 
@@ -119,6 +120,7 @@ impl App {
             strips: Vec::new(),
             svc: Services::default(),
             running: HashMap::new(),
+            timers: HashMap::new(),
             exit: false,
         };
         crate::services::start(&mut app);
@@ -311,6 +313,77 @@ impl App {
                 }
             }
         });
+    }
+
+    /// A long-running helper (nmcli monitor, udevadm monitor): `on_line` for each line.
+    pub fn spawn_lines(&mut self, argv: &[&str], on_line: fn(&mut App, &str)) {
+        let mut cmd = Command::new(argv[0]);
+        cmd.args(&argv[1..]).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
+        unsafe {
+            cmd.pre_exec(|| {
+                libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM);
+                Ok(())
+            });
+        }
+        let Ok(mut child) = cmd.spawn() else { return };
+        let stdout = child.stdout.take().unwrap();
+        let fd = stdout.as_raw_fd();
+        unsafe {
+            let fl = libc::fcntl(fd, libc::F_GETFL);
+            libc::fcntl(fd, libc::F_SETFL, fl | libc::O_NONBLOCK);
+        }
+        let mut buf = Vec::new();
+        let mut child = Some(child);
+        let _ = self.handle.insert_source(Generic::new(stdout, Interest::READ, Mode::Level), move |_, out, app: &mut App| {
+            let mut chunk = [0u8; 4096];
+            loop {
+                match unsafe { out.get_mut() }.read(&mut chunk) {
+                    Ok(0) => {
+                        if let Some(mut c) = child.take() {
+                            let _ = c.wait();
+                        }
+                        return Ok(PostAction::Remove);
+                    }
+                    Ok(n) => {
+                        buf.extend_from_slice(&chunk[..n]);
+                        while let Some(p) = buf.iter().position(|&b| b == b'\n') {
+                            let line: Vec<u8> = buf.drain(..=p).collect();
+                            on_line(app, String::from_utf8_lossy(&line[..line.len() - 1]).as_ref());
+                        }
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => return Ok(PostAction::Continue),
+                    Err(_) => return Ok(PostAction::Remove),
+                }
+            }
+        });
+    }
+
+    /// Calls `ready` whenever `fd` (owned elsewhere) is readable.
+    pub fn watch_fd(&self, fd: std::os::fd::RawFd, ready: fn(&mut App)) {
+        let src = Generic::new(unsafe { smithay_client_toolkit::reexports::calloop::generic::FdWrapper::new(fd) }, Interest::READ, Mode::Level);
+        let _ = self.handle.insert_source(src, move |_, _, app: &mut App| {
+            ready(app);
+            Ok(PostAction::Continue)
+        });
+    }
+
+    /// Restarts a one-shot timer by name: a debounce (Timer.restart()).
+    pub fn debounce(&mut self, name: &'static str, delay: Duration, f: fn(&mut App)) {
+        if let Some(t) = self.timers.remove(name) {
+            self.handle.remove(t);
+        }
+        let tok = self.handle.insert_source(Timer::from_duration(delay), move |_, _, app: &mut App| {
+            app.timers.remove(name);
+            f(app);
+            TimeoutAction::Drop
+        });
+        if let Ok(t) = tok {
+            self.timers.insert(name, t);
+        }
+    }
+
+    pub fn is_running(&self, tag: &str) -> bool {
+        self.running.contains_key(tag)
     }
 
     /// Fire and forget (Quickshell.execDetached).

@@ -440,6 +440,21 @@ impl Fonts {
         out
     }
 
+    /// QFontMetricsF::boundingRect(text).width for one glyph: the hinted ink box.
+    pub fn ink_width(&mut self, text: &str, key: FontKey, size: f32) -> f32 {
+        let line = self.layout(text, key, size, 0.0);
+        let Some(g) = line.glyphs.first().copied() else { return 0.0 };
+        let Some(fc) = self.ft_face(g.face) else { return 0.0 };
+        unsafe {
+            let s = (size * 64.0).round() as ft::FT_F26Dot6;
+            ft::FT_Set_Char_Size(fc, s, s, 72, 72);
+            if ft::FT_Load_Glyph(fc, g.gid as u32, ft::FT_LOAD_DEFAULT | ft::FT_LOAD_TARGET_LIGHT) != 0 {
+                return 0.0;
+            }
+            (*(*fc).glyph).metrics.width as f32 / 64.0
+        }
+    }
+
     pub fn measure(&mut self, text: &str, key: FontKey, size: f32, letter_spacing: f32) -> f32 {
         self.layout(text, key, size, letter_spacing).width
     }

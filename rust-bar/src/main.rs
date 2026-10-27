@@ -3,6 +3,7 @@ mod bar;
 mod color;
 mod gpu;
 mod ipc;
+mod pw;
 mod services;
 mod text;
 mod theme;

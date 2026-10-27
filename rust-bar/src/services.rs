@@ -58,10 +58,50 @@ pub struct Stats {
 }
 
 #[derive(Default)]
+pub struct Battery {
+    pub present: bool,
+    paths: Vec<String>,
+    mains: String,
+    pub level: i64,
+    pub charge_state: String,
+    pub limit_end: i64,
+    pub draw_watts: f64,
+}
+
+#[derive(Default)]
+pub struct Weather {
+    pub text: String,
+    pub alt: String,
+    pub city: String,
+    retry_step: usize,
+}
+
+#[derive(Default)]
+pub struct Wifi {
+    pub has: bool,
+    pub connected: bool,
+    pub ssid: String,
+    pub signal: i64,
+    pub connecting: bool,
+}
+
+#[derive(Default)]
 pub struct Services {
     pub mango: Mango,
     pub stats: Stats,
     pub clock: String,
+    pub timezone: String,
+    pub dnd_enabled: bool,
+    pub dnd_available: bool,
+    pub weather: Weather,
+    pub battery: Battery,
+    pub wifi: Wifi,
+    pub vpn: String,
+    vpn_checked: bool,
+    /// Default sink: volume/mute and its node (name, description, nick).
+    pub audio: (crate::pw::Audio, Option<crate::pw::NodeInfo>),
+    pub pw: Option<crate::pw::Pw>,
+    pub agent_installed: bool,
 }
 
 pub fn home() -> String {
@@ -240,15 +280,35 @@ fn refresh_stats(app: &mut App) -> bool {
 
 // ---- clock ----
 
-pub fn now_hm() -> String {
+/// HH:mm in the custom timezone (~/.cache/quickshell/timezone, set by the
+/// VPN card's time sync) or local time.
+pub fn now_hm(tz: &str) -> String {
+    if !tz.is_empty() {
+        std::env::set_var("TZ", tz);
+    } else {
+        std::env::remove_var("TZ");
+    }
+    unsafe { tzset() };
     let t = unsafe { libc::time(std::ptr::null_mut()) };
     let mut tm: libc::tm = unsafe { std::mem::zeroed() };
     unsafe { libc::localtime_r(&t, &mut tm) };
     format!("{:02}:{:02}", tm.tm_hour, tm.tm_min)
 }
 
+extern "C" {
+    fn tzset();
+}
+
+fn cache_dir() -> String {
+    format!("{}/.cache/quickshell", home())
+}
+
 fn tick_clock(app: &mut App) -> bool {
-    let t = now_hm();
+    let tz = std::fs::read_to_string(format!("{}/timezone", cache_dir())).map(|t| t.trim().to_string()).unwrap_or_default();
+    if tz != app.svc.timezone {
+        app.svc.timezone = tz;
+    }
+    let t = now_hm(&app.svc.timezone);
     if t != app.svc.clock {
         app.svc.clock = t;
         app.mark_all_dirty();
@@ -268,6 +328,278 @@ pub fn start(app: &mut App) {
     refresh_stats(app);
     app.every(Duration::from_millis(5000), refresh_stats);
 
-    app.svc.clock = now_hm();
+    tick_clock(app);
     app.every(Duration::from_millis(1000), tick_clock);
+
+    app.svc.dnd_available = true;
+    dnd_poll(app);
+    app.every(Duration::from_millis(5000), |app| {
+        dnd_poll(app);
+        true
+    });
+
+    if let Ok(t) = std::fs::read_to_string(format!("{}/weather.json", cache_dir())) {
+        apply_weather(app, &t);
+    }
+    request_weather(app);
+    app.every(Duration::from_secs(3600), |app| {
+        request_weather(app);
+        true
+    });
+
+    if let Some(pw) = crate::pw::Pw::new() {
+        let fd = pw.fd();
+        app.svc.pw = Some(pw);
+        app.watch_fd(fd, |app| {
+            let changed = app.svc.pw.as_ref().map_or(false, |p| p.dispatch());
+            if changed {
+                app.svc.audio = app.svc.pw.as_ref().unwrap().sink();
+                app.mark_all_dirty();
+            }
+        });
+    }
+
+    battery_probe(app);
+    app.every(Duration::from_secs(60), |app| {
+        battery_refresh(app, true);
+        true
+    });
+
+    app.svc.wifi.has = glob_dir("/sys/class/net", "").iter().any(|d| std::path::Path::new(&format!("{d}/wireless")).exists());
+    if app.svc.wifi.has {
+        wifi_status(app);
+        app.spawn_lines(&["nmcli", "monitor"], |app, _| app.debounce("wifi", Duration::from_millis(400), wifi_status));
+    }
+
+    vpn_poll(app);
+    app.every(Duration::from_millis(5000), |app| {
+        vpn_poll(app);
+        true
+    });
+
+    let script = format!("{}/.config/quickshell/bar/scripts/agent-usage.py check", home());
+    app.spawn("agent-check", &["sh", "-c", &script], |app, d| {
+        if let Ok(v) = serde_json::from_str::<Value>(d.stdout.trim()) {
+            if v.get("installed").and_then(Value::as_bool) == Some(true) {
+                app.svc.agent_installed = true;
+                app.mark_all_dirty();
+            }
+        }
+    });
+}
+
+// ---- DND (dunstctl), as CenterInfo polls it ----
+
+fn dnd_poll(app: &mut App) {
+    app.spawn("dnd", &["dunstctl", "is-paused"], |app, d| {
+        let v = d.stdout.trim().lines().last().unwrap_or("").to_string();
+        let ok = d.ok && (v == "true" || v == "false");
+        let (en, av) = (if ok { v == "true" } else { app.svc.dnd_enabled }, ok);
+        if (en, av) != (app.svc.dnd_enabled, app.svc.dnd_available) {
+            app.svc.dnd_enabled = en;
+            app.svc.dnd_available = av;
+            app.mark_all_dirty();
+        }
+    });
+}
+
+pub fn dnd_toggle(app: &mut App) {
+    app.spawn("dnd-toggle", &["dunstctl", "set-paused", "toggle"], |app, d| {
+        if !d.ok {
+            app.svc.dnd_available = false;
+        }
+        dnd_poll(app);
+    });
+}
+
+// ---- weather (weather-fetch.sh), with CenterInfo's retry ladder ----
+
+fn apply_weather(app: &mut App, out: &str) -> bool {
+    let Ok(v) = serde_json::from_str::<Value>(out.trim()) else { return false };
+    app.svc.weather.text = v.get("text").and_then(Value::as_str).unwrap_or("").into();
+    app.svc.weather.alt = v.get("alt").and_then(Value::as_str).unwrap_or("").into();
+    app.mark_all_dirty();
+    v.get("stale").and_then(Value::as_bool) != Some(true)
+}
+
+pub fn request_weather(app: &mut App) {
+    let cmd = format!("{}/.config/quickshell/bar/scripts/weather-fetch.sh 2>/dev/null", home());
+    app.spawn("weather", &["sh", "-c", &cmd], |app, d| {
+        let good = !d.stdout.trim().is_empty() && apply_weather(app, &d.stdout);
+        if good {
+            app.svc.weather.retry_step = 0;
+            return;
+        }
+        let minutes = [1u64, 2, 5, 10][app.svc.weather.retry_step.min(3)];
+        app.svc.weather.retry_step += 1;
+        app.debounce("weather-retry", Duration::from_secs(minutes * 60), request_weather);
+    });
+}
+
+// ---- battery (BatteryState.qml, read straight from sysfs) ----
+
+fn read_kv(path: &str) -> Vec<(String, String)> {
+    std::fs::read_to_string(path)
+        .unwrap_or_default()
+        .lines()
+        .filter_map(|l| l.split_once('=').map(|(k, v)| (k.to_string(), v.trim().to_string())))
+        .collect()
+}
+
+fn battery_probe(app: &mut App) {
+    let b = &mut app.svc.battery;
+    b.paths.clear();
+    b.mains.clear();
+    for d in glob_dir("/sys/class/power_supply", "") {
+        let ty = std::fs::read_to_string(format!("{d}/type")).unwrap_or_default();
+        match ty.trim() {
+            "Battery" => {
+                let scope = std::fs::read_to_string(format!("{d}/scope")).unwrap_or("System".into());
+                let present = std::fs::read_to_string(format!("{d}/present")).unwrap_or("1".into());
+                if scope.trim() == "System" && present.trim() == "1" {
+                    b.paths.push(d);
+                }
+            }
+            "Mains" if b.mains.is_empty() => b.mains = d,
+            _ => {}
+        }
+    }
+    b.present = !b.paths.is_empty();
+    battery_refresh(app, true);
+}
+
+pub fn battery_refresh(app: &mut App, with_limits: bool) {
+    let b = &mut app.svc.battery;
+    if !b.present {
+        return;
+    }
+    let (mut e_now, mut e_full, mut watts) = (0f64, 0f64, 0f64);
+    let (mut any_chg, mut any_dis, mut all_full) = (false, false, true);
+    let mut end_limit = 0i64;
+    for p in &b.paths {
+        let kv = read_kv(&format!("{p}/uevent"));
+        let num = |k: &str| kv.iter().find(|(kk, _)| kk == &format!("POWER_SUPPLY_{k}")).and_then(|(_, v)| v.parse::<f64>().ok()).unwrap_or(0.0);
+        let volts = num("VOLTAGE_NOW");
+        let (mut en, mut ef, mut pn) = (num("ENERGY_NOW"), num("ENERGY_FULL"), num("POWER_NOW"));
+        if ef == 0.0 && volts > 0.0 {
+            en = num("CHARGE_NOW") * volts / 1e6;
+            ef = num("CHARGE_FULL") * volts / 1e6;
+            pn = num("CURRENT_NOW") * volts / 1e6;
+        }
+        e_now += en;
+        e_full += ef;
+        watts += pn.abs();
+        let status = kv.iter().find(|(k, _)| k == "POWER_SUPPLY_STATUS").map(|(_, v)| v.as_str()).unwrap_or("Unknown");
+        any_chg |= status == "Charging";
+        any_dis |= status == "Discharging";
+        all_full &= status == "Full";
+        if with_limits && end_limit == 0 {
+            end_limit = std::fs::read_to_string(format!("{p}/charge_control_end_threshold")).ok().and_then(|t| t.trim().parse().ok()).unwrap_or(0);
+        }
+    }
+    if with_limits {
+        b.limit_end = end_limit;
+    }
+    let on_ac = b.mains.is_empty() || std::fs::read_to_string(format!("{}/uevent", b.mains)).unwrap_or_default().contains("POWER_SUPPLY_ONLINE=1");
+    b.draw_watts = watts / 1e6;
+    let before = (b.level, b.charge_state.clone());
+    b.level = if e_full > 0.0 { ((100.0 * e_now / e_full).round() as i64).clamp(0, 100) } else { 0 };
+    b.charge_state = if any_dis || !on_ac {
+        "discharging"
+    } else if any_chg && b.draw_watts > 0.2 {
+        "charging"
+    } else if b.limit_end > 0 && b.limit_end < 99 && b.level >= b.limit_end - 2 {
+        "holding"
+    } else if all_full || b.level >= 97 {
+        "full"
+    } else {
+        "idle"
+    }
+    .into();
+    if before != (b.level, b.charge_state.clone()) {
+        app.mark_all_dirty();
+    }
+}
+
+// ---- Wi-Fi (nmcli, as WifiWidget asks it) ----
+
+/// nmcli -t splits on ':' with '\\' escapes.
+pub fn split_terse(line: &str) -> Vec<String> {
+    let mut out = vec![String::new()];
+    let mut it = line.chars();
+    while let Some(c) = it.next() {
+        match c {
+            '\\' => {
+                if let Some(n) = it.next() {
+                    out.last_mut().unwrap().push(n);
+                }
+            }
+            ':' => out.push(String::new()),
+            c => out.last_mut().unwrap().push(c),
+        }
+    }
+    out
+}
+
+fn wifi_status(app: &mut App) {
+    app.spawn("wifi-current", &["sh", "-c", "nmcli -t -f IN-USE,SSID,SIGNAL device wifi list --rescan no | grep '^\\*' | head -1"], |app, d| {
+        let w = &mut app.svc.wifi;
+        let before = (w.connected, w.ssid.clone());
+        let out = d.stdout.trim();
+        if out.is_empty() {
+            w.connected = false;
+            w.ssid.clear();
+            w.signal = 0;
+        } else {
+            let parts = split_terse(out);
+            if parts.len() >= 3 {
+                w.connected = true;
+                w.ssid = parts[1].clone();
+                w.signal = parts[2].parse().unwrap_or(0);
+            }
+        }
+        if before != (w.connected, w.ssid.clone()) {
+            app.mark_all_dirty();
+        }
+    });
+}
+
+// ---- VPN: the first WireGuard interface (what `wg show interfaces` lists) ----
+
+/// VpnWidget's side effects: a VPN that went down, or none at start with a
+/// city still cached from one, resets the time/weather sync (vpn-reset.sh).
+fn vpn_reset(app: &mut App) {
+    let cmd = format!("{}/.config/quickshell/bar/scripts/vpn-reset.sh all --forget", home());
+    app.spawn("vpn-reset", &["sh", "-c", &cmd], |app, _| {
+        tick_clock(app);
+        request_weather(app);
+    });
+}
+
+fn vpn_poll(app: &mut App) -> bool {
+    let first = !app.svc.vpn_checked;
+    app.svc.vpn_checked = true;
+    // Interfaces of this network namespace (/proc/net/dev), the ones whose
+    // sysfs entry says WireGuard - what `wg show interfaces` lists, unprivileged.
+    let mut active = String::new();
+    let devs = std::fs::read_to_string("/proc/net/dev").unwrap_or_default();
+    for name in devs.lines().skip(2).filter_map(|l| l.split(':').next()).map(str::trim) {
+        if std::fs::read_to_string(format!("/sys/class/net/{name}/uevent")).unwrap_or_default().contains("DEVTYPE=wireguard") {
+            active = name.to_string();
+            break;
+        }
+    }
+    let was_active = !app.svc.vpn.is_empty();
+    if active.is_empty() {
+        if was_active {
+            vpn_reset(app);
+        } else if first && std::fs::read_to_string(format!("{}/weather_city", cache_dir())).map_or(false, |c| !c.trim().is_empty()) {
+            vpn_reset(app);
+        }
+    }
+    if active != app.svc.vpn {
+        app.svc.vpn = active;
+        app.mark_all_dirty();
+    }
+    true
 }
