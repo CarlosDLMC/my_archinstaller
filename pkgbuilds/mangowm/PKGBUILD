@@ -1,9 +1,11 @@
 # Vendored from Arch's mangowm package:
 #   https://gitlab.archlinux.org/archlinux/packaging/packages/mangowm
-# with fifteen patches that make mango look and behave like the Hyprland setup
-# this desktop came from. Every one is an option (or a new dispatcher) that is
-# off by default - stock behaviour stays until the config turns it on; the
-# config in dotfiles/config/mango/ turns them all on.
+# built from our fork of mango, https://github.com/CarlosDLMC/mango (branch
+# patched: mango 0.18.3 plus sixteen commits, one per change below, that make
+# mango look and behave like the Hyprland setup this desktop came from). Every
+# one is an option (or a new dispatcher) that is off by default - stock
+# behaviour stays until the config turns it on; the config in
+# dotfiles/config/mango/ turns them all on.
 #
 # 01 native-content: a window that moves or resizes keeps its content at its
 #    native size, cropped or with its edge pixels extended, as Hyprland draws
@@ -45,16 +47,18 @@
 # options and binds the config uses. depends names the scenefx and wlroots
 # libraries by soname, so pacman refuses a library update this build would not
 # survive instead of leaving a mango that cannot start; rebuild it then. To
-# follow a new mango, set pkgver and the tarball's sha256, re-apply the patches
-# (the source tree they come from is a git branch on 0.18.2, one commit each).
+# follow a new mango, rebase the fork's patched branch onto the new upstream tag,
+# push a new tag <version>-patched.<pkgrel>, then set pkgver, pkgrel and the
+# tarball's sha256 here.
 #
 # Maintainer: Robin Candau <antiz@archlinux.org>
 # Contributor: Matt Quintanilla <matt @ matt quintanilla .xyz>
 
 pkgname=mangowm
 _pkgname=mango
-pkgver=0.18.2
-pkgrel=105
+pkgver=0.18.3
+pkgrel=1
+_tag="${pkgver}-patched.${pkgrel}"
 pkgdesc="Lightweight, feature rich modern wayland compositor (patched to match a Hyprland setup)"
 url="https://mangowm.github.io"
 arch=('x86_64')
@@ -64,51 +68,11 @@ depends=('glibc' 'wayland-protocols' 'pango' 'wayland' 'libinput' 'libdrm' 'cair
          'libxcb' 'libxkbcommon' 'pcre2' 'libwlroots-0.20.so' 'libscenefx-0.5.so'
          'cjson' 'xcb-util-wm')
 makedepends=('meson' 'wlroots0.20' 'scenefx')
-source=("${pkgname}-${pkgver}.tar.gz::https://github.com/mangowm/mango/archive/refs/tags/${pkgver}.tar.gz"
-        '01-native-content.patch'
-        '02-bind-repeat.patch'
-        '03-keep-layout.patch'
-        '04-layer-fade.patch'
-        '05-shadow-colours.patch'
-        '06-fullscreen-takeover.patch'
-        '07-groups.patch'
-        '08-group-bar.patch'
-        '09-fadeout-below-top.patch'
-        '10-special-slide.patch'
-        '11-zoom.patch'
-        '12-border-fade.patch'
-        '13-group-bar-slide.patch'
-        '14-group-switch-fade.patch'
-        '15-group-bar-clip.patch'
-        '16-activation.patch')
-sha256sums=('04c8a6bb168307360383670daf0f96ffa7587df6680b9030587f084121105dd3'
-            'ba35c9142a20c5d5298312a1559ae1906436500087269725aeb05752ddbcc64c'
-            '87de5c562bd5d85cde2e8674fb387b5a77f49a424176b56fd28f3e9a4621eafb'
-            '4a2475095081cbf8d6420999cc571431913449e01fcb0208120f6a1084c46eab'
-            '7d9f40b1c396b5e5333e9785223033b074e52cbcb04780e6e4e351d0099666c7'
-            '67d9dde119ede3a709e7028e7c5e71b4ab1003fbed55ab2bdf11080021aee31e'
-            'bc14b0f27e46e2b1d9663f7608f3c83dafd2094ded7a2707128788b7f61f80dd'
-            'fa7a3d6bf7e174444d1dbefd159d00f161f9b00e433f6acc087460b3a6ecfdfb'
-            '191fd77601c7fc3a6bafd84511989046c7c58eeea6b4f017b957e957ad64fab3'
-            '22b0c3b48073dd19c8ba4e042db6b303fe40411f8e1c50afa7ecb9ae0b60e2e9'
-            'ab02623e62259e617f504e66ac9645192aa69bfadbb043ec0c3ed4d1f4b4e1bd'
-            '2b466682c94c34e7d9a13260c7e917b92c58bbe7bf77afca8adfaa84a0de05ab'
-            'cc594a9dc04bb416fa8cdb3f3323aa322fe777b27450e076b7d3993efc4b5f86'
-            '3a60d40eed0c1d5c2daa5c4dfaec2e9ae11d412a93dd2f6a0b2ab6899ce8af77'
-            '0a38682d7c1b9ac8b6c7c2011dfc5e684992e4c6356f79227efb06da4396ddf6'
-            'cf3a7d9f4caf138afc0ae88d1bb4f63beb7e55e55caabddb3eead7ba6cc20801'
-            '6425f9775d95d71966ad90b645cfd1d4fe5e00f2c9f7d94105e375fb31d19ae1')
-
-prepare() {
-	cd "${_pkgname}-${pkgver}"
-	local p
-	for p in "${srcdir}"/*.patch; do
-		patch -Np1 -i "$p"
-	done
-}
+source=("${pkgname}-${_tag}.tar.gz::https://github.com/CarlosDLMC/mango/archive/refs/tags/${_tag}.tar.gz")
+sha256sums=('7724d979861f52247566fe30caf9f1799cdc7b3c3461014146a36b1a9ebc18ea')
 
 build() {
-	arch-meson "${_pkgname}-${pkgver}" build
+	arch-meson "${_pkgname}-${_tag}" build
 	meson compile -C build
 }
 

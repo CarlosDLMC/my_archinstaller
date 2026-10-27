@@ -1217,7 +1217,8 @@ execute_script "fonts.sh"
 echo "${INFO} Installing ${SKY_BLUE}mango...${RESET}"
 sleep 1
 execute_script "mango.sh"
-# The patched build the mango config needs (pkgbuilds/mangowm).
+# mango itself: built from our fork (pkgbuilds/mangowm) - no stock mangowm
+# from the repos goes in first.
 execute_script "mango-patched.sh"
 
 # Clean up the selected options (remove quotes and trim spaces)

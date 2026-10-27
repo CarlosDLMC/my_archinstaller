@@ -56,8 +56,10 @@ do. Back up a live file before overwriting it.
 ## Notes
 
 - The compositor is **mango** (mangowm, wlroots/dwl-based), patched to behave
-  like the Hyprland setup this desktop came from: `pkgbuilds/mangowm` (one
-  patch per behaviour, each an option the config turns on), built by
+  like the Hyprland setup this desktop came from: `pkgbuilds/mangowm` builds
+  our fork `github.com/CarlosDLMC/mango` (branch `patched`, one commit per
+  behaviour, each an option the config turns on; a release is the tag
+  `<ver>-patched.<pkgrel>`). It is built by
   `install-scripts/mango-patched.sh` and kept in pacman's `IgnorePkg`. Its
   config is `key=value` files under `dotfiles/config/mango/`
   (`keybinds.conf`, `startup.conf`, `rules.conf`, `settings.conf`, ...), all

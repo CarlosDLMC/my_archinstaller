@@ -1,11 +1,8 @@
 #!/bin/bash
-# mango (mangowm) - the compositor - and the Hypr tools this setup keeps on it:
-# hyprlock (the lock screen) and hypridle (idle and sleep), which are not tied
-# to Hyprland.
-
-mango_pkg=(
-  mangowm
-)
+# The Hypr tools this setup keeps on mango: hyprlock (the lock screen) and
+# hypridle (idle and sleep), which are not tied to Hyprland. mango itself is
+# not installed here: mango-patched.sh, which runs next, builds it from our
+# fork - a stock mangowm from the repos cannot run this config.
 
 hypr_eco=(
   hypridle
@@ -28,18 +25,10 @@ fi
 # Set the name of the log file to include the current date and time
 LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_mango.log"
 
-if pacman -Q mangowm >/dev/null 2>&1 || pacman -Q mangowm-git >/dev/null 2>&1; then
-  printf "$NOTE - ${YELLOW} mango is already installed.${RESET} No action required.\n"
-else
-  printf "$INFO - mango not found. ${SKY_BLUE} Installing mango...${RESET}\n"
-  for MANGO in "${mango_pkg[@]}"; do
-    install_package "$MANGO" "$LOG"
-  done
-fi
-
 # CachyOS's Mango editions install mangowm as a dependency of their own
 # settings package, which 01-desktop-pkgs.sh removes: without this, the next
-# orphan clean-up (pacman -Qtdq) would take the compositor with it.
+# orphan clean-up (pacman -Qtdq) would take the compositor with it before
+# mango-patched.sh replaces it.
 if pacman -Qq mangowm >/dev/null 2>&1; then
   sudo pacman -D --asexplicit mangowm >>"$LOG" 2>&1
 fi

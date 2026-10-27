@@ -2,6 +2,23 @@
 
 ## October 2026
 
+Changed (2026-10-27) - the mango patches live in our fork,
+[CarlosDLMC/mango](https://github.com/CarlosDLMC/mango): branch `patched` is
+upstream mango plus one commit per change, and `pkgbuilds/mangowm` builds a
+tag of it (`<version>-patched.<pkgrel>`) instead of applying sixteen
+`.patch` files.
+
+- mango 0.18.3 (mangowm 0.18.3-1, tag `0.18.3-patched.1`): the patches are
+  rebased onto upstream's 0.18.3 and the two commits after it. Dragging no
+  longer lags with VRR on, a menu or card opening under a still pointer reacts
+  to it at once, activating a window in a scratchpad or the special workspace
+  shows it there (and un-minimizes), closing windows are cut at their monitor's
+  edge, and fullscreen transparent windows keep their blur.
+- No stock mangowm is installed first any more: `mango.sh` only keeps
+  hypridle/hyprlock and removes Hyprland, and `mango-patched.sh` is the one
+  place mango comes from - makepkg pulls wlroots0.20, scenefx and the rest
+  from the repos.
+
 Changed (2026-10-22) - mango only. Hyprland is gone from the installer and the
 repo: nothing installs or configures it, and a re-run on a machine that has it
 removes `hyprland`, `xdg-desktop-portal-hyprland` and `hyprsunset`
