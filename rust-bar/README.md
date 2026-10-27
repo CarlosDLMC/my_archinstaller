@@ -60,7 +60,8 @@ from libQt6Quick, uniforms and textures read back from Qt's GL calls):
 - [x] ПУЛЬТ card - Bluetooth (power, paired, scan, pair, connect), night light, НЕ ЗАСЫПАТЬ (the systemd-inhibit holder), the stats switch, power profiles; grows with its lists
 - [x] VPN card - tunnel + off key, ВРЕМЯ/ПОГОДА sync with busy spinners, WireGuard configs with flags; the same scripts
 - [x] Theme follows wallust live (inotify, 80 ms debounce); timezone and weather city follow their cache files
-- [ ] Cards: network, battery, agent
+- [x] Claude Code card - plan, limit meters with reset times and stale-data note, tokens by day and by model (hover shows the split), the same agent-usage.py modes and refresh cadence
+- [ ] Cards: network, battery
 - [ ] The CRT power-off effect (quickshell/crt, run by CrtOff.sh before logout/reboot/shutdown)
 - [ ] Overlays: layout OSD, clipboard, polkit agent, power menu, screenshot, recording
 - [ ] Wallpaper carousel + reveal, overview

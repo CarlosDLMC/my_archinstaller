@@ -269,6 +269,7 @@ impl App {
         if self.card.as_ref().map_or(false, |c| c.win.dirty) {
             self.svc.pult_scanning = crate::pult::scanning(self);
             self.svc.vpn_busy = (crate::vpn::time_busy(self), crate::vpn::weather_busy(self));
+            self.svc.agent_busy = self.is_running("agent-usage");
             cards::update_height(self);
         }
         for i in 0..self.strips.len() {
@@ -537,7 +538,7 @@ impl PointerHandler for App {
                     self.hand = !self.hit_at(w, x, y).is_some();
                     self.set_pointer(w, Some((x, y)));
                     self.win_mut(w).unwrap().dirty = true;
-                    let hand = self.hit_at(w, x, y).is_some();
+                    let hand = self.hit_at(w, x, y).map_or(false, |a| !matches!(a, Action::Hover(_)));
                     self.set_cursor(hand);
                 }
                 PointerEventKind::Leave { .. } => {
@@ -557,7 +558,7 @@ impl PointerHandler for App {
                     if before != after {
                         self.win_mut(w).unwrap().dirty = true;
                     }
-                    self.set_cursor(after.is_some());
+                    self.set_cursor(after.map_or(false, |a| !matches!(a, Action::Hover(_))));
                 }
                 PointerEventKind::Press { button, .. } => {
                     self.pressed = self.hit_at(w, x, y).map(|a| (w, button, a));

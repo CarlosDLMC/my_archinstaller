@@ -64,6 +64,8 @@ pub enum Action {
     Clock,
     /// A control inside the open card (its index in the focus chain).
     Card(u32),
+    /// A hover area inside a card: no hand cursor, no click.
+    Hover(u32),
 }
 
 #[derive(Clone, Debug)]
@@ -632,6 +634,13 @@ pub fn activate(app: &mut App, strip: usize, action: Action, button: u32) {
                 crate::cards::toggle(app, strip, crate::cards::CardKind::Vpn, &h, false);
             }
         }
+        Action::Agent if button == BTN_LEFT => {
+            if let Some(h) = hit {
+                crate::cards::toggle(app, strip, crate::cards::CardKind::Agent, &h, false);
+            }
+        }
+        // AgentWidget.onOtherClicked: the middle button forces a full probe.
+        Action::Agent if button == 0x112 => crate::agent::run(app, "full"),
         Action::LayoutCycle => crate::ipc::layout_next(app),
         Action::Bell => services::dnd_toggle(app),
         _ => {}

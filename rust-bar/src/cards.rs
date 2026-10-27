@@ -38,6 +38,7 @@ pub enum CardKind {
     Audio,
     Pult,
     Vpn,
+    Agent,
 }
 
 /// A fixed origin for animations that run on the clock (Spinner).
@@ -134,6 +135,8 @@ fn geometry(kind: CardKind) -> (f32, f32, Stem) {
         CardKind::Pult => (360.0, 0.0, Stem::Right),
         // VpnWidget: 260 wide, content + 28 high.
         CardKind::Vpn => (260.0, 0.0, Stem::Center),
+        // AgentWidget: 420 wide, max(160, min(content + 30, 85% of the screen)).
+        CardKind::Agent => (420.0, 0.0, Stem::Center),
     }
 }
 
@@ -171,6 +174,10 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
     }
     if kind == CardKind::Vpn {
         h = crate::vpn::card_height(&mut app.fonts, &app.svc);
+    }
+    if kind == CardKind::Agent {
+        content_h = crate::agent::content_height(&mut app.fonts, &app.svc, w, false);
+        h = 160f32.max((content_h.ceil() + 30.0).min(s.screen_height * 0.85));
     }
     // DropdownWidget.cardX: from the icon's centre on the screen.
     let icon_w = icon.w / ui;
@@ -255,6 +262,9 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
     if kind == CardKind::Vpn {
         crate::vpn::opened(app);
     }
+    if kind == CardKind::Agent {
+        crate::agent::opened(app);
+    }
 }
 
 pub fn close(app: &mut App) {
@@ -289,6 +299,16 @@ pub fn update_height(app: &mut App) {
             crate::pult::card_height(&mut app.fonts, &app.svc, scanning)
         }
         CardKind::Vpn => crate::vpn::card_height(&mut app.fonts, &app.svc),
+        CardKind::Agent => {
+            let busy = app.is_running("agent-usage");
+            let w = app.card.as_ref().unwrap().width;
+            let screen_h = app.strips.get(app.card.as_ref().unwrap().strip).map_or(1440.0, |s| s.screen_height);
+            let content = crate::agent::content_height(&mut app.fonts, &app.svc, w, busy);
+            if let Some(c) = app.card.as_mut() {
+                c.content_h = content;
+            }
+            160f32.max((content.ceil() + 30.0).min(screen_h * 0.85))
+        }
         CardKind::Audio => {
             let content = crate::audio_card::content_height(&mut app.fonts, &app.svc);
             if let Some(c) = app.card.as_mut() {
@@ -570,7 +590,7 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
                 y += 42.0 + 6.0;
             }
         }
-        CardKind::Calendar | CardKind::Weather | CardKind::Audio | CardKind::Pult | CardKind::Vpn => {}
+        CardKind::Calendar | CardKind::Weather | CardKind::Audio | CardKind::Pult | CardKind::Vpn | CardKind::Agent => {}
     }
     if ui.card.kind == CardKind::Calendar {
         draw_calendar(&mut ui, w);
@@ -580,6 +600,13 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
     }
     if ui.card.kind == CardKind::Pult {
         crate::pult::draw(&mut ui, w, svc, svc.pult_scanning);
+    }
+    if ui.card.kind == CardKind::Agent {
+        let scroll = ui.card.scroll;
+        ui.scene.save();
+        ui.scene.clip_rect(8.0, STEM_H + 8.0, w - 16.0, h - 28.0);
+        crate::agent::draw(&mut ui, w, svc, svc.agent_busy, STEM_H + 8.0 - scroll);
+        ui.scene.restore();
     }
     if ui.card.kind == CardKind::Vpn {
         crate::vpn::draw(&mut ui, w, svc, svc.vpn_busy);
@@ -907,6 +934,13 @@ fn calendar_step(app: &mut App, delta: i32) {
 /// A wheel turn over the card (QML angleDelta: +120 per notch away from you).
 pub fn wheel(app: &mut App, angle_delta_y: f32) {
     let Some(c) = app.card.as_mut() else { return };
+    if c.kind == CardKind::Agent {
+        let view = c.height - 28.0;
+        let max = (c.content_h - view).max(0.0);
+        c.scroll = (c.scroll - angle_delta_y / 120.0 * 3.0 * 20.0).clamp(0.0, max);
+        c.win.dirty = true;
+        return;
+    }
     if c.kind == CardKind::Audio {
         let over = c.pointer.and_then(|(px, py)| c.sliders.iter().find(|s| px >= s.1 && px < s.1 + s.2 && py >= 0.0).map(|s| s.0));
         let over = over.filter(|code| c.hits.iter().any(|h| h.action == Action::Card(*code) && c.pointer.map_or(false, |(px, py)| h.contains(px, py))));
@@ -978,6 +1012,7 @@ pub fn activate(app: &mut App, action: Action, keyboard: bool) {
         CardKind::Audio => crate::audio_card::activate(app, i),
         CardKind::Pult => crate::pult::activate(app, i),
         CardKind::Vpn => crate::vpn::activate(app, i),
+        CardKind::Agent => {}
         CardKind::Calendar => match i {
             // the focus chain: prev, next; day cells are mouse-only
             CAL_PREV => calendar_step(app, -1),

@@ -187,6 +187,8 @@ pub struct Services {
     pub pending_end: String,
     pub pult: crate::pult::Pult,
     pub vpn_card: crate::vpn::Vpn,
+    pub agent: crate::agent::Usage,
+    pub agent_busy: bool,
     /// (time sync busy, weather sync busy), mirrored for drawing.
     pub vpn_busy: (bool, bool),
     /// btScanProc.running, mirrored for drawing.
@@ -511,15 +513,7 @@ pub fn start(app: &mut App) {
         true
     });
 
-    let script = format!("{}/.config/quickshell/bar/scripts/agent-usage.py check", home());
-    app.spawn("agent-check", &["sh", "-c", &script], |app, d| {
-        if let Ok(v) = serde_json::from_str::<Value>(d.stdout.trim()) {
-            if v.get("installed").and_then(Value::as_bool) == Some(true) {
-                app.svc.agent_installed = true;
-                app.mark_all_dirty();
-            }
-        }
-    });
+    crate::agent::run(app, "check");
 }
 
 // ---- DND (dunstctl), as CenterInfo polls it ----

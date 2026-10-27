@@ -1,3 +1,4 @@
+mod agent;
 mod anim;
 mod app;
 mod audio_card;

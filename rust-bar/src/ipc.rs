@@ -72,6 +72,7 @@ fn cards_toggle(app: &mut App, card: &str) {
         // Bluetooth and the power profile live in the ПУЛЬТ card; both shortcuts open it.
         "bluetooth" | "profile" => (CardKind::Pult, Action::Pult),
         "vpn" => (CardKind::Vpn, Action::Vpn),
+        "agent" => (CardKind::Agent, Action::Agent),
         _ => return,
     };
     let focused = app.svc.mango.focused().map(|m| m.name.clone()).unwrap_or_default();

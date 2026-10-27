@@ -99,3 +99,21 @@ pub fn day_name_short(d: u32) -> String {
         _ => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][i].into(),
     }
 }
+
+/// The format-context abbreviated month (QLocale "MMM"): CLDR's "сент.".
+pub fn month_abbr(m: u32) -> String {
+    let i = (m as usize).clamp(1, 12) - 1;
+    match lang().as_str() {
+        "ru" => ["янв.", "февр.", "мар.", "апр.", "мая", "июн.", "июл.", "авг.", "сент.", "окт.", "нояб.", "дек."][i].into(),
+        "es" => ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sept", "oct", "nov", "dic"][i].into(),
+        _ => ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][i].into(),
+    }
+}
+
+/// QLocale "ddd" of a YYYY-MM-DD date.
+pub fn day_name_of_iso(day: &str) -> String {
+    let mut p = day.split('-').map(|x| x.parse::<i64>().unwrap_or(1));
+    let (y, m, d) = (p.next().unwrap_or(1970), p.next().unwrap_or(1), p.next().unwrap_or(1));
+    let days = days_from_civil(y as i32, m as u32, d as u32);
+    day_name_short(weekday(days))
+}
