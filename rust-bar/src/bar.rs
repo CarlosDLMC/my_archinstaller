@@ -671,5 +671,5 @@ pub fn activate(app: &mut App, strip: usize, action: Action, button: u32) {
         Action::Bell => services::dnd_toggle(app),
         _ => {}
     }
-    let _ = FontKey { family: "", bold: false };
+    let _ = FontKey { family: "", bold: false, plain: false };
 }

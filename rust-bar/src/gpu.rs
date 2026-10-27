@@ -231,7 +231,10 @@ impl Scene {
             TextStyle::Outline(_) => &[1, 0],
             _ => &[0],
         };
-        let subpixel = style == TextStyle::Normal && color.a >= 1.0 && self.opacity >= 1.0;
+        // Qt picks the subpixel material whatever the alpha: its blend constant
+        // is the premultiplied colour and the shader scales the coverage by
+        // alpha * opacity (hiqsubpixeldistancefieldtext.frag).
+        let subpixel = style == TextStyle::Normal;
         for &outline_pass in passes {
             for g in &line.glyphs {
                 if g.color {
@@ -255,6 +258,7 @@ impl Scene {
                     i.p1 = [0.0, 1.0, 0.0, 0.0];
                     self.push(Pipe::Text, i);
                 } else if subpixel {
+                    i.color = [color.r * color.a, color.g * color.a, color.b * color.a, color.a * self.opacity];
                     // atlas texels per device pixel, normalised later by the atlas width
                     i.p1 = [1.0 / combined, 0.0, 0.0, 0.0];
                     self.push(Pipe::TextSub, i);

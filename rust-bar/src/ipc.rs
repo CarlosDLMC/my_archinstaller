@@ -51,6 +51,14 @@ fn call(app: &mut App, target: &str, function: &str, args: &[&str]) -> Result<()
             cards_toggle(app, args.first().copied().unwrap_or(""));
             Ok(())
         }
+        ("power", "toggle") => {
+            crate::power::toggle(app);
+            Ok(())
+        }
+        ("power", "exit") => {
+            crate::power::open_on(app, "E");
+            Ok(())
+        }
         ("layout", "next") => {
             layout_next(app);
             Ok(())

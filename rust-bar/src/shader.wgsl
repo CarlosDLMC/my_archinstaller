@@ -46,12 +46,23 @@ fn fs_rect(v: VOut) -> @location(0) vec4<f32> {
         outer = qt_alpha(a - (half - vec2<f32>(r)), r, segments, px);
         let ri = select(0.0, max(r - bw, 0.01), r > 0.0);
         inner = qt_alpha(a - (half - vec2<f32>(bw) - vec2<f32>(ri)), ri, segments, px);
-    } else {
+    } else if (v.p0.x > 0.0) {
         let r = min(v.p0.x, min(half.x, half.y));
         let q = abs(v.local - center) - (half - vec2<f32>(r));
         let d = length(max(q, vec2<f32>(0.0))) + min(max(q.x, q.y), 0.0) - r;
         outer = select(0.0, 1.0, d <= 0.0);
         inner = select(0.0, 1.0, d + bw <= 0.0);
+    } else {
+        // An unsmoothed Rectangle is triangles under the GPU's fill rule: a
+        // pixel is in when its centre is, left/top edges in, right/bottom out
+        // (decides which pixel a 1 px border at x.5 lands on).
+        let lo = v.rect.xy;
+        let hi = v.rect.xy + v.rect.zw;
+        // Centres exactly on an edge (a rect at x.5) come interpolated a hair
+        // either side of it: nudge them all the same way.
+        let p = v.local + vec2<f32>(0.001);
+        outer = select(0.0, 1.0, all(p >= lo) && all(p < hi));
+        inner = select(0.0, 1.0, all(p >= lo + vec2<f32>(bw)) && all(p < hi - vec2<f32>(bw)));
     }
     if (bw <= 0.0) { inner = outer; }
     return v.color * inner + v.color2 * (outer - inner);

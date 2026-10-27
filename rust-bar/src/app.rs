@@ -101,6 +101,9 @@ pub struct App {
     pointer: Option<(WlPointer, Option<WpCursorShapeDeviceV1>)>,
     keyboard: Option<WlKeyboard>,
     enter_serial: u32,
+    /// The surface holding the keyboard, and Shift.
+    kbd_focus: Option<WinRef>,
+    shift: bool,
     hand: bool,
     /// The widget a button went down on: a click is a release on the same one.
     pressed: Option<(WinRef, u32, Action)>,
@@ -154,6 +157,8 @@ impl App {
             strips: Vec::new(),
             card: None,
             osds: Vec::new(),
+            kbd_focus: None,
+            shift: false,
             svc: Services::default(),
             running: HashMap::new(),
             timers: HashMap::new(),
@@ -540,15 +545,27 @@ impl SeatHandler for App {
 }
 
 impl KeyboardHandler for App {
-    fn enter(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlKeyboard, _: &wl_surface::WlSurface, _: u32, _: &[u32], _: &[Keysym]) {}
-    fn leave(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlKeyboard, _: &wl_surface::WlSurface, _: u32) {}
+    fn enter(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlKeyboard, surface: &wl_surface::WlSurface, _: u32, _: &[u32], _: &[Keysym]) {
+        self.kbd_focus = self.win_of(surface);
+    }
+    fn leave(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlKeyboard, _: &wl_surface::WlSurface, _: u32) {
+        self.kbd_focus = None;
+    }
     fn press_key(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlKeyboard, _: u32, event: KeyEvent) {
+        if let Some(WinRef::Osd(k)) = self.kbd_focus {
+            if self.osd(k).is_some() {
+                // Qt's nativeScanCode is the XKB keycode: evdev + 8.
+                crate::osd::key(self, k, event.keysym, event.raw_code + 8, self.shift);
+                return;
+            }
+        }
         if self.card.is_some() {
             cards::key(self, event.keysym, event.utf8.as_deref());
         }
     }
     fn release_key(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlKeyboard, _: u32, _: KeyEvent) {}
     fn update_modifiers(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlKeyboard, _: u32, m: Modifiers, _: u32) {
+        self.shift = m.shift;
         if let Some(c) = &mut self.card {
             c.shift = m.shift;
         }
@@ -567,6 +584,24 @@ impl PointerHandler for App {
                 }
                 if let PointerEventKind::Press { .. } = e.kind {
                     cards::close(self);
+                }
+                continue;
+            }
+            if let Some(k) = crate::osd::is_dim(self, &e.surface) {
+                // The dialog's dim: a click outside the panel.
+                match e.kind {
+                    PointerEventKind::Enter { serial } => {
+                        self.enter_serial = serial;
+                        self.hand = true;
+                        self.set_cursor(false);
+                    }
+                    PointerEventKind::Press { button, .. } => self.pressed = Some((WinRef::Osd(k), button, Action::Hover(u32::MAX))),
+                    PointerEventKind::Release { button, .. } => {
+                        if self.pressed.take() == Some((WinRef::Osd(k), button, Action::Hover(u32::MAX))) {
+                            crate::osd::dim_clicked(self, k);
+                        }
+                    }
+                    _ => {}
                 }
                 continue;
             }
@@ -606,6 +641,9 @@ impl PointerHandler for App {
                     let after = self.hit_at(w, x, y);
                     if before != after {
                         self.win_mut(w).unwrap().dirty = true;
+                        if let WinRef::Osd(k) = w {
+                            crate::osd::hovered(self, k, after);
+                        }
                     }
                     self.set_cursor(after.map_or(false, |a| !matches!(a, Action::Hover(_))));
                 }

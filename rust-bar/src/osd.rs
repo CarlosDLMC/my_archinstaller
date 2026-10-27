@@ -29,6 +29,7 @@ use crate::theme::Theme;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum OsdKind {
     Layout,
+    Power,
 }
 
 /// Hover, focus and the animated values of an overlay's controls.
@@ -95,6 +96,8 @@ pub struct Osd {
     /// The dim's opacity, linear.
     pub dim_fade: Animated<f32>,
     pub fade_ms: u64,
+    /// The panel's scale when hidden (it grows to 1 as it fades in).
+    pub min_scale: f32,
     /// The panel's rectangle inside the surface.
     pub panel: (f32, f32, f32, f32),
 }
@@ -107,6 +110,9 @@ pub struct OpenParams {
     pub keyboard: bool,
     pub namespace: &'static str,
     pub fade_ms: u64,
+    pub min_scale: f32,
+    /// Where the surface goes on the screen; None = centred by the compositor.
+    pub pos: Option<(i32, i32)>,
 }
 
 impl App {
@@ -151,6 +157,10 @@ pub fn show(app: &mut App, p: OpenParams) {
     let surface = app.compositor.create_surface(&app.qh);
     let layer = app.layer_shell.create_layer_surface(&app.qh, surface, Layer::Overlay, Some(p.namespace), Some(&output));
     // No anchors: the compositor centres it, as it does the QML window.
+    if let Some((x, y)) = p.pos {
+        layer.set_anchor(Anchor::TOP | Anchor::LEFT);
+        layer.set_margin(y, 0, 0, x);
+    }
     layer.set_size(p.size.0, p.size.1);
     layer.set_exclusive_zone(-1);
     layer.set_keyboard_interactivity(if p.keyboard { KeyboardInteractivity::Exclusive } else { KeyboardInteractivity::None });
@@ -178,6 +188,7 @@ pub fn show(app: &mut App, p: OpenParams) {
         fade,
         dim_fade,
         fade_ms: p.fade_ms,
+        min_scale: p.min_scale,
         panel: p.panel,
     });
 }
@@ -195,14 +206,17 @@ pub fn hide(app: &mut App, kind: OsdKind) {
     o.win.dirty = true;
     let ms = o.fade_ms;
     app.after(Duration::from_millis(0), repaint_dims);
-    app.debounce(gone_timer(kind), Duration::from_millis(ms), match kind {
-        OsdKind::Layout => |app: &mut App| destroy(app, OsdKind::Layout),
-    });
+    let gone: fn(&mut App) = match kind {
+        OsdKind::Layout => |app| destroy(app, OsdKind::Layout),
+        OsdKind::Power => |app| destroy(app, OsdKind::Power),
+    };
+    app.debounce(gone_timer(kind), Duration::from_millis(ms), gone);
 }
 
 fn gone_timer(kind: OsdKind) -> &'static str {
     match kind {
         OsdKind::Layout => "osd-gone-layout",
+        OsdKind::Power => "osd-gone-power",
     }
 }
 
@@ -280,7 +294,7 @@ pub fn draw(o: &mut Osd, scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, sv
     let fade = o.fade.get(now);
     let mut animating = o.fade.running(now);
     let (px, py, pw, ph) = o.panel;
-    let scale = 0.94 + 0.06 * fade;
+    let scale = o.min_scale + (1.0 - o.min_scale) * fade;
     o.st.texts.begin_frame();
     scene.save();
     // Item.scale about the panel's centre, and the panel's opacity.
@@ -294,6 +308,7 @@ pub fn draw(o: &mut Osd, scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, sv
     let mut ui = Ui { card: &mut o.st, scene, fonts, theme, now, animating: false, hits: Vec::new(), focus_codes: Vec::new() };
     match o.kind {
         OsdKind::Layout => crate::layout::draw_osd(&mut ui, (px, py, pw, ph), svc),
+        OsdKind::Power => crate::power::draw_osd(&mut ui, (px, py, pw, ph), svc),
     }
     let (hits, codes) = (std::mem::take(&mut ui.hits), std::mem::take(&mut ui.focus_codes));
     animating |= ui.animating;
@@ -308,11 +323,37 @@ pub fn draw(o: &mut Osd, scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, sv
 pub fn click(app: &mut App, kind: OsdKind, action: Action, button: u32) {
     match kind {
         OsdKind::Layout => crate::layout::osd_click(app, action, button),
+        OsdKind::Power => crate::power::osd_click(app, action, button),
+    }
+}
+
+/// A click on the dim, outside the panel.
+pub fn dim_clicked(app: &mut App, kind: OsdKind) {
+    match kind {
+        OsdKind::Layout => {}
+        OsdKind::Power => crate::power::close(app),
+    }
+}
+
+/// A key while the overlay has the keyboard; `scan` is Qt's nativeScanCode.
+pub fn key(app: &mut App, kind: OsdKind, sym: smithay_client_toolkit::seat::keyboard::Keysym, scan: u32, shift: bool) {
+    match kind {
+        OsdKind::Layout => {}
+        OsdKind::Power => crate::power::key(app, sym, scan, shift),
+    }
+}
+
+/// Pointer motion over a control (MouseArea.onEntered).
+pub fn hovered(app: &mut App, kind: OsdKind, action: Option<Action>) {
+    match kind {
+        OsdKind::Layout => {}
+        OsdKind::Power => crate::power::hovered(app, action),
     }
 }
 
 pub fn hover_changed(app: &mut App, kind: OsdKind, inside: bool) {
     match kind {
         OsdKind::Layout => crate::layout::osd_hover(app, inside),
+        OsdKind::Power => {}
     }
 }

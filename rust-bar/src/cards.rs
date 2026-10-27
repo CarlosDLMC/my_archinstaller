@@ -868,7 +868,7 @@ fn console_row_inner<S: UiState>(ui: &mut Ui<S>, code: u32, x: f32, y: f32, w: f
     match trailing {
         // The VPN card's flag: a Text with the app font at fontSize + 2.
         Some((tr, None)) => {
-            let tl = ui.fonts.layout(tr, theme::FontKey { family: "Fira Code:medium", bold: false }, FONT_SIZE + 2.0, 0.0);
+            let tl = ui.fonts.layout(tr, theme::FontKey { family: "Fira Code:medium", bold: false, plain: false }, FONT_SIZE + 2.0, 0.0);
             right -= tl.width;
             ui.text_of(code, 0xC2, &tl, right, y + qround((h - tl.height()) / 2.0), t.col_white);
             right -= 8.0;
@@ -1340,9 +1340,15 @@ fn power_pick(app: &mut App, i: u32, keyboard: bool) {
         _ => "systemctl poweroff",
     };
     if keyboard {
-        // By keyboard these arm the power menu's countdown (PowerOsd) - that
-        // dialog is not ported yet, so the keyboard does not end the session.
+        // armEnd(): by keyboard these arm the power menu's countdown on that
+        // order (a stray "Up, Enter" used to power off on the spot).
         close(app);
+        let k = ["L", "E", "R", "S"][i.min(3) as usize];
+        app.after(Duration::from_millis(0), match k {
+            "E" => |app: &mut App| crate::power::arm_end(app, "E"),
+            "R" => |app: &mut App| crate::power::arm_end(app, "R"),
+            _ => |app: &mut App| crate::power::arm_end(app, "S"),
+        });
         return;
     }
     close(app);

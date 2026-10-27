@@ -262,6 +262,8 @@ impl Line {
 pub struct FontKey {
     pub family: &'static str,
     pub bold: bool,
+    /// font.kerning: false + font.features { liga: 0, calt: 0 }.
+    pub plain: bool,
 }
 
 pub struct Atlas {
@@ -530,7 +532,9 @@ impl Fonts {
                 let face = &self.faces[fi as usize];
                 let mut buf = rustybuzz::UnicodeBuffer::new();
                 buf.push_str(&s);
-                let out = rustybuzz::shape(&face.hb, &[], buf);
+                let off = |t: &[u8; 4]| rustybuzz::Feature::new(rustybuzz::ttf_parser::Tag::from_bytes(t), 0, ..);
+                let plain = [off(b"liga"), off(b"calt"), off(b"kern")];
+                let out = rustybuzz::shape(&face.hb, if key.plain { &plain[..] } else { &[] }, buf);
                 out.glyph_infos().iter().copied().zip(out.glyph_positions().iter().copied()).collect()
             };
             for (info, pos) in shaped {

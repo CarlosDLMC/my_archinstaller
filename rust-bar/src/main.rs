@@ -12,6 +12,7 @@ mod ipc;
 mod layout;
 mod network_card;
 mod osd;
+mod power;
 mod pult;
 mod pw;
 mod runtime;
@@ -43,7 +44,7 @@ fn textref(spec: &str, out: &str) {
         }
         let family: &'static str = Box::leak(f[0].to_string().into_boxed_str());
         let size: f32 = f[1].parse().unwrap();
-        let key = FontKey { family, bold: f[2] == "1" };
+        let key = FontKey { family, bold: f[2] == "1", plain: false };
         let color = Color::parse(f[4]).unwrap();
         let style = if f[3] == "o" { TextStyle::Outline(Color::parse(f[5]).unwrap()) } else { TextStyle::Normal };
         let text = f[6].replace("\\u{f303}", "\u{f303}");

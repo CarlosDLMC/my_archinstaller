@@ -10,11 +10,11 @@ pub const FONT_CONTENT: &str = "JetBrainsMono Nerd Font";
 pub const FONT_SIZE: f32 = 24.0;
 
 pub fn bar_font(bold: bool) -> FontKey {
-    FontKey { family: FONT, bold }
+    FontKey { family: FONT, bold, plain: false }
 }
 
 pub fn content_font(bold: bool) -> FontKey {
-    FontKey { family: FONT_CONTENT, bold }
+    FontKey { family: FONT_CONTENT, bold, plain: false }
 }
 
 #[derive(Clone, Debug)]
