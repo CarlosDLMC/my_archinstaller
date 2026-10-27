@@ -85,7 +85,7 @@ fn cards_toggle(app: &mut App, card: &str) {
 
 /// LayoutState.cycle(): next keyboard layout (MRU order comes with the LayoutState port).
 pub fn layout_next(app: &mut App) {
-    app.exec_detached(&["mmsg", "dispatch", "switch_keyboard_layout"]);
+    crate::layout::switch_next(app);
 }
 
 /// The client side: one call, prints the reply, exit status 1 on error.

@@ -455,7 +455,7 @@ fn device_row(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32, label: &st
 }
 
 /// Spinner: eight dots on a ring, fading towards the tail, a turn per 900 ms.
-pub fn spinner(ui: &mut Ui, x: f32, y: f32, size: f32, color: Color) {
+pub fn spinner<S: crate::cards::UiState>(ui: &mut Ui<S>, x: f32, y: f32, size: f32, color: Color) {
     let dot = 2f32.max((size / 7.0).round());
     let r = size / 2.0 - dot / 2.0;
     let ms = ui.now.duration_since(*crate::cards::EPOCH.get_or_init(std::time::Instant::now)).as_millis() % 900;

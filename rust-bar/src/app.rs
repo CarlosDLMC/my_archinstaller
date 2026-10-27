@@ -76,6 +76,7 @@ pub struct Strip {
 pub enum WinRef {
     Strip(usize),
     Card,
+    Osd(crate::osd::OsdKind),
 }
 
 /// Output of a finished helper process, routed back by its tag.
@@ -109,6 +110,7 @@ pub struct App {
     pub theme: Theme,
     pub strips: Vec<Strip>,
     pub card: Option<OpenCard>,
+    pub osds: Vec<crate::osd::Osd>,
     pub svc: Services,
     pub(crate) running: HashMap<String, (Instant, u32)>,
     pub(crate) timers: HashMap<&'static str, RegistrationToken>,
@@ -151,6 +153,7 @@ impl App {
             theme,
             strips: Vec::new(),
             card: None,
+            osds: Vec::new(),
             svc: Services::default(),
             running: HashMap::new(),
             timers: HashMap::new(),
@@ -211,6 +214,7 @@ impl App {
         match w {
             WinRef::Strip(i) => self.strips.get_mut(i).map(|s| &mut s.win),
             WinRef::Card => self.card.as_mut().map(|c| &mut c.win),
+            WinRef::Osd(k) => self.osd_mut(k).map(|o| &mut o.win),
         }
     }
 
@@ -220,6 +224,9 @@ impl App {
         }
         if self.card.as_ref().map_or(false, |c| c.win.layer.wl_surface() == surface) {
             return Some(WinRef::Card);
+        }
+        if let Some(o) = self.osds.iter().find(|o| o.win.layer.wl_surface() == surface) {
+            return Some(WinRef::Osd(o.kind));
         }
         None
     }
@@ -293,6 +300,10 @@ impl App {
                 self.draw(WinRef::Card);
             }
         }
+        let kinds: Vec<_> = self.osds.iter().filter(|o| o.win.configured && o.win.dirty && !o.win.frame_pending).map(|o| o.kind).collect();
+        for k in kinds {
+            self.draw(WinRef::Osd(k));
+        }
     }
 
     fn draw(&mut self, w: WinRef) {
@@ -315,6 +326,10 @@ impl App {
                 let gpu = self.gpu.as_mut().unwrap();
                 let card = self.card.as_mut().unwrap();
                 cards::draw(card, &mut scene, &mut self.fonts, gpu, &self.theme, &self.svc)
+            }
+            WinRef::Osd(k) => {
+                let o = self.osds.iter_mut().find(|o| o.kind == k).unwrap();
+                crate::osd::draw(o, &mut scene, &mut self.fonts, &self.theme, &self.svc)
             }
         };
         let qh = self.qh.clone();
@@ -362,6 +377,7 @@ impl App {
         let hits = match w {
             WinRef::Strip(i) => &self.strips[i].hits,
             WinRef::Card => &self.card.as_ref()?.hits,
+            WinRef::Osd(k) => &self.osd(k)?.hits,
         };
         hits.iter().rev().find(|h| h.contains(x, y)).map(|h| h.action)
     }
@@ -374,6 +390,11 @@ impl App {
                     c.pointer = p;
                 }
             }
+            WinRef::Osd(k) => {
+                if let Some(o) = self.osd_mut(k) {
+                    o.st.pointer = p;
+                }
+            }
         }
     }
 
@@ -381,6 +402,7 @@ impl App {
         match w {
             WinRef::Strip(i) => self.strips[i].pointer,
             WinRef::Card => self.card.as_ref()?.pointer,
+            WinRef::Osd(k) => self.osd(k)?.st.pointer,
         }
     }
 }
@@ -449,16 +471,22 @@ impl LayerShellHandler for App {
             cards::close(self);
         }
         self.strips.retain(|s| &s.win.layer != layer);
+        self.osds.retain(|o| &o.win.layer != layer && o.dim.as_ref().map_or(true, |d| &d.layer != layer));
     }
     fn configure(&mut self, _: &Connection, _: &QueueHandle<Self>, layer: &LayerSurface, c: LayerSurfaceConfigure, _: u32) {
         if self.card.as_ref().map_or(false, |k| &k.catcher.layer == layer) {
             cards::configure_catcher(self, c.new_size);
             return;
         }
+        if crate::osd::configure_dim(self, layer, c.new_size) {
+            return;
+        }
         let w = if let Some(i) = self.strips.iter().position(|s| &s.win.layer == layer) {
             WinRef::Strip(i)
         } else if self.card.as_ref().map_or(false, |k| &k.win.layer == layer) {
             WinRef::Card
+        } else if let Some(o) = self.osds.iter().find(|o| &o.win.layer == layer) {
+            WinRef::Osd(o.kind)
         } else {
             return;
         };
@@ -546,6 +574,9 @@ impl PointerHandler for App {
             let (x, y) = (e.position.0 as f32, e.position.1 as f32);
             match e.kind {
                 PointerEventKind::Enter { serial } => {
+                    if let WinRef::Osd(k) = w {
+                        crate::osd::hover_changed(self, k, true);
+                    }
                     self.enter_serial = serial;
                     self.hand = !self.hit_at(w, x, y).is_some();
                     self.set_pointer(w, Some((x, y)));
@@ -554,6 +585,12 @@ impl PointerHandler for App {
                     self.set_cursor(hand);
                 }
                 PointerEventKind::Leave { .. } => {
+                    if let WinRef::Osd(k) = w {
+                        crate::osd::hover_changed(self, k, false);
+                    }
+                    if self.win_mut(w).is_none() {
+                        continue;
+                    }
                     self.set_pointer(w, None);
                     self.win_mut(w).unwrap().dirty = true;
                     self.pressed = None;
@@ -584,6 +621,7 @@ impl PointerHandler for App {
                     if delta != 0.0 {
                         match w {
                             WinRef::Card => cards::wheel(self, delta),
+                            WinRef::Osd(_) => {}
                             WinRef::Strip(i) => {
                                 if let Some(act) = self.hit_at(w, x, y) {
                                     bar::wheel(self, i, act, delta);
@@ -599,6 +637,7 @@ impl PointerHandler for App {
                             match w {
                                 WinRef::Strip(i) => bar::activate(self, i, action, button),
                                 WinRef::Card => cards::click(self, action, button),
+                                WinRef::Osd(k) => crate::osd::click(self, k, action, button),
                             }
                         }
                     }

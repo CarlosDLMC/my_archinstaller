@@ -166,6 +166,7 @@ pub struct Services {
     pub weather: Weather,
     pub battery: crate::battery::Battery,
     pub net: crate::network_card::NetPanel,
+    pub layout: crate::layout::LayoutState,
     pub wifi: Wifi,
     pub vpn: String,
     vpn_checked: bool,
@@ -246,6 +247,7 @@ fn on_layout(app: &mut App, line: &str) {
     if let Some(l) = v.get("layout").and_then(Value::as_str) {
         if l != app.svc.mango.keyboard_layout {
             app.svc.mango.keyboard_layout = l.into();
+            crate::layout::layout_changed(app);
             app.mark_all_dirty();
         }
     }
@@ -510,6 +512,7 @@ pub fn start(app: &mut App) {
     crate::pult::start(app);
 
     crate::battery::start(app);
+    crate::layout::start(app);
 
     app.svc.wifi.has = glob_dir("/sys/class/net", "").iter().any(|d| std::path::Path::new(&format!("{d}/wireless")).exists());
     if app.svc.wifi.has {

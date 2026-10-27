@@ -542,8 +542,40 @@ impl CanvasPath {
     }
 }
 
-pub(crate) struct Ui<'a> {
-    pub card: &'a mut OpenCard,
+/// What the shared controls need from the surface they are drawn on: hover,
+/// focus, animated values and the text memo. A card is one; an OSD another.
+pub(crate) trait UiState {
+    fn color(&mut self, id: u32, target: Color, ms: u64, now: Instant) -> (Color, bool);
+    fn number(&mut self, id: u32, target: f32, ms: u64, now: Instant) -> (f32, bool);
+    fn pointer(&self) -> Option<(f32, f32)>;
+    fn focus(&self) -> Option<usize>;
+    fn tint_alert(&self) -> bool;
+    fn texts(&mut self) -> &mut crate::text::TextMemo;
+}
+
+impl UiState for OpenCard {
+    fn color(&mut self, id: u32, target: Color, ms: u64, now: Instant) -> (Color, bool) {
+        OpenCard::color(self, id, target, ms, now)
+    }
+    fn number(&mut self, id: u32, target: f32, ms: u64, now: Instant) -> (f32, bool) {
+        OpenCard::number(self, id, target, ms, now)
+    }
+    fn pointer(&self) -> Option<(f32, f32)> {
+        self.pointer
+    }
+    fn focus(&self) -> Option<usize> {
+        self.focus
+    }
+    fn tint_alert(&self) -> bool {
+        self.tint_alert
+    }
+    fn texts(&mut self) -> &mut crate::text::TextMemo {
+        &mut self.texts
+    }
+}
+
+pub(crate) struct Ui<'a, S: UiState = OpenCard> {
+    pub card: &'a mut S,
     pub scene: &'a mut Scene,
     pub fonts: &'a mut Fonts,
     pub theme: &'a Theme,
@@ -553,16 +585,16 @@ pub(crate) struct Ui<'a> {
     pub focus_codes: Vec<u32>,
 }
 
-impl Ui<'_> {
+impl<S: UiState> Ui<'_, S> {
     pub fn hovered(&self, x: f32, y: f32, w: f32, h: f32) -> bool {
-        self.card.pointer.map_or(false, |(px, py)| px >= x && px < x + w && py >= y && py < y + h)
+        self.card.pointer().map_or(false, |(px, py)| px >= x && px < x + w && py >= y && py < y + h)
     }
 
     /// Adds a control to the focus chain (activeFocusOnTab); true if it has focus.
     pub fn focusable(&mut self, code: u32) -> bool {
         let i = self.focus_codes.len();
         self.focus_codes.push(code);
-        self.card.focus == Some(i)
+        self.card.focus() == Some(i)
     }
 
     /// A Text at (x, y): subpixel until it changes while the card is open
@@ -570,13 +602,13 @@ impl Ui<'_> {
     #[track_caller]
     pub fn text(&mut self, line: &Line, x: f32, y: f32, color: Color, style: TextStyle) {
         let site = crate::text::TextMemo::site(std::panic::Location::caller());
-        let style = self.card.texts.style(site, line, color, style);
+        let style = self.card.texts().style(site, line, color, style);
         self.scene.text(self.fonts, line, x, y + line.ascent, color, style);
     }
 
     /// A control's own Text (`part` of control `id`).
     pub fn text_of(&mut self, id: u32, part: u64, line: &Line, x: f32, y: f32, color: Color) {
-        let style = self.card.texts.style_keyed((part, id), line, color, TextStyle::Normal);
+        let style = self.card.texts().style_keyed((part, id), line, color, TextStyle::Normal);
         self.scene.text(self.fonts, line, x, y + line.ascent, color, style);
     }
 
@@ -623,7 +655,7 @@ impl Ui<'_> {
         let hot = (enabled && self.hovered(x, y, w, h)) || focused;
         let t = self.theme;
         let target = if current {
-            if self.card.tint_alert { t.col_alert } else { t.col_accent }
+            if self.card.tint_alert() { t.col_alert } else { t.col_accent }
         } else if hot {
             t.col_plate.lighter(1.6)
         } else {
@@ -780,12 +812,12 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
 
 /// ConsolePlate: the recessed plate, with its 1 px highlight along the bottom.
 /// ConsoleLamp in its 10 x 10 slot at (x, y): halo and dot fade over 160 ms.
-pub(crate) fn lamp(ui: &mut Ui, id: u32, x: f32, y: f32, lit: bool) {
+pub(crate) fn lamp<S: UiState>(ui: &mut Ui<S>, id: u32, x: f32, y: f32, lit: bool) {
     let tint = ui.theme.col_accent;
     lamp_tinted(ui, id, x, y, lit, tint);
 }
 
-pub(crate) fn lamp_tinted(ui: &mut Ui, id: u32, x: f32, y: f32, lit: bool, tint: Color) {
+pub(crate) fn lamp_tinted<S: UiState>(ui: &mut Ui<S>, id: u32, x: f32, y: f32, lit: bool, tint: Color) {
     let t = ui.theme;
     let (halo, r1) = ui.card.number(0x3_0000 + id, if lit { 0.22 } else { 0.0 }, 160, ui.now);
     let (dot, r2) = ui.card.color(0x4_0000 + id, if lit { tint } else { t.col_plate.darker(1.3) }, 160, ui.now);
@@ -803,19 +835,19 @@ pub(crate) fn lamp_tinted(ui: &mut Ui, id: u32, x: f32, y: f32, lit: bool, tint:
 /// ConsoleRow: lamp, optional icon, label (elided), optional detail and a
 /// trailing text (an emoji flag), laid out by its RowLayout.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn console_row(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32, icon: &str, label: &str, lit: bool, interactive: bool, detail: Option<(&str, Color)>, trailing: Option<&str>) {
+pub(crate) fn console_row<S: UiState>(ui: &mut Ui<S>, code: u32, x: f32, y: f32, w: f32, h: f32, icon: &str, label: &str, lit: bool, interactive: bool, detail: Option<(&str, Color)>, trailing: Option<&str>) {
     let tint = ui.theme.col_accent;
     console_row_inner(ui, code, x, y, w, h, icon, label, lit, interactive, tint, detail, trailing.map(|t| (t, None)));
 }
 
 /// ConsoleRow with a lamp tint and a trailing glyph in the bar font (the lock).
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn console_row_full(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32, icon: &str, label: &str, lit: bool, interactive: bool, tint: Color, detail: Option<(&str, Color)>, trailing: Option<(&str, Color)>) {
+pub(crate) fn console_row_full<S: UiState>(ui: &mut Ui<S>, code: u32, x: f32, y: f32, w: f32, h: f32, icon: &str, label: &str, lit: bool, interactive: bool, tint: Color, detail: Option<(&str, Color)>, trailing: Option<(&str, Color)>) {
     console_row_inner(ui, code, x, y, w, h, icon, label, lit, interactive, tint, detail, trailing.map(|(s, c)| (s, Some(c))));
 }
 
 #[allow(clippy::too_many_arguments)]
-fn console_row_inner(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32, icon: &str, label: &str, lit: bool, interactive: bool, tint: Color, detail: Option<(&str, Color)>, trailing: Option<(&str, Option<Color>)>) {
+fn console_row_inner<S: UiState>(ui: &mut Ui<S>, code: u32, x: f32, y: f32, w: f32, h: f32, icon: &str, label: &str, lit: bool, interactive: bool, tint: Color, detail: Option<(&str, Color)>, trailing: Option<(&str, Option<Color>)>) {
     let t = ui.theme;
     let font = FONT_SIZE - 3.0;
     let focused = interactive && ui.focusable(code);
@@ -876,7 +908,7 @@ pub(crate) fn caption(fonts: &mut Fonts, text: &str) -> crate::text::Line {
 
 /// SegmentGauge: 28 cells, 2 px apart, the lit ones fading over 200 ms;
 /// a white 2 px marker (when 0 < marker < 100).
-pub(crate) fn gauge(ui: &mut Ui, x: f32, y: f32, w: f32, value: f32, marker: f32, tint: Color) {
+pub(crate) fn gauge<S: UiState>(ui: &mut Ui<S>, x: f32, y: f32, w: f32, value: f32, marker: f32, tint: Color) {
     const SEGMENTS: u32 = 28;
     let lit = ((value.clamp(0.0, 100.0) / 100.0 * SEGMENTS as f32) + 0.5).floor() as u32;
     let cell = (w - 2.0 * (SEGMENTS - 1) as f32) / SEGMENTS as f32;
@@ -911,7 +943,7 @@ pub(crate) fn info_grid_height(fonts: &mut Fonts, rows: usize) -> f32 {
 /// InfoGrid: four columns (label, value, label, value), spacing 14 x 4; the
 /// values (preferredWidth 0, fillWidth) share what the labels leave and are
 /// right-aligned, elided. A row of one pair spans its value over the rest.
-pub(crate) fn info_grid(ui: &mut Ui, x: f32, y: f32, w: f32, rows: &[Vec<GridPair>]) {
+pub(crate) fn info_grid<S: UiState>(ui: &mut Ui<S>, x: f32, y: f32, w: f32, rows: &[Vec<GridPair>]) {
     let t = ui.theme;
     let lkey = theme::bar_font(false);
     let vkey = theme::bar_font(true);
@@ -966,7 +998,7 @@ fn snap_columns<const N: usize>(sizes: [f32; N], spacing: f32, target: f32, mini
     (pos, size)
 }
 
-pub(crate) fn plate(ui: &mut Ui, x: f32, y: f32, w: f32, h: f32) {
+pub(crate) fn plate<S: UiState>(ui: &mut Ui<S>, x: f32, y: f32, w: f32, h: f32) {
     ui.scene.rect(x, y, w, h, ui.theme.col_plate, 5.0, 0.0, Color::TRANSPARENT, true);
     ui.scene.fill(x + 5.0, y + h - 1.0, w - 10.0, 1.0, Color::qt_rgba(1.0, 1.0, 1.0, 0.07));
 }

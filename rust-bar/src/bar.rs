@@ -667,7 +667,7 @@ pub fn activate(app: &mut App, strip: usize, action: Action, button: u32) {
                 crate::cards::toggle(app, strip, crate::cards::CardKind::Battery, &h, false);
             }
         }
-        Action::LayoutCycle => crate::ipc::layout_next(app),
+        Action::LayoutCycle => crate::layout::cycle(app),
         Action::Bell => services::dnd_toggle(app),
         _ => {}
     }

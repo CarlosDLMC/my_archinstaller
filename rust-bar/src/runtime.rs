@@ -244,6 +244,13 @@ impl App {
         }
     }
 
+    /// Timer.stop() for a debounce started under `name`.
+    pub fn cancel_timer(&mut self, name: &str) {
+        if let Some(t) = self.timers.remove(name) {
+            self.handle.remove(t);
+        }
+    }
+
     pub fn is_running(&self, tag: &str) -> bool {
         self.running.contains_key(tag)
     }

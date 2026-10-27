@@ -80,7 +80,9 @@ from libQt6Quick, uniforms and textures read back from Qt's GL calls):
 - [x] Battery card - level, segment gauge with the limit marker, time left / draw, capacity, cycles, health, per-pack rows, charge-limit presets through the same root helper; kernel power_supply uevents (netlink, no `udevadm monitor` process) keep it and the strip fresh
 - [x] Network details card (Wi-Fi right click, NetworkPanel): radio key, SSID, channel gauge, addresses, traffic and latency every 3 s from network-status.sh, the DNS picker, the speed test (streamed, cancellable) and the share-by-QR view, with the same scripts and nmcli calls
 - [ ] The CRT power-off effect (quickshell/crt, run by CrtOff.sh before logout/reboot/shutdown)
-- [ ] Overlays: layout OSD, clipboard, polkit agent, power menu, screenshot, recording
+- [x] Overlay framework (osd.rs): Overlay-layer panel on the focused screen, its own size, input only on the panel; the dialogs' dim is one stretched pixel; fade 0..1 OutCubic with scale .94..1
+- [x] Layout OSD + LayoutState: MRU `layout next`, the strip label cycles, the switcher shows on every change, hover holds it, click picks
+- [ ] Overlays: clipboard, polkit agent, power menu, screenshot, recording
 - [ ] Wallpaper carousel + reveal, overview
 - [ ] Switch-over: keybinds, scripts, installer build step
 
