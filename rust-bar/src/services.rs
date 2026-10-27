@@ -772,6 +772,7 @@ pub fn request_weather(app: &mut App) {
         let good = !d.stdout.trim().is_empty() && apply_weather(app, &d.stdout);
         if good {
             app.svc.weather.retry_step = 0;
+            app.cancel_timer("weather-retry");
             return;
         }
         let minutes = [1u64, 2, 5, 10][app.svc.weather.retry_step.min(3)];
