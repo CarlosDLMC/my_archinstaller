@@ -1,0 +1,27 @@
+[package]
+name = "rust-bar"
+version = "0.1.0"
+edition = "2021"
+description = "The desktop bar, in Rust: same look and behaviour as the quickshell bar, less memory"
+license = "MIT"
+
+[dependencies]
+smithay-client-toolkit = { version = "0.19", default-features = false, features = ["calloop"] }
+wayland-client = "0.31"
+wayland-backend = { version = "0.3", features = ["client_system"] }
+raw-window-handle = "0.6"
+wgpu = { version = "25", default-features = false, features = ["vulkan", "wgsl"] }
+pollster = "0.4"
+swash = "0.2"
+memmap2 = "0.9"
+serde_json = "1"
+png = "0.17"
+libc = "0.2"
+freetype-sys = "0.23"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 4
+panic = "abort"
+strip = true
