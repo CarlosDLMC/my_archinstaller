@@ -1,5 +1,5 @@
 //! The running bar: Wayland objects, the event loop, the surfaces (a strip per
-//! output, the open card and its click catcher), redraws driven by frame
+//! output, the open card on its full-screen surface), redraws driven by frame
 //! callbacks - nothing is drawn while nothing changes.
 
 use std::collections::HashMap;
@@ -555,17 +555,13 @@ impl OutputHandler for App {
 
 impl LayerShellHandler for App {
     fn closed(&mut self, _: &Connection, _: &QueueHandle<Self>, layer: &LayerSurface) {
-        if self.card.as_ref().map_or(false, |c| &c.win.layer == layer || &c.catcher.layer == layer) {
+        if self.card.as_ref().map_or(false, |c| &c.win.layer == layer) {
             cards::close(self);
         }
         self.strips.retain(|s| &s.win.layer != layer);
         self.osds.retain(|o| &o.win.layer != layer && o.dim.as_ref().map_or(true, |d| &d.layer != layer));
     }
     fn configure(&mut self, _: &Connection, _: &QueueHandle<Self>, layer: &LayerSurface, c: LayerSurfaceConfigure, _: u32) {
-        if self.card.as_ref().map_or(false, |k| &k.catcher.layer == layer) {
-            cards::configure_catcher(self, c.new_size);
-            return;
-        }
         if crate::osd::configure_dim(self, layer, c.new_size) {
             return;
         }
@@ -664,17 +660,30 @@ impl KeyboardHandler for App {
 impl PointerHandler for App {
     fn pointer_frame(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlPointer, events: &[PointerEvent]) {
         for e in events {
-            if self.card.as_ref().map_or(false, |c| c.catcher.layer.wl_surface() == &e.surface) {
-                // CardSurface: a press anywhere outside the card dismisses it.
-                if let PointerEventKind::Enter { serial } = e.kind {
-                    self.enter_serial = serial;
-                    self.hand = true;
-                    self.set_cursor(false);
+            if self.card.as_ref().map_or(false, |c| c.win.layer.wl_surface() == &e.surface) && self.pressed.is_none() {
+                // CardSurface: around the card, a press dismisses it and the
+                // wheel is eaten; the pointer is not over the card there. (A
+                // drag that started on the card keeps going.)
+                let (x, y) = (e.position.0 as f32, e.position.1 as f32);
+                if !matches!(e.kind, PointerEventKind::Leave { .. }) && !cards::inside(self, x, y) {
+                    match e.kind {
+                        PointerEventKind::Press { .. } => cards::close(self),
+                        PointerEventKind::Enter { serial } => {
+                            self.enter_serial = serial;
+                            self.hand = true;
+                            self.set_cursor(false);
+                        }
+                        PointerEventKind::Motion { .. } => {
+                            if self.card.as_ref().map_or(false, |c| c.pointer.is_some()) {
+                                self.set_pointer(WinRef::Card, None);
+                                self.win_mut(WinRef::Card).unwrap().dirty = true;
+                                self.set_cursor(false);
+                            }
+                        }
+                        _ => {}
+                    }
+                    continue;
                 }
-                if let PointerEventKind::Press { .. } = e.kind {
-                    cards::close(self);
-                }
-                continue;
             }
             if let Some(k) = crate::osd::is_dim(self, &e.surface) {
                 // The dialog's dim: a click outside the panel.

@@ -1,25 +1,22 @@
 //! The strip's dropdown cards (DropdownWidget + CardSurface + CardKeys).
 //!
-//! The QML card is a full-screen transparent layer surface with the card drawn
-//! in it. Here the card is a layer surface of the card's own size - mango fades
-//! layers in and out, which looks the same either way - and a full-screen
-//! "catcher" backed by one transparent pixel (wp_viewporter) takes the click
-//! outside it. A full-screen buffer per card was ~15 MB; this is a few KB plus
-//! the card.
+//! As CardSurface.qml: one full-screen transparent layer surface with the card
+//! drawn in it at its place under the bar. A press anywhere outside the card
+//! closes it. The surface keeps its size while the card grows and shrinks:
+//! mango animates a layer whose size changes (a move, with the fade-in played
+//! again), and a card-sized surface flickered on every view change. mango
+//! blurs only under visible pixels, so only the card is blurred.
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use smithay_client_toolkit::{
-    reexports::protocols::wp::viewporter::client::wp_viewport::WpViewport,
     seat::keyboard::Keysym,
     shell::{
-        wlr_layer::{Anchor, KeyboardInteractivity, Layer, LayerSurface},
+        wlr_layer::{Anchor, KeyboardInteractivity, Layer},
         WaylandSurface,
     },
-    shm::slot::SlotPool,
 };
-use wayland_client::protocol::wl_shm;
 
 use crate::anim::{Animated, Easing};
 use crate::app::{App, Win, WinRef};
@@ -54,17 +51,10 @@ enum Stem {
     Right,
 }
 
-pub struct Catcher {
-    pub layer: LayerSurface,
-    viewport: Option<WpViewport>,
-    pool: Option<SlotPool>,
-}
-
 pub struct OpenCard {
     pub kind: CardKind,
     pub strip: usize,
     pub win: Win,
-    pub catcher: Catcher,
     pub hits: Vec<Hit>,
     pub pointer: Option<(f32, f32)>,
     pub shift: bool,
@@ -95,11 +85,10 @@ pub struct OpenCard {
     notch_stale: bool,
     /// The anchoring icon's centre on screen (for cards whose width changes).
     icon_center: f32,
-    /// The card's top on screen (its layer margin).
+    /// The card's place on the screen: CardSurface's card.x and cardY (QML's
+    /// card x can be fractional, but it lands on whole pixels - measured).
+    left: f32,
     top: f32,
-    /// The card's x on screen is fractional in QML (the icon centre is); the
-    /// surface sits at the whole pixel and the content is drawn this far in.
-    frac: f32,
     /// Which of the card's Texts have changed since it opened.
     pub texts: crate::text::TextMemo,
 }
@@ -194,10 +183,7 @@ pub fn wifi_details(app: &mut App, strip: usize, icon: &Hit) {
             card.width = w;
             card.stem_cx = w / 2.0;
             card.height = h;
-            card.win.width = w as u32;
-            card.win.layer.set_margin(card.top as i32, 0, 0, x as i32);
-            card.win.layer.set_size(w as u32, h as u32);
-            card.win.layer.commit();
+            card.left = x;
             card.win.dirty = true;
         }
         _ => {
@@ -279,24 +265,11 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         Stem::Center => w / 2.0,
     };
     let output = s.output.clone();
-
-    // The catcher first, so the card stacks above it.
-    let surface = app.compositor.create_surface(&app.qh);
-    let catcher = app.layer_shell.create_layer_surface(&app.qh, surface, Layer::Top, Some("quickshell:catcher"), Some(&output));
-    catcher.set_anchor(Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT);
-    catcher.set_exclusive_zone(-1);
-    catcher.set_keyboard_interactivity(KeyboardInteractivity::None);
-    catcher.commit();
+    let (screen_w, screen_h) = (s.screen_width as u32, s.screen_height as u32);
 
     let surface = app.compositor.create_surface(&app.qh);
     let layer = app.layer_shell.create_layer_surface(&app.qh, surface, Layer::Top, Some("quickshell:card"), Some(&output));
-    // QML's card x can be fractional, but it lands on whole pixels (measured).
-    let x = x.round();
-    let frac = 0.0f32;
-    let sw = (w + frac).ceil() as u32;
-    layer.set_anchor(Anchor::TOP | Anchor::LEFT);
-    layer.set_margin(y.round() as i32, 0, 0, x.floor() as i32);
-    layer.set_size(sw, h as u32);
+    layer.set_anchor(Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT);
     layer.set_exclusive_zone(-1);
     layer.set_keyboard_interactivity(KeyboardInteractivity::Exclusive);
     layer.commit();
@@ -304,8 +277,7 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
     app.card = Some(OpenCard {
         kind,
         strip,
-        win: Win::new(layer, sw, h as u32),
-        catcher: Catcher { layer: catcher, viewport: None, pool: None },
+        win: Win::new(layer, screen_w, screen_h),
         hits: Vec::new(),
         pointer: None,
         shift: false,
@@ -325,10 +297,10 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         numbers: HashMap::new(),
         scroll: 0.0,
         content_h,
-        frac,
         texts: Default::default(),
         notch_stale: false,
         icon_center,
+        left: x.round(),
         top: y.round(),
     });
     app.strips[strip].win.dirty = true;
@@ -373,8 +345,8 @@ pub fn close(app: &mut App) {
     unsafe { libc::malloc_trim(0) };
 }
 
-/// A card whose height is a binding (the lists in it change): resize the
-/// surface when the content asks for a different height.
+/// A card whose height is a binding (the lists in it change): the card is
+/// drawn at the new height; the surface stays as it is.
 pub fn update_height(app: &mut App) {
     let Some(card) = app.card.as_ref() else { return };
     let h = match card.kind {
@@ -393,8 +365,8 @@ pub fn update_height(app: &mut App) {
                 let x = (card.icon_center - w / 2.0).min(screen_w - w).max(0.0).round();
                 card.width = w;
                 card.stem_cx = w / 2.0;
-                card.win.width = w as u32;
-                card.win.layer.set_margin(card.top as i32, 0, 0, x as i32);
+                card.left = x;
+                card.win.dirty = true;
             }
             h
         }
@@ -439,28 +411,13 @@ pub fn update_height(app: &mut App) {
         return;
     }
     card.height = h;
-    card.win.layer.set_size(card.win.width, h as u32);
-    card.win.layer.commit();
+    card.win.dirty = true;
 }
 
-/// The catcher's one transparent pixel, stretched over the screen.
-pub fn configure_catcher(app: &mut App, size: (u32, u32)) {
-    let (Some(card), Some(vp)) = (app.card.as_mut(), app.viewporter.as_ref()) else { return };
-    let c = &mut card.catcher;
-    if c.pool.is_none() {
-        c.pool = SlotPool::new(4, &app.shm).ok();
-    }
-    let Some(pool) = c.pool.as_mut() else { return };
-    let Ok((buffer, canvas)) = pool.create_buffer(1, 1, 4, wl_shm::Format::Argb8888) else { return };
-    canvas.fill(0);
-    let wl = c.layer.wl_surface();
-    if c.viewport.is_none() {
-        c.viewport = Some(vp.get_viewport(wl, &app.qh, ()));
-    }
-    c.viewport.as_ref().unwrap().set_destination(size.0.max(1) as i32, size.1.max(1) as i32);
-    let _ = buffer.attach_to(wl);
-    wl.damage_buffer(0, 0, 1, 1);
-    c.layer.commit();
+/// Whether a point of the card's surface is on the card (CardSurface's card
+/// item, whose MouseArea takes every click on it) rather than around it.
+pub fn inside(app: &App, x: f32, y: f32) -> bool {
+    app.card.as_ref().map_or(false, |c| x >= c.left && x < c.left + c.width && y >= c.top && y < c.top + c.height)
 }
 
 // ---- drawing ----
@@ -735,13 +692,13 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
         card.notch = Some((id, key.0, key.1, key.2));
     }
     let (id, iw, ih, _) = card.notch.unwrap();
-    let frac = card.frac;
+    let (ox, oy) = (card.left, card.top);
     scene.save();
-    scene.translate(frac, 0.0);
+    scene.translate(ox, oy);
     scene.image(id, 0.0, 0.0, iw as f32, ih as f32, [0.0, 0.0, 1.0, 1.0]);
     // Hover is tested in content coordinates.
     let pointer = card.pointer;
-    card.pointer = pointer.map(|(px, py)| (px - frac, py));
+    card.pointer = pointer.map(|(px, py)| (px - ox, py - oy));
 
     card.texts.begin_frame();
     let mut ui = Ui { card, scene, fonts, theme, now: Instant::now(), animating: false, hits: Vec::new(), focus_codes: Vec::new() };
@@ -815,8 +772,8 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
     let (hits, codes, animating) = (std::mem::take(&mut ui.hits), std::mem::take(&mut ui.focus_codes), ui.animating);
     scene.restore();
     card.pointer = pointer;
-    card.hits = hits.into_iter().map(|h| Hit { x: h.x + frac, ..h }).collect();
-    card.sliders.iter_mut().for_each(|s| s.1 += frac);
+    card.hits = hits.into_iter().map(|h| Hit { x: h.x + ox, y: h.y + oy, ..h }).collect();
+    card.sliders.iter_mut().for_each(|s| s.1 += ox);
     card.focus_codes = codes;
     animating
 }
