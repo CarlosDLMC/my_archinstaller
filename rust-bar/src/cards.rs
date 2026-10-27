@@ -78,6 +78,11 @@ pub struct OpenCard {
     pub(crate) meter: (f32, f32, i32),
     /// The meter's segment count at the last draw (it follows the width).
     pub(crate) meter_cells: i32,
+    /// Where the last draw put the meter on the card's surface (x, y, width),
+    /// None out of view; whether it has a node; and its own surface.
+    pub(crate) meter_at: Option<(f32, f32, f32)>,
+    pub(crate) meter_node: bool,
+    pub(crate) meter_win: Option<crate::audio_card::MeterWin>,
     /// ConsoleButton.tint for the next button: colAlert (the mute buttons).
     pub(crate) tint_alert: bool,
     numbers: HashMap<u32, Animated<f32>>,
@@ -96,6 +101,16 @@ pub struct OpenCard {
 }
 
 impl OpenCard {
+    /// The card's top-left corner on its surface.
+    pub(crate) fn origin(&self) -> (f32, f32) {
+        (self.left, self.top)
+    }
+
+    /// The card's height.
+    pub(crate) fn card_height(&self) -> f32 {
+        self.height
+    }
+
     /// The palette changed: repaint the notch in the new colBg.
     pub fn invalidate_notch(&mut self) {
         self.notch_stale = true;
@@ -116,7 +131,7 @@ impl OpenCard {
     }
 }
 
-const STEM_H: f32 = 12.0;
+pub(crate) const STEM_H: f32 = 12.0;
 const NOTCH_R: f32 = 10.0;
 const CARD_R: f32 = 12.0;
 
@@ -296,6 +311,9 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         sliders: Vec::new(),
         meter: (0.0, 0.0, 0),
         meter_cells: 12,
+        meter_at: None,
+        meter_node: false,
+        meter_win: None,
         tint_alert: false,
         numbers: HashMap::new(),
         scroll: 0.0,
@@ -339,6 +357,8 @@ pub fn close(app: &mut App) {
         crate::network_card::closed(app);
     }
     let Some(mut card) = app.card.take() else { return };
+    // The meter's subsurface goes before the card's surface.
+    card.meter_win = None;
     if card.kind == CardKind::Weather {
         app.weather_texts = Some(std::mem::take(&mut card.texts));
     }

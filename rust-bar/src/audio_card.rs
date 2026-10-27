@@ -7,11 +7,12 @@ use crate::app::App;
 use crate::bar::{ac, Action, Hit};
 use crate::cards::{plate, Ui};
 use crate::color::Color;
-use crate::gpu::TextStyle;
+use crate::gpu::{Scene, TextStyle};
 use crate::pw::{Audio, NodeInfo};
 use crate::services::Services;
 use crate::text::Line;
-use crate::theme::{self, FONT_SIZE};
+use crate::theme::{self, Theme, FONT_SIZE};
+use wayland_client::protocol::{wl_subsurface::WlSubsurface, wl_surface::WlSurface};
 
 pub const OUT_MUTE: u32 = 1;
 pub const OUT_SLIDER: u32 = 2;
@@ -181,7 +182,10 @@ fn slider(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, value: f32, max: f32, 
     let tint = if muted { t.col_muted } else { t.col_accent };
     for i in 0..n {
         let target = if i < lit { tint } else { Color::qt_rgba(1.0, 1.0, 1.0, 0.07) };
-        let (c, run) = ui.card.color(0x1_0000 + code * 64 + i as u32, target, 200, ui.now);
+        // A range of its own: code * 64 for an app's slider (code 1024 and up)
+        // ran into the handles' 0x2_0000 + code, and the two colours took turns
+        // restarting each other - the card redrew at the screen's refresh rate.
+        let (c, run) = ui.card.color(0x100_0000 + code * 64 + i as u32, target, 200, ui.now);
         ui.animating |= run;
         ui.scene.rect(x + i as f32 * (cell + 2.0), gy, cell, 10.0, c, 1.0, 0.0, Color::TRANSPARENT, true);
     }
@@ -335,13 +339,77 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
     }
 }
 
-/// LevelMeter: dB-scaled live level with a falling bar and a peak hold.
-fn level_meter(ui: &mut Ui, x: f32, y: f32, w: f32, has_node: bool) {
-    let t = ui.theme;
+/// The meter on a surface of its own: a subsurface of the card's, above the
+/// card at the meter's place, redrawn alone while only the level moves. The
+/// card's surface covers the screen (CardSurface), and redrawing it 30 times
+/// a second for a talking mic cost 2.5 times QML's CPU in the bar and in
+/// mango; this surface is a few hundred pixels. Clicks go through it to the
+/// card (an empty input region).
+pub struct MeterWin {
+    pub surface: WlSurface,
+    sub: WlSubsurface,
+    pub gpu: Option<(wgpu::Surface<'static>, wgpu::SurfaceConfiguration)>,
+    /// Its place on the card's surface and the meter's fraction of a pixel in it.
+    pos: (i32, i32),
+    pub frac: (f32, f32),
+    pub size: (u32, u32),
+    pub width: f32,
+    /// The card leaves the segments to this surface.
+    pub live: bool,
+    pub dirty: bool,
+    pub frame_pending: bool,
+}
+
+impl MeterWin {
+    pub fn new(app: &App, parent: &WlSurface) -> Option<MeterWin> {
+        let (sub, surface) = app.subcompositor.as_ref()?.create_subsurface(parent.clone(), &app.qh);
+        sub.set_desync();
+        if let Ok(region) = smithay_client_toolkit::compositor::Region::new(&app.compositor) {
+            surface.set_input_region(Some(region.wl_region()));
+        }
+        surface.commit();
+        Some(MeterWin { surface, sub, gpu: None, pos: (i32::MIN, i32::MIN), frac: (0.0, 0.0), size: (0, 0), width: 0.0, live: false, dirty: true, frame_pending: false })
+    }
+
+    /// Follows the card's last draw: the meter at (x, y), w wide on the card's
+    /// surface, or out of view. True when the card must be drawn again (the
+    /// segments move between the two surfaces, or the new place needs the
+    /// card's next commit).
+    pub fn place(&mut self, at: Option<(f32, f32, f32)>) -> bool {
+        let Some((x, y, w)) = at else {
+            let was = self.live;
+            self.live = false;
+            self.dirty = true;
+            return was;
+        };
+        let (ix, iy) = (x.floor(), y.floor());
+        let frac = (x - ix, y - iy);
+        let size = ((w + frac.0).ceil() as u32, (6.0 + frac.1).ceil() as u32);
+        let mut card = !self.live;
+        if self.pos != (ix as i32, iy as i32) {
+            self.pos = (ix as i32, iy as i32);
+            self.sub.set_position(self.pos.0, self.pos.1);
+            card = true;
+        }
+        (self.frac, self.size, self.width, self.live, self.dirty) = (frac, size, w, true, true);
+        card
+    }
+}
+
+impl Drop for MeterWin {
+    fn drop(&mut self) {
+        // The swapchain goes before the surface it presents to.
+        self.gpu = None;
+        self.sub.destroy();
+        self.surface.destroy();
+    }
+}
+
+/// LevelMeter's segments and hold marker, w wide at (x, y): on the card, or
+/// on the meter's own surface.
+pub fn meter_cells(scene: &mut Scene, t: &Theme, x: f32, y: f32, w: f32, level: f32, hold: f32) {
     let n = 12.max((w / 12.0).round() as i32);
-    ui.card.meter_cells = n;
     let cell = (w - 2.0 * (n - 1) as f32) / n as f32;
-    let (level, hold) = if has_node { (ui.card.meter.0, ui.card.meter.1) } else { (0.0, 0.0) };
     let lit = (level * n as f32).round() as i32;
     let hot_from = ((-6.0f32 + 60.0) / 60.0 * n as f32).round() as i32;
     for i in 0..n {
@@ -352,12 +420,28 @@ fn level_meter(ui: &mut Ui, x: f32, y: f32, w: f32, has_node: bool) {
         } else {
             t.col_accent
         };
-        ui.scene.rect(x + i as f32 * (cell + 2.0), y, cell, 6.0, c, 1.0, 0.0, Color::TRANSPARENT, true);
+        scene.rect(x + i as f32 * (cell + 2.0), y, cell, 6.0, c, 1.0, 0.0, Color::TRANSPARENT, true);
     }
     if hold > 0.02 {
         let hx = (w - cell.max(2.0)).min((hold * n as f32).floor() * (cell + 2.0));
-        ui.scene.rect(x + hx, y, cell.max(2.0), 6.0, t.col_white, 1.0, 0.0, Color::TRANSPARENT, true);
+        scene.rect(x + hx, y, cell.max(2.0), 6.0, t.col_white, 1.0, 0.0, Color::TRANSPARENT, true);
     }
+}
+
+/// LevelMeter: dB-scaled live level with a falling bar and a peak hold.
+fn level_meter(ui: &mut Ui, x: f32, y: f32, w: f32, has_node: bool) {
+    ui.card.meter_cells = 12.max((w / 12.0).round() as i32);
+    let (level, hold) = if has_node { (ui.card.meter.0, ui.card.meter.1) } else { (0.0, 0.0) };
+    ui.card.meter_node = has_node;
+    // Fully inside the Flickable's clip: on its own surface (MeterWin).
+    let inside = y >= crate::cards::STEM_H + 8.0 && y + 6.0 <= ui.card.card_height() - 8.0;
+    let (ox, oy) = ui.card.origin();
+    ui.card.meter_at = inside.then_some((ox + x, oy + y, w));
+    if inside && ui.card.meter_win.as_ref().map_or(false, |m| m.live) {
+        return;
+    }
+    let t = ui.theme;
+    meter_cells(ui.scene, t, x, y, w, level, hold);
 }
 
 /// The meter's 33 ms tick: level falls 0.025 a tick, the hold stays 30 ticks
@@ -391,7 +475,10 @@ pub fn meter_tick(app: &mut App) -> bool {
         *hold = level.max(*hold - 0.02);
     }
     if shown(card.meter.0, card.meter.1) != before {
-        card.win.dirty = true;
+        match card.meter_win.as_mut().filter(|m| m.live) {
+            Some(m) => m.dirty = true,
+            None => card.win.dirty = true,
+        }
     }
     true
 }

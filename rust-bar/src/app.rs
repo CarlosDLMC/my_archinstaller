@@ -42,6 +42,50 @@ use crate::services::{Mango, Services};
 use crate::text::Fonts;
 use crate::theme::Theme;
 
+/// A wgpu surface on a Wayland surface.
+fn raw_surface(conn: &Connection, instance: &wgpu::Instance, wl: &wl_surface::WlSurface) -> wgpu::Surface<'static> {
+    let dpy = NonNull::new(conn.backend().display_ptr() as *mut _).unwrap();
+    let wl = NonNull::new(wl.id().as_ptr() as *mut _).unwrap();
+    unsafe {
+        instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
+            raw_display_handle: RawDisplayHandle::Wayland(WaylandDisplayHandle::new(dpy)),
+            raw_window_handle: RawWindowHandle::Wayland(WaylandWindowHandle::new(wl)),
+        })
+    }
+    .expect("wgpu surface")
+}
+
+/// Its swapchain, configured: blending in gamma space like Qt - a non-sRGB
+/// format and premultiplied alpha.
+fn surface_config(gpu: &Gpu, surface: &wgpu::Surface<'static>, width: u32, height: u32) -> wgpu::SurfaceConfiguration {
+    let caps = surface.get_capabilities(&gpu.adapter);
+    let format = caps.formats.iter().copied().find(|f| !f.is_srgb()).unwrap_or(caps.formats[0]);
+    let alpha_mode = if caps.alpha_modes.contains(&wgpu::CompositeAlphaMode::PreMultiplied) {
+        wgpu::CompositeAlphaMode::PreMultiplied
+    } else {
+        caps.alpha_modes[0]
+    };
+    let config = wgpu::SurfaceConfiguration {
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        format,
+        width: width.max(1),
+        height: height.max(1),
+        present_mode: wgpu::PresentMode::Fifo,
+        desired_maximum_frame_latency: 2,
+        alpha_mode,
+        view_formats: vec![],
+    };
+    surface.configure(&gpu.device, &config);
+    config
+}
+
+/// Both, for a surface that is not one of the Wins (the audio meter's).
+fn gpu_surface(conn: &Connection, instance: &wgpu::Instance, gpu: &Gpu, wl: &wl_surface::WlSurface, width: u32, height: u32) -> (wgpu::Surface<'static>, wgpu::SurfaceConfiguration) {
+    let surface = raw_surface(conn, instance, wl);
+    let config = surface_config(gpu, &surface, width, height);
+    (surface, config)
+}
+
 /// A layer surface drawn with the GPU.
 pub struct Win {
     pub layer: LayerSurface,
@@ -107,6 +151,7 @@ pub struct App {
     pub layer_shell: LayerShell,
     pub shm: Shm,
     pub viewporter: Option<WpViewporter>,
+    pub subcompositor: Option<smithay_client_toolkit::subcompositor::SubcompositorState>,
     cursor_shapes: Option<CursorShapeManager>,
     pointer: Option<(WlPointer, Option<WpCursorShapeDeviceV1>)>,
     keyboard: Option<WlKeyboard>,
@@ -166,6 +211,8 @@ impl App {
             theme.apply_json(&t);
         }
         let viewporter = bind_viewporter(&globals, &qh);
+        let compositor = CompositorState::bind(&globals, &qh).expect("wl_compositor");
+        let subcompositor = smithay_client_toolkit::subcompositor::SubcompositorState::bind(compositor.wl_compositor().clone(), &globals, &qh).ok();
         let mut app = App {
             conn: conn.clone(),
             qh: qh.clone(),
@@ -175,7 +222,8 @@ impl App {
             registry: RegistryState::new(&globals),
             outputs: OutputState::new(&globals, &qh),
             seats: SeatState::new(&globals, &qh),
-            compositor: CompositorState::bind(&globals, &qh).expect("wl_compositor"),
+            compositor,
+            subcompositor,
             layer_shell: LayerShell::bind(&globals, &qh).expect("wlr-layer-shell"),
             shm: Shm::bind(&globals, &qh).expect("wl_shm"),
             viewporter,
@@ -301,39 +349,13 @@ impl App {
         if win.gpu.is_some() {
             return;
         }
-        let dpy = NonNull::new(conn.backend().display_ptr() as *mut _).unwrap();
-        let wl = NonNull::new(win.layer.wl_surface().id().as_ptr() as *mut _).unwrap();
-        let surface = unsafe {
-            instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
-                raw_display_handle: RawDisplayHandle::Wayland(WaylandDisplayHandle::new(dpy)),
-                raw_window_handle: RawWindowHandle::Wayland(WaylandWindowHandle::new(wl)),
-            })
-        }
-        .expect("wgpu surface");
+        let surface = raw_surface(&conn, &instance, win.layer.wl_surface());
         if need_gpu {
             self.gpu = Some(Gpu::new(Some(&surface), instance));
         }
-        let gpu = self.gpu.as_ref().unwrap();
-        let caps = surface.get_capabilities(&gpu.adapter);
-        // Blend in gamma space like Qt: a non-sRGB format, premultiplied alpha.
-        let format = caps.formats.iter().copied().find(|f| !f.is_srgb()).unwrap_or(caps.formats[0]);
-        let alpha_mode = if caps.alpha_modes.contains(&wgpu::CompositeAlphaMode::PreMultiplied) {
-            wgpu::CompositeAlphaMode::PreMultiplied
-        } else {
-            caps.alpha_modes[0]
-        };
         let win = self.win_mut(w).unwrap();
-        let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format,
-            width: win.width.max(1),
-            height: win.height.max(1),
-            present_mode: wgpu::PresentMode::Fifo,
-            desired_maximum_frame_latency: 2,
-            alpha_mode,
-            view_formats: vec![],
-        };
-        surface.configure(&self.gpu.as_ref().unwrap().device, &config);
+        let (width, height) = (win.width, win.height);
+        let config = surface_config(self.gpu.as_ref().unwrap(), &surface, width, height);
         self.win_mut(w).unwrap().gpu = Some((surface, config));
     }
 
@@ -344,6 +366,9 @@ impl App {
             self.svc.wifi_connecting = connecting;
             self.svc.wifi.pulse.set_running(connecting, Instant::now(), 450);
             self.mark_all_dirty();
+        }
+        if self.card.as_ref().and_then(|c| c.meter_win.as_ref()).map_or(false, |m| m.dirty && !m.frame_pending && m.gpu.is_some()) {
+            self.draw_meter();
         }
         if self.card.as_ref().map_or(false, |c| c.win.dirty) {
             self.svc.pult_scanning = crate::pult::scanning(self);
@@ -452,6 +477,65 @@ impl App {
         // Still animating: the next frame callback draws again.
         win.dirty = animating;
         win.frame_pending = true;
+        if w == WinRef::Card {
+            self.place_meter();
+        }
+    }
+
+    /// The audio card's meter onto its own surface once the card has placed it.
+    fn place_meter(&mut self) {
+        let Some(card) = self.card.as_mut() else { return };
+        if card.kind != cards::CardKind::Audio {
+            return;
+        }
+        if card.meter_win.is_none() && card.meter_at.is_some() {
+            let parent = card.win.layer.wl_surface().clone();
+            let m = crate::audio_card::MeterWin::new(self, &parent);
+            self.card.as_mut().unwrap().meter_win = m;
+        }
+        let card = self.card.as_mut().unwrap();
+        let at = card.meter_at;
+        let Some(m) = card.meter_win.as_mut() else { return };
+        if m.place(at) {
+            card.win.dirty = true;
+        }
+        if !m.frame_pending {
+            self.draw_meter();
+        }
+    }
+
+    /// One frame of the meter's own surface.
+    fn draw_meter(&mut self) {
+        let (conn, instance) = (self.conn.clone(), self.instance.clone());
+        let Some(gpu) = self.gpu.as_mut() else { return };
+        let Some(card) = self.card.as_mut() else { return };
+        let (level, hold) = if card.meter_node { (card.meter.0, card.meter.1) } else { (0.0, 0.0) };
+        let Some(m) = card.meter_win.as_mut() else { return };
+        let (w, h) = (m.size.0.max(1), m.size.1.max(1));
+        if m.gpu.is_none() {
+            m.gpu = Some(gpu_surface(&conn, &instance, gpu, &m.surface, w, h));
+        }
+        let (surface, config) = m.gpu.as_mut().unwrap();
+        if (config.width, config.height) != (w, h) {
+            (config.width, config.height) = (w, h);
+            surface.configure(&gpu.device, config);
+        }
+        let Ok(frame) = surface.get_current_texture() else {
+            surface.configure(&gpu.device, config);
+            return;
+        };
+        let format = config.format;
+        let mut scene = Scene::new(1.0, 1.0);
+        scene.clear(w as f32, h as f32);
+        if m.live {
+            crate::audio_card::meter_cells(&mut scene, &self.theme, m.frac.0, m.frac.1, m.width, level, hold);
+        }
+        let view = frame.texture.create_view(&Default::default());
+        m.surface.frame(&self.qh, m.surface.clone());
+        gpu.render(&mut self.fonts, &mut scene, &view, format, (w, h), [0.0, 0.0, 0.0, 0.0]);
+        frame.present();
+        m.dirty = false;
+        m.frame_pending = true;
     }
 
     fn set_cursor(&mut self, hand: bool) {
@@ -523,6 +607,13 @@ impl CompositorHandler for App {
     fn scale_factor_changed(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_surface::WlSurface, _: i32) {}
     fn transform_changed(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_surface::WlSurface, _: wl_output::Transform) {}
     fn frame(&mut self, _: &Connection, _: &QueueHandle<Self>, surface: &wl_surface::WlSurface, _: u32) {
+        if let Some(m) = self.card.as_mut().and_then(|c| c.meter_win.as_mut()).filter(|m| &m.surface == surface) {
+            m.frame_pending = false;
+            if m.dirty {
+                self.draw_meter();
+            }
+            return;
+        }
         if let Some(w) = self.win_of(surface) {
             let win = self.win_mut(w).unwrap();
             win.frame_pending = false;
@@ -847,6 +938,7 @@ impl ProvidesRegistryState for App {
 }
 
 delegate_compositor!(App);
+smithay_client_toolkit::delegate_subcompositor!(App);
 delegate_output!(App);
 delegate_layer!(App);
 delegate_seat!(App);
