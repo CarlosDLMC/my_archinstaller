@@ -180,6 +180,10 @@ pub struct Services {
     pub mango: Mango,
     pub stats: Stats,
     pub clock: String,
+    /// The minute the clock last showed (lastClockMinute), and the wall
+    /// clock at the last tick in ms (lastTickMs).
+    clock_minute: Option<i32>,
+    last_tick_ms: u64,
     pub timezone: String,
     pub dnd_enabled: bool,
     pub dnd_available: bool,
@@ -427,19 +431,53 @@ fn refresh_stats(app: &mut App) -> bool {
 
 // ---- clock ----
 
-/// HH:mm in the custom timezone (~/.cache/quickshell/timezone, set by the
-/// VPN card's time sync) or local time.
-pub fn now_hm(tz: &str) -> String {
-    if !tz.is_empty() {
-        std::env::set_var("TZ", tz);
-    } else {
-        std::env::remove_var("TZ");
-    }
+/// The local wall clock now: the minute of the hour and HH:mm. tzset() each
+/// time, as Qt does for local time, so a new /etc/localtime shows.
+fn local_now() -> (i32, String) {
     unsafe { tzset() };
     let t = unsafe { libc::time(std::ptr::null_mut()) };
     let mut tm: libc::tm = unsafe { std::mem::zeroed() };
     unsafe { libc::localtime_r(&t, &mut tm) };
-    format!("{:02}:{:02}", tm.tm_hour, tm.tm_min)
+    (tm.tm_min, format!("{:02}:{:02}", tm.tm_hour, tm.tm_min))
+}
+
+/// updateClock(force): only a new minute does anything. With a timezone from
+/// the VPN card's sync (~/.cache/quickshell/timezone), `date` gives the time
+/// there, as QML's timeProc does - TZ goes into that process's environment,
+/// never the bar's, which everything the bar runs would inherit.
+fn update_clock(app: &mut App, force: bool) {
+    let (minute, hm) = local_now();
+    if !force && Some(minute) == app.svc.clock_minute {
+        return;
+    }
+    app.svc.clock_minute = Some(minute);
+    if app.svc.timezone.is_empty() {
+        set_clock(app, hm);
+        return;
+    }
+    let tz = format!("TZ={}", app.svc.timezone);
+    app.spawn("clock-tz", &["env", &tz, "date", "+%H:%M"], |app, d| {
+        let t = d.stdout.trim().to_string();
+        if !t.is_empty() {
+            set_clock(app, t);
+        }
+    });
+}
+
+fn set_clock(app: &mut App, t: String) {
+    if t != app.svc.clock {
+        app.svc.clock = t;
+        app.mark_all_dirty();
+    }
+}
+
+/// refreshTimezone(): the timezone file again; a new zone redraws the clock.
+fn refresh_timezone(app: &mut App) {
+    let before = app.svc.timezone.clone();
+    read_cache_files(app);
+    if app.svc.timezone != before {
+        update_clock(app, true);
+    }
 }
 
 extern "C" {
@@ -459,11 +497,7 @@ fn read_cache_files(app: &mut App) {
 /// card's sync (CenterInfo's FileViews); a new city fetches the weather.
 fn cache_changed(app: &mut App, name: &str) {
     match name {
-        "timezone" => {
-            read_cache_files(app);
-            tick_clock(app);
-            app.mark_all_dirty();
-        }
+        "timezone" => refresh_timezone(app),
         "weather_city" => {
             let before = app.svc.weather.city.clone();
             read_cache_files(app);
@@ -494,12 +528,17 @@ fn palette_changed(app: &mut App, name: &str) {
     }
 }
 
+/// CenterInfo's one-second tick. It also notices a resume: the timers run on
+/// the monotonic clock, which stops in suspend, so a wall-clock jump of over
+/// two minutes between ticks fetches the weather once the network has had ten
+/// seconds to come back (the hourly fetch could still be an hour away).
 fn tick_clock(app: &mut App) -> bool {
-    let t = now_hm(&app.svc.timezone);
-    if t != app.svc.clock {
-        app.svc.clock = t;
-        app.mark_all_dirty();
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
+    if app.svc.last_tick_ms > 0 && now.saturating_sub(app.svc.last_tick_ms) > 120_000 {
+        app.debounce("weather-after-resume", Duration::from_secs(10), request_weather);
     }
+    app.svc.last_tick_ms = now;
+    update_clock(app, false);
     true
 }
 
@@ -519,7 +558,7 @@ pub fn start(app: &mut App) {
     let _ = std::fs::create_dir_all(cache_dir());
     app.watch_dir(&cache_dir(), cache_changed);
     app.watch_dir(&format!("{}/.config/quickshell/bar", home()), palette_changed);
-    tick_clock(app);
+    update_clock(app, true);
     app.every(Duration::from_millis(1000), tick_clock);
 
     app.svc.dnd_available = true;
@@ -795,7 +834,7 @@ fn wifi_status(app: &mut App) {
 fn vpn_reset(app: &mut App) {
     let cmd = format!("{}/.config/quickshell/bar/scripts/vpn-reset.sh all --forget", home());
     app.spawn("vpn-reset", &["sh", "-c", &cmd], |app, _| {
-        tick_clock(app);
+        refresh_timezone(app);
         request_weather(app);
     });
 }
