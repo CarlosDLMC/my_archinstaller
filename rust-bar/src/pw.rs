@@ -16,14 +16,35 @@ use pw::types::ObjectType;
 
 #[derive(Clone, Default, Debug)]
 pub struct NodeInfo {
+    pub id: u32,
     pub name: String,
     pub description: String,
     pub nick: String,
+    pub class: String,
+    pub app_name: String,
+    pub media_name: String,
+    pub icon_name: String,
+    pub product_name: String,
+    pub profile_description: String,
+}
+
+impl NodeInfo {
+    pub fn is_sink(&self) -> bool {
+        self.class == "Audio/Sink"
+    }
+    /// A capture device (Audio/Source, Audio/Source/Virtual, Audio/Duplex).
+    pub fn is_source(&self) -> bool {
+        self.class.starts_with("Audio/Source") || self.class == "Audio/Duplex"
+    }
+    pub fn is_playback_stream(&self) -> bool {
+        self.class == "Stream/Output/Audio"
+    }
 }
 
 #[derive(Clone, Default, Debug, PartialEq)]
 pub struct Audio {
     pub ready: bool,
+    pub channels: usize,
     /// Quickshell's PwNodeAudio.volume: the mean of the channel volumes,
     /// cube-rooted (the scale pavucontrol and wpctl show).
     pub volume: f32,
@@ -36,17 +57,21 @@ struct State {
     default_sink: String,
     default_source: String,
     metadata: Option<(Metadata, MetadataListener)>,
-    sink: Option<(u32, Node, NodeListener)>,
-    source: Option<(u32, Node, NodeListener)>,
-    sink_audio: Audio,
-    source_audio: Audio,
+    /// Nodes whose Props are followed: the defaults always, every listed
+    /// device and stream while the audio card is open (PwObjectTracker).
+    bound: HashMap<u32, (Node, NodeListener)>,
+    audio: HashMap<u32, Audio>,
+    track_all: bool,
     changed: bool,
 }
 
 pub struct Pw {
     mainloop: pw::main_loop::MainLoopRc,
     _context: pw::context::ContextRc,
-    _core: pw::core::CoreRc,
+    core: pw::core::CoreRc,
+    /// The peak monitor (PwNodePeakMonitor) while the audio card shows a source.
+    peak: Option<(u32, pw::stream::StreamRc, pw::stream::StreamListener<Rc<std::cell::Cell<f32>>>)>,
+    peak_value: Rc<std::cell::Cell<f32>>,
     registry: Rc<pw::registry::RegistryRc>,
     _reg_listener: pw::registry::Listener,
     state: Rc<RefCell<State>>,
@@ -69,6 +94,7 @@ fn parse_props(pod: &pw::spa::pod::Pod, audio: &mut Audio) -> bool {
                     if !v.is_empty() {
                         let mean = v.iter().map(|x| x.cbrt()).sum::<f32>() / v.len() as f32;
                         audio.volume = mean;
+                        audio.channels = v.len();
                         audio.ready = true;
                         changed = true;
                     }
@@ -104,10 +130,22 @@ impl Pw {
                 match g.type_ {
                     ObjectType::Node => {
                         let get = |k: &str| props.and_then(|p| p.get(k)).unwrap_or("").to_string();
-                        if !get("media.class").starts_with("Audio/") {
+                        let class = get("media.class");
+                        if !class.starts_with("Audio/") && class != "Stream/Output/Audio" {
                             return;
                         }
-                        let info = NodeInfo { name: get("node.name"), description: get("node.description"), nick: get("node.nick") };
+                        let info = NodeInfo {
+                            id: g.id,
+                            name: get("node.name"),
+                            description: get("node.description"),
+                            nick: get("node.nick"),
+                            class: get("media.class"),
+                            app_name: get("application.name"),
+                            media_name: get("media.name"),
+                            icon_name: get("device.icon-name"),
+                            product_name: get("device.product.name"),
+                            profile_description: get("device.profile.description"),
+                        };
                         let mut s = st.borrow_mut();
                         s.nodes.insert(g.id, (info, g.to_owned()));
                         s.changed = true;
@@ -140,18 +178,12 @@ impl Pw {
             .global_remove(move |id| {
                 let mut s = st_rm.borrow_mut();
                 s.nodes.remove(&id);
-                if s.sink.as_ref().map_or(false, |x| x.0 == id) {
-                    s.sink = None;
-                    s.sink_audio = Audio::default();
-                }
-                if s.source.as_ref().map_or(false, |x| x.0 == id) {
-                    s.source = None;
-                    s.source_audio = Audio::default();
-                }
+                s.bound.remove(&id);
+                s.audio.remove(&id);
                 s.changed = true;
             })
             .register();
-        Some(Pw { mainloop, _context: context, _core: core, registry, _reg_listener: reg_listener, state })
+        Some(Pw { mainloop, _context: context, core, peak: None, peak_value: Rc::new(std::cell::Cell::new(0.0)), registry, _reg_listener: reg_listener, state })
     }
 
     pub fn fd(&self) -> std::os::fd::RawFd {
@@ -162,37 +194,58 @@ impl Pw {
     /// Runs PipeWire's pending callbacks; true when what the bar shows changed.
     pub fn dispatch(&self) -> bool {
         self.mainloop.loop_().iterate(std::time::Duration::ZERO);
-        self.follow_defaults();
+        self.follow();
         let mut s = self.state.borrow_mut();
         std::mem::take(&mut s.changed)
     }
 
-    /// Binds the node that is the default sink/source now, if it changed.
-    fn follow_defaults(&self) {
-        let mut s = self.state.borrow_mut();
-        for sink in [true, false] {
-            let want = if sink { s.default_sink.clone() } else { s.default_source.clone() };
-            let id = s.nodes.iter().find(|(_, n)| n.0.name == want).map(|(id, _)| *id);
-            let bound = if sink { s.sink.as_ref().map(|x| x.0) } else { s.source.as_ref().map(|x| x.0) };
-            if id == bound {
+    fn id_of(&self, name: &str) -> Option<u32> {
+        self.state.borrow().nodes.iter().find(|(_, n)| n.0.name == name).map(|(id, _)| *id)
+    }
+
+    /// Keeps the bound set equal to what should be tracked.
+    fn follow(&self) {
+        let (want, have): (Vec<u32>, Vec<u32>) = {
+            let s = self.state.borrow();
+            let mut want: Vec<u32> = Vec::new();
+            for name in [&s.default_sink, &s.default_source] {
+                if let Some(id) = s.nodes.iter().find(|(_, n)| &n.0.name == name).map(|(id, _)| *id) {
+                    want.push(id);
+                }
+            }
+            if s.track_all {
+                for (id, n) in &s.nodes {
+                    if (n.0.is_sink() || n.0.is_source() || n.0.is_playback_stream()) && !want.contains(id) {
+                        want.push(*id);
+                    }
+                }
+            }
+            (want, s.bound.keys().copied().collect())
+        };
+        for id in &have {
+            if !want.contains(id) {
+                let mut s = self.state.borrow_mut();
+                s.bound.remove(id);
+                s.audio.remove(id);
+            }
+        }
+        for id in want {
+            if have.contains(&id) {
                 continue;
             }
-            let slot = id.and_then(|id| {
-                let g = &s.nodes.get(&id)?.1;
-                self.bind_node(g, sink).map(|(n, l)| (id, n, l))
-            });
-            if sink {
-                s.sink = slot;
-                s.sink_audio = Audio::default();
-            } else {
-                s.source = slot;
-                s.source_audio = Audio::default();
+            let bound = {
+                let s = self.state.borrow();
+                s.nodes.get(&id).and_then(|n| self.bind_node(&n.1, id))
+            };
+            if let Some(b) = bound {
+                let mut s = self.state.borrow_mut();
+                s.bound.insert(id, b);
+                s.changed = true;
             }
-            s.changed = true;
         }
     }
 
-    fn bind_node(&self, g: &pw::registry::GlobalObject<pw::properties::PropertiesBox>, sink: bool) -> Option<(Node, NodeListener)> {
+    fn bind_node(&self, g: &pw::registry::GlobalObject<pw::properties::PropertiesBox>, id: u32) -> Option<(Node, NodeListener)> {
         let node: Node = self.registry.bind(g).ok()?;
         let st = self.state.clone();
         let l = node
@@ -203,23 +256,130 @@ impl Pw {
                 }
                 let Some(pod) = pod else { return };
                 let mut s = st.borrow_mut();
-                let changed = if sink { parse_props(pod, &mut s.sink_audio) } else { parse_props(pod, &mut s.source_audio) };
-                s.changed |= changed;
+                let mut a = s.audio.get(&id).cloned().unwrap_or_default();
+                if parse_props(pod, &mut a) {
+                    s.audio.insert(id, a);
+                    s.changed = true;
+                }
             })
             .register();
         node.subscribe_params(&[ParamType::Props]);
         Some((node, l))
     }
 
-    pub fn sink(&self) -> (Audio, Option<NodeInfo>) {
+    /// PwObjectTracker over every device and stream: on while the audio card is open.
+    pub fn track_all(&self, on: bool) {
+        self.state.borrow_mut().track_all = on;
+        self.follow();
+    }
+
+    fn view(&self, id: u32) -> (Audio, Option<NodeInfo>) {
         let s = self.state.borrow();
-        let info = s.sink.as_ref().and_then(|x| s.nodes.get(&x.0).map(|n| n.0.clone()));
-        (s.sink_audio.clone(), info)
+        (s.audio.get(&id).cloned().unwrap_or_default(), s.nodes.get(&id).map(|n| n.0.clone()))
+    }
+
+    pub fn sink(&self) -> (Audio, Option<NodeInfo>) {
+        let name = self.state.borrow().default_sink.clone();
+        self.id_of(&name).map(|id| self.view(id)).unwrap_or_default()
     }
 
     pub fn source(&self) -> (Audio, Option<NodeInfo>) {
+        let name = self.state.borrow().default_source.clone();
+        self.id_of(&name).map(|id| self.view(id)).unwrap_or_default()
+    }
+
+    /// Every audio node with its tracked audio, sorted by id (registry order).
+    pub fn nodes(&self) -> Vec<(NodeInfo, Audio)> {
         let s = self.state.borrow();
-        let info = s.source.as_ref().and_then(|x| s.nodes.get(&x.0).map(|n| n.0.clone()));
-        (s.source_audio.clone(), info)
+        let mut v: Vec<(NodeInfo, Audio)> = s.nodes.values().map(|n| (n.0.clone(), s.audio.get(&n.0.id).cloned().unwrap_or_default())).collect();
+        v.sort_by_key(|n| n.0.id);
+        v
+    }
+
+    fn props_pod(property: pw::spa::pod::Property) -> Vec<u8> {
+        use pw::spa::pod::{serialize::PodSerializer, Object};
+        let obj = Value::Object(Object { type_: pw::spa::sys::SPA_TYPE_OBJECT_Props, id: pw::spa::sys::SPA_PARAM_Props, properties: vec![property] });
+        PodSerializer::serialize(std::io::Cursor::new(Vec::new()), &obj).map(|r| r.0.into_inner()).unwrap_or_default()
+    }
+
+    /// PwNodeAudio.volume = v: every channel at v cubed (the inverse of the read).
+    pub fn set_volume(&self, id: u32, v: f32) {
+        let s = self.state.borrow();
+        let Some((node, _)) = s.bound.get(&id) else { return };
+        let n = s.audio.get(&id).map_or(2, |a| a.channels.max(1));
+        let lin = v.max(0.0).powi(3);
+        let bytes = Self::props_pod(pw::spa::pod::Property { key: pw::spa::sys::SPA_PROP_channelVolumes, flags: pw::spa::pod::PropertyFlags::empty(), value: Value::ValueArray(ValueArray::Float(vec![lin; n])) });
+        if let Some(pod) = pw::spa::pod::Pod::from_bytes(&bytes) {
+            node.set_param(ParamType::Props, 0, pod);
+        }
+    }
+
+    pub fn set_mute(&self, id: u32, muted: bool) {
+        let s = self.state.borrow();
+        let Some((node, _)) = s.bound.get(&id) else { return };
+        let bytes = Self::props_pod(pw::spa::pod::Property { key: pw::spa::sys::SPA_PROP_mute, flags: pw::spa::pod::PropertyFlags::empty(), value: Value::Bool(muted) });
+        if let Some(pod) = pw::spa::pod::Pod::from_bytes(&bytes) {
+            node.set_param(ParamType::Props, 0, pod);
+        }
+    }
+
+    /// Pipewire.preferredDefaultAudioSink/Source = node.
+    pub fn set_default(&self, sink: bool, name: &str) {
+        let s = self.state.borrow();
+        let Some((md, _)) = &s.metadata else { return };
+        let key = if sink { "default.configured.audio.sink" } else { "default.configured.audio.source" };
+        let value = serde_json::json!({ "name": name }).to_string();
+        md.set_property(0, key, Some("Spa:String:JSON"), Some(&value));
+    }
+
+    /// PwNodePeakMonitor on `id` (None stops it); peak() is the last buffer's peak.
+    pub fn monitor_peak(&mut self, id: Option<u32>) {
+        if self.peak.as_ref().map(|p| p.0) == id {
+            return;
+        }
+        self.peak = None;
+        self.peak_value.set(0.0);
+        let Some(id) = id else { return };
+        let target = self.state.borrow().nodes.get(&id).map(|n| n.0.name.clone()).unwrap_or_default();
+        let props = pw::properties::properties! {
+            *pw::keys::MEDIA_TYPE => "Audio",
+            *pw::keys::MEDIA_CATEGORY => "Monitor",
+            *pw::keys::NODE_NAME => "quickshell",
+            "target.object" => target.as_str(),
+            "node.passive" => "true",
+            "node.dont-reconnect" => "true",
+        };
+        let Ok(stream) = pw::stream::StreamRc::new(self.core.clone(), "quickshell", props) else { return };
+        let Ok(listener) = stream
+            .add_local_listener_with_user_data(self.peak_value.clone())
+            .process(|stream, peak| {
+                let Some(mut buf) = stream.dequeue_buffer() else { return };
+                let datas = buf.datas_mut();
+                let Some(d) = datas.first_mut() else { return };
+                let n = d.chunk().size() as usize;
+                let Some(bytes) = d.data() else { return };
+                let mut p = 0f32;
+                for c in bytes[..n.min(bytes.len())].chunks_exact(4) {
+                    p = p.max(f32::from_le_bytes([c[0], c[1], c[2], c[3]]).abs());
+                }
+                peak.set(p);
+            })
+            .register()
+        else {
+            return;
+        };
+        let mut info = pw::spa::param::audio::AudioInfoRaw::new();
+        info.set_format(pw::spa::param::audio::AudioFormat::F32LE);
+        let obj = Value::Object(pw::spa::pod::Object { type_: pw::spa::sys::SPA_TYPE_OBJECT_Format, id: pw::spa::sys::SPA_PARAM_EnumFormat, properties: info.into() });
+        let Ok(bytes) = pw::spa::pod::serialize::PodSerializer::serialize(std::io::Cursor::new(Vec::new()), &obj).map(|r| r.0.into_inner()) else { return };
+        let Some(pod) = pw::spa::pod::Pod::from_bytes(&bytes) else { return };
+        let mut params = [pod];
+        if stream.connect(pw::spa::utils::Direction::Input, None, pw::stream::StreamFlags::AUTOCONNECT | pw::stream::StreamFlags::MAP_BUFFERS, &mut params).is_ok() {
+            self.peak = Some((id, stream, listener));
+        }
+    }
+
+    pub fn peak(&self) -> f32 {
+        self.peak_value.get()
     }
 }

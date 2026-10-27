@@ -541,6 +541,11 @@ impl PointerHandler for App {
                     self.pressed = None;
                 }
                 PointerEventKind::Motion { .. } => {
+                    if let Some((WinRef::Card, 0x110, act)) = self.pressed {
+                        if w == WinRef::Card {
+                            cards::drag(self, act, x);
+                        }
+                    }
                     let before = self.pointer_of(w).and_then(|(px, py)| self.hit_at(w, px, py));
                     self.set_pointer(w, Some((x, y)));
                     let after = self.hit_at(w, x, y);
@@ -551,11 +556,23 @@ impl PointerHandler for App {
                 }
                 PointerEventKind::Press { button, .. } => {
                     self.pressed = self.hit_at(w, x, y).map(|a| (w, button, a));
+                    if let (WinRef::Card, Some(a)) = (w, self.hit_at(w, x, y)) {
+                        cards::press(self, a, x, button);
+                    }
                 }
-                PointerEventKind::Axis { vertical, .. } if w == WinRef::Card => {
+                PointerEventKind::Axis { vertical, .. } => {
                     // Qt's angleDelta: 120 per notch, positive away from the user.
                     let delta = if vertical.discrete != 0 { -(vertical.discrete as f32) * 120.0 } else { -(vertical.absolute as f32) * 8.0 };
-                    cards::wheel(self, delta);
+                    if delta != 0.0 {
+                        match w {
+                            WinRef::Card => cards::wheel(self, delta),
+                            WinRef::Strip(i) => {
+                                if let Some(act) = self.hit_at(w, x, y) {
+                                    bar::wheel(self, i, act, delta);
+                                }
+                            }
+                        }
+                    }
                 }
                 PointerEventKind::Release { button, .. } => {
                     // MouseArea.onClicked: released over the widget it was pressed on.
@@ -563,7 +580,7 @@ impl PointerHandler for App {
                         if pw == w && pb == button && self.hit_at(w, x, y) == Some(action) {
                             match w {
                                 WinRef::Strip(i) => bar::activate(self, i, action, button),
-                                WinRef::Card => cards::activate(self, action, false),
+                                WinRef::Card => cards::click(self, action, button),
                             }
                         }
                     }

@@ -1,5 +1,6 @@
 mod anim;
 mod app;
+mod audio_card;
 mod bar;
 mod cal;
 mod cards;

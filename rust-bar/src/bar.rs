@@ -557,6 +557,19 @@ pub fn close_all_popups(app: &mut App) {
 }
 
 const BTN_LEFT: u32 = 0x110;
+const BTN_RIGHT: u32 = 0x111;
+
+/// DropdownWidget.wheelMoved: the volume widget steps 5%.
+pub fn wheel(app: &mut App, _strip: usize, action: Action, delta: f32) {
+    if action == Action::Volume {
+        let (a, n) = app.svc.audio.clone();
+        if let (Some(n), Some(pw)) = (n, app.svc.pw.as_ref()) {
+            if a.ready {
+                pw.set_volume(n.id, (a.volume + if delta > 0.0 { 0.05 } else { -0.05 }).clamp(0.0, 1.0));
+            }
+        }
+    }
+}
 
 pub fn activate(app: &mut App, strip: usize, action: Action, button: u32) {
     let hit = app.strips[strip].hits.iter().find(|h| h.action == action).cloned();
@@ -578,6 +591,18 @@ pub fn activate(app: &mut App, strip: usize, action: Action, button: u32) {
         Action::Weather if button == BTN_LEFT => {
             if let Some(h) = hit {
                 crate::cards::toggle(app, strip, crate::cards::CardKind::Weather, &h, false);
+            }
+        }
+        // VolumeWidget: right click opens the card, left click mutes.
+        Action::Volume if button == BTN_RIGHT => {
+            if let Some(h) = hit {
+                crate::cards::toggle(app, strip, crate::cards::CardKind::Audio, &h, false);
+            }
+        }
+        Action::Volume if button == BTN_LEFT => {
+            let (a, n) = app.svc.audio.clone();
+            if let (Some(n), Some(pw)) = (n, app.svc.pw.as_ref()) {
+                pw.set_mute(n.id, !a.muted);
             }
         }
         Action::LayoutCycle => crate::ipc::layout_next(app),

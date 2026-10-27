@@ -52,7 +52,8 @@ from libQt6Quick, uniforms and textures read back from Qt's GL calls):
 - [x] Power card (logo) - matches the QML card; with it open: 21 MB PSS / 24 MB VRAM against 88 MB / 127 MB
 - [x] Calendar card (clock) - matches; Qt's CLDR month/day names for LC_TIME, wheel steps months
 - [x] Weather card - matches (tooltip parsing as CenterInfo does it, word wrap)
-- [ ] Cards: audio, network, battery, ПУЛЬТ, VPN, agent
+- [x] Audio card - outputs, inputs + live mic meter (PipeWire peak monitor), per-app faders, default device switching, slider drag/wheel/keys; strip: left click mutes, wheel steps 5%
+- [ ] Cards: network, battery, ПУЛЬТ, VPN, agent
 - [ ] The CRT power-off effect (quickshell/crt, run by CrtOff.sh before logout/reboot/shutdown)
 - [ ] Overlays: layout OSD, clipboard, polkit agent, power menu, screenshot, recording
 - [ ] Wallpaper carousel + reveal, overview

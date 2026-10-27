@@ -35,6 +35,7 @@ pub enum CardKind {
     Power,
     Calendar,
     Weather,
+    Audio,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -59,8 +60,9 @@ pub struct OpenCard {
     pub pointer: Option<(f32, f32)>,
     pub shift: bool,
     /// Index into the card's focus chain (CardKeys), None = nothing focused.
-    focus: Option<usize>,
-    focus_count: usize,
+    pub(crate) focus: Option<usize>,
+    /// The focus chain of the last draw: each focusable control's code.
+    pub(crate) focus_codes: Vec<u32>,
     width: f32,
     height: f32,
     /// x of the stem's centre inside the card.
@@ -71,11 +73,31 @@ pub struct OpenCard {
     /// Calendar: the month shown (year, month 1-12) and the wheel's remainder.
     month: (i32, u32),
     wheel_acc: f32,
+    /// Sliders of the last draw: (code, x, width, maximum).
+    pub(crate) sliders: Vec<(u32, f32, f32, f32)>,
+    /// LevelMeter: (level, hold, hold ticks left).
+    pub(crate) meter: (f32, f32, i32),
+    /// ConsoleButton.tint for the next button: colAlert (the mute buttons).
+    pub(crate) tint_alert: bool,
+    numbers: HashMap<u32, Animated<f32>>,
+    /// Flickable.contentY and the content height.
+    scroll: f32,
+    content_h: f32,
+    /// The card's x on screen is fractional in QML (the icon centre is); the
+    /// surface sits at the whole pixel and the content is drawn this far in.
+    frac: f32,
 }
 
 impl OpenCard {
+    /// An animated number (Behavior on opacity { NumberAnimation }).
+    pub(crate) fn number(&mut self, id: u32, target: f32, ms: u64, now: Instant) -> (f32, bool) {
+        let a = self.numbers.entry(id).or_insert_with(|| Animated::new(target, ms, Easing::Linear));
+        a.set(target, now);
+        (a.get(now), a.running(now))
+    }
+
     /// A control's animated colour (Behavior on color { ColorAnimation { duration } }).
-    fn color(&mut self, id: u32, target: Color, ms: u64, now: Instant) -> (Color, bool) {
+    pub(crate) fn color(&mut self, id: u32, target: Color, ms: u64, now: Instant) -> (Color, bool) {
         let a = self.colors.entry(id).or_insert_with(|| Animated::new(target, ms, Easing::Linear));
         a.set(target, now);
         (a.get(now), a.running(now))
@@ -95,6 +117,8 @@ fn geometry(kind: CardKind) -> (f32, f32, Stem) {
         CardKind::Calendar => (400.0, 38.0 + 8.0 + 284.0 + 12.0 + 24.0, Stem::Center),
         // CenterInfo's weather card: 340 wide, its height is measured from the content.
         CardKind::Weather => (340.0, 0.0, Stem::Center),
+        // VolumeWidget: 330 wide, max(120, min(content + 30, 560)) high.
+        CardKind::Audio => (330.0, 0.0, Stem::Center),
     }
 }
 
@@ -113,6 +137,18 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
     let (w, mut h, stem) = geometry(kind);
     if kind == CardKind::Weather {
         h = weather_height(&mut app.fonts, &app.svc, w);
+    }
+    let mut content_h = 0.0;
+    if kind == CardKind::Audio {
+        if let Some(pw) = app.svc.pw.as_mut() {
+            pw.track_all(true);
+            let src = pw.source().1.map(|n| n.id);
+            pw.monitor_peak(src);
+            pw.dispatch();
+        }
+        content_h = crate::audio_card::content_height(&mut app.fonts, &app.svc);
+        h = 120f32.max((content_h.ceil() + 30.0).min(560.0));
+        app.every(Duration::from_millis(33), crate::audio_card::meter_tick);
     }
     // DropdownWidget.cardX: from the icon's centre on the screen.
     let icon_w = icon.w / ui;
@@ -152,9 +188,13 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
 
     let surface = app.compositor.create_surface(&app.qh);
     let layer = app.layer_shell.create_layer_surface(&app.qh, surface, Layer::Top, Some("quickshell:card"), Some(&output));
+    // QML's card x can be fractional, but it lands on whole pixels (measured).
+    let x = x.round();
+    let frac = 0.0f32;
+    let sw = (w + frac).ceil() as u32;
     layer.set_anchor(Anchor::TOP | Anchor::LEFT);
-    layer.set_margin(y.round() as i32, 0, 0, x.round() as i32);
-    layer.set_size(w as u32, h as u32);
+    layer.set_margin(y.round() as i32, 0, 0, x.floor() as i32);
+    layer.set_size(sw, h as u32);
     layer.set_exclusive_zone(-1);
     layer.set_keyboard_interactivity(KeyboardInteractivity::Exclusive);
     layer.commit();
@@ -162,13 +202,13 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
     app.card = Some(OpenCard {
         kind,
         strip,
-        win: Win::new(layer, w as u32, h as u32),
+        win: Win::new(layer, sw, h as u32),
         catcher: Catcher { layer: catcher, viewport: None, pool: None },
         hits: Vec::new(),
         pointer: None,
         shift: false,
         focus: if keyboard { Some(0) } else { None },
-        focus_count: 0,
+        focus_codes: Vec::new(),
         width: w,
         height: h,
         stem_cx,
@@ -177,12 +217,25 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         colors: HashMap::new(),
         month: { let (y, m, _) = crate::cal::today(); (y, m) },
         wheel_acc: 0.0,
+        sliders: Vec::new(),
+        meter: (0.0, 0.0, 0),
+        tint_alert: false,
+        numbers: HashMap::new(),
+        scroll: 0.0,
+        content_h,
+        frac,
     });
     app.strips[strip].win.dirty = true;
 }
 
 pub fn close(app: &mut App) {
     let Some(card) = app.card.take() else { return };
+    if card.kind == CardKind::Audio {
+        if let Some(pw) = app.svc.pw.as_mut() {
+            pw.track_all(false);
+            pw.monitor_peak(None);
+        }
+    }
     if let (Some(gpu), Some((id, ..))) = (app.gpu.as_mut(), card.notch) {
         gpu.drop_image(id);
     }
@@ -293,42 +346,42 @@ impl CanvasPath {
     }
 }
 
-struct Ui<'a> {
-    card: &'a mut OpenCard,
-    scene: &'a mut Scene,
-    fonts: &'a mut Fonts,
-    theme: &'a Theme,
-    now: Instant,
-    animating: bool,
-    hits: Vec<Hit>,
-    focus_n: usize,
+pub(crate) struct Ui<'a> {
+    pub card: &'a mut OpenCard,
+    pub scene: &'a mut Scene,
+    pub fonts: &'a mut Fonts,
+    pub theme: &'a Theme,
+    pub now: Instant,
+    pub animating: bool,
+    pub hits: Vec<Hit>,
+    pub focus_codes: Vec<u32>,
 }
 
 impl Ui<'_> {
-    fn hovered(&self, x: f32, y: f32, w: f32, h: f32) -> bool {
+    pub fn hovered(&self, x: f32, y: f32, w: f32, h: f32) -> bool {
         self.card.pointer.map_or(false, |(px, py)| px >= x && px < x + w && py >= y && py < y + h)
     }
 
-    /// The next control in the focus chain: (its index, has focus).
-    fn focusable(&mut self) -> (usize, bool) {
-        let i = self.focus_n;
-        self.focus_n += 1;
-        (i, self.card.focus == Some(i))
+    /// Adds a control to the focus chain (activeFocusOnTab); true if it has focus.
+    pub fn focusable(&mut self, code: u32) -> bool {
+        let i = self.focus_codes.len();
+        self.focus_codes.push(code);
+        self.card.focus == Some(i)
     }
 
-    fn text(&mut self, line: &Line, x: f32, y: f32, color: Color, style: TextStyle) {
+    pub fn text(&mut self, line: &Line, x: f32, y: f32, color: Color, style: TextStyle) {
         self.scene.text(self.fonts, line, x, y + line.ascent, color, style);
     }
 
     /// ConsoleButton: a key on the console - plate colour, white focus ring,
     /// shadow lip, icon + bold caption centred one pixel high.
     #[allow(clippy::too_many_arguments)]
-    fn console_button(&mut self, id: u32, x: f32, y: f32, w: f32, icon: &str, icon_color: Color, label: &str, current: bool) {
+    pub fn console_button(&mut self, id: u32, x: f32, y: f32, w: f32, icon: &str, icon_color: Color, label: &str, current: bool) {
         self.console_button_sized(id, x, y, w, FONT_SIZE - 4.0, icon, icon_color, label, current);
     }
 
     /// ConsoleButton.implicitWidth: max(minWidth, face + 26).
-    fn console_button_width(&mut self, font: f32, icon: &str, label: &str, min_width: f32) -> f32 {
+    pub fn console_button_width(&mut self, font: f32, icon: &str, label: &str, min_width: f32) -> f32 {
         let icon_box = font + 2.0;
         let cap = if label.is_empty() { 0.0 } else { self.fonts.layout(label, theme::bar_font(true), font, 0.0).width };
         let face = match (icon.is_empty(), label.is_empty()) {
@@ -340,13 +393,13 @@ impl Ui<'_> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn console_button_sized(&mut self, id: u32, x: f32, y: f32, w: f32, font: f32, icon: &str, icon_color: Color, label: &str, current: bool) {
+    pub fn console_button_sized(&mut self, id: u32, x: f32, y: f32, w: f32, font: f32, icon: &str, icon_color: Color, label: &str, current: bool) {
         let h = (font * 2.1).round();
-        let (fi, focused) = self.focusable();
+        let focused = self.focusable(id);
         let hot = self.hovered(x, y, w, h) || focused;
         let t = self.theme;
         let target = if current {
-            t.col_accent
+            if self.card.tint_alert { t.col_alert } else { t.col_accent }
         } else if hot {
             t.col_plate.lighter(1.6)
         } else {
@@ -382,7 +435,7 @@ impl Ui<'_> {
             let cy = ry + ((row_h - cap.height()) / 2.0 + 0.5).floor();
             self.text(&cap, cx, cy, if current { t.col_bg } else { t.col_grey }, TextStyle::Normal);
         }
-        self.hits.push(Hit { x, y, w, h, action: Action::Card(fi as u32) });
+        self.hits.push(Hit { x, y, w, h, action: Action::Card(id) });
     }
 }
 
@@ -406,9 +459,15 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
         card.notch = Some((id, key.0, key.1, key.2));
     }
     let (id, iw, ih, _) = card.notch.unwrap();
+    let frac = card.frac;
+    scene.save();
+    scene.translate(frac, 0.0);
     scene.image(id, 0.0, 0.0, iw as f32, ih as f32, [0.0, 0.0, 1.0, 1.0]);
+    // Hover is tested in content coordinates.
+    let pointer = card.pointer;
+    card.pointer = pointer.map(|(px, py)| (px - frac, py));
 
-    let mut ui = Ui { card, scene, fonts, theme, now: Instant::now(), animating: false, hits: Vec::new(), focus_n: 0 };
+    let mut ui = Ui { card, scene, fonts, theme, now: Instant::now(), animating: false, hits: Vec::new(), focus_codes: Vec::new() };
     // The Loader's margins: top stemHeight + 8, 8 around.
     let (cx, cy, cw) = (8.0, STEM_H + 8.0, w - 16.0);
     match ui.card.kind {
@@ -425,7 +484,7 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
                 y += 42.0 + 6.0;
             }
         }
-        CardKind::Calendar | CardKind::Weather => {}
+        CardKind::Calendar | CardKind::Weather | CardKind::Audio => {}
     }
     if ui.card.kind == CardKind::Calendar {
         draw_calendar(&mut ui, w);
@@ -433,15 +492,27 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
     if ui.card.kind == CardKind::Weather {
         draw_weather(&mut ui, w, svc);
     }
+    if ui.card.kind == CardKind::Audio {
+        // The Loader's area, clipped like the Flickable, scrolled by contentY.
+        ui.card.sliders.clear();
+        let scroll = ui.card.scroll;
+        ui.scene.save();
+        ui.scene.clip_rect(8.0, STEM_H + 8.0, w - 16.0, h - 28.0);
+        crate::audio_card::draw(&mut ui, w, svc, STEM_H + 8.0 - scroll);
+        ui.scene.restore();
+    }
     let _ = svc;
-    let (hits, n, animating) = (std::mem::take(&mut ui.hits), ui.focus_n, ui.animating);
-    card.hits = hits;
-    card.focus_count = n;
+    let (hits, codes, animating) = (std::mem::take(&mut ui.hits), std::mem::take(&mut ui.focus_codes), ui.animating);
+    scene.restore();
+    card.pointer = pointer;
+    card.hits = hits.into_iter().map(|h| Hit { x: h.x + frac, ..h }).collect();
+    card.sliders.iter_mut().for_each(|s| s.1 += frac);
+    card.focus_codes = codes;
     animating
 }
 
 /// ConsolePlate: the recessed plate, with its 1 px highlight along the bottom.
-fn plate(ui: &mut Ui, x: f32, y: f32, w: f32, h: f32) {
+pub(crate) fn plate(ui: &mut Ui, x: f32, y: f32, w: f32, h: f32) {
     ui.scene.rect(x, y, w, h, ui.theme.col_plate, 5.0, 0.0, Color::TRANSPARENT, true);
     ui.scene.fill(x + 5.0, y + h - 1.0, w - 10.0, 1.0, Color::qt_rgba(1.0, 1.0, 1.0, 0.07));
 }
@@ -460,11 +531,11 @@ fn draw_calendar(ui: &mut Ui, w: f32) {
     let title = format!("{} {}", crate::cal::month_name(month).to_uppercase(), year);
     let tl = ui.fonts.layout(&title, theme::bar_font(true), FONT_SIZE + 4.0, 1.0);
     let head_h = tl.height().max(bh);
-    ui.console_button_sized(100 + CAL_PREV, x0, y0 + ((head_h - bh) / 2.0 + 0.5).floor(), bw, font, "\u{f0141}", t.col_grey, "", false);
+    ui.console_button_sized(CAL_PREV, x0, y0 + ((head_h - bh) / 2.0 + 0.5).floor(), bw, font, "\u{f0141}", t.col_grey, "", false);
     let tw = cw - 2.0 * bw;
     let tx = x0 + bw + (tw - tl.width) / 2.0;
     ui.text(&tl, tx, y0 + ((head_h - tl.height()) / 2.0 + 0.5).floor(), t.col_white, TextStyle::Normal);
-    ui.console_button_sized(100 + CAL_NEXT, x0 + cw - bw, y0 + ((head_h - bh) / 2.0 + 0.5).floor(), bw, font, "\u{f0142}", t.col_grey, "", false);
+    ui.console_button_sized(CAL_NEXT, x0 + cw - bw, y0 + ((head_h - bh) / 2.0 + 0.5).floor(), bw, font, "\u{f0142}", t.col_grey, "", false);
 
     // The plate: weekday captions, then the 7 x 6 grid.
     let py = y0 + head_h + 8.0;
@@ -679,6 +750,19 @@ fn calendar_step(app: &mut App, delta: i32) {
 /// A wheel turn over the card (QML angleDelta: +120 per notch away from you).
 pub fn wheel(app: &mut App, angle_delta_y: f32) {
     let Some(c) = app.card.as_mut() else { return };
+    if c.kind == CardKind::Audio {
+        let over = c.pointer.and_then(|(px, py)| c.sliders.iter().find(|s| px >= s.1 && px < s.1 + s.2 && py >= 0.0).map(|s| s.0));
+        let over = over.filter(|code| c.hits.iter().any(|h| h.action == Action::Card(*code) && c.pointer.map_or(false, |(px, py)| h.contains(px, py))));
+        if let Some(code) = over {
+            crate::audio_card::slider_step(app, code, angle_delta_y > 0.0);
+        } else {
+            let view = c.height - 28.0;
+            let max = (c.content_h - view).max(0.0);
+            c.scroll = (c.scroll - angle_delta_y / 120.0 * 3.0 * 20.0).clamp(0.0, max);
+            c.win.dirty = true;
+        }
+        return;
+    }
     if c.kind != CardKind::Calendar {
         return;
     }
@@ -699,12 +783,42 @@ pub fn wheel(app: &mut App, angle_delta_y: f32) {
 
 // ---- input ----
 
+/// A button went down on a card control: a slider jumps to the pointer.
+pub fn press(app: &mut App, action: Action, x: f32, button: u32) {
+    if let (Action::Card(code), Some(card)) = (action, app.card.as_ref()) {
+        if card.kind == CardKind::Audio && button == 0x110 && crate::audio_card::is_slider(code) {
+            crate::audio_card::slider_to(app, code, x);
+        }
+    }
+}
+
+/// The pointer moved with the left button held on a slider.
+pub fn drag(app: &mut App, action: Action, x: f32) {
+    press(app, action, x, 0x110);
+}
+
+/// A click (release over the pressed control) with a button.
+pub fn click(app: &mut App, action: Action, button: u32) {
+    let Action::Card(code) = action else { return };
+    let Some(card) = app.card.as_ref() else { return };
+    if card.kind == CardKind::Audio && crate::audio_card::is_slider(code) {
+        if button == 0x111 {
+            crate::audio_card::slider_mute(app, code);
+        }
+        return;
+    }
+    if button == 0x110 {
+        activate(app, action, false);
+    }
+}
+
 pub fn activate(app: &mut App, action: Action, keyboard: bool) {
     let Some(card) = app.card.as_ref() else { return };
     let Action::Card(i) = action else { return };
     match card.kind {
         CardKind::Power => power_pick(app, i, keyboard),
         CardKind::Weather => {}
+        CardKind::Audio => crate::audio_card::activate(app, i),
         CardKind::Calendar => match i {
             // the focus chain: prev, next; day cells are mouse-only
             CAL_PREV => calendar_step(app, -1),
@@ -745,7 +859,20 @@ fn power_pick(app: &mut App, i: u32, keyboard: bool) {
 /// CardKeys: Esc closes, Tab/arrows walk the focus chain, Return/Enter/Space press.
 pub fn key(app: &mut App, sym: Keysym, _utf8: Option<&str>) {
     let Some(card) = app.card.as_mut() else { return };
-    let n = card.focus_count.max(1);
+    // A focused VolumeSlider takes Left/Right and its mute keys first.
+    let focused = card.focus.and_then(|f| card.focus_codes.get(f).copied());
+    if card.kind == CardKind::Audio {
+        if let Some(code) = focused.filter(|c| crate::audio_card::is_slider(*c)) {
+            match sym {
+                Keysym::Left => return crate::audio_card::slider_step(app, code, false),
+                Keysym::Right => return crate::audio_card::slider_step(app, code, true),
+                Keysym::Return | Keysym::KP_Enter | Keysym::space | Keysym::m | Keysym::M => return crate::audio_card::slider_mute(app, code),
+                _ => {}
+            }
+        }
+    }
+    let Some(card) = app.card.as_mut() else { return };
+    let n = card.focus_codes.len().max(1);
     let back = card.shift;
     match sym {
         Keysym::Escape => close(app),
@@ -758,8 +885,8 @@ pub fn key(app: &mut App, sym: Keysym, _utf8: Option<&str>) {
             card.win.dirty = true;
         }
         Keysym::Return | Keysym::KP_Enter | Keysym::space => {
-            if let Some(f) = card.focus {
-                activate(app, Action::Card(f as u32), true);
+            if let Some(code) = card.focus.and_then(|f| card.focus_codes.get(f).copied()) {
+                activate(app, Action::Card(code), true);
             }
         }
         _ => {}

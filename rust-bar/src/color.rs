@@ -117,16 +117,18 @@ impl Color {
         Color::rgba(out[0], out[1], out[2], a)
     }
 
-    fn hsv_ints(&self) -> (i32, i32, i32) {
+    /// QColor::toHsv as floats (hue 0..1 or -1, saturation, value), through
+    /// QColor's 16-bit storage.
+    fn hsv(&self) -> (f32, f32, f32) {
         let (r, g, b) = (self.r, self.g, self.b);
         let max = r.max(g).max(b);
         let min = r.min(g).min(b);
         let delta = max - min;
-        let value = (max * MAX).round() as i32;
+        let v = q16(max);
         if fuzzy_null(delta) {
-            return (-1, 0, value >> 8);
+            return (-1.0, 0.0, v);
         }
-        let sat = ((delta / max) * MAX).round() as i32;
+        let s = q16(delta / max);
         let mut h = if fuzzy_eq(r, max) {
             (g - b) / delta
         } else if fuzzy_eq(g, max) {
@@ -138,48 +140,52 @@ impl Color {
         if h < 0.0 {
             h += 360.0;
         }
-        ((h * 100.0).round() as i32 / 100, sat >> 8, value >> 8)
+        let h = (h * 100.0).round();
+        (if h == 36000.0 { 0.0 } else { h / 36000.0 }, s, v)
     }
 
-    fn from_hsv_ints(h: i32, s: i32, v: i32, a: f32) -> Color {
-        let sat = (s * 0x101) as f32 / MAX;
-        let val = (v * 0x101) as f32 / MAX;
-        if h < 0 || s == 0 {
-            return Color::rgba(val, val, val, a);
+    /// QColor::fromHsvF, back to 16-bit RGB.
+    fn from_hsv(h: f32, s: f32, v: f32, a: f32) -> Color {
+        let s = q16(s.clamp(0.0, 1.0));
+        let v = q16(v.clamp(0.0, 1.0));
+        if h < 0.0 || s == 0.0 {
+            return Color::rgba(v, v, v, a);
         }
-        let hh = ((h % 360) * 100) as f32 / 6000.0;
+        let hq = (h * 36000.0).round();
+        let hh = if hq >= 36000.0 { 0.0 } else { hq / 6000.0 };
         let i = hh as i32;
         let f = hh - i as f32;
-        let p = val * (1.0 - sat);
+        let p = v * (1.0 - s);
         let (r, g, b) = if i & 1 == 1 {
-            let q = val * (1.0 - sat * f);
+            let q = v * (1.0 - s * f);
             match i {
-                1 => (q, val, p),
-                3 => (p, q, val),
-                _ => (val, p, q),
+                1 => (q, v, p),
+                3 => (p, q, v),
+                _ => (v, p, q),
             }
         } else {
-            let t = val * (1.0 - sat * (1.0 - f));
+            let t = v * (1.0 - s * (1.0 - f));
             match i {
-                0 => (val, t, p),
-                2 => (p, val, t),
-                _ => (t, p, val),
+                0 => (v, t, p),
+                2 => (p, v, t),
+                _ => (t, p, v),
             }
         };
         Color::rgba(q16(r), q16(g), q16(b), a)
     }
 
-    /// Qt.darker(c, factor).
+    /// Qt.darker(c, factor): QColor::darker(qRound(factor * 100)) - Qt 6 works
+    /// in float HSV (an int HSV path, as in Qt 5, comes out a level darker).
     pub fn darker(&self, factor: f32) -> Color {
         let f = (factor * 100.0).round() as i32;
         if f <= 0 {
             return *self;
         }
         if f < 100 {
-            return self.lighter(10000.0 / f as f32 / 100.0);
+            return self.lighter((10000 / f) as f32 / 100.0);
         }
-        let (h, s, v) = self.hsv_ints();
-        Color::from_hsv_ints(h, s, v * 100 / f, self.a)
+        let (h, s, v) = self.hsv();
+        Color::from_hsv(h, s, v * 100.0 / f as f32, self.a)
     }
 
     /// Qt.lighter(c, factor).
@@ -189,16 +195,15 @@ impl Color {
             return *self;
         }
         if f < 100 {
-            return self.darker(10000.0 / f as f32 / 100.0);
+            return self.darker((10000 / f) as f32 / 100.0);
         }
-        let (h, mut s, v) = self.hsv_ints();
-        let mut v = v * f / 100;
-        if v > 255 {
-            s -= v - 255;
-            s = s.max(0);
-            v = 255;
+        let (h, mut s, v) = self.hsv();
+        let mut v = f as f32 * v / 100.0;
+        if v > 1.0 {
+            s = (s - (v - 1.0)).max(0.0);
+            v = 1.0;
         }
-        Color::from_hsv_ints(h, s, v, self.a)
+        Color::from_hsv(h, s, v, self.a)
     }
 
     pub fn with_alpha(self, a: f32) -> Color {

@@ -68,6 +68,7 @@ fn cards_toggle(app: &mut App, card: &str) {
         "power" => (CardKind::Power, Action::Logo),
         "calendar" => (CardKind::Calendar, Action::Clock),
         "weather" => (CardKind::Weather, Action::Weather),
+        "audio" => (CardKind::Audio, Action::Volume),
         _ => return,
     };
     let focused = app.svc.mango.focused().map(|m| m.name.clone()).unwrap_or_default();
