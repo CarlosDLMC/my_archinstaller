@@ -18,6 +18,7 @@ struct Inst {
     @location(6) p0: vec4<f32>,
     @location(7) p1: vec4<f32>,
     @location(8) clip: vec4<f32>,   // device px x0 y0 x1 y1
+    @location(9) sclip: vec4<f32>,  // sheared clip: x0, x1 at y ref, slope
 };
 
 struct VOut {
@@ -30,6 +31,7 @@ struct VOut {
     @location(5) @interpolate(flat) p1: vec4<f32>,
     @location(6) @interpolate(flat) rect: vec4<f32>,
     @location(7) @interpolate(flat) clip: vec4<f32>,
+    @location(8) @interpolate(flat) sclip: vec4<f32>,
 };
 
 fn corner(vi: u32) -> vec2<f32> {
@@ -62,6 +64,7 @@ fn vs_rect(@builtin(vertex_index) vi: u32, i: Inst) -> VOut {
     o.p1 = i.p1;
     o.rect = i.rect;
     o.clip = i.clip;
+    o.sclip = i.sclip;
     return o;
 }
 
@@ -79,7 +82,16 @@ fn vs_quad(@builtin(vertex_index) vi: u32, i: Inst) -> VOut {
     o.p1 = i.p1;
     o.rect = i.rect;
     o.clip = i.clip;
+    o.sclip = i.sclip;
     return o;
+}
+
+/// Coverage of the sheared clip's sloping sides (1 without one).
+fn skew_cov(v: VOut) -> f32 {
+    let off = v.sclip.w * (v.pos.y - v.sclip.z);
+    let l = v.sclip.x + off;
+    let r = v.sclip.y + off;
+    return clamp(v.pos.x - l + 0.5, 0.0, 1.0) * clamp(r - v.pos.x + 0.5, 0.0, 1.0);
 }
 
 fn clipped(v: VOut) -> bool {

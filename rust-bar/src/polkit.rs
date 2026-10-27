@@ -491,7 +491,7 @@ fn show_osd(app: &mut App) {
     let Some((_, sw, sh)) = osd::focused_output(app) else { return };
     let m = met();
     let h = card_h(&mut app.fonts, &app.svc);
-    osd::show(app, OpenParams { kind: OsdKind::Polkit, size: (m.card_w as u32, h.ceil() as u32), panel: (0.0, 0.0, m.card_w, h), dim: Some(Color::qt_rgba(0.0, 0.0, 0.0, 0.45)), keyboard: true, namespace: "quickshell", fade_ms: FADE_MS, min_scale: 0.96, fade_easing: crate::anim::Easing::OutCubic, pos: Some((ac(sw, m.card_w) as i32, ac(sh, h) as i32)) });
+    osd::show(app, OpenParams { kind: OsdKind::Polkit, size: (m.card_w as u32, h.ceil() as u32), panel: (0.0, 0.0, m.card_w, h), dim: Some(Color::qt_rgba(0.0, 0.0, 0.0, 0.45)), keyboard: true, namespace: "quickshell", fade_ms: FADE_MS, min_scale: 0.96, fade_easing: crate::anim::Easing::OutCubic, pos: Some((ac(sw, m.card_w) as i32, ac(sh, h) as i32)), fill: false });
     app.svc.polkit.blink_since = Some(std::time::Instant::now());
     blink(app);
 }

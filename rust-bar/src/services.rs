@@ -171,6 +171,7 @@ pub struct Services {
     pub capture: crate::capture::Capture,
     pub polkit: crate::polkit::Polkit,
     pub clip: crate::clip::Clip,
+    pub wall: crate::wallpaper::Wall,
     pub wifi: Wifi,
     pub vpn: String,
     vpn_checked: bool,
@@ -444,6 +445,7 @@ fn cache_changed(app: &mut App, name: &str) {
 /// rewrites it in place).
 fn palette_changed(app: &mut App, name: &str) {
     if name == "wallust-colors.json" {
+        crate::wallpaper::palette_changed(app);
         app.debounce("palette", Duration::from_millis(80), |app| {
             if let Ok(t) = std::fs::read_to_string(palette_path()) {
                 if app.theme.apply_json(&t) {
@@ -521,6 +523,7 @@ pub fn start(app: &mut App) {
     crate::capture::start(app);
     crate::polkit::start(app);
     crate::clip::start(app);
+    crate::wallpaper::start(app);
 
     app.svc.wifi.has = glob_dir("/sys/class/net", "").iter().any(|d| std::path::Path::new(&format!("{d}/wireless")).exists());
     if app.svc.wifi.has {

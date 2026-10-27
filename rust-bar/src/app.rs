@@ -86,6 +86,7 @@ pub enum WinRef {
     Card,
     Osd(crate::osd::OsdKind),
     Crt(usize),
+    Reveal(usize),
 }
 
 /// Output of a finished helper process, routed back by its tag.
@@ -127,6 +128,8 @@ pub struct App {
     /// `rust-bar crt`: the CRT power-off windows instead of strips.
     pub crt_mode: bool,
     pub crts: Vec<crate::crt::CrtWin>,
+    /// The wallpaper reveal, one window per screen while it runs.
+    pub reveals: Vec<crate::wallpaper::RevealWin>,
     pub svc: Services,
     pub(crate) running: HashMap<String, (Instant, u32)>,
     pub(crate) timers: HashMap<&'static str, RegistrationToken>,
@@ -183,6 +186,7 @@ impl App {
             osds: Vec::new(),
             crt_mode,
             crts: Vec::new(),
+            reveals: Vec::new(),
             kbd_focus: None,
             shift: false,
             mods: Mods::default(),
@@ -256,6 +260,7 @@ impl App {
             WinRef::Card => self.card.as_mut().map(|c| &mut c.win),
             WinRef::Osd(k) => self.osd_mut(k).map(|o| &mut o.win),
             WinRef::Crt(i) => self.crts.get_mut(i).map(|c| &mut c.win),
+            WinRef::Reveal(i) => self.reveals.get_mut(i).map(|r| &mut r.win),
         }
     }
 
@@ -271,6 +276,9 @@ impl App {
         }
         if let Some(i) = self.crts.iter().position(|c| c.win.layer.wl_surface() == surface) {
             return Some(WinRef::Crt(i));
+        }
+        if let Some(i) = self.reveals.iter().position(|r| r.win.layer.wl_surface() == surface) {
+            return Some(WinRef::Reveal(i));
         }
         None
     }
@@ -354,6 +362,12 @@ impl App {
                 self.draw(WinRef::Crt(i));
             }
         }
+        for i in 0..self.reveals.len() {
+            let w = &self.reveals[i].win;
+            if w.configured && w.dirty && !w.frame_pending {
+                self.draw(WinRef::Reveal(i));
+            }
+        }
     }
 
     fn draw(&mut self, w: WinRef) {
@@ -384,6 +398,10 @@ impl App {
             WinRef::Crt(i) => {
                 let gpu = self.gpu.as_mut().unwrap();
                 crate::crt::draw(&mut self.crts[i], &mut scene, gpu)
+            }
+            WinRef::Reveal(i) => {
+                let gpu = self.gpu.as_mut().unwrap();
+                crate::wallpaper::draw_reveal(&mut self.reveals[i], &mut scene, gpu, &self.svc, &self.theme)
             }
         };
         let qh = self.qh.clone();
@@ -431,8 +449,14 @@ impl App {
         let hits = match w {
             WinRef::Strip(i) => &self.strips[i].hits,
             WinRef::Card => &self.card.as_ref()?.hits,
-            WinRef::Osd(k) => &self.osd(k)?.hits,
-            WinRef::Crt(_) => return None,
+            WinRef::Osd(k) => {
+                let o = self.osd(k)?;
+                if let Some(a) = o.st.shape_at(x, y) {
+                    return Some(a);
+                }
+                &o.hits
+            }
+            WinRef::Crt(_) | WinRef::Reveal(_) => return None,
         };
         hits.iter().rev().find(|h| h.contains(x, y)).map(|h| h.action)
     }
@@ -450,7 +474,7 @@ impl App {
                     o.st.pointer = p;
                 }
             }
-            WinRef::Crt(_) => {}
+            WinRef::Crt(_) | WinRef::Reveal(_) => {}
         }
     }
 
@@ -459,7 +483,7 @@ impl App {
             WinRef::Strip(i) => self.strips[i].pointer,
             WinRef::Card => self.card.as_ref()?.pointer,
             WinRef::Osd(k) => self.osd(k)?.st.pointer,
-            WinRef::Crt(_) => None,
+            WinRef::Crt(_) | WinRef::Reveal(_) => None,
         }
     }
 }
@@ -551,6 +575,8 @@ impl LayerShellHandler for App {
         } else if let Some(i) = self.crts.iter().position(|c| &c.win.layer == layer) {
             crate::crt::configured(self, i);
             WinRef::Crt(i)
+        } else if let Some(i) = self.reveals.iter().position(|r| &r.win.layer == layer) {
+            WinRef::Reveal(i)
         } else {
             return;
         };
@@ -666,6 +692,9 @@ impl PointerHandler for App {
                 continue;
             }
             let Some(w) = self.win_of(&e.surface) else { continue };
+            if let WinRef::Reveal(_) = w {
+                continue;
+            }
             if let WinRef::Crt(_) = w {
                 // Qt.BlankCursor: no pointer over the picture while it collapses.
                 if let (PointerEventKind::Enter { serial }, Some((p, _))) = (&e.kind, &self.pointer) {
@@ -733,7 +762,7 @@ impl PointerHandler for App {
                         match w {
                             WinRef::Card => cards::wheel(self, delta),
                             WinRef::Osd(k) => crate::osd::wheel(self, k, delta),
-                            WinRef::Crt(_) => {}
+                            WinRef::Crt(_) | WinRef::Reveal(_) => {}
                             WinRef::Strip(i) => {
                                 if let Some(act) = self.hit_at(w, x, y) {
                                     bar::wheel(self, i, act, delta);
@@ -756,7 +785,7 @@ impl PointerHandler for App {
                                 WinRef::Strip(i) => bar::activate(self, i, action, button),
                                 WinRef::Card => cards::click(self, action, button),
                                 WinRef::Osd(k) => crate::osd::click(self, k, action, button),
-                                WinRef::Crt(_) => {}
+                                WinRef::Crt(_) | WinRef::Reveal(_) => {}
                             }
                         }
                     }

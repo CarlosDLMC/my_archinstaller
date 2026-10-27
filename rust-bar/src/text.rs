@@ -807,6 +807,14 @@ impl Fonts {
         out
     }
 
+    /// QFontMetricsF::averageCharWidth: OS/2 xAvgCharWidth at the size, in 26.6.
+    pub fn average_char_width(&mut self, key: FontKey, size: f32) -> f32 {
+        let f = self.face_for(key) as usize;
+        let face = &self.faces[f];
+        let avg = face.font.metrics(&[]).average_width as f64;
+        (avg * size as f64 * 64.0 / face.upem as f64).round() as f32 / 64.0
+    }
+
     /// Qt's ElideMiddle (QTextEngine::elidedText): as many characters from
     /// each end as fit beside the ellipsis.
     pub fn elide_middle(&mut self, text: &str, key: FontKey, size: f32, letter_spacing: f32, max: f32) -> Line {

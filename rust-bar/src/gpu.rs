@@ -18,7 +18,12 @@ pub struct Inst {
     pub p0: [f32; 4],
     pub p1: [f32; 4],
     pub clip: [f32; 4],
+    /// A sheared clip (an item with clip: true under a skew): x0, x1 at
+    /// device y = yref, slope dx/dy. NO_SKEW_CLIP when there is none.
+    pub sclip: [f32; 4],
 }
+
+pub const NO_SKEW_CLIP: [f32; 4] = [-1e30, 1e30, 0.0, 0.0];
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Pipe {
@@ -83,8 +88,9 @@ pub struct Scene {
     pub batches: Vec<(Pipe, Range<u32>)>,
     pub xf: Xf,
     pub clip: [f32; 4],
+    pub sclip: [f32; 4],
     pub opacity: f32,
-    stack: Vec<(Xf, [f32; 4], f32)>,
+    stack: Vec<(Xf, [f32; 4], [f32; 4], f32)>,
     atlas_size: (f32, f32),
 }
 
@@ -122,6 +128,7 @@ impl Scene {
             batches: Vec::new(),
             xf: Xf::ID,
             clip: [0.0, 0.0, width, height],
+            sclip: NO_SKEW_CLIP,
             opacity: 1.0,
             stack: Vec::new(),
             atlas_size: (1.0, 1.0),
@@ -133,18 +140,20 @@ impl Scene {
         self.batches.clear();
         self.xf = Xf::ID;
         self.clip = [0.0, 0.0, width, height];
+        self.sclip = NO_SKEW_CLIP;
         self.opacity = 1.0;
         self.stack.clear();
     }
 
     pub fn save(&mut self) {
-        self.stack.push((self.xf, self.clip, self.opacity));
+        self.stack.push((self.xf, self.clip, self.sclip, self.opacity));
     }
 
     pub fn restore(&mut self) {
-        if let Some((x, c, o)) = self.stack.pop() {
+        if let Some((x, c, sc, o)) = self.stack.pop() {
             self.xf = x;
             self.clip = c;
+            self.sclip = sc;
             self.opacity = o;
         }
     }
@@ -171,6 +180,17 @@ impl Scene {
         let (x1, y1) = self.xf.apply(x + w, y + h);
         let (x0, x1) = (x0.min(x1), x0.max(x1));
         let (y0, y1) = (y0.min(y1), y0.max(y1));
+        if self.xf.c.abs() > 1e-6 && self.xf.b.abs() < 1e-6 {
+            // Under a skew the cut is a parallelogram: its y range here, its
+            // sloping sides in sclip (Qt clips it in a multisampled layer).
+            let k = self.xf.c / self.xf.d;
+            let yref = self.xf.ty;
+            let (l, r) = (self.xf.a * x + self.xf.tx, self.xf.a * (x + w) + self.xf.tx);
+            self.sclip = [l.min(r), l.max(r), yref, k];
+            let (ya, yb) = (self.xf.d * y + self.xf.ty, self.xf.d * (y + h) + self.xf.ty);
+            self.clip = [self.clip[0], self.clip[1].max(ya.min(yb)), self.clip[2], self.clip[3].min(ya.max(yb))];
+            return;
+        }
         self.clip = [self.clip[0].max(x0), self.clip[1].max(y0), self.clip[2].min(x1), self.clip[3].min(y1)];
     }
 
@@ -192,6 +212,7 @@ impl Scene {
             xf0: [self.xf.a, self.xf.c, self.xf.tx],
             xf1: [self.xf.b, self.xf.d, self.xf.ty],
             clip: self.clip,
+            sclip: self.sclip,
             ..Default::default()
         }
     }
@@ -287,6 +308,7 @@ impl Scene {
                 xf0: [1.0, 0.0, 0.0],
                 xf1: [0.0, 1.0, 0.0],
                 clip: self.clip,
+                sclip: self.sclip,
                 ..Default::default()
             };
             i.uv = [cg.ax as f32, cg.ay as f32, (cg.ax + cg.w) as f32, (cg.ay + cg.h) as f32];
@@ -315,6 +337,7 @@ impl Scene {
                 xf0: [1.0, 0.0, 0.0],
                 xf1: [0.0, 1.0, 0.0],
                 clip: self.clip,
+                sclip: self.sclip,
                 ..Default::default()
             };
             i.uv = [(ng.ax - 1) as f32, (ng.ay - 1) as f32, (ng.ax + ng.w + 1) as f32, (ng.ay + ng.h + 1) as f32];
@@ -389,9 +412,9 @@ pub struct Gpu {
     pub images: Vec<Option<Image>>,
 }
 
-const INST_ATTRS: [wgpu::VertexAttribute; 9] = wgpu::vertex_attr_array![
+const INST_ATTRS: [wgpu::VertexAttribute; 10] = wgpu::vertex_attr_array![
     0 => Float32x4, 1 => Float32x3, 2 => Float32x3, 3 => Float32x4, 4 => Float32x4,
-    5 => Float32x4, 6 => Float32x4, 7 => Float32x4, 8 => Float32x4
+    5 => Float32x4, 6 => Float32x4, 7 => Float32x4, 8 => Float32x4, 9 => Float32x4
 ];
 
 fn bytes<T>(v: &[T]) -> &[u8] {

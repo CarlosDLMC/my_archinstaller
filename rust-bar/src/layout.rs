@@ -222,7 +222,7 @@ fn show_osd(app: &mut App) {
     let (pw, ph) = panel_size(app);
     // implicitWidth: panel + 40; the panel centred in it.
     let (w, h) = ((pw + 40.0).ceil(), (ph + 40.0).ceil());
-    osd::show(app, OpenParams { kind: OsdKind::Layout, size: (w as u32, h as u32), panel: (ac(w, pw), ac(h, ph), pw, ph), dim: None, keyboard: false, namespace: "quickshell", fade_ms: OSD_FADE_MS, min_scale: 0.94, fade_easing: crate::anim::Easing::OutCubic, pos: None });
+    osd::show(app, OpenParams { kind: OsdKind::Layout, size: (w as u32, h as u32), panel: (ac(w, pw), ac(h, ph), pw, ph), dim: None, keyboard: false, namespace: "quickshell", fade_ms: OSD_FADE_MS, min_scale: 0.94, fade_easing: crate::anim::Easing::OutCubic, pos: None, fill: false });
     app.svc.layout.hovered = None;
     // hideTimer: fade after 1.3 s unless the pointer holds it.
     app.debounce("layout-osd-hide", Duration::from_millis(OSD_VISIBLE_MS), |app| {

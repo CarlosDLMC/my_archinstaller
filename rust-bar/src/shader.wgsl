@@ -65,7 +65,7 @@ fn fs_rect(v: VOut) -> @location(0) vec4<f32> {
         inner = select(0.0, 1.0, all(p >= lo + vec2<f32>(bw)) && all(p < hi - vec2<f32>(bw)));
     }
     if (bw <= 0.0) { inner = outer; }
-    return v.color * inner + v.color2 * (outer - inner);
+    return (v.color * inner + v.color2 * (outer - inner)) * skew_cov(v);
 }
 
 // p0: alphaMin, alphaMax, outlineAlphaMax0, outlineAlphaMax1; p1.y: 1 = outline style
@@ -75,16 +75,16 @@ fn fs_text(v: VOut) -> @location(0) vec4<f32> {
     let d = textureSample(atlas_tex, samp, v.uv).r;
     let a = smoothstep(v.p0.x, v.p0.y, d);
     if (v.p1.y > 0.5) {
-        return mix(v.color2, v.color, vec4<f32>(a)) * smoothstep(v.p0.z, v.p0.w, d);
+        return mix(v.color2, v.color, vec4<f32>(a)) * smoothstep(v.p0.z, v.p0.w, d) * skew_cov(v);
     }
-    return v.color * a;
+    return v.color * a * skew_cov(v);
 }
 
 // p0.x: opacity
 @fragment
 fn fs_image(v: VOut) -> @location(0) vec4<f32> {
     if (clipped(v)) { discard; }
-    return textureSample(image_tex, samp, v.uv) * v.p0.x;
+    return textureSample(image_tex, samp, v.uv) * v.p0.x * skew_cov(v);
 }
 
 // Qt's outlinedtext.frag: coverage plus the four one-texel neighbours.
@@ -98,5 +98,5 @@ fn fs_native_outline(v: VOut) -> @location(0) vec4<f32> {
           + textureSample(atlas_tex, samp, v.uv + vec2<f32>(t.x, 0.0)).r
           + textureSample(atlas_tex, samp, v.uv - vec2<f32>(t.x, 0.0)).r;
     let outline = clamp(clamp(n, 0.0, 1.0) - glyph, 0.0, 1.0);
-    return v.color2 * outline + v.color * glyph;
+    return (v.color2 * outline + v.color * glyph) * skew_cov(v);
 }

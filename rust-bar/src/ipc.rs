@@ -59,6 +59,19 @@ fn call(app: &mut App, target: &str, function: &str, args: &[&str]) -> Result<()
             crate::power::open_on(app, "E");
             Ok(())
         }
+        ("wallpaper", f) => {
+            match f {
+                "toggle" => crate::wallpaper::toggle(app),
+                "open" => crate::wallpaper::open(app),
+                "close" => crate::wallpaper::close(app),
+                "next" => crate::wallpaper::next(app, 1),
+                "prev" => crate::wallpaper::next(app, -1),
+                "nextFolder" => crate::wallpaper::folder(app, 1),
+                "prevFolder" => crate::wallpaper::folder(app, -1),
+                _ => return Err(format!("no function {f} on wallpaper")),
+            }
+            Ok(())
+        }
         ("clipboard", "toggle") => {
             crate::clip::toggle(app);
             Ok(())

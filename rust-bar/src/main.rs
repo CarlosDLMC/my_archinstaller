@@ -24,6 +24,7 @@ mod services;
 mod text;
 mod theme;
 mod vpn;
+mod wallpaper;
 mod wifi_card;
 
 use color::Color;

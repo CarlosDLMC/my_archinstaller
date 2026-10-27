@@ -23,9 +23,10 @@ fn fs_text_subpixel(v: VOut) -> DualOut {
     c = smoothstep(lo.x + lo.y, hi.x + hi.y, 2.0 * c);
     // Qt: fragColor = coverage * color.w, blended with constant = premultiplied colour.
     let f = vec4<f32>((n.xyz + n.yzw + vec3<f32>(c)) * 0.333, c) * v.color.a;
+    let k = skew_cov(v);
     var o: DualOut;
-    o.color = vec4<f32>(v.color.rgb * f.rgb, f.a);
-    o.mask = f;
+    o.color = vec4<f32>(v.color.rgb * f.rgb, f.a) * k;
+    o.mask = f * k;
     return o;
 }
 

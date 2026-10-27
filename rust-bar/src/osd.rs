@@ -34,6 +34,7 @@ pub enum OsdKind {
     Record,
     Polkit,
     Clipboard,
+    Wallpaper,
 }
 
 /// Hover, focus and the animated values of an overlay's controls.
@@ -48,6 +49,35 @@ pub struct OsdState {
     colors: HashMap<u32, Animated<Color>>,
     numbers: HashMap<u32, Animated<f32>>,
     pub texts: TextMemo,
+    /// Sheared hit areas (x, y, w, h, slope, y ref, action): a point is in
+    /// when, moved back along the slope, it falls in the rectangle.
+    pub shapes: Vec<(f32, f32, f32, f32, f32, f32, Action)>,
+}
+
+impl OsdState {
+    /// A Behavior with an easing curve (NumberAnimation { easing.type }).
+    pub fn number_e(&mut self, id: u32, target: f32, ms: u64, easing: Easing, now: Instant) -> (f32, bool) {
+        let a = self.numbers.entry(id).or_insert_with(|| Animated::new(target, ms, easing));
+        a.set(target, now);
+        (a.get(now), a.running(now))
+    }
+
+    /// The control under (x, y) among the sheared areas, topmost first.
+    pub fn shape_at(&self, x: f32, y: f32) -> Option<Action> {
+        self.shapes.iter().rev().find(|s| {
+            let px = x - s.4 * (y - s.5);
+            px >= s.0 && px < s.0 + s.2 && y >= s.1 && y < s.1 + s.3
+        }).map(|s| s.6)
+    }
+
+    /// The animated value as it stands, without retargeting it.
+    pub fn number_peek(&self, id: u32, now: Instant) -> Option<f32> {
+        self.numbers.get(&id).map(|a| a.get(now))
+    }
+
+    pub fn reset_numbers(&mut self) {
+        self.numbers.clear();
+    }
 }
 
 impl UiState for OsdState {
@@ -121,6 +151,8 @@ pub struct OpenParams {
     pub fade_easing: Easing,
     /// Where the surface goes on the screen; None = centred by the compositor.
     pub pos: Option<(i32, i32)>,
+    /// Anchored to every edge (the size comes from the compositor).
+    pub fill: bool,
 }
 
 impl Osd {
@@ -137,7 +169,7 @@ impl Osd {
         self.fade.get(now)
     }
     fn fade_easing_linear(&self) -> bool {
-        self.kind == OsdKind::Clipboard
+        matches!(self.kind, OsdKind::Clipboard | OsdKind::Wallpaper)
     }
 }
 
@@ -187,11 +219,14 @@ pub fn show(app: &mut App, p: OpenParams) {
         layer.set_anchor(Anchor::TOP | Anchor::LEFT);
         layer.set_margin(y, 0, 0, x);
     }
+    if p.fill {
+        layer.set_anchor(Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT);
+    }
     layer.set_size(p.size.0, p.size.1);
     layer.set_exclusive_zone(-1);
     layer.set_keyboard_interactivity(if p.keyboard { KeyboardInteractivity::Exclusive } else { KeyboardInteractivity::None });
     // mask: Region { item: panel } - clicks outside the panel go through.
-    if let Ok(region) = smithay_client_toolkit::compositor::Region::new(&app.compositor) {
+    if let (false, Ok(region)) = (p.fill, smithay_client_toolkit::compositor::Region::new(&app.compositor)) {
         let (x, y, w, h) = p.panel;
         region.add(x.floor() as i32, y.floor() as i32, w.ceil() as i32, h.ceil() as i32);
         layer.wl_surface().set_input_region(Some(region.wl_region()));
@@ -239,6 +274,7 @@ pub fn hide(app: &mut App, kind: OsdKind) {
         OsdKind::Record => |app| destroy(app, OsdKind::Record),
         OsdKind::Polkit => |app| destroy(app, OsdKind::Polkit),
         OsdKind::Clipboard => |app| destroy(app, OsdKind::Clipboard),
+        OsdKind::Wallpaper => |app| destroy(app, OsdKind::Wallpaper),
     };
     app.debounce(gone_timer(kind), Duration::from_millis(ms), gone);
 }
@@ -251,6 +287,7 @@ fn gone_timer(kind: OsdKind) -> &'static str {
         OsdKind::Record => "osd-gone-record",
         OsdKind::Polkit => "osd-gone-polkit",
         OsdKind::Clipboard => "osd-gone-clipboard",
+        OsdKind::Wallpaper => "osd-gone-wallpaper",
     }
 }
 
@@ -327,10 +364,12 @@ pub fn draw(o: &mut Osd, scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, sv
     let now = Instant::now();
     let fade = o.fade.get(now);
     let mut animating = o.fade.running(now);
-    let (px, py, pw, ph) = o.panel;
+    // A full-screen overlay's panel is the window.
+    let (px, py, pw, ph) = if o.panel.2 > 0.0 { o.panel } else { (0.0, 0.0, o.win.width as f32, o.win.height as f32) };
     // The scale always runs OutCubic; the opacity may be linear.
     let scale = o.min_scale + (1.0 - o.min_scale) * o.fade_scale(now);
     o.st.texts.begin_frame();
+    o.st.shapes.clear();
     scene.save();
     // Item.scale about the panel's centre, and the panel's opacity.
     scene.translate(px + pw / 2.0, py + ph / 2.0);
@@ -349,6 +388,7 @@ pub fn draw(o: &mut Osd, scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, sv
         OsdKind::Record => crate::capture::draw_osd(&mut ui, true, (px, py, pw, ph), svc, pressed),
         OsdKind::Polkit => crate::polkit::draw_osd(&mut ui, (px, py, pw, ph), svc),
         OsdKind::Clipboard => crate::clip::draw_osd(&mut ui, (px, py, pw, ph), svc),
+        OsdKind::Wallpaper => crate::wallpaper::draw_osd(&mut ui, (px, py, pw, ph), svc),
     }
     let (hits, codes) = (std::mem::take(&mut ui.hits), std::mem::take(&mut ui.focus_codes));
     animating |= ui.animating;
@@ -367,6 +407,7 @@ pub fn click(app: &mut App, kind: OsdKind, action: Action, button: u32) {
         OsdKind::Shot | OsdKind::Record => crate::capture::click(app, kind, action),
         OsdKind::Polkit => {}
         OsdKind::Clipboard => crate::clip::click(app, action),
+        OsdKind::Wallpaper => crate::wallpaper::click(app, action),
     }
 }
 
@@ -379,6 +420,7 @@ pub fn dim_clicked(app: &mut App, kind: OsdKind) {
         // MouseArea { anchors.fill: parent }: the dim takes clicks and does nothing.
         OsdKind::Polkit => {}
         OsdKind::Clipboard => crate::clip::close(app),
+        OsdKind::Wallpaper => crate::wallpaper::close(app),
     }
 }
 
@@ -391,6 +433,7 @@ pub fn key(app: &mut App, kind: OsdKind, sym: smithay_client_toolkit::seat::keyb
         OsdKind::Shot | OsdKind::Record => crate::capture::key(app, kind, sym, scan),
         OsdKind::Polkit => crate::polkit::key(app, sym, utf8),
         OsdKind::Clipboard => crate::clip::key(app, sym, mods, utf8),
+        OsdKind::Wallpaper => crate::wallpaper::key(app, sym, mods, utf8),
     }
 }
 
@@ -399,6 +442,9 @@ pub fn wheel(app: &mut App, kind: OsdKind, delta: f32) {
     if kind == OsdKind::Clipboard {
         crate::clip::wheel(app, delta);
     }
+    if kind == OsdKind::Wallpaper {
+        crate::wallpaper::wheel(app, delta);
+    }
 }
 
 /// Pointer motion over a control (MouseArea.onEntered).
@@ -406,13 +452,13 @@ pub fn hovered(app: &mut App, kind: OsdKind, action: Option<Action>) {
     match kind {
         OsdKind::Layout => {}
         OsdKind::Power => crate::power::hovered(app, action),
-        OsdKind::Shot | OsdKind::Record | OsdKind::Polkit | OsdKind::Clipboard => {}
+        OsdKind::Shot | OsdKind::Record | OsdKind::Polkit | OsdKind::Clipboard | OsdKind::Wallpaper => {}
     }
 }
 
 pub fn hover_changed(app: &mut App, kind: OsdKind, inside: bool) {
     match kind {
         OsdKind::Layout => crate::layout::osd_hover(app, inside),
-        OsdKind::Power | OsdKind::Shot | OsdKind::Record | OsdKind::Polkit | OsdKind::Clipboard => {}
+        OsdKind::Power | OsdKind::Shot | OsdKind::Record | OsdKind::Polkit | OsdKind::Clipboard | OsdKind::Wallpaper => {}
     }
 }
