@@ -339,12 +339,14 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
     }
 }
 
-/// The meter on a surface of its own: a subsurface of the card's, above the
-/// card at the meter's place, redrawn alone while only the level moves. The
-/// card's surface covers the screen (CardSurface), and redrawing it 30 times
-/// a second for a talking mic cost 2.5 times QML's CPU in the bar and in
-/// mango; this surface is a few hundred pixels. Clicks go through it to the
-/// card (an empty input region).
+/// The meter on a surface of its own, redrawn alone while only the level
+/// moves: a few hundred pixels instead of the card's full-screen surface. It
+/// is a subsurface BELOW the card's, seen through a hole the card leaves at
+/// the meter (Scene::hole), and paints the plate under its segments itself.
+/// Below, not above: mango blurs behind a layer through the last buffer of
+/// its tree (iter_layer_scene_buffers), and the meter's 230 x 6 px stretched
+/// over the screen blurred all of it but the gaps between the segments.
+/// Clicks go through it (an empty input region).
 pub struct MeterWin {
     pub surface: WlSurface,
     sub: WlSubsurface,
@@ -363,6 +365,7 @@ pub struct MeterWin {
 impl MeterWin {
     pub fn new(app: &App, parent: &WlSurface) -> Option<MeterWin> {
         let (sub, surface) = app.subcompositor.as_ref()?.create_subsurface(parent.clone(), &app.qh);
+        sub.place_below(parent);
         sub.set_desync();
         if let Ok(region) = smithay_client_toolkit::compositor::Region::new(&app.compositor) {
             surface.set_input_region(Some(region.wl_region()));
@@ -438,6 +441,9 @@ fn level_meter(ui: &mut Ui, x: f32, y: f32, w: f32, has_node: bool) {
     let (ox, oy) = ui.card.origin();
     ui.card.meter_at = inside.then_some((ox + x, oy + y, w));
     if inside && ui.card.meter_win.as_ref().map_or(false, |m| m.live) {
+        // The whole pixels MeterWin covers (see place()).
+        let (hx, hy) = (x.floor(), y.floor());
+        ui.scene.hole(hx, hy, (x + w).ceil() - hx, (y + 6.0).ceil() - hy);
         return;
     }
     let t = ui.theme;

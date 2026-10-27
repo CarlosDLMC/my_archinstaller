@@ -528,6 +528,8 @@ impl App {
         let mut scene = Scene::new(1.0, 1.0);
         scene.clear(w as f32, h as f32);
         if m.live {
+            // What the card's hole leaves out: its plate, then the segments.
+            scene.fill(0.0, 0.0, w as f32, h as f32, self.theme.col_plate);
             crate::audio_card::meter_cells(&mut scene, &self.theme, m.frac.0, m.frac.1, m.width, level, hold);
         }
         let view = frame.texture.create_view(&Default::default());

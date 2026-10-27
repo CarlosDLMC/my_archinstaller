@@ -68,6 +68,16 @@ fn fs_rect(v: VOut) -> @location(0) vec4<f32> {
     return (v.color * inner + v.color2 * (outer - inner)) * skew_cov(v);
 }
 
+// Scene::hole: the pixels whose centre is in the rect become transparent (the
+// pipeline replaces instead of blending), so a surface below shows through.
+@fragment
+fn fs_clear(v: VOut) -> @location(0) vec4<f32> {
+    if (clipped(v)) { discard; }
+    let p = v.local + vec2<f32>(0.001);
+    if (!(all(p >= v.rect.xy) && all(p < v.rect.xy + v.rect.zw))) { discard; }
+    return vec4<f32>(0.0);
+}
+
 // p0: alphaMin, alphaMax, outlineAlphaMax0, outlineAlphaMax1; p1.y: 1 = outline style
 @fragment
 fn fs_text(v: VOut) -> @location(0) vec4<f32> {

@@ -37,6 +37,8 @@ pub enum Pipe {
     Color,
     /// QtQuick.Effects RectangularShadow.
     Shadow,
+    /// Scene::hole.
+    Clear,
 }
 
 /// A 2D affine transform: x' = a x + c y + tx, y' = b x + d y + ty.
@@ -236,6 +238,16 @@ impl Scene {
         i.color2 = border_color.premul(self.opacity);
         i.p0 = [radius, border, if aa { 1.0 } else { 0.0 }, 0.0];
         self.push(Pipe::Rect, i);
+    }
+
+    /// A transparent hole in what is drawn so far, whole pixels by the fill
+    /// rule: a subsurface placed below shows through it (the audio meter).
+    pub fn hole(&mut self, x: f32, y: f32, w: f32, h: f32) {
+        if w <= 0.0 || h <= 0.0 {
+            return;
+        }
+        let i = self.base(x, y, w, h);
+        self.push(Pipe::Clear, i);
     }
 
     pub fn fill(&mut self, x: f32, y: f32, w: f32, h: f32, c: Color) {
@@ -458,7 +470,7 @@ pub struct Gpu {
     shader: wgpu::ShaderModule,
     shader_sub: wgpu::ShaderModule,
     pipe_layout: wgpu::PipelineLayout,
-    pipelines: Vec<(wgpu::TextureFormat, [wgpu::RenderPipeline; 6])>,
+    pipelines: Vec<(wgpu::TextureFormat, [wgpu::RenderPipeline; 7])>,
     globals: wgpu::Buffer,
     atlas: Option<(wgpu::Texture, wgpu::BindGroup, u32, u32)>,
     color_atlas: Option<(wgpu::Texture, wgpu::BindGroup, u32, u32)>,
@@ -642,6 +654,7 @@ impl Gpu {
             make("vs_quad", "fs_image", premul),
             make("vs_quad", "fs_native_outline", premul),
             make("vs_quad", "fs_shadow", premul),
+            make("vs_rect", "fs_clear", wgpu::BlendState::REPLACE),
         ];
         self.pipelines.push((format, p));
         self.pipelines.len() - 1
@@ -838,6 +851,7 @@ impl Gpu {
                     Pipe::TextSub => rp.set_pipeline(&pipes[2]),
                     Pipe::NativeOutline => rp.set_pipeline(&pipes[4]),
                     Pipe::Shadow => rp.set_pipeline(&pipes[5]),
+                    Pipe::Clear => rp.set_pipeline(&pipes[6]),
                     Pipe::Color => {
                         let Some((_, bind, ..)) = self.color_atlas.as_ref() else { continue };
                         rp.set_pipeline(&pipes[3]);
