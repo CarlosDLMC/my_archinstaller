@@ -1,30 +1,25 @@
-//! The running bar: Wayland objects, the event loop, one strip per output,
-//! redraws driven by frame callbacks (nothing is drawn while nothing changes).
+//! The running bar: Wayland objects, the event loop, the surfaces (a strip per
+//! output, the open card and its click catcher), redraws driven by frame
+//! callbacks - nothing is drawn while nothing changes.
 
 use std::collections::HashMap;
-use std::io::{Read, Write};
-use std::os::fd::AsRawFd;
-use std::os::unix::net::{UnixListener, UnixStream};
-use std::os::unix::process::CommandExt;
-use std::process::{Child, Command, Stdio};
 use std::ptr::NonNull;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle};
 use smithay_client_toolkit::{
     compositor::{CompositorHandler, CompositorState},
-    delegate_compositor, delegate_layer, delegate_output, delegate_pointer, delegate_registry, delegate_seat,
+    delegate_compositor, delegate_keyboard, delegate_layer, delegate_output, delegate_pointer, delegate_registry, delegate_seat,
+    delegate_shm,
     output::{OutputHandler, OutputState},
-    reexports::calloop::{
-        generic::Generic,
-        timer::{TimeoutAction, Timer},
-        EventLoop, Interest, LoopHandle, Mode, PostAction,
-    },
+    reexports::calloop::{EventLoop, LoopHandle, RegistrationToken},
     reexports::calloop_wayland_source::WaylandSource,
     reexports::protocols::wp::cursor_shape::v1::client::wp_cursor_shape_device_v1::{Shape, WpCursorShapeDeviceV1},
+    reexports::protocols::wp::viewporter::client::{wp_viewport::WpViewport, wp_viewporter::WpViewporter},
     registry::{ProvidesRegistryState, RegistryState},
     registry_handlers,
     seat::{
+        keyboard::{KeyEvent, KeyboardHandler, Keysym, Modifiers},
         pointer::{cursor_shape::CursorShapeManager, PointerEvent, PointerEventKind, PointerHandler},
         Capability, SeatHandler, SeatState,
     },
@@ -32,33 +27,53 @@ use smithay_client_toolkit::{
         wlr_layer::{Anchor, KeyboardInteractivity, Layer, LayerShell, LayerShellHandler, LayerSurface, LayerSurfaceConfigure},
         WaylandSurface,
     },
+    shm::{Shm, ShmHandler},
 };
 use wayland_client::{
-    globals::registry_queue_init,
-    protocol::{wl_output, wl_pointer::WlPointer, wl_seat::WlSeat, wl_surface},
-    Connection, Proxy, QueueHandle,
+    globals::{registry_queue_init, GlobalList},
+    protocol::{wl_keyboard::WlKeyboard, wl_output, wl_pointer::WlPointer, wl_seat::WlSeat, wl_surface},
+    Connection, Dispatch, Proxy, QueueHandle,
 };
 
 use crate::bar::{self, Action, Hit};
+use crate::cards::{self, OpenCard};
 use crate::gpu::{Gpu, Scene};
 use crate::services::{Mango, Services};
 use crate::text::Fonts;
 use crate::theme::Theme;
 
-pub struct Strip {
-    pub output: wl_output::WlOutput,
-    pub name: String,
+/// A layer surface drawn with the GPU.
+pub struct Win {
     pub layer: LayerSurface,
-    surface: Option<(wgpu::Surface<'static>, wgpu::SurfaceConfiguration)>,
+    gpu: Option<(wgpu::Surface<'static>, wgpu::SurfaceConfiguration)>,
     pub width: u32,
     pub height: u32,
-    pub screen_width: f32,
-    configured: bool,
+    pub configured: bool,
     pub dirty: bool,
     frame_pending: bool,
     scene: Scene,
+}
+
+impl Win {
+    pub fn new(layer: LayerSurface, width: u32, height: u32) -> Win {
+        Win { layer, gpu: None, width, height, configured: false, dirty: true, frame_pending: false, scene: Scene::new(1.0, 1.0) }
+    }
+}
+
+pub struct Strip {
+    pub output: wl_output::WlOutput,
+    pub name: String,
+    pub win: Win,
+    pub screen_width: f32,
+    pub screen_height: f32,
     pub hits: Vec<Hit>,
     pub pointer: Option<(f32, f32)>,
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum WinRef {
+    Strip(usize),
+    Card,
 }
 
 /// Output of a finished helper process, routed back by its tag.
@@ -75,22 +90,26 @@ pub struct App {
     registry: RegistryState,
     outputs: OutputState,
     seats: SeatState,
-    compositor: CompositorState,
-    layer_shell: LayerShell,
+    pub compositor: CompositorState,
+    pub layer_shell: LayerShell,
+    pub shm: Shm,
+    pub viewporter: Option<WpViewporter>,
     cursor_shapes: Option<CursorShapeManager>,
     pointer: Option<(WlPointer, Option<WpCursorShapeDeviceV1>)>,
+    keyboard: Option<WlKeyboard>,
     enter_serial: u32,
     hand: bool,
     /// The widget a button went down on: a click is a release on the same one.
-    pressed: Option<(usize, u32, Action)>,
+    pressed: Option<(WinRef, u32, Action)>,
     pub instance: wgpu::Instance,
     pub gpu: Option<Gpu>,
     pub fonts: Fonts,
     pub theme: Theme,
     pub strips: Vec<Strip>,
+    pub card: Option<OpenCard>,
     pub svc: Services,
-    running: HashMap<String, Instant>,
-    timers: HashMap<&'static str, smithay_client_toolkit::reexports::calloop::RegistrationToken>,
+    pub(crate) running: HashMap<String, Instant>,
+    pub(crate) timers: HashMap<&'static str, RegistrationToken>,
     pub exit: bool,
 }
 
@@ -106,6 +125,7 @@ impl App {
         if let Ok(t) = std::fs::read_to_string(crate::services::palette_path()) {
             theme.apply_json(&t);
         }
+        let viewporter = bind_viewporter(&globals, &qh);
         let mut app = App {
             conn: conn.clone(),
             qh: qh.clone(),
@@ -115,8 +135,11 @@ impl App {
             seats: SeatState::new(&globals, &qh),
             compositor: CompositorState::bind(&globals, &qh).expect("wl_compositor"),
             layer_shell: LayerShell::bind(&globals, &qh).expect("wlr-layer-shell"),
+            shm: Shm::bind(&globals, &qh).expect("wl_shm"),
+            viewporter,
             cursor_shapes: CursorShapeManager::bind(&globals, &qh).ok(),
             pointer: None,
+            keyboard: None,
             enter_serial: 0,
             hand: false,
             pressed: None,
@@ -125,6 +148,7 @@ impl App {
             fonts: Fonts::new(),
             theme,
             strips: Vec::new(),
+            card: None,
             svc: Services::default(),
             running: HashMap::new(),
             timers: HashMap::new(),
@@ -140,21 +164,22 @@ impl App {
 
     pub fn mark_all_dirty(&mut self) {
         for s in &mut self.strips {
-            s.dirty = true;
+            s.win.dirty = true;
+        }
+        if let Some(c) = &mut self.card {
+            c.win.dirty = true;
         }
     }
 
     fn create_strip(&mut self, output: wl_output::WlOutput) {
         let info = self.outputs.info(&output);
         let name = info.as_ref().and_then(|i| i.name.clone()).unwrap_or_default();
-        let screen_width = info
-            .as_ref()
-            .and_then(|i| i.logical_size.map(|s| s.0 as f32))
-            .or_else(|| info.as_ref().and_then(|i| i.modes.iter().find(|m| m.current).map(|m| m.dimensions.0 as f32)))
-            .unwrap_or(2560.0);
+        let current = info.as_ref().and_then(|i| i.modes.iter().find(|m| m.current).map(|m| m.dimensions));
+        let logical = info.as_ref().and_then(|i| i.logical_size);
+        let (sw, sh) = logical.or(current).map(|(w, h)| (w as f32, h as f32)).unwrap_or((2560.0, 1440.0));
         let surface = self.compositor.create_surface(&self.qh);
         let layer = self.layer_shell.create_layer_surface(&self.qh, surface, Layer::Top, Some("quickshell:bar"), Some(&output));
-        let height = bar::strip_height(screen_width);
+        let height = bar::strip_height(sw);
         layer.set_anchor(Anchor::TOP | Anchor::LEFT | Anchor::RIGHT);
         layer.set_size(0, height);
         layer.set_exclusive_zone(bar::exclusive_zone(height, self.svc.mango.game_mode));
@@ -163,15 +188,9 @@ impl App {
         self.strips.push(Strip {
             output,
             name,
-            layer,
-            surface: None,
-            width: 0,
-            height,
-            screen_width,
-            configured: false,
-            dirty: true,
-            frame_pending: false,
-            scene: Scene::new(1.0, 1.0),
+            win: Win::new(layer, 0, height),
+            screen_width: sw,
+            screen_height: sh,
             hits: Vec::new(),
             pointer: None,
         });
@@ -180,27 +199,47 @@ impl App {
     /// Game mode changes the gap the strip leaves for windows.
     pub fn update_exclusive_zones(&mut self) {
         for s in &self.strips {
-            s.layer.set_exclusive_zone(bar::exclusive_zone(s.height, self.svc.mango.game_mode));
-            s.layer.commit();
+            s.win.layer.set_exclusive_zone(bar::exclusive_zone(s.win.height, self.svc.mango.game_mode));
+            s.win.layer.commit();
         }
     }
 
-    fn ensure_surface(&mut self, i: usize) {
-        if self.strips[i].surface.is_some() {
+    pub fn win_mut(&mut self, w: WinRef) -> Option<&mut Win> {
+        match w {
+            WinRef::Strip(i) => self.strips.get_mut(i).map(|s| &mut s.win),
+            WinRef::Card => self.card.as_mut().map(|c| &mut c.win),
+        }
+    }
+
+    fn win_of(&self, surface: &wl_surface::WlSurface) -> Option<WinRef> {
+        if let Some(i) = self.strips.iter().position(|s| s.win.layer.wl_surface() == surface) {
+            return Some(WinRef::Strip(i));
+        }
+        if self.card.as_ref().map_or(false, |c| c.win.layer.wl_surface() == surface) {
+            return Some(WinRef::Card);
+        }
+        None
+    }
+
+    fn ensure_gpu(&mut self, w: WinRef) {
+        let conn = self.conn.clone();
+        let instance = self.instance.clone();
+        let need_gpu = self.gpu.is_none();
+        let Some(win) = self.win_mut(w) else { return };
+        if win.gpu.is_some() {
             return;
         }
-        let s = &self.strips[i];
-        let dpy = NonNull::new(self.conn.backend().display_ptr() as *mut _).unwrap();
-        let win = NonNull::new(s.layer.wl_surface().id().as_ptr() as *mut _).unwrap();
+        let dpy = NonNull::new(conn.backend().display_ptr() as *mut _).unwrap();
+        let wl = NonNull::new(win.layer.wl_surface().id().as_ptr() as *mut _).unwrap();
         let surface = unsafe {
-            self.instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
+            instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
                 raw_display_handle: RawDisplayHandle::Wayland(WaylandDisplayHandle::new(dpy)),
-                raw_window_handle: RawWindowHandle::Wayland(WaylandWindowHandle::new(win)),
+                raw_window_handle: RawWindowHandle::Wayland(WaylandWindowHandle::new(wl)),
             })
         }
         .expect("wgpu surface");
-        if self.gpu.is_none() {
-            self.gpu = Some(Gpu::new(Some(&surface), self.instance.clone()));
+        if need_gpu {
+            self.gpu = Some(Gpu::new(Some(&surface), instance));
         }
         let gpu = self.gpu.as_ref().unwrap();
         let caps = surface.get_capabilities(&gpu.adapter);
@@ -211,64 +250,84 @@ impl App {
         } else {
             caps.alpha_modes[0]
         };
+        let win = self.win_mut(w).unwrap();
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
-            width: s.width.max(1),
-            height: s.height.max(1),
+            width: win.width.max(1),
+            height: win.height.max(1),
             present_mode: wgpu::PresentMode::Fifo,
             desired_maximum_frame_latency: 2,
             alpha_mode,
             view_formats: vec![],
         };
-        surface.configure(&gpu.device, &config);
-        self.strips[i].surface = Some((surface, config));
+        surface.configure(&self.gpu.as_ref().unwrap().device, &config);
+        self.win_mut(w).unwrap().gpu = Some((surface, config));
     }
 
     pub fn redraw_dirty(&mut self) {
         for i in 0..self.strips.len() {
-            let s = &self.strips[i];
-            if s.configured && s.dirty && !s.frame_pending {
-                self.draw(i);
+            let w = &self.strips[i].win;
+            if w.configured && w.dirty && !w.frame_pending {
+                self.draw(WinRef::Strip(i));
+            }
+        }
+        if let Some(c) = &self.card {
+            if c.win.configured && c.win.dirty && !c.win.frame_pending {
+                self.draw(WinRef::Card);
             }
         }
     }
 
-    fn draw(&mut self, i: usize) {
-        self.ensure_surface(i);
+    fn draw(&mut self, w: WinRef) {
+        self.ensure_gpu(w);
+        let Some(win) = self.win_mut(w) else { return };
+        let (width, height) = (win.width, win.height);
+        let mut scene = std::mem::replace(&mut win.scene, Scene::new(1.0, 1.0));
+        scene.clear(width as f32, height as f32);
+        let animating = match w {
+            WinRef::Strip(i) => {
+                let s = &self.strips[i];
+                let ctx = bar::Ctx { width: width as f32, screen_width: s.screen_width, name: &s.name, pointer: s.pointer, open: self.card.as_ref().filter(|c| c.strip == i).map(|c| c.kind) };
+                let (hits, animating) = bar::draw(&mut scene, &mut self.fonts, &self.theme, &self.svc, &ctx);
+                self.strips[i].hits = hits;
+                animating
+            }
+            WinRef::Card => {
+                let gpu = self.gpu.as_mut().unwrap();
+                let card = self.card.as_mut().unwrap();
+                cards::draw(card, &mut scene, &mut self.fonts, gpu, &self.theme, &self.svc)
+            }
+        };
         let qh = self.qh.clone();
-        let s = &mut self.strips[i];
-        let (surface, config) = s.surface.as_mut().unwrap();
-        if config.width != s.width || config.height != s.height {
-            config.width = s.width.max(1);
-            config.height = s.height.max(1);
-            surface.configure(&self.gpu.as_ref().unwrap().device, config);
+        let device = self.gpu.as_ref().unwrap().device.clone();
+        let win = self.win_mut(w).unwrap();
+        let (surface, config) = win.gpu.as_mut().unwrap();
+        if config.width != width.max(1) || config.height != height.max(1) {
+            config.width = width.max(1);
+            config.height = height.max(1);
+            surface.configure(&device, config);
         }
         let format = config.format;
         let frame = match surface.get_current_texture() {
             Ok(f) => f,
             Err(_) => {
-                surface.configure(&self.gpu.as_ref().unwrap().device, config);
+                surface.configure(&device, config);
+                win.scene = scene;
                 return;
             }
         };
         let view = frame.texture.create_view(&Default::default());
-        s.scene.clear(s.width as f32, s.height as f32);
-        let ctx = bar::Ctx { width: s.width as f32, screen_width: s.screen_width, name: &s.name, pointer: s.pointer };
-        let (hits, animating) = bar::draw(&mut s.scene, &mut self.fonts, &self.theme, &self.svc, &ctx);
-        s.hits = hits;
-        let wl = s.layer.wl_surface();
+        let wl = win.layer.wl_surface().clone();
         wl.frame(&qh, wl.clone());
         let gpu = self.gpu.as_mut().unwrap();
-        gpu.render(&mut self.fonts, &mut s.scene, &view, format, (s.width, s.height), [0.0, 0.0, 0.0, 0.0]);
+        gpu.render(&mut self.fonts, &mut scene, &view, format, (width, height), [0.0, 0.0, 0.0, 0.0]);
         frame.present();
+        let win = self.win_mut(w).unwrap();
+        win.scene = scene;
         // Still animating: the next frame callback draws again.
-        s.dirty = animating;
-        s.frame_pending = true;
-    }
-
-    fn strip_of(&self, surface: &wl_surface::WlSurface) -> Option<usize> {
-        self.strips.iter().position(|s| s.layer.wl_surface() == surface)
+        win.dirty = animating;
+        win.frame_pending = true;
     }
 
     fn set_cursor(&mut self, hand: bool) {
@@ -281,211 +340,54 @@ impl App {
         }
     }
 
-    fn hit_at(&self, i: usize, x: f32, y: f32) -> Option<Action> {
-        self.strips[i].hits.iter().rev().find(|h| h.contains(x, y)).map(|h| h.action)
-    }
-
-    /// Runs `argv` with its stdout collected; `done` gets it when the process ends.
-    /// Children die with the bar (PR_SET_PDEATHSIG), as setpriv --pdeathsig does for the QML bar.
-    pub fn spawn(&mut self, tag: &str, argv: &[&str], done: fn(&mut App, ProcDone)) {
-        if self.running.contains_key(tag) {
-            return;
-        }
-        let mut cmd = Command::new(argv[0]);
-        cmd.args(&argv[1..]).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
-        unsafe {
-            cmd.pre_exec(|| {
-                libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM);
-                Ok(())
-            });
-        }
-        let Ok(mut child) = cmd.spawn() else {
-            done(self, ProcDone { tag: tag.into(), stdout: String::new(), ok: false });
-            return;
+    fn hit_at(&self, w: WinRef, x: f32, y: f32) -> Option<Action> {
+        let hits = match w {
+            WinRef::Strip(i) => &self.strips[i].hits,
+            WinRef::Card => &self.card.as_ref()?.hits,
         };
-        let stdout = child.stdout.take().unwrap();
-        let fd = stdout.as_raw_fd();
-        unsafe {
-            let fl = libc::fcntl(fd, libc::F_GETFL);
-            libc::fcntl(fd, libc::F_SETFL, fl | libc::O_NONBLOCK);
-        }
-        self.running.insert(tag.into(), Instant::now());
-        let tag = tag.to_string();
-        let mut buf = Vec::new();
-        let mut child: Option<Child> = Some(child);
-        let _ = self.handle.insert_source(Generic::new(stdout, Interest::READ, Mode::Level), move |_, out, app: &mut App| {
-            let mut chunk = [0u8; 4096];
-            loop {
-                match unsafe { out.get_mut() }.read(&mut chunk) {
-                    Ok(0) => {
-                        let ok = child.take().and_then(|mut c| c.wait().ok()).map_or(false, |s| s.success());
-                        app.running.remove(&tag);
-                        let stdout = String::from_utf8_lossy(&buf).into_owned();
-                        done(app, ProcDone { tag: tag.clone(), stdout, ok });
-                        return Ok(PostAction::Remove);
-                    }
-                    Ok(n) => buf.extend_from_slice(&chunk[..n]),
-                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => return Ok(PostAction::Continue),
-                    Err(_) => return Ok(PostAction::Remove),
+        hits.iter().rev().find(|h| h.contains(x, y)).map(|h| h.action)
+    }
+
+    fn set_pointer(&mut self, w: WinRef, p: Option<(f32, f32)>) {
+        match w {
+            WinRef::Strip(i) => self.strips[i].pointer = p,
+            WinRef::Card => {
+                if let Some(c) = &mut self.card {
+                    c.pointer = p;
                 }
             }
-        });
-    }
-
-    /// A long-running helper (nmcli monitor, udevadm monitor): `on_line` for each line.
-    pub fn spawn_lines(&mut self, argv: &[&str], on_line: fn(&mut App, &str)) {
-        let mut cmd = Command::new(argv[0]);
-        cmd.args(&argv[1..]).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
-        unsafe {
-            cmd.pre_exec(|| {
-                libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM);
-                Ok(())
-            });
-        }
-        let Ok(mut child) = cmd.spawn() else { return };
-        let stdout = child.stdout.take().unwrap();
-        let fd = stdout.as_raw_fd();
-        unsafe {
-            let fl = libc::fcntl(fd, libc::F_GETFL);
-            libc::fcntl(fd, libc::F_SETFL, fl | libc::O_NONBLOCK);
-        }
-        let mut buf = Vec::new();
-        let mut child = Some(child);
-        let _ = self.handle.insert_source(Generic::new(stdout, Interest::READ, Mode::Level), move |_, out, app: &mut App| {
-            let mut chunk = [0u8; 4096];
-            loop {
-                match unsafe { out.get_mut() }.read(&mut chunk) {
-                    Ok(0) => {
-                        if let Some(mut c) = child.take() {
-                            let _ = c.wait();
-                        }
-                        return Ok(PostAction::Remove);
-                    }
-                    Ok(n) => {
-                        buf.extend_from_slice(&chunk[..n]);
-                        while let Some(p) = buf.iter().position(|&b| b == b'\n') {
-                            let line: Vec<u8> = buf.drain(..=p).collect();
-                            on_line(app, String::from_utf8_lossy(&line[..line.len() - 1]).as_ref());
-                        }
-                    }
-                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => return Ok(PostAction::Continue),
-                    Err(_) => return Ok(PostAction::Remove),
-                }
-            }
-        });
-    }
-
-    /// Calls `ready` whenever `fd` (owned elsewhere) is readable.
-    pub fn watch_fd(&self, fd: std::os::fd::RawFd, ready: fn(&mut App)) {
-        let src = Generic::new(unsafe { smithay_client_toolkit::reexports::calloop::generic::FdWrapper::new(fd) }, Interest::READ, Mode::Level);
-        let _ = self.handle.insert_source(src, move |_, _, app: &mut App| {
-            ready(app);
-            Ok(PostAction::Continue)
-        });
-    }
-
-    /// Restarts a one-shot timer by name: a debounce (Timer.restart()).
-    pub fn debounce(&mut self, name: &'static str, delay: Duration, f: fn(&mut App)) {
-        if let Some(t) = self.timers.remove(name) {
-            self.handle.remove(t);
-        }
-        let tok = self.handle.insert_source(Timer::from_duration(delay), move |_, _, app: &mut App| {
-            app.timers.remove(name);
-            f(app);
-            TimeoutAction::Drop
-        });
-        if let Ok(t) = tok {
-            self.timers.insert(name, t);
         }
     }
 
-    pub fn is_running(&self, tag: &str) -> bool {
-        self.running.contains_key(tag)
-    }
-
-    /// Fire and forget (Quickshell.execDetached).
-    pub fn exec_detached(&self, argv: &[&str]) {
-        let mut cmd = Command::new(argv[0]);
-        cmd.args(&argv[1..]).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
-        unsafe {
-            cmd.pre_exec(|| {
-                libc::setsid();
-                Ok(())
-            });
-        }
-        if let Ok(mut c) = cmd.spawn() {
-            std::thread::spawn(move || {
-                let _ = c.wait();
-            });
+    fn pointer_of(&self, w: WinRef) -> Option<(f32, f32)> {
+        match w {
+            WinRef::Strip(i) => self.strips[i].pointer,
+            WinRef::Card => self.card.as_ref()?.pointer,
         }
     }
-
-    /// A repeating timer; `tick` returns false to stop it.
-    pub fn every(&self, period: Duration, tick: fn(&mut App) -> bool) {
-        let _ = self.handle.insert_source(Timer::from_duration(period), move |_, _, app| {
-            if tick(app) {
-                TimeoutAction::ToDuration(period)
-            } else {
-                TimeoutAction::Drop
-            }
-        });
-    }
-
-    pub fn after(&self, delay: Duration, f: fn(&mut App)) {
-        let _ = self.handle.insert_source(Timer::from_duration(delay), move |_, _, app| {
-            f(app);
-            TimeoutAction::Drop
-        });
-    }
-
-    /// Reads lines from a connected stream socket for as long as it is open.
-    pub fn watch_lines(&self, stream: UnixStream, on_line: fn(&mut App, &str)) {
-        let _ = stream.set_nonblocking(true);
-        let mut buf = Vec::new();
-        let _ = self.handle.insert_source(Generic::new(stream, Interest::READ, Mode::Level), move |_, s, app: &mut App| {
-            let mut chunk = [0u8; 16384];
-            loop {
-                match unsafe { s.get_mut() }.read(&mut chunk) {
-                    Ok(0) => return Ok(PostAction::Remove),
-                    Ok(n) => {
-                        buf.extend_from_slice(&chunk[..n]);
-                        while let Some(p) = buf.iter().position(|&b| b == b'\n') {
-                            let line: Vec<u8> = buf.drain(..=p).collect();
-                            on_line(app, String::from_utf8_lossy(&line[..line.len() - 1]).as_ref());
-                        }
-                    }
-                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => return Ok(PostAction::Continue),
-                    Err(_) => return Ok(PostAction::Remove),
-                }
-            }
-        });
-    }
-
-    pub fn listen_unix(&self, listener: UnixListener, on_conn: fn(&mut App, UnixStream)) {
-        let _ = listener.set_nonblocking(true);
-        let _ = self.handle.insert_source(Generic::new(listener, Interest::READ, Mode::Level), move |_, l, app: &mut App| {
-            while let Ok((c, _)) = l.accept() {
-                on_conn(app, c);
-            }
-            Ok(PostAction::Continue)
-        });
-    }
-
-
 }
 
-pub fn write_line(mut s: &UnixStream, line: &str) {
-    let _ = s.write_all(line.as_bytes());
+fn bind_viewporter(globals: &GlobalList, qh: &QueueHandle<App>) -> Option<WpViewporter> {
+    globals.bind::<WpViewporter, _, _>(qh, 1..=1, ()).ok()
+}
+
+impl Dispatch<WpViewporter, ()> for App {
+    fn event(_: &mut App, _: &WpViewporter, _: <WpViewporter as Proxy>::Event, _: &(), _: &Connection, _: &QueueHandle<App>) {}
+}
+
+impl Dispatch<WpViewport, ()> for App {
+    fn event(_: &mut App, _: &WpViewport, _: <WpViewport as Proxy>::Event, _: &(), _: &Connection, _: &QueueHandle<App>) {}
 }
 
 impl CompositorHandler for App {
     fn scale_factor_changed(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_surface::WlSurface, _: i32) {}
     fn transform_changed(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_surface::WlSurface, _: wl_output::Transform) {}
     fn frame(&mut self, _: &Connection, _: &QueueHandle<Self>, surface: &wl_surface::WlSurface, _: u32) {
-        if let Some(i) = self.strip_of(surface) {
-            self.strips[i].frame_pending = false;
-            if self.strips[i].dirty {
-                self.draw(i);
+        if let Some(w) = self.win_of(surface) {
+            let win = self.win_mut(w).unwrap();
+            win.frame_pending = false;
+            if win.dirty {
+                self.draw(w);
             }
         }
     }
@@ -506,35 +408,53 @@ impl OutputHandler for App {
             if let Some(n) = info.as_ref().and_then(|i| i.name.clone()) {
                 s.name = n;
             }
-            if let Some(w) = info.as_ref().and_then(|i| i.logical_size.map(|l| l.0 as f32)) {
-                s.screen_width = w;
+            if let Some((w, h)) = info.as_ref().and_then(|i| i.logical_size) {
+                s.screen_width = w as f32;
+                s.screen_height = h as f32;
             }
-            s.dirty = true;
+            s.win.dirty = true;
         }
     }
     fn output_destroyed(&mut self, _: &Connection, _: &QueueHandle<Self>, output: wl_output::WlOutput) {
-        self.strips.retain(|s| s.output != output);
+        if let Some(i) = self.strips.iter().position(|s| s.output == output) {
+            if self.card.as_ref().map_or(false, |c| c.strip == i) {
+                cards::close(self);
+            }
+            self.strips.remove(i);
+        }
     }
 }
 
 impl LayerShellHandler for App {
     fn closed(&mut self, _: &Connection, _: &QueueHandle<Self>, layer: &LayerSurface) {
-        self.strips.retain(|s| &s.layer != layer);
+        if self.card.as_ref().map_or(false, |c| &c.win.layer == layer || &c.catcher.layer == layer) {
+            cards::close(self);
+        }
+        self.strips.retain(|s| &s.win.layer != layer);
     }
     fn configure(&mut self, _: &Connection, _: &QueueHandle<Self>, layer: &LayerSurface, c: LayerSurfaceConfigure, _: u32) {
-        if let Some(i) = self.strips.iter().position(|s| &s.layer == layer) {
-            let s = &mut self.strips[i];
-            if c.new_size.0 > 0 {
-                s.width = c.new_size.0;
-            }
-            if c.new_size.1 > 0 {
-                s.height = c.new_size.1;
-            }
-            s.configured = true;
-            s.dirty = true;
-            if !s.frame_pending {
-                self.draw(i);
-            }
+        if self.card.as_ref().map_or(false, |k| &k.catcher.layer == layer) {
+            cards::configure_catcher(self, c.new_size);
+            return;
+        }
+        let w = if let Some(i) = self.strips.iter().position(|s| &s.win.layer == layer) {
+            WinRef::Strip(i)
+        } else if self.card.as_ref().map_or(false, |k| &k.win.layer == layer) {
+            WinRef::Card
+        } else {
+            return;
+        };
+        let win = self.win_mut(w).unwrap();
+        if c.new_size.0 > 0 {
+            win.width = c.new_size.0;
+        }
+        if c.new_size.1 > 0 {
+            win.height = c.new_size.1;
+        }
+        win.configured = true;
+        win.dirty = true;
+        if !win.frame_pending {
+            self.draw(w);
         }
     }
 }
@@ -551,6 +471,9 @@ impl SeatHandler for App {
                 self.pointer = Some((p, dev));
             }
         }
+        if cap == Capability::Keyboard && self.keyboard.is_none() {
+            self.keyboard = self.seats.get_keyboard(qh, &seat, None).ok();
+        }
     }
     fn remove_capability(&mut self, _: &Connection, _: &QueueHandle<Self>, _: WlSeat, cap: Capability) {
         if cap == Capability::Pointer {
@@ -561,55 +484,94 @@ impl SeatHandler for App {
                 p.release();
             }
         }
+        if cap == Capability::Keyboard {
+            if let Some(k) = self.keyboard.take() {
+                k.release();
+            }
+        }
     }
     fn remove_seat(&mut self, _: &Connection, _: &QueueHandle<Self>, _: WlSeat) {}
+}
+
+impl KeyboardHandler for App {
+    fn enter(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlKeyboard, _: &wl_surface::WlSurface, _: u32, _: &[u32], _: &[Keysym]) {}
+    fn leave(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlKeyboard, _: &wl_surface::WlSurface, _: u32) {}
+    fn press_key(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlKeyboard, _: u32, event: KeyEvent) {
+        if self.card.is_some() {
+            cards::key(self, event.keysym, event.utf8.as_deref());
+        }
+    }
+    fn release_key(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlKeyboard, _: u32, _: KeyEvent) {}
+    fn update_modifiers(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlKeyboard, _: u32, m: Modifiers, _: u32) {
+        if let Some(c) = &mut self.card {
+            c.shift = m.shift;
+        }
+    }
 }
 
 impl PointerHandler for App {
     fn pointer_frame(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlPointer, events: &[PointerEvent]) {
         for e in events {
-            let Some(i) = self.strip_of(&e.surface) else { continue };
+            if self.card.as_ref().map_or(false, |c| c.catcher.layer.wl_surface() == &e.surface) {
+                // CardSurface: a press anywhere outside the card dismisses it.
+                if let PointerEventKind::Enter { serial } = e.kind {
+                    self.enter_serial = serial;
+                    self.hand = true;
+                    self.set_cursor(false);
+                }
+                if let PointerEventKind::Press { .. } = e.kind {
+                    cards::close(self);
+                }
+                continue;
+            }
+            let Some(w) = self.win_of(&e.surface) else { continue };
             let (x, y) = (e.position.0 as f32, e.position.1 as f32);
             match e.kind {
                 PointerEventKind::Enter { serial } => {
                     self.enter_serial = serial;
-                    self.hand = false;
-                    self.strips[i].pointer = Some((x, y));
-                    self.strips[i].dirty = true;
-                    let hand = self.hit_at(i, x, y).is_some();
-                    if let Some((_, Some(dev))) = &self.pointer {
-                        dev.set_shape(serial, if hand { Shape::Pointer } else { Shape::Default });
-                    }
-                    self.hand = hand;
+                    self.hand = !self.hit_at(w, x, y).is_some();
+                    self.set_pointer(w, Some((x, y)));
+                    self.win_mut(w).unwrap().dirty = true;
+                    let hand = self.hit_at(w, x, y).is_some();
+                    self.set_cursor(hand);
                 }
                 PointerEventKind::Leave { .. } => {
-                    self.strips[i].pointer = None;
-                    self.strips[i].dirty = true;
+                    self.set_pointer(w, None);
+                    self.win_mut(w).unwrap().dirty = true;
                     self.pressed = None;
                 }
                 PointerEventKind::Motion { .. } => {
-                    let before = self.strips[i].pointer.and_then(|(px, py)| self.hit_at(i, px, py));
-                    self.strips[i].pointer = Some((x, y));
-                    let after = self.hit_at(i, x, y);
+                    let before = self.pointer_of(w).and_then(|(px, py)| self.hit_at(w, px, py));
+                    self.set_pointer(w, Some((x, y)));
+                    let after = self.hit_at(w, x, y);
                     if before != after {
-                        self.strips[i].dirty = true;
+                        self.win_mut(w).unwrap().dirty = true;
                     }
                     self.set_cursor(after.is_some());
                 }
                 PointerEventKind::Press { button, .. } => {
-                    self.pressed = self.hit_at(i, x, y).map(|a| (i, button, a));
+                    self.pressed = self.hit_at(w, x, y).map(|a| (w, button, a));
                 }
                 PointerEventKind::Release { button, .. } => {
                     // MouseArea.onClicked: released over the widget it was pressed on.
-                    if let Some((pi, pb, action)) = self.pressed.take() {
-                        if pi == i && pb == button && self.hit_at(i, x, y) == Some(action) {
-                            bar::activate(self, i, action, button);
+                    if let Some((pw, pb, action)) = self.pressed.take() {
+                        if pw == w && pb == button && self.hit_at(w, x, y) == Some(action) {
+                            match w {
+                                WinRef::Strip(i) => bar::activate(self, i, action, button),
+                                WinRef::Card => cards::activate(self, action, false),
+                            }
                         }
                     }
                 }
                 _ => {}
             }
         }
+    }
+}
+
+impl ShmHandler for App {
+    fn shm_state(&mut self) -> &mut Shm {
+        &mut self.shm
     }
 }
 
@@ -625,8 +587,10 @@ delegate_output!(App);
 delegate_layer!(App);
 delegate_seat!(App);
 delegate_pointer!(App);
+delegate_keyboard!(App);
+delegate_shm!(App);
 delegate_registry!(App);
 
-pub fn mango_of<'a>(app: &'a App) -> &'a Mango {
+pub fn mango_of(app: &App) -> &Mango {
     &app.svc.mango
 }

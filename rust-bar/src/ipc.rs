@@ -47,12 +47,31 @@ fn call(app: &mut App, target: &str, function: &str, args: &[&str]) -> Result<()
             app.mark_all_dirty();
             Ok(())
         }
+        ("cards", "toggle") => {
+            cards_toggle(app, args.first().copied().unwrap_or(""));
+            Ok(())
+        }
         ("layout", "next") => {
             layout_next(app);
             Ok(())
         }
         _ => Err(format!("no function {function} on target {target}")),
     }
+}
+
+/// BarCards.qml: SUPER+CTRL+<letter> opens a card on the focused monitor's
+/// strip with its first control focused; the same shortcut closes it.
+fn cards_toggle(app: &mut App, card: &str) {
+    use crate::bar::Action;
+    use crate::cards::CardKind;
+    let (kind, action) = match card {
+        "power" => (CardKind::Power, Action::Logo),
+        _ => return,
+    };
+    let focused = app.svc.mango.focused().map(|m| m.name.clone()).unwrap_or_default();
+    let Some(strip) = app.strips.iter().position(|s| s.name == focused).or(if app.strips.is_empty() { None } else { Some(0) }) else { return };
+    let Some(hit) = app.strips[strip].hits.iter().find(|h| h.action == action).cloned() else { return };
+    crate::cards::toggle(app, strip, kind, &hit, true);
 }
 
 /// LayoutState.cycle(): next keyboard layout (MRU order comes with the LayoutState port).

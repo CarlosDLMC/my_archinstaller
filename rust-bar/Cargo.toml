@@ -6,13 +6,14 @@ description = "The desktop bar, in Rust: same look and behaviour as the quickshe
 license = "MIT"
 
 [dependencies]
-smithay-client-toolkit = { version = "0.19", default-features = false, features = ["calloop"] }
+smithay-client-toolkit = { version = "0.19", default-features = false, features = ["calloop", "xkbcommon"] }
 wayland-client = "0.31"
 wayland-backend = { version = "0.3", features = ["client_system"] }
 raw-window-handle = "0.6"
 wgpu = { version = "25", default-features = false, features = ["vulkan", "wgsl"] }
 pollster = "0.4"
 swash = "0.2"
+zeno = "0.3"
 memmap2 = "0.9"
 serde_json = "1"
 png = "0.17"

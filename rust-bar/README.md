@@ -38,6 +38,8 @@ from libQt6Quick, uniforms and textures read back from Qt's GL calls):
 | `src/services.rs` | Mango.qml streams, SystemStats, clock, weather, DND, battery, Wi-Fi, VPN, agent check |
 | `src/pw.rs` | PipeWire: default sink/source volume and mute (needs clang to build) |
 | `src/bar.rs` | shell.qml's strip |
+| `src/cards.rs` | the dropdown cards: surfaces, notch, focus chain, keys, each card's content |
+| `src/anim.rs`, `src/runtime.rs` | easing/animated values; processes, timers, event-loop sources |
 | `src/ipc.rs` | `rust-bar msg <target> <function> [args]` - the keybinds' calls |
 
 ## Status
@@ -46,7 +48,10 @@ from libQt6Quick, uniforms and textures read back from Qt's GL calls):
 - [x] Strip: every widget - logo, workspaces, dividers, title, clock, bell (DND), weather pill, agent, CPU, memory, volume (PipeWire, event-driven), battery (sysfs), Wi-Fi (nmcli monitor), VPN, layout, ПУЛЬТ icon; matches the QML strip in the sandbox
 - [ ] Strip: Wi-Fi blink while connecting, colour emoji in titles, battery change events (netlink instead of udevadm)
 - [x] Animations (Qt easing curves, Behavior-style retargeting, looping pulse), cursor shape on hover changes, click-on-release
-- [ ] Cards (notch canvas, CardSurface, CardKeys) - calendar, weather, audio, network, power, battery, ПУЛЬТ, VPN, agent
+- [x] Card framework: card-sized layer + 1-pixel click catcher (wp_viewporter) instead of a full-screen surface, notch canvas (arcTo, QPainter-like fill), CardKeys focus chain, hover colour animations, `cards toggle` IPC
+- [x] Power card (logo) - matches the QML card; with it open: 21 MB PSS / 24 MB VRAM against 88 MB / 127 MB
+- [ ] Cards: calendar, weather, audio, network, battery, ПУЛЬТ, VPN, agent
+- [ ] The CRT power-off effect (quickshell/crt, run by CrtOff.sh before logout/reboot/shutdown)
 - [ ] Overlays: layout OSD, clipboard, polkit agent, power menu, screenshot, recording
 - [ ] Wallpaper carousel + reveal, overview
 - [ ] Switch-over: keybinds, scripts, installer build step

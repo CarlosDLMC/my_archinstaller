@@ -46,6 +46,8 @@ pub enum Action {
     Bell,
     Weather,
     Clock,
+    /// A control inside the open card (its index in the focus chain).
+    Card(u32),
 }
 
 #[derive(Clone, Debug)]
@@ -68,6 +70,8 @@ pub struct Ctx<'a> {
     pub screen_width: f32,
     pub name: &'a str,
     pub pointer: Option<(f32, f32)>,
+    /// The card open on this strip, if any.
+    pub open: Option<crate::cards::CardKind>,
 }
 
 struct Painter<'a> {
@@ -540,10 +544,21 @@ fn draw_center(p: &mut Painter, svc: &Services, x0: f32, width: f32, design_widt
     p.hit(pill_x, pill_y, pill_w, 26.0, Action::Clock);
 }
 
-pub fn close_all_popups(_app: &mut App) {}
+/// barWindow.closeAllPopups(): the focused window changed.
+pub fn close_all_popups(app: &mut App) {
+    crate::cards::close(app);
+}
 
-pub fn activate(app: &mut App, strip: usize, action: Action, _button: u32) {
+const BTN_LEFT: u32 = 0x110;
+
+pub fn activate(app: &mut App, strip: usize, action: Action, button: u32) {
+    let hit = app.strips[strip].hits.iter().find(|h| h.action == action).cloned();
     match action {
+        Action::Logo if button == BTN_LEFT => {
+            if let Some(h) = hit {
+                crate::cards::toggle(app, strip, crate::cards::CardKind::Power, &h, false);
+            }
+        }
         Action::Workspace(id) => {
             let name = app.strips[strip].name.clone();
             services::mango_dispatch(app, &format!("viewcrossmon,{id},^{name}$"));

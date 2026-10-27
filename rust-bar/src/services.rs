@@ -103,6 +103,8 @@ pub struct Services {
     pub audio: (crate::pw::Audio, Option<crate::pw::NodeInfo>),
     pub pw: Option<crate::pw::Pw>,
     pub agent_installed: bool,
+    /// The command PowerWidget.endSession() runs 250 ms after its card closes.
+    pub pending_end: String,
 }
 
 pub fn home() -> String {
