@@ -100,3 +100,13 @@ fn fs_native_outline(v: VOut) -> @location(0) vec4<f32> {
     let outline = clamp(clamp(n, 0.0, 1.0) - glyph, 0.0, 1.0);
     return (v.color2 * outline + v.color * glyph) * skew_cov(v);
 }
+
+// RectangularShadow: p0 = rectSize (half extents), blur; rect = the effect quad.
+@fragment
+fn fs_shadow(v: VOut) -> @location(0) vec4<f32> {
+    if (clipped(v)) { discard; }
+    let c = v.rect.xy + v.rect.zw * 0.5;
+    let box = length(max(abs(v.local - c) - v.p0.xy, vec2<f32>(0.0)));
+    let a = 1.0 - smoothstep(0.0, v.p0.z, box);
+    return v.color * a * a * skew_cov(v);
+}

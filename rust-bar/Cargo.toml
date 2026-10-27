@@ -24,6 +24,7 @@ pipewire = "0.9"
 dbus = { version = "0.9", default-features = false }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp", "pnm"] }
 unicode-linebreak = "0.1"
+resvg = { version = "0.45", default-features = false }
 
 [profile.release]
 opt-level = 3

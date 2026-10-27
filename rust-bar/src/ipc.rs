@@ -59,6 +59,15 @@ fn call(app: &mut App, target: &str, function: &str, args: &[&str]) -> Result<()
             crate::power::open_on(app, "E");
             Ok(())
         }
+        ("overview", f) => {
+            match f {
+                "toggle" => crate::overview::toggle(app),
+                "open" => crate::overview::open(app),
+                "close" => crate::overview::close(app),
+                _ => return Err(format!("no function {f} on overview")),
+            }
+            Ok(())
+        }
         ("wallpaper", f) => {
             match f {
                 "toggle" => crate::wallpaper::toggle(app),

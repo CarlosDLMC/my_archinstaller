@@ -35,6 +35,8 @@ pub enum OsdKind {
     Polkit,
     Clipboard,
     Wallpaper,
+    /// The overview: one per screen, by index.
+    Overview(u8),
 }
 
 /// Hover, focus and the animated values of an overlay's controls.
@@ -153,6 +155,8 @@ pub struct OpenParams {
     pub pos: Option<(i32, i32)>,
     /// Anchored to every edge (the size comes from the compositor).
     pub fill: bool,
+    /// The screen, when not the focused one.
+    pub output: Option<(WlOutput, f32, f32)>,
 }
 
 impl Osd {
@@ -202,7 +206,7 @@ pub fn show(app: &mut App, p: OpenParams) {
         }
         return;
     }
-    let Some((output, sw, sh)) = focused_output(app) else { return };
+    let Some((output, sw, sh)) = p.output.clone().or_else(|| focused_output(app)) else { return };
     let dim = p.dim.map(|_| {
         let surface = app.compositor.create_surface(&app.qh);
         let layer = app.layer_shell.create_layer_surface(&app.qh, surface, Layer::Overlay, Some(p.namespace), Some(&output));
@@ -275,6 +279,7 @@ pub fn hide(app: &mut App, kind: OsdKind) {
         OsdKind::Polkit => |app| destroy(app, OsdKind::Polkit),
         OsdKind::Clipboard => |app| destroy(app, OsdKind::Clipboard),
         OsdKind::Wallpaper => |app| destroy(app, OsdKind::Wallpaper),
+        OsdKind::Overview(_) => |_| {},
     };
     app.debounce(gone_timer(kind), Duration::from_millis(ms), gone);
 }
@@ -288,6 +293,7 @@ fn gone_timer(kind: OsdKind) -> &'static str {
         OsdKind::Polkit => "osd-gone-polkit",
         OsdKind::Clipboard => "osd-gone-clipboard",
         OsdKind::Wallpaper => "osd-gone-wallpaper",
+        OsdKind::Overview(_) => "osd-gone-overview",
     }
 }
 
@@ -389,6 +395,7 @@ pub fn draw(o: &mut Osd, scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, sv
         OsdKind::Polkit => crate::polkit::draw_osd(&mut ui, (px, py, pw, ph), svc),
         OsdKind::Clipboard => crate::clip::draw_osd(&mut ui, (px, py, pw, ph), svc),
         OsdKind::Wallpaper => crate::wallpaper::draw_osd(&mut ui, (px, py, pw, ph), svc),
+        OsdKind::Overview(i) => crate::overview::draw_osd(&mut ui, i, (px, py, pw, ph), svc),
     }
     let (hits, codes) = (std::mem::take(&mut ui.hits), std::mem::take(&mut ui.focus_codes));
     animating |= ui.animating;
@@ -408,6 +415,7 @@ pub fn click(app: &mut App, kind: OsdKind, action: Action, button: u32) {
         OsdKind::Polkit => {}
         OsdKind::Clipboard => crate::clip::click(app, action),
         OsdKind::Wallpaper => crate::wallpaper::click(app, action),
+        OsdKind::Overview(_) => {}
     }
 }
 
@@ -421,6 +429,7 @@ pub fn dim_clicked(app: &mut App, kind: OsdKind) {
         OsdKind::Polkit => {}
         OsdKind::Clipboard => crate::clip::close(app),
         OsdKind::Wallpaper => crate::wallpaper::close(app),
+        OsdKind::Overview(_) => {}
     }
 }
 
@@ -434,6 +443,16 @@ pub fn key(app: &mut App, kind: OsdKind, sym: smithay_client_toolkit::seat::keyb
         OsdKind::Polkit => crate::polkit::key(app, sym, utf8),
         OsdKind::Clipboard => crate::clip::key(app, sym, mods, utf8),
         OsdKind::Wallpaper => crate::wallpaper::key(app, sym, mods, utf8),
+        OsdKind::Overview(_) => crate::overview::key(app, sym),
+    }
+}
+
+/// Every pointer event on an overlay, before the generic hit handling; true
+/// when the overlay took it (the overview's drags).
+pub fn raw_pointer(app: &mut App, kind: OsdKind, ev: &smithay_client_toolkit::seat::pointer::PointerEventKind, x: f32, y: f32) -> bool {
+    match kind {
+        OsdKind::Overview(i) => crate::overview::pointer(app, i, ev, x, y),
+        _ => false,
     }
 }
 
@@ -452,13 +471,13 @@ pub fn hovered(app: &mut App, kind: OsdKind, action: Option<Action>) {
     match kind {
         OsdKind::Layout => {}
         OsdKind::Power => crate::power::hovered(app, action),
-        OsdKind::Shot | OsdKind::Record | OsdKind::Polkit | OsdKind::Clipboard | OsdKind::Wallpaper => {}
+        OsdKind::Shot | OsdKind::Record | OsdKind::Polkit | OsdKind::Clipboard | OsdKind::Wallpaper | OsdKind::Overview(_) => {}
     }
 }
 
 pub fn hover_changed(app: &mut App, kind: OsdKind, inside: bool) {
     match kind {
         OsdKind::Layout => crate::layout::osd_hover(app, inside),
-        OsdKind::Power | OsdKind::Shot | OsdKind::Record | OsdKind::Polkit | OsdKind::Clipboard | OsdKind::Wallpaper => {}
+        OsdKind::Power | OsdKind::Shot | OsdKind::Record | OsdKind::Polkit | OsdKind::Clipboard | OsdKind::Wallpaper | OsdKind::Overview(_) => {}
     }
 }

@@ -193,7 +193,7 @@ fn drop_textures(app: &mut App) {
 fn show(app: &mut App) {
     let Some((_, sw, sh)) = osd::focused_output(app) else { return };
     let (w, h) = (px(820.0), px(480.0));
-    osd::show(app, OpenParams { kind: OsdKind::Clipboard, size: (w as u32, h as u32), panel: (0.0, 0.0, w, h), dim: Some(Color::qt_rgba(0.0, 0.0, 0.0, 0.45)), keyboard: true, namespace: "quickshell", fade_ms: FADE_MS, min_scale: 0.97, fade_easing: crate::anim::Easing::Linear, pos: Some((ac(sw, w) as i32, ac(sh, h) as i32)), fill: false });
+    osd::show(app, OpenParams { kind: OsdKind::Clipboard, size: (w as u32, h as u32), panel: (0.0, 0.0, w, h), dim: Some(Color::qt_rgba(0.0, 0.0, 0.0, 0.45)), keyboard: true, namespace: "quickshell", fade_ms: FADE_MS, min_scale: 0.97, fade_easing: crate::anim::Easing::Linear, pos: Some((ac(sw, w) as i32, ac(sh, h) as i32)), fill: false, output: None });
 }
 
 /// The model was replaced: ListView makes every delegate anew.

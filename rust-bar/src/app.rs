@@ -692,6 +692,15 @@ impl PointerHandler for App {
                 continue;
             }
             let Some(w) = self.win_of(&e.surface) else { continue };
+            if let WinRef::Osd(k) = w {
+                let (x, y) = (e.position.0 as f32, e.position.1 as f32);
+                if let PointerEventKind::Enter { serial } = e.kind {
+                    self.enter_serial = serial;
+                }
+                if crate::osd::raw_pointer(self, k, &e.kind, x, y) {
+                    continue;
+                }
+            }
             if let WinRef::Reveal(_) = w {
                 continue;
             }

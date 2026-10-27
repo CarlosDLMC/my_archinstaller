@@ -15,6 +15,7 @@ mod ipc;
 mod layout;
 mod network_card;
 mod osd;
+mod overview;
 mod polkit;
 mod power;
 mod pult;

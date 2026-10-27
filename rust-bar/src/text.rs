@@ -326,7 +326,7 @@ pub struct Fonts {
     by_file: HashMap<(String, u32), u16>,
     fallback: HashMap<(FontKey, char), u16>,
     glyphs: HashMap<(u16, GlyphId, bool), Option<DfGlyph>>,
-    native: HashMap<(u16, GlyphId, i64, u8), Option<NativeGlyph>>,
+    native: HashMap<(u16, GlyphId, i64, u8, u8), Option<NativeGlyph>>,
     library: ft::FT_Library,
     scale: ScaleContext,
     pub atlas: Atlas,
@@ -886,17 +886,23 @@ impl Fonts {
     /// 8-bit (gray) glyph cache: light hinting target, outline translated by
     /// the subpixel position, rendered in normal mode.
     pub fn native_glyph(&mut self, face: u16, gid: GlyphId, size: f32, quarter: u8) -> Option<NativeGlyph> {
+        self.native_glyph_hinted(face, gid, size, quarter, 0)
+    }
+
+    /// The same with Font.hintingPreference: 0 default (light), 1 full
+    /// (FT_LOAD_TARGET_NORMAL), 2 none (FT_LOAD_NO_HINTING).
+    pub fn native_glyph_hinted(&mut self, face: u16, gid: GlyphId, size: f32, quarter: u8, hint: u8) -> Option<NativeGlyph> {
         let size26 = (size * 64.0).round() as i64;
-        let key = (face, gid, size26, quarter);
+        let key = (face, gid, size26, quarter, hint);
         if let Some(g) = self.native.get(&key) {
             return *g;
         }
-        let g = unsafe { self.rasterise(face, gid, size26, quarter) };
+        let g = unsafe { self.rasterise(face, gid, size26, quarter, hint) };
         self.native.insert(key, g);
         g
     }
 
-    unsafe fn rasterise(&mut self, face: u16, gid: GlyphId, size26: i64, quarter: u8) -> Option<NativeGlyph> {
+    unsafe fn rasterise(&mut self, face: u16, gid: GlyphId, size26: i64, quarter: u8, hint: u8) -> Option<NativeGlyph> {
         let f = &mut self.faces[face as usize];
         if f.ft_face.is_none() {
             let mut fc: ft::FT_Face = std::ptr::null_mut();
@@ -907,7 +913,11 @@ impl Fonts {
         }
         let fc = f.ft_face.unwrap();
         ft::FT_Set_Char_Size(fc, size26 as ft::FT_F26Dot6, size26 as ft::FT_F26Dot6, 72, 72);
-        let flags = native_load_flags();
+        let flags = match hint {
+            1 => (ft::FT_LOAD_DEFAULT | ft::FT_LOAD_TARGET_NORMAL) as i32,
+            2 => (ft::FT_LOAD_DEFAULT | ft::FT_LOAD_NO_HINTING) as i32,
+            _ => native_load_flags(),
+        };
         if ft::FT_Load_Glyph(fc, gid as u32, flags) != 0 {
             return None;
         }

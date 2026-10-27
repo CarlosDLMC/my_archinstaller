@@ -1,0 +1,878 @@
+//! The overview (SUPER A; quickshell bar/overview): every screen shows its
+//! ten workspaces as a 5 x 2 grid with a still picture of each window and its
+//! app icon. Click a workspace to go there, a window to focus it, middle-click
+//! to close it; drag a window to another workspace (or onto a neighbour to
+//! swap); arrows walk the workspaces; Esc or Return leave.
+
+use std::collections::{HashMap, HashSet};
+use std::io::{Read, Write};
+use std::os::fd::AsRawFd;
+use std::os::unix::net::UnixStream;
+
+use smithay_client_toolkit::reexports::calloop::RegistrationToken;
+use smithay_client_toolkit::seat::pointer::PointerEventKind;
+
+use crate::anim::Easing;
+use crate::app::App;
+use crate::bar::{ac, Action};
+use crate::cards::Ui;
+use crate::color::Color;
+use crate::gpu::TextStyle;
+use crate::osd::{self, OpenParams, OsdKind, OsdState};
+use crate::services::{self, Monitor, Services};
+use crate::text::FontKey;
+use crate::theme;
+
+const SCALE: f32 = 0.16;
+const ROWS: i64 = 2;
+const COLS: i64 = 5;
+const SPACING: f32 = 5.0;
+/// Appearance.animation: elementMoveEnter (windows) and elementMoveFast (the frame).
+const ENTER: Easing = Easing::Bezier(0.05, 0.7, 0.1, 1.0);
+const FAST: Easing = Easing::Bezier(0.34, 0.8, 0.34, 1.0);
+const MAIN: FontKey = FontKey { family: theme::FONT_CONTENT, bold: false, plain: false };
+const NUMBER: FontKey = FontKey { family: theme::FONT, bold: false, plain: false };
+
+#[derive(Clone, Debug, Default)]
+pub struct Client {
+    pub id: i64,
+    pub title: String,
+    pub appid: String,
+    pub monitor: String,
+    pub tags: Vec<i64>,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub floating: bool,
+    pub global: bool,
+    pub focused: bool,
+    pub minimized: bool,
+    pub xwayland: bool,
+    pub group: bool,
+    pub group_focus: bool,
+    pub fullscreen: bool,
+    pub maximized: bool,
+    pub scratchpad: bool,
+    pub toplevel: String,
+}
+
+impl Client {
+    fn ws(&self) -> i64 {
+        self.tags.first().copied().unwrap_or(0)
+    }
+}
+
+#[derive(Clone, Copy)]
+struct Tex {
+    id: u32,
+}
+
+/// A press on a window: where it was grabbed, and whether it became a drag.
+struct Press {
+    screen: u8,
+    id: i64,
+    button: u32,
+    start: (f32, f32),
+    grab: (f32, f32),
+    pos: (f32, f32),
+    dragging: bool,
+}
+
+#[derive(Default)]
+pub struct Overview {
+    pub open: bool,
+    clients: Vec<Client>,
+    watch: Option<(UnixStream, Option<RegistrationToken>, Vec<u8>)>,
+    shots_pending: bool,
+    shot_gen: u32,
+    previews: HashMap<i64, Tex>,
+    preview_loading: HashSet<i64>,
+    icons: HashMap<(String, u32), Option<Tex>>,
+    icon_loading: HashSet<(String, u32)>,
+    desktop: Option<HashMap<String, String>>,
+    icon_paths: HashMap<String, Option<String>>,
+    hovered: Option<(u8, i64)>,
+    press: Option<Press>,
+    drop_ws: Option<(u8, i64)>,
+}
+
+fn shot_dir() -> String {
+    format!("{}/quickshell-overview", std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into()))
+}
+
+// ---- open / close ----
+
+pub fn toggle(app: &mut App) {
+    if app.svc.overview.open {
+        close(app);
+    } else {
+        open(app);
+    }
+}
+
+pub fn open(app: &mut App) {
+    if app.svc.overview.open {
+        return;
+    }
+    app.svc.overview.open = true;
+    app.svc.overview.shots_pending = true;
+    app.svc.overview_screens = app.strips.iter().map(|s| s.name.clone()).collect();
+    let outputs: Vec<_> = app.strips.iter().map(|s| (s.output.clone(), s.screen_width, s.screen_height)).collect();
+    for (i, out) in outputs.into_iter().enumerate() {
+        osd::show(app, OpenParams { kind: OsdKind::Overview(i as u8), size: (0, 0), panel: (0.0, 0.0, 0.0, 0.0), dim: None, keyboard: true, namespace: "quickshell:overview", fade_ms: 0, min_scale: 1.0, fade_easing: Easing::Linear, pos: None, fill: true, output: Some(out) });
+    }
+    watch(app);
+}
+
+pub fn close(app: &mut App) {
+    if !app.svc.overview.open {
+        return;
+    }
+    let o = &mut app.svc.overview;
+    o.open = false;
+    o.press = None;
+    o.hovered = None;
+    o.drop_ws = None;
+    if let Some((_, Some(t), _)) = o.watch.take() {
+        app.unwatch(t);
+    }
+    app.osds.retain(|o| !matches!(o.kind, OsdKind::Overview(_)));
+    let ids: Vec<u32> = app.svc.overview.previews.drain().map(|(_, t)| t.id).chain(app.svc.overview.icons.drain().filter_map(|(_, t)| t.map(|t| t.id))).collect();
+    app.svc.overview.preview_loading.clear();
+    app.svc.overview.icon_loading.clear();
+    if let Some(gpu) = app.gpu.as_mut() {
+        for id in ids {
+            gpu.drop_image(id);
+        }
+    }
+    unsafe { libc::malloc_trim(0) };
+}
+
+fn redraw(app: &mut App) {
+    for o in app.osds.iter_mut().filter(|o| matches!(o.kind, OsdKind::Overview(_))) {
+        o.win.dirty = true;
+    }
+}
+
+/// MangoData: `watch all-clients` on mango's socket while open.
+fn watch(app: &mut App) {
+    let Ok(path) = std::env::var("MANGO_INSTANCE_SIGNATURE") else { return };
+    let Ok(mut s) = UnixStream::connect(&path) else { return };
+    let _ = s.write_all(b"watch all-clients\n");
+    let _ = s.set_nonblocking(true);
+    let token = app.watch_fd(s.as_raw_fd(), |app| {
+        let mut lines = Vec::new();
+        if let Some((s, _, buf)) = app.svc.overview.watch.as_mut() {
+            let mut chunk = [0u8; 65536];
+            loop {
+                match s.read(&mut chunk) {
+                    Ok(0) => break,
+                    Ok(n) => buf.extend_from_slice(&chunk[..n]),
+                    Err(_) => break,
+                }
+            }
+            while let Some(p) = buf.iter().position(|&b| b == b'\n') {
+                let l: Vec<u8> = buf.drain(..=p).collect();
+                lines.push(String::from_utf8_lossy(&l[..l.len() - 1]).into_owned());
+            }
+        }
+        for l in lines {
+            on_clients(app, &l);
+        }
+    });
+    app.svc.overview.watch = Some((s, token, Vec::new()));
+}
+
+fn on_clients(app: &mut App, line: &str) {
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else { return };
+    let Some(list) = v.get("clients").and_then(|c| c.as_array()) else { return };
+    let b = |o: &serde_json::Value, k: &str| o.get(k).and_then(|x| x.as_bool()).unwrap_or(false);
+    let f = |o: &serde_json::Value, k: &str| o.get(k).and_then(|x| x.as_f64()).unwrap_or(0.0) as f32;
+    let s = |o: &serde_json::Value, k: &str| o.get(k).map(|x| x.as_str().map(String::from).unwrap_or_else(|| if x.is_null() { String::new() } else { x.to_string() })).unwrap_or_default();
+    app.svc.overview.clients = list
+        .iter()
+        .map(|o| Client {
+            id: o.get("id").and_then(|x| x.as_i64()).unwrap_or(0),
+            title: s(o, "title"),
+            appid: s(o, "appid"),
+            monitor: s(o, "monitor"),
+            tags: o.get("tags").and_then(|t| t.as_array()).map(|a| a.iter().filter_map(|x| x.as_i64()).collect()).unwrap_or_default(),
+            x: f(o, "x"),
+            y: f(o, "y"),
+            width: f(o, "width"),
+            height: f(o, "height"),
+            floating: b(o, "is_floating"),
+            global: b(o, "is_global"),
+            focused: b(o, "is_focused"),
+            minimized: b(o, "is_minimized"),
+            xwayland: b(o, "is_xwayland"),
+            group: b(o, "is_group"),
+            group_focus: b(o, "is_group_focus"),
+            fullscreen: b(o, "is_fullscreen"),
+            maximized: b(o, "is_maximized"),
+            scratchpad: b(o, "is_scratchpad"),
+            toplevel: s(o, "foreign_toplevel_id"),
+        })
+        .collect();
+    if std::mem::take(&mut app.svc.overview.shots_pending) {
+        take_shots(app);
+    }
+    load_icons(app);
+    redraw(app);
+}
+
+/// overview-shots.sh: one still picture per window, then shotGeneration++.
+fn take_shots(app: &mut App) {
+    let script = format!("{}/.config/quickshell/bar/scripts/overview-shots.sh", services::home());
+    let mut args = vec![script, shot_dir()];
+    for w in &app.svc.overview.clients {
+        if !w.toplevel.is_empty() && w.toplevel != "0" && !w.minimized && !(w.group && !w.group_focus) {
+            args.push(format!("{}:{}:{}x{}", w.id, w.toplevel, w.width as i64, w.height as i64));
+        }
+    }
+    let argv: Vec<&str> = args.iter().map(String::as_str).collect();
+    app.spawn("overview-shots", &argv, |app, _| {
+        let o = &mut app.svc.overview;
+        o.shot_gen += 1;
+        if !o.open {
+            return;
+        }
+        let ids: Vec<i64> = o.clients.iter().map(|c| c.id).collect();
+        for id in ids {
+            if app.svc.overview.preview_loading.insert(id) {
+                let path = format!("{}/{id}.ppm", shot_dir());
+                app.background(move || (id, decode(&path)), |app, (id, img)| {
+                    app.svc.overview.preview_loading.remove(&id);
+                    let Some((w, h, rgba)) = img else { return };
+                    if !app.svc.overview.open {
+                        return;
+                    }
+                    let Some(gpu) = app.gpu.as_mut() else { return };
+                    let t = Tex { id: gpu.add_image(w, h, &rgba, true) };
+                    if let Some(old) = app.svc.overview.previews.insert(id, t) {
+                        gpu.drop_image(old.id);
+                    }
+                    redraw(app);
+                });
+            }
+        }
+    });
+}
+
+fn decode(path: &str) -> Option<(u32, u32, Vec<u8>)> {
+    let img = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?.decode().ok()?.to_rgba8();
+    let (w, h) = img.dimensions();
+    Some((w, h, img.into_raw()))
+}
+
+// ---- icons: DesktopEntries.heuristicLookup + Quickshell.iconPath ----
+
+/// Desktop entries by id (and lowercase id) and by StartupWMClass: their Icon.
+fn desktop_index() -> HashMap<String, String> {
+    let mut dirs = vec![std::env::var("XDG_DATA_HOME").unwrap_or_else(|_| format!("{}/.local/share", services::home()))];
+    dirs.extend(std::env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/local/share:/usr/share".into()).split(':').map(String::from));
+    let mut by_id: HashMap<String, String> = HashMap::new();
+    let mut by_class: HashMap<String, String> = HashMap::new();
+    for d in dirs.iter().rev() {
+        let root = format!("{d}/applications");
+        let mut stack = vec![root.clone()];
+        while let Some(dir) = stack.pop() {
+            let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+            for e in rd.flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    stack.push(p.to_string_lossy().into_owned());
+                    continue;
+                }
+                let ps = p.to_string_lossy().into_owned();
+                let Some(rel) = ps.strip_prefix(&format!("{root}/")).and_then(|r| r.strip_suffix(".desktop")) else { continue };
+                let id = rel.replace('/', "-");
+                let Ok(text) = std::fs::read_to_string(&p) else { continue };
+                let mut in_entry = false;
+                let (mut icon, mut class) = (String::new(), String::new());
+                for l in text.lines() {
+                    let l = l.trim();
+                    if l.starts_with('[') {
+                        in_entry = l == "[Desktop Entry]";
+                        continue;
+                    }
+                    if !in_entry {
+                        continue;
+                    }
+                    if let Some(v) = l.strip_prefix("Icon=") {
+                        icon = v.trim().into();
+                    } else if let Some(v) = l.strip_prefix("StartupWMClass=") {
+                        class = v.trim().into();
+                    }
+                }
+                if icon.is_empty() {
+                    continue;
+                }
+                by_id.insert(id.clone(), icon.clone());
+                by_id.entry(format!("lc:{}", id.to_lowercase())).or_insert(icon.clone());
+                if !class.is_empty() {
+                    by_class.entry(format!("wm:{class}")).or_insert(icon.clone());
+                    by_class.entry(format!("wmlc:{}", class.to_lowercase())).or_insert(icon);
+                }
+            }
+        }
+    }
+    by_id.extend(by_class);
+    by_id
+}
+
+fn icon_name(idx: &HashMap<String, String>, appid: &str) -> String {
+    if appid.is_empty() {
+        return "application-x-executable".into();
+    }
+    for k in [appid.to_string(), format!("lc:{}", appid.to_lowercase()), format!("wm:{appid}"), format!("wmlc:{}", appid.to_lowercase())] {
+        if let Some(i) = idx.get(&k) {
+            return i.clone();
+        }
+    }
+    appid.into()
+}
+
+/// The theme qt6ct gives Qt, then its Inherits chain, then hicolor.
+fn theme_chain() -> Vec<String> {
+    let home = services::home();
+    let conf = std::fs::read_to_string(format!("{home}/.config/qt6ct/qt6ct.conf")).unwrap_or_default();
+    let first = conf.lines().find_map(|l| l.strip_prefix("icon_theme=")).unwrap_or("hicolor").to_string();
+    let mut out = Vec::new();
+    let mut queue = vec![first];
+    while let Some(t) = queue.pop() {
+        if out.contains(&t) {
+            continue;
+        }
+        if let Some(dir) = icon_base_dirs().iter().map(|b| format!("{b}/{t}")).find(|d| std::path::Path::new(&format!("{d}/index.theme")).exists()) {
+            let idx = std::fs::read_to_string(format!("{dir}/index.theme")).unwrap_or_default();
+            if let Some(inh) = idx.lines().find_map(|l| l.strip_prefix("Inherits=")) {
+                for i in inh.split(',').rev() {
+                    queue.push(i.trim().into());
+                }
+            }
+        }
+        out.push(t);
+    }
+    if !out.contains(&"hicolor".to_string()) {
+        out.push("hicolor".into());
+    }
+    out
+}
+
+fn icon_base_dirs() -> Vec<String> {
+    let home = services::home();
+    let mut v = vec![format!("{home}/.icons"), std::env::var("XDG_DATA_HOME").map(|d| format!("{d}/icons")).unwrap_or_else(|_| format!("{home}/.local/share/icons"))];
+    v.extend(std::env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/local/share:/usr/share".into()).split(':').map(|d| format!("{d}/icons")));
+    v
+}
+
+/// QIcon::fromTheme(name): the first theme that has it - scalable first,
+/// else the closest PNG at or above the size; /usr/share/pixmaps last.
+fn find_icon(name: &str, size: u32) -> Option<String> {
+    if name.starts_with('/') {
+        return std::path::Path::new(name).exists().then(|| name.to_string());
+    }
+    for theme in theme_chain() {
+        let mut best: Option<(i64, String)> = None;
+        for base in icon_base_dirs() {
+            let root = format!("{base}/{theme}");
+            let Ok(top) = std::fs::read_dir(&root) else { continue };
+            for a in top.flatten().filter(|e| e.path().is_dir()) {
+                let Ok(sub) = std::fs::read_dir(a.path()) else { continue };
+                for b in sub.flatten().filter(|e| e.path().is_dir()) {
+                    for ext in ["svg", "png"] {
+                        let f = b.path().join(format!("{name}.{ext}"));
+                        if !f.exists() {
+                            continue;
+                        }
+                        let dirs = format!("{}/{}", a.file_name().to_string_lossy(), b.file_name().to_string_lossy());
+                        let px = dirs.split(['/', 'x', '@']).filter_map(|p| p.parse::<i64>().ok()).max();
+                        let score = if ext == "svg" { 0 } else { px.map_or(10_000, |p| if p >= size as i64 { p - size as i64 } else { 5_000 + size as i64 - p }) };
+                        if best.as_ref().map_or(true, |(s, _)| score < *s) {
+                            best = Some((score, f.to_string_lossy().into_owned()));
+                        }
+                    }
+                }
+            }
+        }
+        if let Some((_, p)) = best {
+            return Some(p);
+        }
+    }
+    ["png", "svg", "xpm"].iter().map(|e| format!("/usr/share/pixmaps/{name}.{e}")).find(|p| std::path::Path::new(p).exists())
+}
+
+/// The icon at size x size, premultiplied RGBA.
+fn render_icon(path: &str, size: u32) -> Option<(u32, u32, Vec<u8>)> {
+    let size = size.max(1);
+    if path.ends_with(".svg") {
+        let data = std::fs::read(path).ok()?;
+        let tree = resvg::usvg::Tree::from_data(&data, &resvg::usvg::Options::default()).ok()?;
+        let mut pm = resvg::tiny_skia::Pixmap::new(size, size)?;
+        let s = tree.size();
+        let k = (size as f32 / s.width()).min(size as f32 / s.height());
+        let (dx, dy) = ((size as f32 - s.width() * k) / 2.0, (size as f32 - s.height() * k) / 2.0);
+        resvg::render(&tree, resvg::tiny_skia::Transform::from_row(k, 0.0, 0.0, k, dx, dy), &mut pm.as_mut());
+        return Some((size, size, pm.take()));
+    }
+    let img = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?.decode().ok()?.to_rgba8();
+    let img = image::imageops::resize(&img, size, size, image::imageops::FilterType::Triangle);
+    let mut rgba = img.into_raw();
+    for p in rgba.chunks_exact_mut(4) {
+        let a = p[3] as u32;
+        for v in &mut p[..3] {
+            *v = ((*v as u32 * a + 127) / 255) as u8;
+        }
+    }
+    Some((size, size, rgba))
+}
+
+/// The icons the open overview needs, rendered off the main thread.
+fn load_icons(app: &mut App) {
+    if app.svc.overview.desktop.is_none() {
+        app.svc.overview.desktop = Some(desktop_index());
+    }
+    let mut jobs = Vec::new();
+    let monitors = app.svc.mango.monitors.clone();
+    for m in &monitors {
+        let g = geo(m);
+        for (c, _) in visible(&app.svc.overview, m, &g) {
+            let size = icon_size(&c, m, &g).round() as u32;
+            let name = icon_name(app.svc.overview.desktop.as_ref().unwrap(), &c.appid);
+            let key = (name.clone(), size);
+            if app.svc.overview.icons.contains_key(&key) || app.svc.overview.icon_loading.contains(&key) {
+                continue;
+            }
+            let path = match app.svc.overview.icon_paths.get(&name) {
+                Some(p) => p.clone(),
+                None => {
+                    let p = find_icon(&name, size).or_else(|| find_icon("application-x-executable", size)).or_else(|| find_icon("image-missing", size));
+                    app.svc.overview.icon_paths.insert(name.clone(), p.clone());
+                    p
+                }
+            };
+            app.svc.overview.icon_loading.insert(key.clone());
+            jobs.push((key, path));
+        }
+    }
+    for (key, path) in jobs {
+        app.background(move || (key.clone(), path.and_then(|p| render_icon(&p, key.1))), |app, (key, img)| {
+            app.svc.overview.icon_loading.remove(&key);
+            if !app.svc.overview.open {
+                return;
+            }
+            let tex = match (img, app.gpu.as_mut()) {
+                (Some((w, h, rgba)), Some(gpu)) => Some(Tex { id: gpu.add_image(w, h, &rgba, false) }),
+                _ => None,
+            };
+            app.svc.overview.icons.insert(key, tex);
+            redraw(app);
+        });
+    }
+}
+
+// ---- layout ----
+
+/// The panel's geometry on one monitor (whole pixels, as the layouts snap it).
+struct Geo {
+    reserved_top: f32,
+    ws_w: f32,
+    ws_h: f32,
+    cell_w: f32,
+    cell_h: f32,
+    root: (f32, f32, f32, f32),
+    grid: (f32, f32),
+}
+
+fn geo(m: &Monitor) -> Geo {
+    let (w, h) = (m.width, m.height);
+    let reserved_top = (34.0 * (w / 2560.0).clamp(0.9, 1.0)).round();
+    let (ws_w, ws_h) = (w * SCALE, (h - reserved_top) * SCALE);
+    let (cell_w, cell_h) = (ws_w.ceil(), ws_h.ceil());
+    let grid_w = COLS as f32 * cell_w + (COLS - 1) as f32 * SPACING;
+    let grid_h = ROWS as f32 * cell_h + (ROWS - 1) as f32 * SPACING;
+    let (rw, rh) = (grid_w + 40.0, grid_h + 40.0);
+    let root = (ac(w / m.scale.max(0.1), rw), 100.0, rw, rh);
+    Geo { reserved_top, ws_w, ws_h, cell_w, cell_h, root, grid: (root.0 + 20.0, root.1 + 20.0) }
+}
+
+fn active_ws(m: &Monitor) -> i64 {
+    m.active_tags.first().copied().unwrap_or(1)
+}
+
+fn group(m: &Monitor) -> i64 {
+    (active_ws(m) - 1) / (ROWS * COLS)
+}
+
+/// retileHidden(): a hidden workspace's tiled windows laid out afresh, as
+/// mango would (halves, alternating), unless they already fill it.
+fn retile(list: Vec<Client>, m: &Monitor, g: &Geo) -> Vec<Client> {
+    let gap = 12.0;
+    let area = (m.x + gap, m.y + g.reserved_top, m.width - 2.0 * gap, m.height - g.reserved_top - gap);
+    let mut by_ws: HashMap<i64, Vec<usize>> = HashMap::new();
+    for (i, w) in list.iter().enumerate() {
+        if m.active_tags.contains(&w.ws()) || w.floating || w.fullscreen || w.maximized || w.global || w.scratchpad {
+            continue;
+        }
+        by_ws.entry(w.ws()).or_default().push(i);
+    }
+    let mut placed: HashMap<i64, (f32, f32, f32, f32)> = HashMap::new();
+    for (_, idx) in by_ws {
+        let tiled: Vec<&Client> = idx.iter().map(|&i| &list[i]).collect();
+        let mut covered = 0.0;
+        let mut overlap = false;
+        for (i, a) in tiled.iter().enumerate() {
+            covered += a.width * a.height;
+            for b in &tiled[i + 1..] {
+                if a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height {
+                    overlap = true;
+                }
+            }
+        }
+        if tiled.len() > 1 && !overlap && covered > 0.9 * area.2 * area.3 {
+            continue;
+        }
+        let mut tiled = tiled;
+        tiled.sort_by(|a, b| a.x.partial_cmp(&b.x).unwrap().then(a.y.partial_cmp(&b.y).unwrap()));
+        let mut bx = area;
+        for (i, w) in tiled.iter().enumerate() {
+            let mut mine = bx;
+            if i < tiled.len() - 1 {
+                if bx.2 >= bx.3 {
+                    let ww = (bx.2 - gap) / 2.0;
+                    mine = (bx.0, bx.1, ww, bx.3);
+                    bx = (bx.0 + ww + gap, bx.1, bx.2 - ww - gap, bx.3);
+                } else {
+                    let hh = (bx.3 - gap) / 2.0;
+                    mine = (bx.0, bx.1, bx.2, hh);
+                    bx = (bx.0, bx.1 + hh + gap, bx.2, bx.3 - hh - gap);
+                }
+            }
+            placed.insert(w.id, mine);
+        }
+    }
+    list.into_iter()
+        .map(|mut w| {
+            if let Some(&(x, y, ww, hh)) = placed.get(&w.id) {
+                (w.x, w.y, w.width, w.height) = (x, y, ww, hh);
+            }
+            w
+        })
+        .collect()
+}
+
+/// The windows on this monitor's shown group, in drawing order, with their
+/// resting rectangles in the window space.
+fn visible(o: &Overview, m: &Monitor, g: &Geo) -> Vec<(Client, (f32, f32, f32, f32))> {
+    let n = ROWS * COLS;
+    let (lo, hi) = (group(m) * n, (group(m) + 1) * n);
+    let list: Vec<Client> = o.clients.iter().filter(|w| w.monitor == m.name && !w.minimized && !(w.group && !w.group_focus) && lo < w.ws() && w.ws() <= hi).cloned().collect();
+    let mut list = retile(list, m, g);
+    list.sort_by_key(|w| (w.global, w.floating, w.focused));
+    list.into_iter()
+        .map(|w| {
+            let col = (w.ws() - 1) % COLS;
+            let row = (w.ws() - 1) % n / COLS;
+            let x = ((w.x - m.x) * SCALE).max(0.0) + (g.ws_w + SPACING) * col as f32;
+            let y = ((w.y - m.y - g.reserved_top) * SCALE).max(0.0) + (g.ws_h + SPACING) * row as f32;
+            let r = (x, y, (w.width * SCALE).min(g.ws_w), (w.height * SCALE).min(g.ws_h));
+            (w, r)
+        })
+        .collect()
+}
+
+fn icon_size(c: &Client, m: &Monitor, _g: &Geo) -> f32 {
+    let (tw, th) = (c.width * SCALE, c.height * SCALE);
+    let compact = 12.0 * 4.0 > th || 12.0 * 4.0 > tw;
+    tw.min(th) * if compact { 0.45 } else { 0.25 } / m.scale.max(0.1)
+}
+
+fn monitor_of<'a>(svc: &'a Services, screen: &str) -> Option<&'a Monitor> {
+    svc.mango.monitor(screen)
+}
+
+// ---- drawing ----
+
+pub fn draw_osd(ui: &mut Ui<OsdState>, screen: u8, _panel: (f32, f32, f32, f32), svc: &Services) {
+    let Some(name) = svc.overview_screens.get(screen as usize) else { return };
+    let Some(m) = monitor_of(svc, name) else { return };
+    let o = &svc.overview;
+    let t = ui.theme;
+    let g = geo(m);
+    let now = ui.now;
+    let white = t.col_white;
+    let wa = |a: f32| Color { a, ..white };
+    let layer1 = Color { r: t.pal_bg.r * 0.5, g: t.pal_bg.g * 0.5, b: t.pal_bg.b * 0.5, a: 1.0 };
+    let (rx, ry, rw, rh) = g.root;
+    let (bx, by, bw, bh) = (rx + 10.0, ry + 10.0, rw - 20.0, rh - 20.0);
+    ui.scene.shadow(bx, by, bw, bh, Color::qt_rgba(0.0, 0.0, 0.0, 0.3), 9.0, 1.0, (0.0, 1.0));
+    ui.scene.rect(bx, by, bw, bh, t.pal_bg, 0.0, 1.0, wa(0.14), false);
+    let (gx, gy) = g.grid;
+    let n = ROWS * COLS;
+    // The workspaces: a dark well each, its number faint in the middle.
+    for r in 0..ROWS {
+        for c in 0..COLS {
+            let value = group(m) * n + r * COLS + c + 1;
+            let (x, y) = (gx + c as f32 * (g.cell_w + SPACING), gy + r as f32 * (g.cell_h + SPACING));
+            let drop = o.drop_ws == Some((screen, value)) && o.press.as_ref().map_or(false, |p| p.dragging);
+            let hover_c = Color { r: 0.08 * white.r + 0.92 * layer1.r, g: 0.08 * white.g + 0.92 * layer1.g, b: 0.08 * white.b + 0.92 * layer1.b, a: 1.0 };
+            let fill = if drop { Color { r: 0.1 * layer1.r + 0.9 * hover_c.r, g: 0.1 * layer1.g + 0.9 * hover_c.g, b: 0.1 * layer1.b + 0.9 * hover_c.b, a: 1.0 } } else { layer1 };
+            ui.scene.rect(x, y, g.cell_w, g.cell_h, fill, 0.0, 2.0, if drop { wa(0.4) } else { Color::TRANSPARENT }, false);
+            let num = ui.fonts.layout(&value.to_string(), NUMBER, (250.0 * m.scale * SCALE).round(), 0.0);
+            ui.text(&num, x + (g.cell_w - num.adv) / 2.0, y + (g.cell_h - num.height()) / 2.0, wa(0.2), TextStyle::Native(1));
+            ui.hits.push(crate::bar::Hit { x, y, w: g.cell_w, h: g.cell_h, action: Action::Card(WS + value as u32) });
+        }
+    }
+    // The windows, then the frame on the active workspace.
+    let wins = visible(o, m, &g);
+    if wins.is_empty() {
+        draw_indicator(ui, m, &g, white);
+    }
+    // The dragged window is drawn last (z 99999).
+    let mut order: Vec<usize> = (0..wins.len()).collect();
+    if let Some(p) = o.press.as_ref().filter(|p| p.dragging && p.screen == screen) {
+        if let Some(k) = wins.iter().position(|(c, _)| c.id == p.id) {
+            order.retain(|&i| i != k);
+            order.push(k);
+        }
+    }
+    for &i in &order {
+        let (c, (tx, ty, tw, th)) = &wins[i];
+        let dragged = o.press.as_ref().filter(|p| p.dragging && p.id == c.id && p.screen == screen);
+        let (target_x, target_y) = match dragged {
+            Some(p) => (p.pos.0 - p.grab.0 - gx, p.pos.1 - p.grab.1 - gy),
+            None => (*tx, *ty),
+        };
+        let key = (c.id as u32) << 4;
+        let (x, r1) = ui.card.number_e(key | 1, target_x, 400, ENTER, now);
+        let (y, r2) = ui.card.number_e(key | 2, target_y, 400, ENTER, now);
+        let (w, r3) = ui.card.number_e(key | 3, *tw, 400, ENTER, now);
+        let (h, r4) = ui.card.number_e(key | 4, *th, 400, ENTER, now);
+        ui.animating |= r1 || r2 || r3 || r4;
+        let (x, y) = (gx + x, gy + y);
+        ui.scene.save();
+        ui.scene.clip_rect(x, y, w, h);
+        if let Some(tex) = o.previews.get(&c.id) {
+            ui.scene.image(tex.id, x, y, w, h, [0.0, 0.0, 1.0, 1.0]);
+        }
+        let pressed = o.press.as_ref().map_or(false, |p| p.id == c.id && p.screen == screen);
+        let hovered = o.hovered == Some((screen, c.id));
+        let wash = if pressed { wa(0.22) } else if hovered { wa(0.12) } else { wa(0.0) };
+        ui.scene.rect(x, y, w, h, wash, 0.0, 1.0, Color { a: 0.3, ..t.col_grey }, false);
+        let s = icon_size(c, m, &g);
+        let name = o.desktop.as_ref().map(|d| icon_name(d, &c.appid)).unwrap_or_default();
+        if let Some(Some(tex)) = o.icons.get(&(name, s.round() as u32)) {
+            ui.scene.image(tex.id, x + ac(w, s), y + ac(h, s), s, s, [0.0, 0.0, 1.0, 1.0]);
+        }
+        ui.scene.restore();
+        ui.hits.push(crate::bar::Hit { x, y, w, h, action: Action::Card(WIN + i as u32) });
+        if i == 0 {
+            draw_indicator(ui, m, &g, white);
+        }
+    }
+    // The hovered window's tooltip, above it: title, then [appid].
+    if let Some((_, (c, (tx, ty, tw, _)))) = wins.iter().enumerate().find(|(_, (c, _))| o.hovered == Some((screen, c.id)) && o.press.as_ref().map_or(true, |p| !p.dragging)) {
+        let text = format!("{}\n[{}] {}", if c.title.is_empty() { "Unknown" } else { &c.title }, if c.appid.is_empty() { "unknown" } else { &c.appid }, if c.xwayland { "[XWayland] " } else { "" });
+        let lines: Vec<_> = text.lines().map(|l| ui.fonts.layout(l, MAIN, 12.0, 0.0)).collect();
+        let tw_ = lines.iter().map(|l| l.width).fold(0.0, f32::max);
+        let th_: f32 = lines.iter().map(|l| l.height()).sum();
+        let (pw, ph) = (tw_ + 20.0, th_ + 10.0);
+        let (px, py) = (gx + tx + (tw - pw) / 2.0, gy + ty - ph - 3.0);
+        ui.scene.rect(px, py, pw, ph, t.pal_bg, 0.0, 1.0, wa(0.14), false);
+        let mut ly = py + 5.0;
+        for l in &lines {
+            ui.text(l, px + (pw - l.adv) / 2.0, ly, white, TextStyle::Native(2));
+            ly += l.height();
+        }
+    }
+}
+
+/// The frame on the active workspace (z = windowZ: above the first window,
+/// under the others).
+fn draw_indicator(ui: &mut Ui<OsdState>, m: &Monitor, g: &Geo, white: Color) {
+    let n = ROWS * COLS;
+    let (gx, gy) = g.grid;
+    let now = ui.now;
+    let active = active_ws(m) - group(m) * n;
+    let (ar, ac_) = ((active - 1) / COLS, (active - 1) % COLS);
+    let (fx, r1) = ui.card.number_e(0xF00_0001, (g.ws_w + SPACING) * ac_ as f32, 200, FAST, now);
+    let (fy, r2) = ui.card.number_e(0xF00_0002, (g.ws_h + SPACING) * ar as f32, 200, FAST, now);
+    ui.animating |= r1 || r2;
+    ui.scene.rect(gx + fx, gy + fy, g.ws_w, g.ws_h, Color::TRANSPARENT, 0.0, 2.0, white, false);
+}
+
+pub const WS: u32 = 0x1000;
+pub const WIN: u32 = 0x2000;
+
+// ---- input ----
+
+/// The window under the pointer on a screen: the topmost by drawing order.
+fn window_at(app: &App, screen: u8, x: f32, y: f32) -> Option<(i64, (f32, f32))> {
+    let name = app.svc.overview_screens.get(screen as usize)?;
+    let m = app.svc.mango.monitor(name)?;
+    let g = geo(m);
+    let (gx, gy) = g.grid;
+    visible(&app.svc.overview, m, &g).into_iter().rev().find(|(_, (wx, wy, ww, wh))| x >= gx + wx && x < gx + wx + ww && y >= gy + wy && y < gy + wy + wh).map(|(c, (wx, wy, ..))| (c.id, (x - gx - wx, y - gy - wy)))
+}
+
+fn workspace_at(app: &App, screen: u8, x: f32, y: f32) -> Option<i64> {
+    let name = app.svc.overview_screens.get(screen as usize)?;
+    let m = app.svc.mango.monitor(name)?;
+    let g = geo(m);
+    let (gx, gy) = g.grid;
+    for r in 0..ROWS {
+        for c in 0..COLS {
+            let (wx, wy) = (gx + c as f32 * (g.cell_w + SPACING), gy + r as f32 * (g.cell_h + SPACING));
+            if x >= wx && x < wx + g.cell_w && y >= wy && y < wy + g.cell_h {
+                return Some(group(m) * ROWS * COLS + r * COLS + c + 1);
+            }
+        }
+    }
+    None
+}
+
+/// Every pointer event on an overview window.
+pub fn pointer(app: &mut App, screen: u8, ev: &PointerEventKind, x: f32, y: f32) -> bool {
+    match ev {
+        PointerEventKind::Motion { .. } | PointerEventKind::Enter { .. } => {
+            let hov = window_at(app, screen, x, y).map(|(id, _)| (screen, id));
+            if hov != app.svc.overview.hovered {
+                app.svc.overview.hovered = hov;
+                redraw(app);
+            }
+            if let Some(p) = app.svc.overview.press.as_mut() {
+                p.pos = (x, y);
+                if !p.dragging && ((x - p.start.0).abs() > 10.0 || (y - p.start.1).abs() > 10.0) && p.button == 0x110 {
+                    p.dragging = true;
+                }
+                if p.dragging {
+                    let ws = workspace_at(app, screen, x, y).map(|w| (screen, w));
+                    app.svc.overview.drop_ws = ws;
+                    redraw(app);
+                }
+            }
+            true
+        }
+        PointerEventKind::Leave { .. } => {
+            app.svc.overview.hovered = None;
+            redraw(app);
+            true
+        }
+        PointerEventKind::Press { button, .. } => {
+            // A press beside the panel (outside its width) leaves.
+            if let Some(m) = app.svc.overview_screens.get(screen as usize).and_then(|n| app.svc.mango.monitor(n)) {
+                let g = geo(m);
+                let half = g.root.2 / 2.0;
+                let centre = m.width / m.scale.max(0.1) / 2.0;
+                if x < centre - half || x > centre + half {
+                    close(app);
+                    return true;
+                }
+            }
+            if let Some((id, grab)) = window_at(app, screen, x, y).filter(|_| *button == 0x110 || *button == 0x112) {
+                app.svc.overview.press = Some(Press { screen, id, button: *button, start: (x, y), grab, pos: (x, y), dragging: false });
+                redraw(app);
+            } else if *button == 0x110 {
+                app.svc.overview.press = Some(Press { screen, id: -1, button: *button, start: (x, y), grab: (0.0, 0.0), pos: (x, y), dragging: false });
+            }
+            true
+        }
+        PointerEventKind::Release { button, .. } => {
+            let Some(p) = app.svc.overview.press.take() else { return true };
+            app.svc.overview.drop_ws = None;
+            redraw(app);
+            if p.button != *button {
+                return true;
+            }
+            let win = app.svc.overview.clients.iter().find(|c| c.id == p.id).cloned();
+            if p.dragging {
+                if let (Some(w), Some(target)) = (win, workspace_at(app, screen, x, y)) {
+                    if target != w.ws() {
+                        services::mango_dispatch_client(app, &format!("tagsilent,{target}"), w.id);
+                    } else {
+                        drop_inside(app, screen, &w, (x, y), &p);
+                    }
+                }
+                return true;
+            }
+            match (win, *button) {
+                (Some(w), 0x110) => {
+                    close(app);
+                    services::mango_dispatch_client(app, "focusid", w.id);
+                }
+                (Some(w), 0x112) => services::mango_dispatch_client(app, "killclient", w.id),
+                (None, 0x110) => {
+                    if let Some(ws) = workspace_at(app, screen, x, y) {
+                        let name = app.svc.overview_screens.get(screen as usize).cloned().unwrap_or_default();
+                        close(app);
+                        services::mango_dispatch(app, &format!("viewcrossmon,{ws},^{name}$"));
+                    }
+                }
+                _ => {}
+            }
+            true
+        }
+        _ => true,
+    }
+}
+
+/// dropInside(): a floating window moves there; a tiled one swaps with the
+/// tiled window it was dropped on.
+fn drop_inside(app: &mut App, screen: u8, win: &Client, at: (f32, f32), p: &Press) {
+    if (at.0 - p.start.0).abs() < 8.0 && (at.1 - p.start.1).abs() < 8.0 {
+        return;
+    }
+    let Some(name) = app.svc.overview_screens.get(screen as usize).cloned() else { return };
+    let Some(m) = app.svc.mango.monitor(&name).cloned() else { return };
+    let g = geo(&m);
+    let (gx, gy) = g.grid;
+    let list = visible(&app.svc.overview, &m, &g);
+    let Some((_, (ix, iy, ..))) = list.iter().find(|(c, _)| c.id == win.id) else { return };
+    let (tile_x, tile_y) = (at.0 - p.grab.0 - gx, at.1 - p.grab.1 - gy);
+    if win.floating {
+        let col = (win.ws() - 1) % COLS;
+        let row = (win.ws() - 1) % (ROWS * COLS) / COLS;
+        let (xo, yo) = ((g.ws_w + SPACING) * col as f32, (g.ws_h + SPACING) * row as f32);
+        let x = (m.x + (tile_x - xo).max(0.0) / SCALE).round();
+        let y = (m.y + g.reserved_top + (tile_y - yo).max(0.0) / SCALE).round();
+        services::mango_dispatch_client(app, &format!("movewin,{x},{y}"), win.id);
+        return;
+    }
+    let _ = (ix, iy);
+    let (hx, hy) = (tile_x + p.grab.0, tile_y + p.grab.1);
+    let target = list.iter().filter(|(c, _)| c.id != win.id && c.ws() == win.ws() && !c.floating).filter(|(_, (x, y, w, h))| hx >= *x && hx < x + w && hy >= *y && hy < y + h).map(|(c, _)| c.clone()).last();
+    let Some(t) = target else { return };
+    let (dx, dy) = ((t.x + t.width / 2.0) - (win.x + win.width / 2.0), (t.y + t.height / 2.0) - (win.y + win.height / 2.0));
+    let dir = if dx.abs() >= dy.abs() { if dx > 0.0 { "right" } else { "left" } } else if dy > 0.0 { "down" } else { "up" };
+    let swap = format!("mmsg dispatch exchange_client,{dir} client,{}", win.id);
+    if m.active_tags.contains(&win.ws()) {
+        app.exec_detached(&["sh", "-c", &swap]);
+    } else {
+        let cmd = format!("mmsg dispatch 'viewcrossmon,{},^{}$' && {swap}", win.ws(), m.name);
+        app.exec_detached(&["sh", "-c", &cmd]);
+    }
+}
+
+/// Esc / Return leave; the arrows walk the shown group's workspaces.
+pub fn key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Keysym) {
+    use smithay_client_toolkit::seat::keyboard::Keysym;
+    match sym {
+        Keysym::Escape | Keysym::Return => close(app),
+        Keysym::Left | Keysym::Right | Keysym::Up | Keysym::Down => {
+            let n = ROWS * COLS;
+            let cur = app.svc.mango.focused().and_then(|m| m.active_tags.first().copied()).unwrap_or(1);
+            let grp = (cur - 1) / n;
+            let (lo, hi) = (grp * n + 1, grp * n + n);
+            let target = match sym {
+                Keysym::Left => if cur - 1 < lo { hi } else { cur - 1 },
+                Keysym::Right => if cur + 1 > hi { lo } else { cur + 1 },
+                Keysym::Up => if cur - COLS < lo { cur - COLS + n } else { cur - COLS },
+                _ => if cur + COLS > hi { cur + COLS - n } else { cur + COLS },
+            };
+            services::mango_dispatch(app, &format!("view,{target},0"));
+        }
+        _ => {}
+    }
+}

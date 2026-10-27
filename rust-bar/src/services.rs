@@ -23,6 +23,12 @@ pub struct Monitor {
     pub active_tags: Vec<i64>,
     pub client_id: Option<i64>,
     pub client_title: String,
+    /// Layout position and size, and the output scale.
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub scale: f32,
 }
 
 #[derive(Default)]
@@ -172,6 +178,9 @@ pub struct Services {
     pub polkit: crate::polkit::Polkit,
     pub clip: crate::clip::Clip,
     pub wall: crate::wallpaper::Wall,
+    pub overview: crate::overview::Overview,
+    /// The output names, by the overview windows' screen index.
+    pub overview_screens: Vec<String>,
     pub wifi: Wifi,
     pub vpn: String,
     vpn_checked: bool,
@@ -209,6 +218,11 @@ fn parse_monitors(v: &Value) -> Option<Vec<Monitor>> {
                 let client = m.get("active_client");
                 Monitor {
                     name: m.get("name").and_then(Value::as_str).unwrap_or("").into(),
+                    x: m.get("x").and_then(Value::as_f64).unwrap_or(0.0) as f32,
+                    y: m.get("y").and_then(Value::as_f64).unwrap_or(0.0) as f32,
+                    width: m.get("width").and_then(Value::as_f64).unwrap_or(1920.0) as f32,
+                    height: m.get("height").and_then(Value::as_f64).unwrap_or(1080.0) as f32,
+                    scale: m.get("scale").and_then(Value::as_f64).unwrap_or(1.0) as f32,
                     active: m.get("active").and_then(Value::as_bool).unwrap_or(false),
                     tags: m
                         .get("tags")
@@ -269,6 +283,12 @@ fn connect_watch(app: &mut App, what: &str, on_line: fn(&mut App, &str)) {
 
 pub fn mango_dispatch(app: &App, command: &str) {
     app.exec_detached(&["mmsg", "dispatch", command]);
+}
+
+/// Mango.dispatch(command, clientId): the client as its own argument.
+pub fn mango_dispatch_client(app: &App, command: &str, client: i64) {
+    let c = format!("client,{client}");
+    app.exec_detached(&["mmsg", "dispatch", command, &c]);
 }
 
 // ---- SystemStats ----

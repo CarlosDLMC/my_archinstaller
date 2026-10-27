@@ -35,6 +35,8 @@ pub enum Pipe {
     NativeOutline,
     /// A colour glyph from the RGBA atlas (emoji).
     Color,
+    /// QtQuick.Effects RectangularShadow.
+    Shadow,
 }
 
 /// A 2D affine transform: x' = a x + c y + tx, y' = b x + d y + ty.
@@ -81,6 +83,9 @@ pub enum TextStyle {
     Outline(Color),
     /// Plain text forced to grey anti-aliasing (for translucent text).
     Gray,
+    /// renderType: Text.NativeRendering - FreeType's gray coverage at the
+    /// device size; the hinting preference (1 full, 2 none, 0 default).
+    Native(u8),
 }
 
 pub struct Scene {
@@ -239,6 +244,10 @@ impl Scene {
 
     /// A laid-out line with its baseline at (x, y).
     pub fn text(&mut self, fonts: &mut Fonts, line: &Line, x: f32, baseline: f32, color: Color, style: TextStyle) {
+        if let TextStyle::Native(hint) = style {
+            self.text_native(fonts, line, x, baseline, color, hint);
+            return;
+        }
         if self.opacity <= 0.0 || line.glyphs.is_empty() {
             return;
         }
@@ -347,6 +356,52 @@ impl Scene {
         }
     }
 
+    /// Native glyphs: full hinting snaps the pen to whole pixels, otherwise
+    /// it is placed in quarters (QFontEngineFT's subpixel positions).
+    fn text_native(&mut self, fonts: &mut Fonts, line: &Line, x: f32, baseline: f32, color: Color, hint: u8) {
+        let scale = self.xf.scale();
+        let size = line.size * scale;
+        for g in &line.glyphs {
+            let (dx, dy) = self.xf.apply(x + g.x, baseline);
+            let (dx, quarter) = if hint == 1 { (dx.round(), 0) } else { (dx, Fonts::subpixel_quarter(dx)) };
+            let Some(ng) = fonts.native_glyph_hinted(g.face, g.gid, size, quarter, hint) else { continue };
+            if ng.w == 0 {
+                continue;
+            }
+            let px = dx.floor() + ng.left as f32 - 1.0;
+            let py = dy.round() - ng.top as f32 - 1.0;
+            let mut i = Inst {
+                rect: [px, py, (ng.w + 2) as f32, (ng.h + 2) as f32],
+                xf0: [1.0, 0.0, 0.0],
+                xf1: [0.0, 1.0, 0.0],
+                clip: self.clip,
+                sclip: self.sclip,
+                ..Default::default()
+            };
+            i.uv = [(ng.ax - 1) as f32, (ng.ay - 1) as f32, (ng.ax + ng.w + 1) as f32, (ng.ay + ng.h + 1) as f32];
+            i.color = color.premul(self.opacity);
+            i.color2 = [0.0; 4];
+            self.push(Pipe::NativeOutline, i);
+        }
+    }
+
+    /// RectangularShadow on an item at (x, y, w, h): the quad grows by
+    /// 2 blur + 2 spread, the box inside shrinks by 1.8 blur, and the alpha is
+    /// colour * a^2 with a = 1 - smoothstep(0, 2.1 blur, distance)
+    /// (qquickrectangularshadow.cpp, rectangularshadow.frag; radius 0).
+    pub fn shadow(&mut self, x: f32, y: f32, w: f32, h: f32, color: Color, blur: f32, spread: f32, offset: (f32, f32)) {
+        if self.opacity <= 0.0 {
+            return;
+        }
+        let pad = 2.0 * blur + 2.0 * spread;
+        let (ew, eh) = (w + pad, h + pad);
+        let (ex, ey) = (x + (w - ew) / 2.0 + offset.0, y + (h - eh) / 2.0 + offset.1);
+        let mut i = self.base(ex, ey, ew, eh);
+        i.color = color.premul(self.opacity);
+        i.p0 = [ew / 2.0 - blur * 1.8, eh / 2.0 - blur * 1.8, blur * 2.1, 0.0];
+        self.push(Pipe::Shadow, i);
+    }
+
     pub fn image(&mut self, id: u32, x: f32, y: f32, w: f32, h: f32, uv: [f32; 4]) {
         if self.opacity <= 0.0 {
             return;
@@ -403,7 +458,7 @@ pub struct Gpu {
     shader: wgpu::ShaderModule,
     shader_sub: wgpu::ShaderModule,
     pipe_layout: wgpu::PipelineLayout,
-    pipelines: Vec<(wgpu::TextureFormat, [wgpu::RenderPipeline; 5])>,
+    pipelines: Vec<(wgpu::TextureFormat, [wgpu::RenderPipeline; 6])>,
     globals: wgpu::Buffer,
     atlas: Option<(wgpu::Texture, wgpu::BindGroup, u32, u32)>,
     color_atlas: Option<(wgpu::Texture, wgpu::BindGroup, u32, u32)>,
@@ -586,6 +641,7 @@ impl Gpu {
             make("vs_quad", "fs_text_subpixel", dual),
             make("vs_quad", "fs_image", premul),
             make("vs_quad", "fs_native_outline", premul),
+            make("vs_quad", "fs_shadow", premul),
         ];
         self.pipelines.push((format, p));
         self.pipelines.len() - 1
@@ -781,6 +837,7 @@ impl Gpu {
                     Pipe::Text => rp.set_pipeline(&pipes[1]),
                     Pipe::TextSub => rp.set_pipeline(&pipes[2]),
                     Pipe::NativeOutline => rp.set_pipeline(&pipes[4]),
+                    Pipe::Shadow => rp.set_pipeline(&pipes[5]),
                     Pipe::Color => {
                         let Some((_, bind, ..)) = self.color_atlas.as_ref() else { continue };
                         rp.set_pipeline(&pipes[3]);

@@ -357,7 +357,7 @@ fn show_osd(app: &mut App) {
     let (x, y) = (ac(sw, w), ac(sh, h));
     // The surface also carries the window's shadow (2 cells right, 1 down).
     let size = ((w + 2.0 * g.cw).ceil() as u32, (h + g.ch).ceil() as u32);
-    osd::show(app, OpenParams { kind: OsdKind::Power, size, panel: (0.0, 0.0, w, h), dim: Some(Color::qt_rgba(0.0, 0.0, 0.0, 0.62)), keyboard: true, namespace: "quickshell:power", fade_ms: FADE_MS, min_scale: 0.97, fade_easing: crate::anim::Easing::OutCubic, pos: Some((x as i32, y as i32)), fill: false });
+    osd::show(app, OpenParams { kind: OsdKind::Power, size, panel: (0.0, 0.0, w, h), dim: Some(Color::qt_rgba(0.0, 0.0, 0.0, 0.62)), keyboard: true, namespace: "quickshell:power", fade_ms: FADE_MS, min_scale: 0.97, fade_easing: crate::anim::Easing::OutCubic, pos: Some((x as i32, y as i32)), fill: false, output: None });
 }
 
 /// Cell: `text` on `bg` (one cell per character), the label centred

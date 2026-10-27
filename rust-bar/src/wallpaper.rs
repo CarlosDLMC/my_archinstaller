@@ -277,7 +277,7 @@ pub fn open(app: &mut App) {
     w.folder_index = w.folder_of(&w.current_id.clone());
     w.open = true;
     w.pending = Pending::Current;
-    osd::show(app, OpenParams { kind: OsdKind::Wallpaper, size: (0, 0), panel: (0.0, 0.0, 0.0, 0.0), dim: None, keyboard: true, namespace: "quickshell:wallpaper", fade_ms: FADE_MS, min_scale: 1.0, fade_easing: Easing::Linear, pos: None, fill: true });
+    osd::show(app, OpenParams { kind: OsdKind::Wallpaper, size: (0, 0), panel: (0.0, 0.0, 0.0, 0.0), dim: None, keyboard: true, namespace: "quickshell:wallpaper", fade_ms: FADE_MS, min_scale: 1.0, fade_easing: Easing::Linear, pos: None, fill: true, output: None });
     if let Some(o) = app.osd_mut(OsdKind::Wallpaper) {
         o.st.reset_numbers();
     }
