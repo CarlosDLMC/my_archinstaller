@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use pipewire as pw;
+use pw::device::{Device, DeviceListener};
 use pw::metadata::{Metadata, MetadataListener};
 use pw::node::{Node, NodeListener};
 use pw::spa::param::ParamType;
@@ -26,6 +27,10 @@ pub struct NodeInfo {
     pub icon_name: String,
     pub product_name: String,
     pub profile_description: String,
+    /// device.id and card.profile.device: the card and the route index a
+    /// device node's volume lives on (PwNode::shouldUseDevice).
+    pub device: Option<(u32, i32)>,
+    pub pro_audio: bool,
 }
 
 impl NodeInfo {
@@ -61,6 +66,9 @@ struct State {
     /// device and stream while the audio card is open (PwObjectTracker).
     bound: HashMap<u32, (Node, NodeListener)>,
     audio: HashMap<u32, Audio>,
+    /// The audio cards and the route device indexes each one has (PwDevice::hasRouteDevice).
+    devices: HashMap<u32, (Device, DeviceListener)>,
+    routes: HashMap<u32, Vec<i32>>,
     track_all: bool,
     changed: bool,
 }
@@ -145,10 +153,41 @@ impl Pw {
                             icon_name: get("device.icon-name"),
                             product_name: get("device.product.name"),
                             profile_description: get("device.profile.description"),
+                            device: get("device.id").parse().ok().zip(get("card.profile.device").parse().ok()),
+                            pro_audio: matches!(get("device.profile.pro").as_str(), "true" | "1"),
                         };
                         let mut s = st.borrow_mut();
                         s.nodes.insert(g.id, (info, g.to_owned()));
                         s.changed = true;
+                    }
+                    ObjectType::Device => {
+                        if props.and_then(|p| p.get("media.class")) != Some("Audio/Device") {
+                            return;
+                        }
+                        let Some(reg) = reg.upgrade() else { return };
+                        let Ok(dev) = reg.bind::<Device, _>(g) else { return };
+                        let (st2, id) = (st.clone(), g.id);
+                        let l = dev
+                            .add_listener_local()
+                            .param(move |_, ty, _, _, pod| {
+                                if ty != ParamType::Route {
+                                    return;
+                                }
+                                let Some(pod) = pod else { return };
+                                let Ok((_, Value::Object(obj))) = PodDeserializer::deserialize_any_from(pod.as_bytes()) else { return };
+                                for p in obj.properties {
+                                    if let (pw::spa::sys::SPA_PARAM_ROUTE_device, Value::Int(d)) = (p.key, p.value) {
+                                        let mut s = st2.borrow_mut();
+                                        let r = s.routes.entry(id).or_default();
+                                        if !r.contains(&d) {
+                                            r.push(d);
+                                        }
+                                    }
+                                }
+                            })
+                            .register();
+                        dev.subscribe_params(&[ParamType::Route]);
+                        st.borrow_mut().devices.insert(g.id, (dev, l));
                     }
                     ObjectType::Metadata => {
                         if props.and_then(|p| p.get("metadata.name")) != Some("default") {
@@ -180,6 +219,8 @@ impl Pw {
                 s.nodes.remove(&id);
                 s.bound.remove(&id);
                 s.audio.remove(&id);
+                s.devices.remove(&id);
+                s.routes.remove(&id);
                 s.changed = true;
             })
             .register();
@@ -332,7 +373,10 @@ impl Pw {
         md.set_property(0, key, Some("Spa:String:JSON"), Some(&value));
     }
 
-    /// PwNodePeakMonitor on `id` (None stops it); peak() is the last buffer's peak.
+    /// PwNodePeakMonitor on `id` (None stops it); peak() is the last buffer's
+    /// peak. A stream like quickshell's: not passive, so it wakes a suspended
+    /// microphone while the audio card is open - a passive one only heard the
+    /// mic while something else was recording, and the meter sat still.
     pub fn monitor_peak(&mut self, id: Option<u32>) {
         if self.peak.as_ref().map(|p| p.0) == id {
             return;
@@ -341,25 +385,27 @@ impl Pw {
         self.peak_value.set(0.0);
         let Some(id) = id else { return };
         let target = self.state.borrow().nodes.get(&id).map(|n| n.0.name.clone()).unwrap_or_default();
+        let sink = self.state.borrow().nodes.get(&id).map_or(false, |n| n.0.is_sink());
         let props = pw::properties::properties! {
             *pw::keys::MEDIA_TYPE => "Audio",
             *pw::keys::MEDIA_CATEGORY => "Monitor",
-            *pw::keys::NODE_NAME => "quickshell",
+            *pw::keys::MEDIA_NAME => "Peak detect",
+            *pw::keys::APP_NAME => "Quickshell Peak Detect",
+            "stream.monitor" => "true",
+            "stream.capture.sink" => if sink { "true" } else { "false" },
             "target.object" => target.as_str(),
-            "node.passive" => "true",
-            "node.dont-reconnect" => "true",
         };
-        let Ok(stream) = pw::stream::StreamRc::new(self.core.clone(), "quickshell", props) else { return };
+        let Ok(stream) = pw::stream::StreamRc::new(self.core.clone(), "quickshell-peak-monitor", props) else { return };
         let Ok(listener) = stream
             .add_local_listener_with_user_data(self.peak_value.clone())
             .process(|stream, peak| {
                 let Some(mut buf) = stream.dequeue_buffer() else { return };
                 let datas = buf.datas_mut();
                 let Some(d) = datas.first_mut() else { return };
-                let n = d.chunk().size() as usize;
+                let (off, n) = (d.chunk().offset() as usize, d.chunk().size() as usize);
                 let Some(bytes) = d.data() else { return };
                 let mut p = 0f32;
-                for c in bytes[..n.min(bytes.len())].chunks_exact(4) {
+                for c in bytes[off.min(bytes.len())..(off + n).min(bytes.len())].chunks_exact(4) {
                     p = p.max(f32::from_le_bytes([c[0], c[1], c[2], c[3]]).abs());
                 }
                 peak.set(p);
@@ -379,7 +425,21 @@ impl Pw {
         }
     }
 
+    /// PwNodePeakMonitor.peak: the cube root of the sample peak (the scale
+    /// the volumes are on), undone by the node's own volume unless that volume
+    /// is the card's route (PwNode::shouldUseDevice), as quickshell does.
     pub fn peak(&self) -> f32 {
-        self.peak_value.get()
+        let Some((id, ..)) = &self.peak else { return 0.0 };
+        let mut v = self.peak_value.get().cbrt();
+        let s = self.state.borrow();
+        let on_device = s.nodes.get(id).map_or(false, |n| {
+            !n.0.pro_audio && n.0.device.map_or(false, |(dev, route)| s.routes.get(&dev).map_or(false, |r| r.contains(&route)))
+        });
+        if !on_device {
+            if let Some(a) = s.audio.get(id).filter(|a| a.ready && a.volume != 0.0) {
+                v /= a.volume;
+            }
+        }
+        v
     }
 }

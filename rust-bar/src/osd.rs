@@ -197,6 +197,10 @@ pub fn focused_output(app: &App) -> Option<(WlOutput, f32, f32)> {
 pub fn show(app: &mut App, p: OpenParams) {
     let now = Instant::now();
     if let Some(o) = app.osd_mut(p.kind) {
+        if p.keyboard && !o.shown {
+            o.win.layer.set_keyboard_interactivity(KeyboardInteractivity::Exclusive);
+            o.win.layer.commit();
+        }
         o.shown = true;
         o.fade.set(1.0, now);
         o.dim_fade.set(1.0, now);
@@ -266,6 +270,11 @@ pub fn hide(app: &mut App, kind: OsdKind) {
         return;
     }
     o.shown = false;
+    // keyboardFocus: shown ? Exclusive : None - the keyboard goes back to the
+    // window at once, not after the fade: clip-paste.sh types Ctrl+V 60 ms
+    // after a pick, and a fading overlay that still held the keyboard ate it.
+    o.win.layer.set_keyboard_interactivity(KeyboardInteractivity::None);
+    o.win.layer.commit();
     o.fade.set(0.0, now);
     o.dim_fade.set(0.0, now);
     o.win.dirty = true;
