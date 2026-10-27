@@ -34,6 +34,7 @@ use crate::theme::{self, Theme, FONT_SIZE};
 pub enum CardKind {
     Power,
     Calendar,
+    Weather,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -92,6 +93,8 @@ fn geometry(kind: CardKind) -> (f32, f32, Stem) {
         CardKind::Power => (210.0, (4.0 * 42.0 + 3.0 * 6.0f32).ceil() + 28.0, Stem::Left),
         // CalendarPopup: 400 wide; header 38 + 8 + plate (8 + 24 + 4 + 240 + 8) + 12 + 24.
         CardKind::Calendar => (400.0, 38.0 + 8.0 + 284.0 + 12.0 + 24.0, Stem::Center),
+        // CenterInfo's weather card: 340 wide, its height is measured from the content.
+        CardKind::Weather => (340.0, 0.0, Stem::Center),
     }
 }
 
@@ -107,7 +110,10 @@ pub fn toggle(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard:
 fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool) {
     let s = &app.strips[strip];
     let ui = crate::bar::ui_scale(s.screen_width);
-    let (w, h, stem) = geometry(kind);
+    let (w, mut h, stem) = geometry(kind);
+    if kind == CardKind::Weather {
+        h = weather_height(&mut app.fonts, &app.svc, w);
+    }
     // DropdownWidget.cardX: from the icon's centre on the screen.
     let icon_w = icon.w / ui;
     let icon_center = icon.x + icon.w / 2.0;
@@ -121,6 +127,11 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         // CalendarPopup: a fixed 60 px stem, cardX = anchorX (int) - 200.
         stem_w = 60.0;
         card_x = icon_center.trunc() - 200.0;
+    }
+    if kind == CardKind::Weather {
+        // The stem is the weather pill's width (int); centred on the pill.
+        stem_w = icon_w.trunc();
+        card_x = icon_center - w / 2.0;
     }
     let x = card_x.min(s.screen_width - w).max(0.0);
     let y = crate::bar::strip_height(s.screen_width) as f32 + 2.0;
@@ -414,10 +425,13 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
                 y += 42.0 + 6.0;
             }
         }
-        CardKind::Calendar => {}
+        CardKind::Calendar | CardKind::Weather => {}
     }
     if ui.card.kind == CardKind::Calendar {
         draw_calendar(&mut ui, w);
+    }
+    if ui.card.kind == CardKind::Weather {
+        draw_weather(&mut ui, w, svc);
     }
     let _ = svc;
     let (hits, n, animating) = (std::mem::take(&mut ui.hits), ui.focus_n, ui.animating);
@@ -492,6 +506,167 @@ fn draw_calendar(ui: &mut Ui, w: f32) {
     }
 }
 
+/// CenterInfo.getConditionColor
+fn condition_color(cond: &str, t: &Theme) -> Color {
+    let c = cond.to_lowercase();
+    let hex = if c.contains("sun") || c.contains("clear") {
+        "#f1fa8c"
+    } else if c.contains("cloud") || c.contains("overcast") {
+        "#94a3b8"
+    } else if c.contains("rain") || c.contains("drizzle") || c.contains("shower") {
+        "#8be9fd"
+    } else if c.contains("thunder") || c.contains("storm") {
+        "#bd93f9"
+    } else if c.contains("snow") || c.contains("sleet") || c.contains("ice") {
+        "#f8f8f2"
+    } else if c.contains("fog") || c.contains("mist") || c.contains("haze") {
+        "#6272a4"
+    } else if c.contains("wind") {
+        "#50fa7b"
+    } else {
+        return t.pal_fg;
+    };
+    Color::parse(hex).unwrap()
+}
+
+/// The weather card's lines and plate heights, shared by measuring and drawing.
+struct WeatherLayout {
+    sky: Line,
+    temp: Line,
+    cond: Vec<Line>,
+    place: Vec<Line>,
+    row_h: f32,
+    read_h: f32,
+    read_x: f32,
+    p1: f32,
+    p2: f32,
+    p3: f32,
+}
+
+fn weather_layout(fonts: &mut Fonts, svc: &Services, w: f32) -> WeatherLayout {
+    let wx = &svc.weather;
+    let (x0, cw) = (12.0, w - 24.0);
+    let icon = if wx.icon.is_empty() { "\u{f0590}".to_string() } else { wx.icon.clone() };
+    let sky = fonts.layout(&icon, theme::bar_font(false), 52.0, 0.0);
+    let num = first_number(&wx.text);
+    let temp = fonts.layout(&if num.is_empty() { String::new() } else { format!("{num}°C") }, theme::bar_font(true), 34.0, 0.0);
+    let read_x = x0 + 12.0 + sky.width + 16.0;
+    let read_w = (x0 + cw - 12.0) - read_x;
+    let cond = fonts.wrap(&wx.alt_display.to_uppercase(), theme::bar_font(true), FONT_SIZE - 5.0, 1.0, read_w);
+    let place = if wx.location.is_empty() { Vec::new() } else { fonts.wrap(&wx.location, theme::bar_font(false), FONT_SIZE - 6.0, 0.0, read_w) };
+    let cond_h: f32 = cond.iter().map(|l| l.height()).sum();
+    let place_h: f32 = place.iter().map(|l| l.height()).sum();
+    let read_h = temp.height() + 2.0 + cond_h + if place.is_empty() { 0.0 } else { 2.0 + place_h };
+    let row_h = sky.height().max(read_h);
+    let p2 = if wx.min_temp.is_empty() && wx.max_temp.is_empty() && wx.feels_like.is_empty() {
+        0.0
+    } else {
+        let r1 = fonts.layout("М", theme::bar_font(true), FONT_SIZE - 5.0, 1.0).height();
+        let r2 = fonts.layout("0", theme::bar_font(true), FONT_SIZE, 0.0).height();
+        10.0 + r1 + 2.0 + r2 + 10.0
+    };
+    let p3 = if wx.hourly_rain.is_empty() {
+        0.0
+    } else {
+        let cap_h = fonts.layout(" ДОЖДЬ", theme::bar_font(true), FONT_SIZE - 5.0, 1.0).height();
+        let pct_h = fonts.layout("0%", theme::bar_font(true), FONT_SIZE - 8.0, 0.0).height();
+        10.0 + cap_h + 6.0 + 40.0 + 4.0 + pct_h + 10.0
+    };
+    WeatherLayout { sky, temp, cond, place, row_h, read_h, read_x, p1: row_h + 24.0, p2, p3 }
+}
+
+/// The first (possibly negative) integer in s, as /-?\d+/ finds it.
+fn first_number(s: &str) -> String {
+    let b: Vec<char> = s.chars().collect();
+    for i in 0..b.len() {
+        let neg = b[i] == '-' && b.get(i + 1).map_or(false, |c| c.is_ascii_digit());
+        if b[i].is_ascii_digit() || neg {
+            let mut j = i + 1;
+            while j < b.len() && b[j].is_ascii_digit() {
+                j += 1;
+            }
+            return b[i..j].iter().collect();
+        }
+    }
+    String::new()
+}
+
+fn weather_height(fonts: &mut Fonts, svc: &Services, w: f32) -> f32 {
+    let l = weather_layout(fonts, svc, w);
+    let plates = [l.p1, l.p2, l.p3];
+    let shown: Vec<f32> = plates.iter().copied().filter(|h| *h > 0.0).collect();
+    let content = shown.iter().sum::<f32>() + 8.0 * (shown.len().saturating_sub(1)) as f32;
+    // Column (from STEM_H + 12) + bottom margin 12; cardHeight = implicitHeight + 12 + 24.
+    (content + 12.0 + 24.0).ceil()
+}
+
+/// The weather card's content.
+fn draw_weather(ui: &mut Ui, w: f32, svc: &Services) {
+    let t = ui.theme;
+    let wx = &svc.weather;
+    let (x0, cw) = (12.0, w - 24.0);
+    let l = weather_layout(ui.fonts, svc, w);
+    let temp_color = |s: &str| crate::bar::temp_color(s, t);
+    let mut y = STEM_H + 12.0;
+
+    // Plate 1 (pad 12): the sky glyph, temperature, condition, place.
+    plate(ui, x0, y, cw, l.p1);
+    let iy = y + 12.0;
+    ui.text(&l.sky, x0 + 12.0, iy + ((l.row_h - l.sky.height()) / 2.0 + 0.5).floor(), condition_color(&wx.alt, t), TextStyle::Normal);
+    let mut ry = iy + ((l.row_h - l.read_h) / 2.0 + 0.5).floor();
+    ui.text(&l.temp, l.read_x, ry, temp_color(&wx.text), TextStyle::Normal);
+    ry += l.temp.height() + 2.0;
+    for line in &l.cond {
+        ui.text(line, l.read_x, ry, t.col_white, TextStyle::Normal);
+        ry += line.height();
+    }
+    ry += 2.0;
+    for line in &l.place {
+        ui.text(line, l.read_x, ry, t.col_grey, TextStyle::Normal);
+        ry += line.height();
+    }
+    y += l.p1 + 8.0;
+
+    // Plate 2: МИН / МАКС / ОЩУЩАЕТСЯ, three equal columns.
+    if l.p2 > 0.0 {
+        plate(ui, x0, y, cw, l.p2);
+        let colw = (cw - 20.0 - 16.0) / 3.0;
+        let caps = ["МИН", "МАКС", "ОЩУЩАЕТСЯ"];
+        let vals = [&wx.min_temp, &wx.max_temp, &wx.feels_like];
+        let r1 = ui.fonts.layout("М", theme::bar_font(true), FONT_SIZE - 5.0, 1.0).height();
+        let r2 = ui.fonts.layout("0", theme::bar_font(true), FONT_SIZE, 0.0).height();
+        for i in 0..3 {
+            let cx = x0 + 10.0 + i as f32 * (colw + 8.0);
+            let cl = ui.fonts.layout(caps[i], theme::bar_font(true), FONT_SIZE - 5.0, 1.0);
+            ui.text(&cl, cx + (colw - cl.width) / 2.0, y + 10.0 + ((r1 - cl.height()) / 2.0 + 0.5).floor(), t.col_dim, TextStyle::Normal);
+            let v = if vals[i].is_empty() { "—" } else { vals[i].as_str() };
+            let vl = ui.fonts.layout(v, theme::bar_font(true), FONT_SIZE, 0.0);
+            ui.text(&vl, cx + (colw - vl.width) / 2.0, y + 10.0 + r1 + 2.0 + ((r2 - vl.height()) / 2.0 + 0.5).floor(), temp_color(vals[i]), TextStyle::Normal);
+        }
+        y += l.p2 + 8.0;
+    }
+
+    // Plate 3: rain chance for the next hours, six segments each.
+    if l.p3 > 0.0 {
+        plate(ui, x0, y, cw, l.p3);
+        let cap = ui.fonts.layout(" ДОЖДЬ", theme::bar_font(true), FONT_SIZE - 5.0, 1.0);
+        ui.text(&cap, x0 + 10.0, y + 10.0, t.col_dim, TextStyle::Normal);
+        let n = wx.hourly_rain.len() as f32;
+        let colw = (cw - 20.0 - 8.0 * (n - 1.0)) / n;
+        let by = y + 10.0 + cap.height() + 6.0;
+        for (i, v) in wx.hourly_rain.iter().enumerate() {
+            let lit = ((*v).clamp(0, 100) as f32 / 100.0 * 6.0).round() as i64;
+            let cx = x0 + 10.0 + i as f32 * (colw + 8.0);
+            for k in 0..6i64 {
+                let c = if (5 - k) < lit { t.col_accent } else { Color::qt_rgba(1.0, 1.0, 1.0, 0.07) };
+                ui.scene.rect(cx, by + k as f32 * 7.0, colw, 5.0, c, 1.0, 0.0, Color::TRANSPARENT, true);
+            }
+            let pl = ui.fonts.layout(&format!("{v}%"), theme::bar_font(true), FONT_SIZE - 8.0, 0.0);
+            ui.text(&pl, cx + (colw - pl.width) / 2.0, by + 44.0, if lit > 0 { t.col_white } else { t.col_grey }, TextStyle::Normal);
+        }
+    }
+}
+
 fn calendar_step(app: &mut App, delta: i32) {
     if let Some(c) = app.card.as_mut() {
         let (y, m) = c.month;
@@ -529,6 +704,7 @@ pub fn activate(app: &mut App, action: Action, keyboard: bool) {
     let Action::Card(i) = action else { return };
     match card.kind {
         CardKind::Power => power_pick(app, i, keyboard),
+        CardKind::Weather => {}
         CardKind::Calendar => match i {
             // the focus chain: prev, next; day cells are mouse-only
             CAL_PREV => calendar_step(app, -1),

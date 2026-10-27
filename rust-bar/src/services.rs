@@ -72,8 +72,88 @@ pub struct Battery {
 pub struct Weather {
     pub text: String,
     pub alt: String,
+    pub alt_display: String,
     pub city: String,
+    pub location: String,
+    pub icon: String,
+    pub feels_like: String,
+    pub min_temp: String,
+    pub max_temp: String,
+    pub hourly_rain: Vec<i64>,
     retry_step: usize,
+}
+
+fn strip_html(s: &str) -> String {
+    let mut out = String::new();
+    let mut tag = false;
+    for c in s.chars() {
+        match c {
+            '<' => tag = true,
+            '>' if tag => tag = false,
+            c if !tag => out.push(c),
+            _ => {}
+        }
+    }
+    out.trim().to_string()
+}
+
+/// The first `open([^<]+)close` in s.
+fn between(s: &str, open: &str, close: &str) -> Option<String> {
+    let mut rest = s;
+    while let Some(i) = rest.find(open) {
+        let after = &rest[i + open.len()..];
+        let end = after.find('<').unwrap_or(after.len());
+        if end > 0 && after[end..].starts_with(close) {
+            return Some(after[..end].to_string());
+        }
+        rest = after;
+    }
+    None
+}
+
+/// CenterInfo.parseWeatherJson's reading of the tooltip.
+fn parse_tooltip(w: &mut Weather, tip: &str) {
+    if let Some(l) = between(tip, "<b>", "</b>") {
+        w.location = strip_html(&l);
+    }
+    if let Some(i) = tip.find("Feels like ") {
+        let rest = &tip[i + 11..];
+        let end = rest.find(['<', '\n']).unwrap_or(rest.len());
+        if end > 0 {
+            w.feels_like = strip_html(&rest[..end]);
+        }
+    }
+    if let Some(ic) = between(tip, "<big>", "</big>") {
+        w.icon = strip_html(&ic);
+    }
+    for line in tip.split('\n') {
+        // \s*([^\t]+)\t\t\s*([^\t\n]+), both halves with a degree sign
+        let t = line.trim_start();
+        if let Some(i) = t.find("\t\t") {
+            let (a, b) = (&t[..i], t[i + 2..].trim_start());
+            if !a.is_empty() && !a.contains('\t') && !b.is_empty() {
+                let b = b.split('\t').next().unwrap_or("");
+                if !b.is_empty() && a.contains('°') && b.contains('°') {
+                    w.min_temp = strip_html(a);
+                    w.max_temp = strip_html(b);
+                }
+            }
+        }
+    }
+    let mut rain = Vec::new();
+    let mut rest = tip;
+    while let Some(i) = rest.find("Rain drop ") {
+        rest = &rest[i + 10..];
+        let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+        if !digits.is_empty() && rest[digits.len()..].starts_with('%') {
+            if rain.len() < 5 {
+                rain.push(digits.parse().unwrap_or(0));
+            }
+        }
+    }
+    if !rain.is_empty() {
+        w.hourly_rain = rain;
+    }
 }
 
 #[derive(Default)]
@@ -419,8 +499,13 @@ pub fn dnd_toggle(app: &mut App) {
 
 fn apply_weather(app: &mut App, out: &str) -> bool {
     let Ok(v) = serde_json::from_str::<Value>(out.trim()) else { return false };
-    app.svc.weather.text = v.get("text").and_then(Value::as_str).unwrap_or("").into();
-    app.svc.weather.alt = v.get("alt").and_then(Value::as_str).unwrap_or("").into();
+    let w = &mut app.svc.weather;
+    w.text = v.get("text").and_then(Value::as_str).unwrap_or("").into();
+    w.alt = v.get("alt").and_then(Value::as_str).unwrap_or("").into();
+    w.alt_display = v.get("alt_display").and_then(Value::as_str).filter(|s| !s.is_empty()).unwrap_or(&w.alt).to_string();
+    if let Some(tip) = v.get("tooltip").and_then(Value::as_str) {
+        parse_tooltip(w, tip);
+    }
     app.mark_all_dirty();
     v.get("stale").and_then(Value::as_bool) != Some(true)
 }

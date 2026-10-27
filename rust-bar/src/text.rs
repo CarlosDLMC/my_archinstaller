@@ -415,6 +415,27 @@ impl Fonts {
         line
     }
 
+    /// Text.WordWrap: lines no wider than `max`, broken at spaces (a word
+    /// longer than the line is broken where it overflows, as Qt's WrapAnywhere fallback).
+    pub fn wrap(&mut self, text: &str, key: FontKey, size: f32, letter_spacing: f32, max: f32) -> Vec<Line> {
+        let mut lines = Vec::new();
+        let words: Vec<&str> = text.split(' ').collect();
+        let mut cur = String::new();
+        for w in words {
+            let candidate = if cur.is_empty() { w.to_string() } else { format!("{cur} {w}") };
+            if !cur.is_empty() && self.measure(&candidate, key, size, letter_spacing) > max {
+                lines.push(self.layout(&cur, key, size, letter_spacing));
+                cur = w.to_string();
+            } else {
+                cur = candidate;
+            }
+        }
+        if !cur.is_empty() || lines.is_empty() {
+            lines.push(self.layout(&cur, key, size, letter_spacing));
+        }
+        lines
+    }
+
     /// Text.ElideRight: cut and end with "…" so the line fits `max`.
     pub fn elide_right(&mut self, line: &Line, text: &str, key: FontKey, max: f32, letter_spacing: f32) -> Line {
         if line.width <= max {

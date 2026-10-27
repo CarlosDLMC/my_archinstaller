@@ -387,7 +387,7 @@ fn vpn_slot_width(p: &mut Painter) -> f32 {
 }
 
 /// CenterInfo.getTempColor
-fn temp_color(text: &str, theme: &Theme) -> Color {
+pub fn temp_color(text: &str, theme: &Theme) -> Color {
     let num: String = {
         let mut s = String::new();
         let mut it = text.chars().peekable();
@@ -528,6 +528,9 @@ fn draw_center(p: &mut Painter, svc: &Services, x0: f32, width: f32, design_widt
     if has_weather {
         let px = left_x + bell.width;
         let py = row_y + qround((row_h - 26.0) / 2.0);
+        if p.open == Some(crate::cards::CardKind::Weather) {
+            p.scene.rect(px, py, pill_w, 26.0, theme.col_bg, 8.0, 0.0, Color::TRANSPARENT, true);
+        }
         let mut tx = px + qround((pill_w - row_w) / 2.0);
         let row_text_h = parts.iter().map(|(l, _)| l.height()).fold(0.0, f32::max);
         let ty = py + qround((26.0 - row_text_h) / 2.0);
@@ -570,6 +573,11 @@ pub fn activate(app: &mut App, strip: usize, action: Action, button: u32) {
         Action::Clock if button == BTN_LEFT => {
             if let Some(h) = hit {
                 crate::cards::toggle(app, strip, crate::cards::CardKind::Calendar, &h, false);
+            }
+        }
+        Action::Weather if button == BTN_LEFT => {
+            if let Some(h) = hit {
+                crate::cards::toggle(app, strip, crate::cards::CardKind::Weather, &h, false);
             }
         }
         Action::LayoutCycle => crate::ipc::layout_next(app),
