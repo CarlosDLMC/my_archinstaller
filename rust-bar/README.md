@@ -27,6 +27,12 @@ from libQt6Quick, uniforms and textures read back from Qt's GL calls):
 - **Positions**: anchors centre with qRound(half(parent) - half(size)), where
   an odd integer part rounds a half up; RowLayout snaps sizes up and centres
   with qRound; horizontalAlignment centres the advances (no overhang).
+- **Rounded rectangles** are Qt's smooth rectangle node, not a circle SDF:
+  each corner is an inscribed polygon of `clamp(ceil(r·π/6), 3, 18)` chords,
+  radius capped at `min(w, h)·0.4999` and dropped at ≤ 0.5 px, and the
+  anti-aliasing ring moves every edge vertex half a pixel in x *and* in y, so
+  alpha is `0.5 - max((n·q - c) / (n.x + n.y))` over the edges and chords
+  (exact on the battery gauge's 1 px corners, where `fwidth` was 60 levels off).
 - Colours go through QColor's arithmetic (Qt 6's darker/lighter in float HSV) (`color.rs`), blending is in gamma
   space on a non-sRGB, premultiplied surface, like Qt's.
 
@@ -50,7 +56,6 @@ from libQt6Quick, uniforms and textures read back from Qt's GL calls):
 - [x] Engine, text parity (≥99.6 % of pixels within 8/255 of Qt on the test sets)
 - [x] Strip: every widget - logo, workspaces, dividers, title, clock, bell (DND), weather pill, agent, CPU, memory, volume (PipeWire, event-driven), battery (sysfs), Wi-Fi (nmcli monitor), VPN, layout, ПУЛЬТ icon; matches the QML strip in the sandbox
 - [x] Shaping (rustybuzz: flags, ZWJ sequences, JetBrains Mono ligatures - Qt applies them) and colour emoji (Noto strike scaled by size/strike height, as Qt does)
-- [ ] Strip: battery change events (netlink instead of udevadm)
 - [x] Animations (Qt easing curves, Behavior-style retargeting, looping pulse), cursor shape on hover changes, click-on-release
 - [x] Card framework: card-sized layer + 1-pixel click catcher (wp_viewporter) instead of a full-screen surface, notch canvas (arcTo, QPainter-like fill), CardKeys focus chain, hover colour animations, `cards toggle` IPC
 - [x] Power card (logo) - matches the QML card; with it open: 21 MB PSS / 24 MB VRAM against 88 MB / 127 MB
@@ -62,7 +67,8 @@ from libQt6Quick, uniforms and textures read back from Qt's GL calls):
 - [x] Theme follows wallust live (inotify, 80 ms debounce); timezone and weather city follow their cache files
 - [x] Claude Code card - plan, limit meters with reset times and stale-data note, tokens by day and by model (hover shows the split), the same agent-usage.py modes and refresh cadence
 - [x] Wi-Fi card (networks): link header, scanned networks with signal and lock, rescan timing, password entry (● echo, blinking cursor), connect watchdog, disconnect; the strip icon blinks while connecting
-- [ ] Cards: network details (NetworkPanel, right click), battery
+- [x] Battery card - level, segment gauge with the limit marker, time left / draw, capacity, cycles, health, per-pack rows, charge-limit presets through the same root helper; kernel power_supply uevents (netlink, no `udevadm monitor` process) keep it and the strip fresh
+- [ ] Cards: network details (NetworkPanel, right click)
 - [ ] The CRT power-off effect (quickshell/crt, run by CrtOff.sh before logout/reboot/shutdown)
 - [ ] Overlays: layout OSD, clipboard, polkit agent, power menu, screenshot, recording
 - [ ] Wallpaper carousel + reveal, overview

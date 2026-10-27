@@ -58,17 +58,6 @@ pub struct Stats {
 }
 
 #[derive(Default)]
-pub struct Battery {
-    pub present: bool,
-    paths: Vec<String>,
-    mains: String,
-    pub level: i64,
-    pub charge_state: String,
-    pub limit_end: i64,
-    pub draw_watts: f64,
-}
-
-#[derive(Default)]
 pub struct Weather {
     pub text: String,
     pub alt: String,
@@ -175,7 +164,7 @@ pub struct Services {
     pub dnd_enabled: bool,
     pub dnd_available: bool,
     pub weather: Weather,
-    pub battery: Battery,
+    pub battery: crate::battery::Battery,
     pub wifi: Wifi,
     pub vpn: String,
     vpn_checked: bool,
@@ -345,12 +334,17 @@ fn find_temp_path() -> Option<String> {
     glob_dir("/sys/class/thermal", "thermal_zone").into_iter().map(|z| format!("{z}/temp")).find(|p| std::path::Path::new(p).exists())
 }
 
-fn glob_dir(dir: &str, prefix: &str) -> Vec<String> {
+pub(crate) fn glob_dir(dir: &str, prefix: &str) -> Vec<String> {
     let mut v: Vec<String> = std::fs::read_dir(dir)
         .map(|r| r.filter_map(|e| e.ok()).map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| n.starts_with(prefix)).map(|n| format!("{dir}/{n}")).collect())
         .unwrap_or_default();
     v.sort();
     v
+}
+
+/// `[ -x path ]`.
+pub(crate) fn is_executable(path: &str) -> bool {
+    std::ffi::CString::new(path).map_or(false, |c| unsafe { libc::access(c.as_ptr(), libc::X_OK) } == 0)
 }
 
 fn stats_pref() -> bool {
@@ -497,11 +491,7 @@ pub fn start(app: &mut App) {
 
     crate::pult::start(app);
 
-    battery_probe(app);
-    app.every(Duration::from_secs(60), |app| {
-        battery_refresh(app, true);
-        true
-    });
+    crate::battery::start(app);
 
     app.svc.wifi.has = glob_dir("/sys/class/net", "").iter().any(|d| std::path::Path::new(&format!("{d}/wireless")).exists());
     if app.svc.wifi.has {
@@ -569,91 +559,6 @@ pub fn request_weather(app: &mut App) {
         app.svc.weather.retry_step += 1;
         app.debounce("weather-retry", Duration::from_secs(minutes * 60), request_weather);
     });
-}
-
-// ---- battery (BatteryState.qml, read straight from sysfs) ----
-
-fn read_kv(path: &str) -> Vec<(String, String)> {
-    std::fs::read_to_string(path)
-        .unwrap_or_default()
-        .lines()
-        .filter_map(|l| l.split_once('=').map(|(k, v)| (k.to_string(), v.trim().to_string())))
-        .collect()
-}
-
-fn battery_probe(app: &mut App) {
-    let b = &mut app.svc.battery;
-    b.paths.clear();
-    b.mains.clear();
-    for d in glob_dir("/sys/class/power_supply", "") {
-        let ty = std::fs::read_to_string(format!("{d}/type")).unwrap_or_default();
-        match ty.trim() {
-            "Battery" => {
-                let scope = std::fs::read_to_string(format!("{d}/scope")).unwrap_or("System".into());
-                let present = std::fs::read_to_string(format!("{d}/present")).unwrap_or("1".into());
-                if scope.trim() == "System" && present.trim() == "1" {
-                    b.paths.push(d);
-                }
-            }
-            "Mains" if b.mains.is_empty() => b.mains = d,
-            _ => {}
-        }
-    }
-    b.present = !b.paths.is_empty();
-    battery_refresh(app, true);
-}
-
-pub fn battery_refresh(app: &mut App, with_limits: bool) {
-    let b = &mut app.svc.battery;
-    if !b.present {
-        return;
-    }
-    let (mut e_now, mut e_full, mut watts) = (0f64, 0f64, 0f64);
-    let (mut any_chg, mut any_dis, mut all_full) = (false, false, true);
-    let mut end_limit = 0i64;
-    for p in &b.paths {
-        let kv = read_kv(&format!("{p}/uevent"));
-        let num = |k: &str| kv.iter().find(|(kk, _)| kk == &format!("POWER_SUPPLY_{k}")).and_then(|(_, v)| v.parse::<f64>().ok()).unwrap_or(0.0);
-        let volts = num("VOLTAGE_NOW");
-        let (mut en, mut ef, mut pn) = (num("ENERGY_NOW"), num("ENERGY_FULL"), num("POWER_NOW"));
-        if ef == 0.0 && volts > 0.0 {
-            en = num("CHARGE_NOW") * volts / 1e6;
-            ef = num("CHARGE_FULL") * volts / 1e6;
-            pn = num("CURRENT_NOW") * volts / 1e6;
-        }
-        e_now += en;
-        e_full += ef;
-        watts += pn.abs();
-        let status = kv.iter().find(|(k, _)| k == "POWER_SUPPLY_STATUS").map(|(_, v)| v.as_str()).unwrap_or("Unknown");
-        any_chg |= status == "Charging";
-        any_dis |= status == "Discharging";
-        all_full &= status == "Full";
-        if with_limits && end_limit == 0 {
-            end_limit = std::fs::read_to_string(format!("{p}/charge_control_end_threshold")).ok().and_then(|t| t.trim().parse().ok()).unwrap_or(0);
-        }
-    }
-    if with_limits {
-        b.limit_end = end_limit;
-    }
-    let on_ac = b.mains.is_empty() || std::fs::read_to_string(format!("{}/uevent", b.mains)).unwrap_or_default().contains("POWER_SUPPLY_ONLINE=1");
-    b.draw_watts = watts / 1e6;
-    let before = (b.level, b.charge_state.clone());
-    b.level = if e_full > 0.0 { ((100.0 * e_now / e_full).round() as i64).clamp(0, 100) } else { 0 };
-    b.charge_state = if any_dis || !on_ac {
-        "discharging"
-    } else if any_chg && b.draw_watts > 0.2 {
-        "charging"
-    } else if b.limit_end > 0 && b.limit_end < 99 && b.level >= b.limit_end - 2 {
-        "holding"
-    } else if all_full || b.level >= 97 {
-        "full"
-    } else {
-        "idle"
-    }
-    .into();
-    if before != (b.level, b.charge_state.clone()) {
-        app.mark_all_dirty();
-    }
 }
 
 // ---- Wi-Fi (nmcli, as WifiWidget asks it) ----

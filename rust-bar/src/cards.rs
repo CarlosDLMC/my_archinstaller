@@ -40,6 +40,7 @@ pub enum CardKind {
     Vpn,
     Agent,
     Wifi,
+    Battery,
 }
 
 /// A fixed origin for animations that run on the clock (Spinner).
@@ -144,6 +145,8 @@ fn geometry(kind: CardKind) -> (f32, f32, Stem) {
         CardKind::Agent => (420.0, 0.0, Stem::Center),
         // WifiWidget (networks): as wide as the longest SSID needs.
         CardKind::Wifi => (300.0, 0.0, Stem::Center),
+        // BatteryWidget: 440 wide, max(200, min(content + 30, 620)).
+        CardKind::Battery => (440.0, 0.0, Stem::Center),
     }
 }
 
@@ -163,12 +166,17 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         w = crate::wifi_card::card_width(&mut app.fonts, &app.svc);
         h = crate::wifi_card::card_height(&mut app.fonts, &app.svc);
     }
+    let mut content_h = 0.0;
+    if kind == CardKind::Battery {
+        crate::battery::opened(app);
+        content_h = crate::battery::content_height(&mut app.fonts, &app.svc, w);
+        h = crate::battery::card_height(&mut app.fonts, &app.svc, w);
+    }
     let s = &app.strips[strip];
     let ui = crate::bar::ui_scale(s.screen_width);
     if kind == CardKind::Weather {
         h = weather_height(&mut app.fonts, &app.svc, w);
     }
-    let mut content_h = 0.0;
     if kind == CardKind::Audio {
         if let Some(pw) = app.svc.pw.as_mut() {
             pw.track_all(true);
@@ -337,6 +345,14 @@ pub fn update_height(app: &mut App) {
                 c.content_h = content;
             }
             160f32.max((content.ceil() + 30.0).min(screen_h * 0.85))
+        }
+        CardKind::Battery => {
+            let w = app.card.as_ref().unwrap().width;
+            let content = crate::battery::content_height(&mut app.fonts, &app.svc, w);
+            if let Some(c) = app.card.as_mut() {
+                c.content_h = content;
+            }
+            crate::battery::card_height(&mut app.fonts, &app.svc, w)
         }
         CardKind::Audio => {
             let content = crate::audio_card::content_height(&mut app.fonts, &app.svc);
@@ -619,7 +635,7 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
                 y += 42.0 + 6.0;
             }
         }
-        CardKind::Calendar | CardKind::Weather | CardKind::Audio | CardKind::Pult | CardKind::Vpn | CardKind::Agent | CardKind::Wifi => {}
+        CardKind::Calendar | CardKind::Weather | CardKind::Audio | CardKind::Pult | CardKind::Vpn | CardKind::Agent | CardKind::Wifi | CardKind::Battery => {}
     }
     if ui.card.kind == CardKind::Calendar {
         draw_calendar(&mut ui, w);
@@ -638,6 +654,13 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
         ui.scene.save();
         ui.scene.clip_rect(8.0, STEM_H + 8.0, w - 16.0, h - 28.0);
         crate::agent::draw(&mut ui, w, svc, svc.agent_busy, STEM_H + 8.0 - scroll);
+        ui.scene.restore();
+    }
+    if ui.card.kind == CardKind::Battery {
+        let scroll = ui.card.scroll;
+        ui.scene.save();
+        ui.scene.clip_rect(8.0, STEM_H + 8.0, w - 16.0, h - 28.0);
+        crate::battery::draw(&mut ui, w, svc, STEM_H + 8.0 - scroll);
         ui.scene.restore();
     }
     if ui.card.kind == CardKind::Vpn {
@@ -994,7 +1017,7 @@ fn calendar_step(app: &mut App, delta: i32) {
 /// A wheel turn over the card (QML angleDelta: +120 per notch away from you).
 pub fn wheel(app: &mut App, angle_delta_y: f32) {
     let Some(c) = app.card.as_mut() else { return };
-    if c.kind == CardKind::Agent {
+    if c.kind == CardKind::Agent || c.kind == CardKind::Battery {
         let view = c.height - 28.0;
         let max = (c.content_h - view).max(0.0);
         c.scroll = (c.scroll - angle_delta_y / 120.0 * 3.0 * 20.0).clamp(0.0, max);
@@ -1074,6 +1097,7 @@ pub fn activate(app: &mut App, action: Action, keyboard: bool) {
         CardKind::Vpn => crate::vpn::activate(app, i),
         CardKind::Agent => {}
         CardKind::Wifi => crate::wifi_card::activate(app, i),
+        CardKind::Battery => crate::battery::activate(app, i),
         CardKind::Calendar => match i {
             // the focus chain: prev, next; day cells are mouse-only
             CAL_PREV => calendar_step(app, -1),

@@ -74,6 +74,7 @@ fn cards_toggle(app: &mut App, card: &str) {
         "vpn" => (CardKind::Vpn, Action::Vpn),
         "agent" => (CardKind::Agent, Action::Agent),
         "network" => (CardKind::Wifi, Action::Wifi),
+        "battery" => (CardKind::Battery, Action::Battery),
         _ => return,
     };
     let focused = app.svc.mango.focused().map(|m| m.name.clone()).unwrap_or_default();
