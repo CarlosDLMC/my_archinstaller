@@ -134,6 +134,11 @@ pub struct App {
     pub(crate) running: HashMap<String, (Instant, u32)>,
     pub(crate) timers: HashMap<&'static str, RegistrationToken>,
     pub exit: bool,
+    /// When the bar started: Theme.qml's palette load lands just after it.
+    pub(crate) started: Instant,
+    /// The weather card's Texts, kept between openings (CenterInfo's card is
+    /// not a Loader: once shown, its Texts live as long as the bar).
+    pub(crate) weather_texts: Option<crate::text::TextMemo>,
     /// Results of work done off the main thread, run back on the event loop.
     pub(crate) bg_tx: smithay_client_toolkit::reexports::calloop::channel::Sender<Box<dyn FnOnce(&mut App) + Send>>,
     /// The one decode thread's queue (runtime.rs, background()).
@@ -197,6 +202,8 @@ impl App {
             running: HashMap::new(),
             timers: HashMap::new(),
             exit: false,
+            started: Instant::now(),
+            weather_texts: None,
         };
         if crt_mode {
             crate::crt::start(&mut app);
@@ -384,6 +391,15 @@ impl App {
                 let mut memo = std::mem::take(&mut self.strips[i].texts);
                 let s = &self.strips[i];
                 let ctx = bar::Ctx { width: width as f32, screen_width: s.screen_width, name: &s.name, pointer: s.pointer, open: self.card.as_ref().filter(|c| c.strip == i).map(|c| c.kind) };
+                // Theme.qml loads the wallust palette just after the QML bar's
+                // first frame, and to Qt that is a change: every strip text whose
+                // colour it moved is gray from then on (TextMemo). A silent pass
+                // in the built-in colours gives this bar the same history.
+                if memo.is_empty() && self.started.elapsed() < std::time::Duration::from_secs(5) {
+                    let mut dry = Scene::new(1.0, 1.0);
+                    dry.clear(width as f32, height as f32);
+                    let _ = bar::draw(&mut dry, &mut self.fonts, &Theme::fallback(), &self.svc, &ctx, &mut memo);
+                }
                 let (hits, animating) = bar::draw(&mut scene, &mut self.fonts, &self.theme, &self.svc, &ctx, &mut memo);
                 self.strips[i].hits = hits;
                 self.strips[i].texts = memo;

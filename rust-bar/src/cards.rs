@@ -76,6 +76,8 @@ pub struct OpenCard {
     pub(crate) sliders: Vec<(u32, f32, f32, f32)>,
     /// LevelMeter: (level, hold, hold ticks left).
     pub(crate) meter: (f32, f32, i32),
+    /// The meter's segment count at the last draw (it follows the width).
+    pub(crate) meter_cells: i32,
     /// ConsoleButton.tint for the next button: colAlert (the mute buttons).
     pub(crate) tint_alert: bool,
     numbers: HashMap<u32, Animated<f32>>,
@@ -293,6 +295,7 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         wheel_acc: 0.0,
         sliders: Vec::new(),
         meter: (0.0, 0.0, 0),
+        meter_cells: 12,
         tint_alert: false,
         numbers: HashMap::new(),
         scroll: 0.0,
@@ -304,6 +307,14 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         top: y.round(),
     });
     app.strips[strip].win.dirty = true;
+    if kind == CardKind::Weather {
+        // CenterInfo's weather card is not a Loader: Qt makes its Texts' nodes
+        // the first time it is shown and keeps them, so what changed since the
+        // last opening is gray (the palette load at startup came before any node).
+        if let Some(m) = app.weather_texts.take() {
+            app.card.as_mut().unwrap().texts = m;
+        }
+    }
     if kind == CardKind::Pult {
         crate::pult::opened(app);
     }
@@ -327,7 +338,10 @@ pub fn close(app: &mut App) {
     if app.card.as_ref().map(|c| c.kind) == Some(CardKind::Network) {
         crate::network_card::closed(app);
     }
-    let Some(card) = app.card.take() else { return };
+    let Some(mut card) = app.card.take() else { return };
+    if card.kind == CardKind::Weather {
+        app.weather_texts = Some(std::mem::take(&mut card.texts));
+    }
     if card.kind == CardKind::Audio {
         if let Some(pw) = app.svc.pw.as_mut() {
             pw.track_all(false);

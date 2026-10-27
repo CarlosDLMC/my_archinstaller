@@ -339,6 +339,7 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
 fn level_meter(ui: &mut Ui, x: f32, y: f32, w: f32, has_node: bool) {
     let t = ui.theme;
     let n = 12.max((w / 12.0).round() as i32);
+    ui.card.meter_cells = n;
     let cell = (w - 2.0 * (n - 1) as f32) / n as f32;
     let (level, hold) = if has_node { (ui.card.meter.0, ui.card.meter.1) } else { (0.0, 0.0) };
     let lit = (level * n as f32).round() as i32;
@@ -360,7 +361,9 @@ fn level_meter(ui: &mut Ui, x: f32, y: f32, w: f32, has_node: bool) {
 }
 
 /// The meter's 33 ms tick: level falls 0.025 a tick, the hold stays 30 ticks
-/// then falls 0.02 a tick.
+/// then falls 0.02 a tick. The card is redrawn only when that moves a lit
+/// segment or the hold marker - Qt repaints only what changed, and a silent
+/// mic redrew the card (and mango re-composited it) 30 times a second.
 pub fn meter_tick(app: &mut App) -> bool {
     let Some(card) = app.card.as_mut() else { return false };
     if card.kind != crate::cards::CardKind::Audio {
@@ -374,6 +377,9 @@ pub fn meter_tick(app: &mut App) -> bool {
         let db = 20.0 * peak.log10();
         ((db + 60.0) / 60.0).clamp(0.0, 1.0)
     };
+    let n = card.meter_cells as f32;
+    let shown = |level: f32, hold: f32| ((level * n).round() as i32, hold > 0.02, (hold * n).floor() as i32);
+    let before = shown(card.meter.0, card.meter.1);
     let (level, hold, ticks) = &mut card.meter;
     *level = target.max(*level - 0.025);
     if target >= *hold {
@@ -384,7 +390,9 @@ pub fn meter_tick(app: &mut App) -> bool {
     } else {
         *hold = level.max(*hold - 0.02);
     }
-    card.win.dirty = true;
+    if shown(card.meter.0, card.meter.1) != before {
+        card.win.dirty = true;
+    }
     true
 }
 

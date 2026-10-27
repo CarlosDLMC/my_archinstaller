@@ -190,6 +190,11 @@ pub struct TextMemo {
 }
 
 impl TextMemo {
+    /// Nothing drawn through it yet.
+    pub fn is_empty(&self) -> bool {
+        self.seen.is_empty()
+    }
+
     pub fn begin_frame(&mut self) {
         self.sites.clear();
     }
