@@ -260,7 +260,12 @@ impl App {
             crate::ipc::listen(&mut app);
         }
         while !app.exit {
-            ev.dispatch(None, &mut app).expect("dispatch");
+            // The compositor went away (a logout, mango quitting): leave
+            // quietly, as Qt does - an expect here aborted with a core dump.
+            // Nothing is torn down: every surface died with the connection.
+            if ev.dispatch(None, &mut app).is_err() {
+                std::process::exit(0);
+            }
             app.redraw_dirty();
         }
     }
