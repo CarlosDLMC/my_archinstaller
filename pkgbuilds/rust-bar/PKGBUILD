@@ -47,6 +47,8 @@ build() {
   export CARGO_HOME="$srcdir/cargo-home"
   # Inside srcdir: the builder's own CARGO_TARGET_DIR must not catch it.
   export CARGO_TARGET_DIR="$srcdir/target"
+  # Paths in the binary (panic messages) without the build directory.
+  export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$srcdir=/build"
   cargo build --frozen --release
 }
 

@@ -164,7 +164,7 @@ log):
 
 | Part | Memory |
 |---|---|
-| quickshell (`qs -c bar`) - the bar, its cards and the overview | 92 MB |
+| rust-bar - the bar, its cards, menus and the overview (was quickshell: 92 MB) | 27 MB |
 | **mango** - the compositor (window manager, rendering, input) | **29 MB** |
 | **Xwayland** - X11 compatibility, for apps that are not Wayland (Steam, some games) | **19 MB** |
 | keyd - the Caps Lock navigation layer | 35 MB |
@@ -182,7 +182,7 @@ log):
 | Other amdgpu memory with no counter (firmware, ring buffers, display state) | ~260 MB |
 | GPU buffers in system RAM (the wallpaper image among them) | ~90 MB |
 | Shared libraries, locked memory and the rest | ~250 MB |
-| **Total** | **~1.27 GB** |
+| **Total** | **~1.2 GB** |
 
 The processes were measured on the running desktop with browsers open (the
 browsers themselves are left out), so they add up to a little more than on the
@@ -190,9 +190,17 @@ idle desktop of the comparison (~190 MB, which gives the ~1.2 GB). Counted the
 same way as in the resources table (with the shared libraries they use), mango
 is 70 MB where Hyprland was 153 MB.
 
+The bar is rust-bar since 2026-10-27, a Rust rewrite of the quickshell bar.
+Measured on this desktop the same way, idle after opening every card and
+menu: 27 MB against the quickshell bar's 94 MB (plus 23 MB of it in swap),
+4 threads against 31, 42 MB of GPU memory against 66, and 0.10% of a core
+idle against 0.12%. Opening a card costs a quarter of the CPU; the overview,
+the wallpaper carousel and the clipboard a little less than before (the rest
+of the table was measured with the quickshell bar).
+
 About half of it is the kernel and the AMD driver, the same under Hyprland or
 mango. That is why it does not go under 1 GB by changing the desktop: removing
-the bar entirely would save ~130 MB, and the VRAM bookkeeping only exists on a
+the bar entirely would save ~30 MB (~130 MB with the quickshell bar), and the VRAM bookkeeping only exists on a
 GPU with a lot of VRAM (it serves GPU compute, ROCm/OpenCL). A machine with a
 smaller or integrated GPU idles lower.
 
