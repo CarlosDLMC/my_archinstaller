@@ -186,6 +186,9 @@ pub struct Services {
     /// The command PowerWidget.endSession() runs 250 ms after its card closes.
     pub pending_end: String,
     pub pult: crate::pult::Pult,
+    pub vpn_card: crate::vpn::Vpn,
+    /// (time sync busy, weather sync busy), mirrored for drawing.
+    pub vpn_busy: (bool, bool),
     /// btScanProc.running, mirrored for drawing.
     pub pult_scanning: bool,
 }
@@ -389,11 +392,50 @@ fn cache_dir() -> String {
     format!("{}/.cache/quickshell", home())
 }
 
-fn tick_clock(app: &mut App) -> bool {
-    let tz = std::fs::read_to_string(format!("{}/timezone", cache_dir())).map(|t| t.trim().to_string()).unwrap_or_default();
-    if tz != app.svc.timezone {
-        app.svc.timezone = tz;
+fn read_cache_files(app: &mut App) {
+    app.svc.timezone = std::fs::read_to_string(format!("{}/timezone", cache_dir())).map(|t| t.trim().to_string()).unwrap_or_default();
+    app.svc.weather.city = std::fs::read_to_string(format!("{}/weather_city", cache_dir())).map(|t| t.trim().to_string()).unwrap_or_default();
+}
+
+/// ~/.cache/quickshell changed: the timezone and weather city follow the VPN
+/// card's sync (CenterInfo's FileViews); a new city fetches the weather.
+fn cache_changed(app: &mut App, name: &str) {
+    match name {
+        "timezone" => {
+            read_cache_files(app);
+            tick_clock(app);
+            app.mark_all_dirty();
+        }
+        "weather_city" => {
+            let before = app.svc.weather.city.clone();
+            read_cache_files(app);
+            if app.svc.weather.city != before {
+                request_weather(app);
+            }
+            app.mark_all_dirty();
+        }
+        _ => {}
     }
+}
+
+/// Theme.qml's FileView on wallust-colors.json, debounced 80 ms (wallust
+/// rewrites it in place).
+fn palette_changed(app: &mut App, name: &str) {
+    if name == "wallust-colors.json" {
+        app.debounce("palette", Duration::from_millis(80), |app| {
+            if let Ok(t) = std::fs::read_to_string(palette_path()) {
+                if app.theme.apply_json(&t) {
+                    if let Some(c) = app.card.as_mut() {
+                        c.invalidate_notch();
+                    }
+                    app.mark_all_dirty();
+                }
+            }
+        });
+    }
+}
+
+fn tick_clock(app: &mut App) -> bool {
     let t = now_hm(&app.svc.timezone);
     if t != app.svc.clock {
         app.svc.clock = t;
@@ -414,6 +456,10 @@ pub fn start(app: &mut App) {
     refresh_stats(app);
     app.every(Duration::from_millis(5000), refresh_stats);
 
+    read_cache_files(app);
+    let _ = std::fs::create_dir_all(cache_dir());
+    app.watch_dir(&cache_dir(), cache_changed);
+    app.watch_dir(&format!("{}/.config/quickshell/bar", home()), palette_changed);
     tick_clock(app);
     app.every(Duration::from_millis(1000), tick_clock);
 
@@ -667,6 +713,10 @@ fn vpn_reset(app: &mut App) {
         tick_clock(app);
         request_weather(app);
     });
+}
+
+pub fn vpn_check(app: &mut App) {
+    vpn_poll(app);
 }
 
 fn vpn_poll(app: &mut App) -> bool {

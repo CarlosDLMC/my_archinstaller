@@ -627,6 +627,11 @@ pub fn activate(app: &mut App, strip: usize, action: Action, button: u32) {
                 crate::cards::toggle(app, strip, crate::cards::CardKind::Pult, &h, false);
             }
         }
+        Action::Vpn if button == BTN_LEFT => {
+            if let Some(h) = hit {
+                crate::cards::toggle(app, strip, crate::cards::CardKind::Vpn, &h, false);
+            }
+        }
         Action::LayoutCycle => crate::ipc::layout_next(app),
         Action::Bell => services::dnd_toggle(app),
         _ => {}

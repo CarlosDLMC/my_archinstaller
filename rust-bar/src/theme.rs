@@ -3,7 +3,7 @@
 //! what it is; the arithmetic here is the same, through QColor's rounding.
 
 use crate::color::Color;
-use crate::text::FontKey;
+pub use crate::text::FontKey;
 
 pub const FONT: &str = "Terminess Nerd Font";
 pub const FONT_CONTENT: &str = "JetBrainsMono Nerd Font";

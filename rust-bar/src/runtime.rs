@@ -126,6 +126,40 @@ impl App {
         });
     }
 
+    /// FileView { watchChanges: true } for a directory: `changed(app, name)`
+    /// for each file in it that is written, created, moved in or removed.
+    pub fn watch_dir(&mut self, dir: &str, changed: fn(&mut App, &str)) {
+        let fd = unsafe { libc::inotify_init1(libc::IN_NONBLOCK | libc::IN_CLOEXEC) };
+        if fd < 0 {
+            return;
+        }
+        let Ok(c) = std::ffi::CString::new(dir) else { return };
+        let mask = libc::IN_CLOSE_WRITE | libc::IN_MOVED_TO | libc::IN_CREATE | libc::IN_DELETE;
+        if unsafe { libc::inotify_add_watch(fd, c.as_ptr(), mask) } < 0 {
+            unsafe { libc::close(fd) };
+            return;
+        }
+        let file = unsafe { <std::fs::File as std::os::fd::FromRawFd>::from_raw_fd(fd) };
+        let _ = self.handle.insert_source(Generic::new(file, Interest::READ, Mode::Level), move |_, f, app: &mut App| {
+            let mut buf = [0u8; 4096];
+            loop {
+                match unsafe { f.get_mut() }.read(&mut buf) {
+                    Ok(n) if n > 0 => {
+                        let mut off = 0;
+                        while off + 16 <= n {
+                            let len = u32::from_ne_bytes([buf[off + 12], buf[off + 13], buf[off + 14], buf[off + 15]]) as usize;
+                            let name = &buf[off + 16..(off + 16 + len).min(n)];
+                            let name = String::from_utf8_lossy(name.split(|b| *b == 0).next().unwrap_or(&[])).into_owned();
+                            changed(app, &name);
+                            off += 16 + len;
+                        }
+                    }
+                    _ => return Ok(PostAction::Continue),
+                }
+            }
+        });
+    }
+
     /// Calls `ready` whenever `fd` (owned elsewhere) is readable.
     pub fn watch_fd(&self, fd: std::os::fd::RawFd, ready: fn(&mut App)) {
         let src = Generic::new(unsafe { smithay_client_toolkit::reexports::calloop::generic::FdWrapper::new(fd) }, Interest::READ, Mode::Level);

@@ -37,6 +37,7 @@ pub enum CardKind {
     Weather,
     Audio,
     Pult,
+    Vpn,
 }
 
 /// A fixed origin for animations that run on the clock (Spinner).
@@ -87,12 +88,18 @@ pub struct OpenCard {
     /// Flickable.contentY and the content height.
     scroll: f32,
     content_h: f32,
+    notch_stale: bool,
     /// The card's x on screen is fractional in QML (the icon centre is); the
     /// surface sits at the whole pixel and the content is drawn this far in.
     frac: f32,
 }
 
 impl OpenCard {
+    /// The palette changed: repaint the notch in the new colBg.
+    pub fn invalidate_notch(&mut self) {
+        self.notch_stale = true;
+    }
+
     /// An animated number (Behavior on opacity { NumberAnimation }).
     pub(crate) fn number(&mut self, id: u32, target: f32, ms: u64, now: Instant) -> (f32, bool) {
         let a = self.numbers.entry(id).or_insert_with(|| Animated::new(target, ms, Easing::Linear));
@@ -125,6 +132,8 @@ fn geometry(kind: CardKind) -> (f32, f32, Stem) {
         CardKind::Audio => (330.0, 0.0, Stem::Center),
         // PultWidget: 360 wide, content + 28 high, stem on the right.
         CardKind::Pult => (360.0, 0.0, Stem::Right),
+        // VpnWidget: 260 wide, content + 28 high.
+        CardKind::Vpn => (260.0, 0.0, Stem::Center),
     }
 }
 
@@ -159,6 +168,9 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
     if kind == CardKind::Pult {
         let scanning = crate::pult::scanning(app);
         h = crate::pult::card_height(&mut app.fonts, &app.svc, scanning);
+    }
+    if kind == CardKind::Vpn {
+        h = crate::vpn::card_height(&mut app.fonts, &app.svc);
     }
     // DropdownWidget.cardX: from the icon's centre on the screen.
     let icon_w = icon.w / ui;
@@ -234,10 +246,14 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         scroll: 0.0,
         content_h,
         frac,
+        notch_stale: false,
     });
     app.strips[strip].win.dirty = true;
     if kind == CardKind::Pult {
         crate::pult::opened(app);
+    }
+    if kind == CardKind::Vpn {
+        crate::vpn::opened(app);
     }
 }
 
@@ -272,6 +288,7 @@ pub fn update_height(app: &mut App) {
             let scanning = crate::pult::scanning(app);
             crate::pult::card_height(&mut app.fonts, &app.svc, scanning)
         }
+        CardKind::Vpn => crate::vpn::card_height(&mut app.fonts, &app.svc),
         CardKind::Audio => {
             let content = crate::audio_card::content_height(&mut app.fonts, &app.svc);
             if let Some(c) = app.card.as_mut() {
@@ -437,9 +454,26 @@ impl Ui<'_> {
 
     #[allow(clippy::too_many_arguments)]
     pub fn console_button_sized(&mut self, id: u32, x: f32, y: f32, w: f32, font: f32, icon: &str, icon_color: Color, label: &str, current: bool) {
+        self.console_button_ex(id, x, y, w, font, icon, icon_color, label, current, false, true);
+    }
+
+    /// ConsoleButton with busy (a Spinner where the icon is) and enabled
+    /// (opacity .45, not in the focus chain, not clickable).
+    #[allow(clippy::too_many_arguments)]
+    pub fn console_button_ex(&mut self, id: u32, x: f32, y: f32, w: f32, font: f32, icon: &str, icon_color: Color, label: &str, current: bool, busy: bool, enabled: bool) {
+        self.scene.save();
+        if !enabled {
+            self.scene.multiply_opacity(0.45);
+        }
+        self.console_button_inner(id, x, y, w, font, icon, icon_color, label, current, busy, enabled);
+        self.scene.restore();
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn console_button_inner(&mut self, id: u32, x: f32, y: f32, w: f32, font: f32, icon: &str, icon_color: Color, label: &str, current: bool, busy: bool, enabled: bool) {
         let h = (font * 2.1).round();
-        let focused = self.focusable(id);
-        let hot = self.hovered(x, y, w, h) || focused;
+        let focused = enabled && self.focusable(id);
+        let hot = (enabled && self.hovered(x, y, w, h)) || focused;
         let t = self.theme;
         let target = if current {
             if self.card.tint_alert { t.col_alert } else { t.col_accent }
@@ -458,7 +492,8 @@ impl Ui<'_> {
         let icon_box = font + 2.0;
         let icon_line = self.fonts.layout(icon, theme::bar_font(false), font + 2.0, 0.0);
         let cap = self.fonts.layout(label, theme::bar_font(true), font, 0.0);
-        // Row skips an invisible child and its spacing.
+        // Row skips an invisible child and its spacing; busy keeps the icon slot.
+        let icon = if busy && icon.is_empty() { " " } else { icon };
         let row_w = match (icon.is_empty(), label.is_empty()) {
             (true, _) => cap.width,
             (false, true) => icon_box,
@@ -468,7 +503,11 @@ impl Ui<'_> {
         let rx = x + ac(w, row_w);
         // anchors.centerIn with verticalCenterOffset -1 when raised
         let ry = y + ac(h, row_h) + if current { 0.0 } else { -1.0 };
-        if !icon.is_empty() {
+        if busy {
+            let s = font - 2.0;
+            let sy = ry + ac(row_h, icon_box) + ac(icon_box, s);
+            crate::pult::spinner(self, rx + ac(icon_box, s), sy, s, if current { t.col_bg } else { t.col_white });
+        } else if !icon.is_empty() {
             let ic = if current { t.col_bg } else if hot { t.col_white } else { icon_color };
             let ix = rx + ac(icon_box, icon_line.width);
             let iy = ry + ac(row_h, icon_box) + ac(icon_box, icon_line.height());
@@ -479,7 +518,9 @@ impl Ui<'_> {
             let cy = ry + ac(row_h, cap.height());
             self.text(&cap, cx, cy, if current { t.col_bg } else { t.col_grey }, TextStyle::Normal);
         }
-        self.hits.push(Hit { x, y, w, h, action: Action::Card(id) });
+        if enabled {
+            self.hits.push(Hit { x, y, w, h, action: Action::Card(id) });
+        }
     }
 }
 
@@ -487,7 +528,8 @@ impl Ui<'_> {
 pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut Gpu, theme: &Theme, svc: &Services) -> bool {
     let (w, h) = (card.width, card.height);
     let key = (w.ceil() as u32, h.ceil() as u32, (card.stem_cx * 4.0) as i32);
-    if card.notch.map_or(true, |n| (n.1, n.2, n.3) != key) {
+    if card.notch_stale || card.notch.map_or(true, |n| (n.1, n.2, n.3) != key) {
+        card.notch_stale = false;
         if let Some((id, ..)) = card.notch {
             gpu.drop_image(id);
         }
@@ -528,7 +570,7 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
                 y += 42.0 + 6.0;
             }
         }
-        CardKind::Calendar | CardKind::Weather | CardKind::Audio | CardKind::Pult => {}
+        CardKind::Calendar | CardKind::Weather | CardKind::Audio | CardKind::Pult | CardKind::Vpn => {}
     }
     if ui.card.kind == CardKind::Calendar {
         draw_calendar(&mut ui, w);
@@ -538,6 +580,12 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
     }
     if ui.card.kind == CardKind::Pult {
         crate::pult::draw(&mut ui, w, svc, svc.pult_scanning);
+    }
+    if ui.card.kind == CardKind::Vpn {
+        crate::vpn::draw(&mut ui, w, svc, svc.vpn_busy);
+        if svc.vpn_busy.0 || svc.vpn_busy.1 {
+            ui.animating = true;
+        }
     }
     if ui.card.kind == CardKind::Audio {
         // The Loader's area, clipped like the Flickable, scrolled by contentY.
@@ -559,6 +607,68 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
 }
 
 /// ConsolePlate: the recessed plate, with its 1 px highlight along the bottom.
+/// ConsoleLamp in its 10 x 10 slot at (x, y): halo and dot fade over 160 ms.
+pub(crate) fn lamp(ui: &mut Ui, id: u32, x: f32, y: f32, lit: bool) {
+    let t = ui.theme;
+    let (halo, r1) = ui.card.number(0x3_0000 + id, if lit { 0.22 } else { 0.0 }, 160, ui.now);
+    let (dot, r2) = ui.card.color(0x4_0000 + id, if lit { t.col_accent } else { t.col_plate.darker(1.3) }, 160, ui.now);
+    ui.animating |= r1 || r2;
+    if halo > 0.0 {
+        ui.scene.save();
+        ui.scene.multiply_opacity(halo);
+        ui.scene.rect(x + ac(10.0, 18.0), y + ac(10.0, 18.0), 18.0, 18.0, t.col_accent, 9.0, 0.0, Color::TRANSPARENT, true);
+        ui.scene.restore();
+    }
+    let border = if lit { t.col_accent.lighter(1.25) } else { Color::qt_rgba(1.0, 1.0, 1.0, 0.12) };
+    ui.scene.rect(x + ac(10.0, 9.0), y + ac(10.0, 9.0), 9.0, 9.0, dot, 4.5, 1.0, border, true);
+}
+
+/// ConsoleRow: lamp, optional icon, label (elided), optional detail and a
+/// trailing text (an emoji flag), laid out by its RowLayout.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn console_row(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32, icon: &str, label: &str, lit: bool, interactive: bool, detail: Option<(&str, Color)>, trailing: Option<&str>) {
+    let t = ui.theme;
+    let font = FONT_SIZE - 3.0;
+    let focused = interactive && ui.focusable(code);
+    let hot = (interactive && ui.hovered(x, y, w, h)) || focused;
+    let (bg, run) = ui.card.color(0x5_0000 + code, if hot { t.col_plate.lighter(1.6) } else { Color::TRANSPARENT }, 110, ui.now);
+    ui.animating |= run;
+    ui.scene.rect(x, y, w, h, bg, 4.0, if focused { 2.0 } else { 0.0 }, t.col_white, true);
+    let mut cx = x + 6.0;
+    lamp(ui, code, cx, y + qround((h - 10.0) / 2.0), lit);
+    cx += 10.0 + 8.0;
+    let fg = if lit || hot { t.col_white } else { t.col_grey };
+    if !icon.is_empty() {
+        let il = ui.fonts.layout(icon, theme::bar_font(false), font, 0.0);
+        ui.text(&il, cx + (font + 2.0 - il.adv) / 2.0, y + qround((h - il.height()) / 2.0), fg, TextStyle::Normal);
+        cx += font + 2.0 + 8.0;
+    }
+    let mut right = x + w - 6.0;
+    if let Some(tr) = trailing {
+        let tl = ui.fonts.layout(tr, theme::FontKey { family: "Fira Code:medium", bold: false }, FONT_SIZE + 2.0, 0.0);
+        right -= tl.width;
+        ui.text(&tl, right, y + qround((h - tl.height()) / 2.0), t.col_white, TextStyle::Normal);
+        right -= 8.0;
+    }
+    if let Some((d, dc)) = detail.filter(|d| !d.0.is_empty()) {
+        let dl = ui.fonts.layout(d, theme::bar_font(false), font - 2.0, 0.0);
+        right -= dl.width;
+        ui.text(&dl, right, y + qround((h - dl.height()) / 2.0), dc, TextStyle::Normal);
+        right -= 8.0;
+    }
+    let key = theme::bar_font(lit);
+    let full = ui.fonts.layout(label, key, font, 0.0);
+    let line = ui.fonts.elide_right(&full, label, key, right - cx, 0.0);
+    ui.text(&line, cx, y + qround((h - line.height()) / 2.0), fg, TextStyle::Normal);
+    if interactive {
+        ui.hits.push(Hit { x, y, w, h, action: Action::Card(code) });
+    }
+}
+
+fn qround(v: f32) -> f32 {
+    (v + 0.5).floor()
+}
+
 pub(crate) fn plate(ui: &mut Ui, x: f32, y: f32, w: f32, h: f32) {
     ui.scene.rect(x, y, w, h, ui.theme.col_plate, 5.0, 0.0, Color::TRANSPARENT, true);
     ui.scene.fill(x + 5.0, y + h - 1.0, w - 10.0, 1.0, Color::qt_rgba(1.0, 1.0, 1.0, 0.07));
@@ -867,6 +977,7 @@ pub fn activate(app: &mut App, action: Action, keyboard: bool) {
         CardKind::Weather => {}
         CardKind::Audio => crate::audio_card::activate(app, i),
         CardKind::Pult => crate::pult::activate(app, i),
+        CardKind::Vpn => crate::vpn::activate(app, i),
         CardKind::Calendar => match i {
             // the focus chain: prev, next; day cells are mouse-only
             CAL_PREV => calendar_step(app, -1),

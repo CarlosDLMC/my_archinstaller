@@ -1,0 +1,200 @@
+//! The VPN widget's card (VpnWidget.qml): the tunnel, the time/weather sync
+//! keys and the WireGuard configs, with the same helper scripts.
+
+use std::time::{Duration, Instant};
+
+use crate::app::App;
+use crate::bar::{ac, Action, Hit};
+use crate::cards::{plate, Ui};
+use crate::color::Color;
+use crate::gpu::TextStyle;
+use crate::services::{self, Services};
+use crate::theme::{self, FONT_SIZE};
+
+#[derive(Default)]
+pub struct Vpn {
+    pub configs: Vec<String>,
+    pub connecting: bool,
+    /// The 450 ms spinner floors (timeSpinFloor / weatherSpinFloor).
+    pub time_floor: Option<Instant>,
+    pub weather_floor: Option<Instant>,
+}
+
+pub const OFF: u32 = 1;
+pub const TIME: u32 = 2;
+pub const WEATHER: u32 = 3;
+pub const ROW: u32 = 0x100;
+
+const FLOOR: Duration = Duration::from_millis(450);
+
+fn scripts() -> String {
+    format!("{}/.config/quickshell/bar/scripts", services::home())
+}
+
+pub fn time_busy(app: &App) -> bool {
+    app.is_running("vpn-time") || app.svc.vpn_card.time_floor.map_or(false, |t| t.elapsed() < FLOOR)
+}
+
+pub fn weather_busy(app: &App) -> bool {
+    app.is_running("vpn-weather") || app.svc.vpn_card.weather_floor.map_or(false, |t| t.elapsed() < FLOOR)
+}
+
+/// onOpened: the configs, as root can list them.
+pub fn opened(app: &mut App) {
+    app.spawn("vpn-list", &["sh", "-c", "sudo find /etc/wireguard -name '*.conf' -exec basename {} .conf \\; 2>/dev/null | sort"], |app, d| {
+        let list: Vec<String> = d.stdout.lines().map(str::trim).filter(|l| !l.is_empty()).map(String::from).collect();
+        if !list.is_empty() {
+            app.svc.vpn_card.configs = list;
+        }
+        app.mark_all_dirty();
+    });
+}
+
+fn flag(name: &str) -> &'static str {
+    match name.get(..2).unwrap_or("").to_lowercase().as_str() {
+        "de" => "🇩🇪",
+        "pl" => "🇵🇱",
+        "ge" => "🇬🇪",
+        "es" => "🇪🇸",
+        "ua" => "🇺🇦",
+        "lt" => "🇱🇹",
+        "id" => "🇮🇩",
+        _ => "",
+    }
+}
+
+struct M {
+    head: f32,
+    btn: f32,
+    row: f32,
+}
+
+fn metrics(fonts: &mut crate::text::Fonts, active: bool) -> M {
+    let name_h = fonts.layout("Н", theme::bar_font(true), FONT_SIZE - 2.0, 0.0).height();
+    let btn = ((FONT_SIZE - 6.0) * 2.1).round();
+    M { head: name_h.max(if active { btn } else { 0.0 }), btn, row: ((FONT_SIZE - 3.0) * 1.75).round() }
+}
+
+pub fn card_height(fonts: &mut crate::text::Fonts, svc: &Services) -> f32 {
+    let active = !svc.vpn.is_empty();
+    let m = metrics(fonts, active);
+    let mut parts = vec![m.head];
+    if active {
+        parts.push(m.btn);
+    }
+    if !svc.vpn_card.configs.is_empty() {
+        let n = svc.vpn_card.configs.len().min(8) as f32;
+        parts.push(n * (m.row + 2.0) - 2.0 + 8.0);
+    }
+    let h = parts.iter().sum::<f32>() + 8.0 * (parts.len() - 1) as f32;
+    h.ceil() + 28.0
+}
+
+pub fn draw(ui: &mut Ui, w: f32, svc: &Services, busy: (bool, bool)) {
+    let t = ui.theme;
+    let active = !svc.vpn.is_empty();
+    let m = metrics(ui.fonts, active);
+    let (x0, cw) = (8.0, w - 16.0);
+    let mut y = 12.0 + 8.0;
+
+    // ТУННЕЛЬ: lamp, caption, the tunnel's name, the off key.
+    crate::cards::lamp(ui, 0x7000, x0 + 4.0, y + ac(m.head, 10.0), active);
+    let cap = ui.fonts.layout("ТУННЕЛЬ", theme::bar_font(true), FONT_SIZE - 5.0, 1.0);
+    let cx = x0 + 4.0 + 10.0 + 10.0;
+    ui.text(&cap, cx, y + ac(m.head, cap.height()), t.col_dim, TextStyle::Normal);
+    let font = FONT_SIZE - 6.0;
+    let off_w = ui.console_button_width(font, "\u{f0156}", "", 0.0);
+    let nx = cx + cap.width + 10.0;
+    let right = if active { x0 + cw - off_w } else { x0 + cw };
+    let name = if active { svc.vpn.as_str() } else { "ОТКЛЮЧЁН" };
+    let key = theme::bar_font(true);
+    let full = ui.fonts.layout(name, key, FONT_SIZE - 2.0, 0.0);
+    let line = ui.fonts.elide_right(&full, name, key, right - 8.0 - nx, 0.0);
+    ui.text(&line, nx, y + ac(m.head, line.height()), if active { t.col_white } else { t.col_grey }, TextStyle::Normal);
+    if active {
+        ui.console_button_sized(OFF, x0 + cw - off_w, y + ac(m.head, m.btn), off_w, font, "\u{f0156}", t.col_grey, "", false);
+    }
+    y += m.head + 8.0;
+
+    // ВРЕМЯ / ПОГОДА: follow the tunnel's place, or come back home.
+    if active {
+        let bw = (cw - 6.0) / 2.0;
+        let time_away = !svc.timezone.is_empty();
+        let weather_away = !svc.weather.city.is_empty();
+        ui.console_button_ex(TIME, x0, y, bw, font, "\u{f0954}", t.col_grey, "ВРЕМЯ", time_away, busy.0, !busy.0);
+        ui.console_button_ex(WEATHER, x0 + bw + 6.0, y, bw, font, "\u{f0590}", t.col_grey, "ПОГОДА", weather_away, busy.1, !busy.1);
+        y += m.btn + 8.0;
+    }
+
+    // The configs, a flag after each.
+    if !svc.vpn_card.configs.is_empty() {
+        let n = svc.vpn_card.configs.len().min(8);
+        let h = n as f32 * (m.row + 2.0) - 2.0 + 8.0;
+        plate(ui, x0, y, cw, h);
+        let mut ry = y + 4.0;
+        for (i, name) in svc.vpn_card.configs.iter().take(8).enumerate() {
+            let lit = *name == svc.vpn;
+            crate::cards::console_row(ui, ROW + i as u32, x0 + 4.0, ry, cw - 8.0, m.row, "", name, lit, !lit, None, Some(flag(name)).filter(|f| !f.is_empty()));
+            ry += m.row + 2.0;
+        }
+    }
+}
+
+pub fn activate(app: &mut App, code: u32) {
+    let active = app.svc.vpn.clone();
+    match code {
+        OFF => {
+            app.svc.vpn_card.connecting = true;
+            let cmd = format!("{}/vpn-reset.sh all --forget", scripts());
+            app.spawn("vpn-action", &["sudo", "wg-quick", "down", &active], |app, _| {
+                app.svc.vpn_card.connecting = false;
+                app.svc.vpn.clear();
+                app.after(Duration::from_millis(500), |app| {
+                    services::vpn_check(app);
+                });
+            });
+            app.spawn("vpn-reset-card", &["sh", "-c", &cmd], |app, _| {
+                services::vpn_check(app);
+            });
+            crate::cards::close(app);
+        }
+        TIME => {
+            app.svc.vpn_card.time_floor = Some(Instant::now());
+            let cmd = if !app.svc.timezone.is_empty() { format!("{}/vpn-reset.sh time", scripts()) } else { format!("{}/vpn-sync.sh \"$1\" time", scripts()) };
+            app.spawn("vpn-time", &["sh", "-c", &cmd, "sh", &active], |app, _| app.mark_all_dirty());
+            spin_redraw(app);
+        }
+        WEATHER => {
+            app.svc.vpn_card.weather_floor = Some(Instant::now());
+            let cmd = if !app.svc.weather.city.is_empty() { format!("{}/vpn-reset.sh weather", scripts()) } else { format!("{}/vpn-sync.sh \"$1\" weather", scripts()) };
+            app.spawn("vpn-weather", &["sh", "-c", &cmd, "sh", &active], |app, _| app.mark_all_dirty());
+            spin_redraw(app);
+        }
+        c if (ROW..ROW + 0x100).contains(&c) => {
+            let Some(target) = app.svc.vpn_card.configs.get((c - ROW) as usize).cloned() else { return };
+            app.svc.vpn_card.connecting = true;
+            let done = |app: &mut App, _| {
+                app.svc.vpn_card.connecting = false;
+                app.after(Duration::from_millis(500), |app| {
+                    services::vpn_check(app);
+                });
+            };
+            if active.is_empty() {
+                app.spawn("vpn-action", &["sudo", "wg-quick", "up", &target], done);
+            } else {
+                let cmd = format!("{}/vpn-switch.sh \"$1\" \"$2\"", scripts());
+                app.spawn("vpn-action", &["sh", "-c", &cmd, "sh", &active, &target], done);
+            }
+            crate::cards::close(app);
+        }
+        _ => {}
+    }
+}
+
+/// The floor ends without an event: redraw when it does.
+fn spin_redraw(app: &mut App) {
+    app.after(FLOOR + Duration::from_millis(10), |app| app.mark_all_dirty());
+    app.mark_all_dirty();
+}
+
+pub fn unused(_: Color, _: Hit, _: Action) {}

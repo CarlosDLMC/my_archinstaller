@@ -13,6 +13,7 @@ mod runtime;
 mod services;
 mod text;
 mod theme;
+mod vpn;
 
 use color::Color;
 use gpu::{Gpu, Scene, TextStyle};

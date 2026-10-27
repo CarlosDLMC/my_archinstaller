@@ -58,7 +58,9 @@ from libQt6Quick, uniforms and textures read back from Qt's GL calls):
 - [x] Weather card - matches (tooltip parsing as CenterInfo does it, word wrap)
 - [x] Audio card - outputs, inputs + live mic meter (PipeWire peak monitor), per-app faders, default device switching, slider drag/wheel/keys; strip: left click mutes, wheel steps 5%
 - [x] ПУЛЬТ card - Bluetooth (power, paired, scan, pair, connect), night light, НЕ ЗАСЫПАТЬ (the systemd-inhibit holder), the stats switch, power profiles; grows with its lists
-- [ ] Cards: network, battery, VPN, agent
+- [x] VPN card - tunnel + off key, ВРЕМЯ/ПОГОДА sync with busy spinners, WireGuard configs with flags; the same scripts
+- [x] Theme follows wallust live (inotify, 80 ms debounce); timezone and weather city follow their cache files
+- [ ] Cards: network, battery, agent
 - [ ] The CRT power-off effect (quickshell/crt, run by CrtOff.sh before logout/reboot/shutdown)
 - [ ] Overlays: layout OSD, clipboard, polkit agent, power menu, screenshot, recording
 - [ ] Wallpaper carousel + reveal, overview

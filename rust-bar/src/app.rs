@@ -268,6 +268,7 @@ impl App {
     pub fn redraw_dirty(&mut self) {
         if self.card.as_ref().map_or(false, |c| c.win.dirty) {
             self.svc.pult_scanning = crate::pult::scanning(self);
+            self.svc.vpn_busy = (crate::vpn::time_busy(self), crate::vpn::weather_busy(self));
             cards::update_height(self);
         }
         for i in 0..self.strips.len() {
