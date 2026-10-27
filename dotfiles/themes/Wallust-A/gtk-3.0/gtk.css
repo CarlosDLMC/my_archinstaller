@@ -123,3 +123,15 @@ link:not(#wallust) {
 .standard-view treeview.view:not(:selected):not(#wallust) {
     background-color: @wal_bg;
 }
+
+/* The rubber band dragged out to select files: exo paints it with the file
+   view's own style plus .rubberband, so the rule above filled it with the
+   pane's colour and only Adwaita's dark-blue edge showed. The selection's
+   accent tint instead, with an accent edge - in the list view and every
+   other GTK3 rubber band too. */
+.rubberband:not(#wallust),
+rubberband:not(#wallust),
+.standard-view .view.rubberband:not(#wallust) {
+    background-color: @wal_sel_bg;
+    border: 1px solid @wal_accent;
+}
