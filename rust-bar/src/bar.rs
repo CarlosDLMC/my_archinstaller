@@ -579,8 +579,14 @@ fn draw_center(p: &mut Painter, svc: &Services, x0: f32, width: f32, design_widt
     p.hit(pill_x, pill_y, pill_w, 26.0, Action::Clock);
 }
 
-/// barWindow.closeAllPopups(): the focused window changed.
+/// barWindow.closeAllPopups(): the focused window changed. Only the
+/// DropdownWidget cards listen to it - CenterInfo's calendar and weather
+/// cards stay open.
 pub fn close_all_popups(app: &mut App) {
+    use crate::cards::CardKind;
+    if matches!(app.card.as_ref().map(|c| c.kind), Some(CardKind::Calendar | CardKind::Weather)) {
+        return;
+    }
     crate::cards::close(app);
 }
 
