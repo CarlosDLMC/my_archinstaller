@@ -71,6 +71,9 @@ pub struct Ctx<'a> {
 }
 
 struct Painter<'a> {
+    now: std::time::Instant,
+    /// Something is mid-animation: draw again on the next frame.
+    animating: bool,
     scene: &'a mut Scene,
     fonts: &'a mut Fonts,
     theme: &'a Theme,
@@ -163,14 +166,15 @@ fn layout_label(raw: &str) -> String {
     }
 }
 
-pub fn draw(scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, svc: &Services, ctx: &Ctx) -> Vec<Hit> {
+/// Draws the strip; returns its click areas and whether it is animating.
+pub fn draw(scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, svc: &Services, ctx: &Ctx) -> (Vec<Hit>, bool) {
     let ui = ui_scale(ctx.screen_width);
     let dw = ctx.width / ui;
     // PanelWindow.color: the wash under the compositor blur.
     scene.fill(0.0, 0.0, ctx.width, (DESIGN_HEIGHT * ui).round(), theme.col_bg_wash);
     scene.save();
     scene.scale(ui, ui);
-    let mut p = Painter { scene, fonts, theme, hits: Vec::new(), ui, pointer: ctx.pointer };
+    let mut p = Painter { now: std::time::Instant::now(), animating: false, scene, fonts, theme, hits: Vec::new(), ui, pointer: ctx.pointer };
 
     // shell.qml's order; a hidden widget takes its separator with it.
     let mut slots = vec![Slot::Pad(12.0), Slot::Logo, Slot::Workspaces, Slot::Sep, Slot::Title, Slot::Center];
@@ -286,7 +290,13 @@ pub fn draw(scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, svc: &Services,
             Slot::Wifi => {
                 let line = p.line(wifi_icon(svc), true, FONT_SIZE + 4.0);
                 let c = if svc.wifi.connected { theme.col_white } else { theme.col_grey };
+                // Blinks 1 -> .35 -> 1 (450 ms each, InOutQuad) while connecting.
+                let (o, running) = svc.wifi.pulse.value(p.now, 0.35, 450, crate::anim::Easing::InOutQuad);
+                p.animating |= running;
+                p.scene.save();
+                p.scene.multiply_opacity(o);
                 icon_slot(&mut p, &line, x, c, Action::Wifi);
+                p.scene.restore();
             }
             Slot::Vpn => {
                 let w = vpn_slot_width(&mut p);
@@ -300,8 +310,9 @@ pub fn draw(scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, svc: &Services,
         x += if matches!(s, Slot::Center) { center_w } else { *w };
     }
     let hits = std::mem::take(&mut p.hits);
+    let animating = p.animating;
     scene.restore();
-    hits
+    (hits, animating)
 }
 
 const AGENT_ICON: &str = "\u{f16a3}";

@@ -79,6 +79,10 @@ pub struct App {
     layer_shell: LayerShell,
     cursor_shapes: Option<CursorShapeManager>,
     pointer: Option<(WlPointer, Option<WpCursorShapeDeviceV1>)>,
+    enter_serial: u32,
+    hand: bool,
+    /// The widget a button went down on: a click is a release on the same one.
+    pressed: Option<(usize, u32, Action)>,
     pub instance: wgpu::Instance,
     pub gpu: Option<Gpu>,
     pub fonts: Fonts,
@@ -113,6 +117,9 @@ impl App {
             layer_shell: LayerShell::bind(&globals, &qh).expect("wlr-layer-shell"),
             cursor_shapes: CursorShapeManager::bind(&globals, &qh).ok(),
             pointer: None,
+            enter_serial: 0,
+            hand: false,
+            pressed: None,
             instance: Gpu::new_instance(),
             gpu: None,
             fonts: Fonts::new(),
@@ -248,13 +255,15 @@ impl App {
         let view = frame.texture.create_view(&Default::default());
         s.scene.clear(s.width as f32, s.height as f32);
         let ctx = bar::Ctx { width: s.width as f32, screen_width: s.screen_width, name: &s.name, pointer: s.pointer };
-        s.hits = bar::draw(&mut s.scene, &mut self.fonts, &self.theme, &self.svc, &ctx);
+        let (hits, animating) = bar::draw(&mut s.scene, &mut self.fonts, &self.theme, &self.svc, &ctx);
+        s.hits = hits;
         let wl = s.layer.wl_surface();
         wl.frame(&qh, wl.clone());
         let gpu = self.gpu.as_mut().unwrap();
         gpu.render(&mut self.fonts, &mut s.scene, &view, format, (s.width, s.height), [0.0, 0.0, 0.0, 0.0]);
         frame.present();
-        s.dirty = false;
+        // Still animating: the next frame callback draws again.
+        s.dirty = animating;
         s.frame_pending = true;
     }
 
@@ -262,10 +271,18 @@ impl App {
         self.strips.iter().position(|s| s.layer.wl_surface() == surface)
     }
 
-    fn set_cursor(&self, serial: u32, hand: bool) {
-        if let Some((_, Some(dev))) = &self.pointer {
-            dev.set_shape(serial, if hand { Shape::Pointer } else { Shape::Default });
+    fn set_cursor(&mut self, hand: bool) {
+        if hand == self.hand {
+            return;
         }
+        self.hand = hand;
+        if let Some((_, Some(dev))) = &self.pointer {
+            dev.set_shape(self.enter_serial, if hand { Shape::Pointer } else { Shape::Default });
+        }
+    }
+
+    fn hit_at(&self, i: usize, x: f32, y: f32) -> Option<Action> {
+        self.strips[i].hits.iter().rev().find(|h| h.contains(x, y)).map(|h| h.action)
     }
 
     /// Runs `argv` with its stdout collected; `done` gets it when the process ends.
@@ -454,12 +471,7 @@ impl App {
         });
     }
 
-    fn click(&mut self, i: usize, button: u32, x: f32, y: f32) {
-        let hit = self.strips[i].hits.iter().rev().find(|h| h.contains(x, y)).cloned();
-        if let Some(h) = hit {
-            bar::activate(self, i, h.action, button);
-        }
-    }
+
 }
 
 pub fn write_line(mut s: &UnixStream, line: &str) {
@@ -560,26 +572,40 @@ impl PointerHandler for App {
             let (x, y) = (e.position.0 as f32, e.position.1 as f32);
             match e.kind {
                 PointerEventKind::Enter { serial } => {
+                    self.enter_serial = serial;
+                    self.hand = false;
                     self.strips[i].pointer = Some((x, y));
                     self.strips[i].dirty = true;
-                    let hand = self.strips[i].hits.iter().any(|h| h.contains(x, y));
-                    self.set_cursor(serial, hand);
+                    let hand = self.hit_at(i, x, y).is_some();
+                    if let Some((_, Some(dev))) = &self.pointer {
+                        dev.set_shape(serial, if hand { Shape::Pointer } else { Shape::Default });
+                    }
+                    self.hand = hand;
                 }
                 PointerEventKind::Leave { .. } => {
                     self.strips[i].pointer = None;
                     self.strips[i].dirty = true;
+                    self.pressed = None;
                 }
                 PointerEventKind::Motion { .. } => {
-                    let before = self.strips[i].hits.iter().position(|h| self.strips[i].pointer.map_or(false, |(px, py)| h.contains(px, py)));
+                    let before = self.strips[i].pointer.and_then(|(px, py)| self.hit_at(i, px, py));
                     self.strips[i].pointer = Some((x, y));
-                    let after = self.strips[i].hits.iter().position(|h| h.contains(x, y));
+                    let after = self.hit_at(i, x, y);
                     if before != after {
                         self.strips[i].dirty = true;
                     }
+                    self.set_cursor(after.is_some());
                 }
-                PointerEventKind::Press { button, serial, .. } => {
-                    let _ = serial;
-                    self.click(i, button, x, y);
+                PointerEventKind::Press { button, .. } => {
+                    self.pressed = self.hit_at(i, x, y).map(|a| (i, button, a));
+                }
+                PointerEventKind::Release { button, .. } => {
+                    // MouseArea.onClicked: released over the widget it was pressed on.
+                    if let Some((pi, pb, action)) = self.pressed.take() {
+                        if pi == i && pb == button && self.hit_at(i, x, y) == Some(action) {
+                            bar::activate(self, i, action, button);
+                        }
+                    }
                 }
                 _ => {}
             }

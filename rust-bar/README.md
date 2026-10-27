@@ -45,7 +45,7 @@ from libQt6Quick, uniforms and textures read back from Qt's GL calls):
 - [x] Engine, text parity (≥99.6 % of pixels within 8/255 of Qt on the test sets)
 - [x] Strip: every widget - logo, workspaces, dividers, title, clock, bell (DND), weather pill, agent, CPU, memory, volume (PipeWire, event-driven), battery (sysfs), Wi-Fi (nmcli monitor), VPN, layout, ПУЛЬТ icon; matches the QML strip in the sandbox
 - [ ] Strip: Wi-Fi blink while connecting, colour emoji in titles, battery change events (netlink instead of udevadm)
-- [ ] Animations (Qt easing curves), cursor shape on hover changes, click-on-release
+- [x] Animations (Qt easing curves, Behavior-style retargeting, looping pulse), cursor shape on hover changes, click-on-release
 - [ ] Cards (notch canvas, CardSurface, CardKeys) - calendar, weather, audio, network, power, battery, ПУЛЬТ, VPN, agent
 - [ ] Overlays: layout OSD, clipboard, polkit agent, power menu, screenshot, recording
 - [ ] Wallpaper carousel + reveal, overview

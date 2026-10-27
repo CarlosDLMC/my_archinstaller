@@ -1,3 +1,4 @@
+mod anim;
 mod app;
 mod bar;
 mod color;

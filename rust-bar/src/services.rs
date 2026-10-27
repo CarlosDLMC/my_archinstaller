@@ -83,6 +83,7 @@ pub struct Wifi {
     pub ssid: String,
     pub signal: i64,
     pub connecting: bool,
+    pub pulse: crate::anim::Pulse,
 }
 
 #[derive(Default)]
