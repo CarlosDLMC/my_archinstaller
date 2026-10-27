@@ -9,6 +9,8 @@ use crate::color::Color;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Easing {
     Linear,
+    InQuad,
+    OutQuad,
     OutCubic,
     InOutQuad,
     InOutCubic,
@@ -25,6 +27,8 @@ pub fn ease(e: Easing, t: f32) -> f32 {
             let t = t - 1.0;
             t * t * t + 1.0
         }
+        Easing::InQuad => t * t,
+        Easing::OutQuad => -t * (t - 2.0),
         Easing::InOutQuad => {
             let t = t * 2.0;
             if t < 1.0 {

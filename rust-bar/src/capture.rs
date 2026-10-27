@@ -288,7 +288,7 @@ fn show(app: &mut App, kind: OsdKind) {
     let (cw, ch) = content_size(&mut app.fonts, &app.svc, kind == OsdKind::Record);
     let (pw, ph) = (cw + 2.0 * m.pad, ch + 2.0 * m.pad);
     let (x, y) = (ac(sw, pw), ac(sh, ph));
-    osd::show(app, OpenParams { kind, size: (pw.ceil() as u32, ph.ceil() as u32), panel: (0.0, 0.0, pw, ph), dim: Some(Color::qt_rgba(0.0, 0.0, 0.0, 0.5)), keyboard: true, namespace: "quickshell", fade_ms: FADE_MS, min_scale: 0.96, pos: Some((x as i32, y as i32)) });
+    osd::show(app, OpenParams { kind, size: (pw.ceil() as u32, ph.ceil() as u32), panel: (0.0, 0.0, pw, ph), dim: Some(Color::qt_rgba(0.0, 0.0, 0.0, 0.5)), keyboard: true, namespace: "quickshell", fade_ms: FADE_MS, min_scale: 0.96, fade_easing: crate::anim::Easing::OutCubic, pos: Some((x as i32, y as i32)) });
 }
 
 /// The panel's size follows its content (monitors arrive, a switch flips).

@@ -606,6 +606,17 @@ impl<S: UiState> Ui<'_, S> {
         self.scene.text(self.fonts, line, x, y + line.ascent, color, style);
     }
 
+    /// A wrapped Text: its lines, one under the other, judged as one item.
+    pub fn text_block(&mut self, id: u32, part: u64, lines: &[Line], x: f32, y: f32, color: Color) -> f32 {
+        let style = self.card.texts().style_lines((part, id), lines, color, TextStyle::Normal);
+        let mut ly = y;
+        for l in lines {
+            self.scene.text(self.fonts, l, x, ly + l.ascent, color, style);
+            ly += l.height();
+        }
+        ly - y
+    }
+
     /// A control's own Text (`part` of control `id`).
     pub fn text_of(&mut self, id: u32, part: u64, line: &Line, x: f32, y: f32, color: Color) {
         let style = self.card.texts().style_keyed((part, id), line, color, TextStyle::Normal);

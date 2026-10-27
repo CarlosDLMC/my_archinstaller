@@ -59,6 +59,10 @@ fn call(app: &mut App, target: &str, function: &str, args: &[&str]) -> Result<()
             crate::power::open_on(app, "E");
             Ok(())
         }
+        ("clipboard", "toggle") => {
+            crate::clip::toggle(app);
+            Ok(())
+        }
         ("shot", "open") => {
             crate::capture::shot_open(app);
             Ok(())

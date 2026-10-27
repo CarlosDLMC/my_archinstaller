@@ -208,26 +208,40 @@ impl TextMemo {
     /// The same for a text named by its control (a key's caption, a row's
     /// label), so texts hidden in some frames do not shift the others.
     pub fn style_keyed(&mut self, key: (u64, u32), line: &Line, color: crate::color::Color, style: crate::gpu::TextStyle) -> crate::gpu::TextStyle {
+        self.style_lines(key, std::slice::from_ref(line), color, style)
+    }
+
+    /// One Text laid out over several lines: one node, one verdict.
+    pub fn style_lines(&mut self, key: (u64, u32), lines: &[Line], color: crate::color::Color, style: crate::gpu::TextStyle) -> crate::gpu::TextStyle {
         use std::hash::{Hash, Hasher};
         if !matches!(style, crate::gpu::TextStyle::Normal) {
             return style;
         }
         // An empty Text has no node; the next text gets a new one.
-        if line.glyphs.is_empty() {
+        if lines.iter().all(|l| l.glyphs.is_empty()) {
             self.seen.remove(&key);
             return style;
         }
         let mut h = std::collections::hash_map::DefaultHasher::new();
-        for g in &line.glyphs {
-            (g.face, g.gid, g.x.to_bits(), g.bold).hash(&mut h);
+        for line in lines {
+            for g in &line.glyphs {
+                (g.face, g.gid, g.x.to_bits(), g.bold).hash(&mut h);
+            }
+            (line.size.to_bits(), line.glyphs.len()).hash(&mut h);
         }
-        (line.size.to_bits(), color.r.to_bits(), color.g.to_bits(), color.b.to_bits(), color.a.to_bits()).hash(&mut h);
+        (color.r.to_bits(), color.g.to_bits(), color.b.to_bits(), color.a.to_bits()).hash(&mut h);
         let sig = h.finish();
         let e = self.seen.entry(key).or_insert((sig, false));
         if e.0 != sig {
             *e = (sig, true);
         }
         if e.1 { crate::gpu::TextStyle::Gray } else { style }
+    }
+
+    /// Forgets the controls' texts of these parts (a ListView's delegates,
+    /// made anew when its model is replaced).
+    pub fn forget_parts(&mut self, parts: &[u64]) {
+        self.seen.retain(|k, _| !parts.contains(&k.0));
     }
 
     /// A call site's id, for #[track_caller] callers.
@@ -710,25 +724,61 @@ impl Fonts {
         Some(ColorGlyph { ax, ay, w: dw as u32, h: dh as u32, left: (*slot).bitmap_left as f32 * f, top: (*slot).bitmap_top as f32 * f })
     }
 
-    /// Text.WordWrap: lines no wider than `max`, broken at spaces (a word
-    /// longer than the line is broken where it overflows, as Qt's WrapAnywhere fallback).
+    /// Text.WordWrap: QTextLayout's line breaking - at the Unicode line-break
+    /// opportunities (after spaces, but also after hyphens and slashes),
+    /// trailing spaces hanging past the edge; a piece wider than the line
+    /// stays whole.
     pub fn wrap(&mut self, text: &str, key: FontKey, size: f32, letter_spacing: f32, max: f32) -> Vec<Line> {
-        let mut lines = Vec::new();
-        let words: Vec<&str> = text.split(' ').collect();
+        self.wrap_strings(text, key, size, letter_spacing, max, false).iter().map(|l| self.layout(l, key, size, letter_spacing)).collect()
+    }
+
+    /// Text.Wrap: the same, but a piece wider than the line breaks anywhere.
+    pub fn wrap_anywhere(&mut self, text: &str, key: FontKey, size: f32, letter_spacing: f32, max: f32) -> Vec<Line> {
+        self.wrap_strings(text, key, size, letter_spacing, max, true).iter().map(|l| self.layout(l, key, size, letter_spacing)).collect()
+    }
+
+    pub fn wrap_strings(&mut self, text: &str, key: FontKey, size: f32, letter_spacing: f32, max: f32, anywhere: bool) -> Vec<String> {
+        use unicode_linebreak::{linebreaks, BreakOpportunity};
+        let mut out: Vec<String> = Vec::new();
         let mut cur = String::new();
-        for w in words {
-            let candidate = if cur.is_empty() { w.to_string() } else { format!("{cur} {w}") };
-            if !cur.is_empty() && self.measure(&candidate, key, size, letter_spacing) > max {
-                lines.push(self.layout(&cur, key, size, letter_spacing));
-                cur = w.to_string();
+        let mut start = 0;
+        for (pos, opp) in linebreaks(text) {
+            let seg = &text[start..pos];
+            start = pos;
+            let cand = format!("{cur}{seg}");
+            let fits = self.measure(cand.trim_end(), key, size, letter_spacing) <= max;
+            if fits || cur.is_empty() && !anywhere {
+                cur = cand;
             } else {
-                cur = candidate;
+                if !cur.is_empty() {
+                    out.push(cur.trim_end_matches(['\n', '\r']).to_string());
+                    cur.clear();
+                }
+                if self.measure(seg.trim_end(), key, size, letter_spacing) <= max || !anywhere {
+                    cur = seg.to_string();
+                } else {
+                    // Wider than a whole line: break it wherever it must.
+                    for ch in seg.chars() {
+                        let c = format!("{cur}{ch}");
+                        if !cur.is_empty() && self.measure(c.trim_end(), key, size, letter_spacing) > max {
+                            out.push(std::mem::take(&mut cur));
+                            cur.push(ch);
+                        } else {
+                            cur = c;
+                        }
+                    }
+                }
+            }
+            if opp == BreakOpportunity::Mandatory && pos < text.len() {
+                out.push(cur.trim_end_matches(['\n', '\r']).to_string());
+                cur.clear();
             }
         }
-        if !cur.is_empty() || lines.is_empty() {
-            lines.push(self.layout(&cur, key, size, letter_spacing));
+        let last = cur.trim_end_matches(['\n', '\r']).to_string();
+        if !last.is_empty() || out.is_empty() {
+            out.push(last);
         }
-        lines
+        out
     }
 
     /// Text.ElideRight: cut and end with "…" so the line fits `max`.

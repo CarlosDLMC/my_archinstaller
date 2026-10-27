@@ -33,6 +33,7 @@ pub enum OsdKind {
     Shot,
     Record,
     Polkit,
+    Clipboard,
 }
 
 /// Hover, focus and the animated values of an overlay's controls.
@@ -116,8 +117,28 @@ pub struct OpenParams {
     pub namespace: &'static str,
     pub fade_ms: u64,
     pub min_scale: f32,
+    /// The panel opacity's curve (OutCubic but for the clipboard's).
+    pub fade_easing: Easing,
     /// Where the surface goes on the screen; None = centred by the compositor.
     pub pos: Option<(i32, i32)>,
+}
+
+impl Osd {
+    /// The panel's scale animation: the fade's progress, always OutCubic.
+    fn fade_scale(&self, now: Instant) -> f32 {
+        if self.fade_easing_linear() {
+            let t = self.fade.get(now);
+            let shown = self.shown;
+            // A linear fade's progress mapped onto OutCubic, direction aware.
+            let p = if shown { t } else { 1.0 - t };
+            let e = crate::anim::ease(Easing::OutCubic, p);
+            return if shown { e } else { 1.0 - e };
+        }
+        self.fade.get(now)
+    }
+    fn fade_easing_linear(&self) -> bool {
+        self.kind == OsdKind::Clipboard
+    }
 }
 
 impl App {
@@ -176,7 +197,7 @@ pub fn show(app: &mut App, p: OpenParams) {
         layer.wl_surface().set_input_region(Some(region.wl_region()));
     }
     layer.commit();
-    let mut fade = Animated::new(0.0, p.fade_ms, Easing::OutCubic);
+    let mut fade = Animated::new(0.0, p.fade_ms, p.fade_easing);
     fade.set(1.0, now);
     let mut dim_fade = Animated::new(0.0, p.fade_ms, Easing::Linear);
     dim_fade.set(1.0, now);
@@ -217,6 +238,7 @@ pub fn hide(app: &mut App, kind: OsdKind) {
         OsdKind::Shot => |app| destroy(app, OsdKind::Shot),
         OsdKind::Record => |app| destroy(app, OsdKind::Record),
         OsdKind::Polkit => |app| destroy(app, OsdKind::Polkit),
+        OsdKind::Clipboard => |app| destroy(app, OsdKind::Clipboard),
     };
     app.debounce(gone_timer(kind), Duration::from_millis(ms), gone);
 }
@@ -228,6 +250,7 @@ fn gone_timer(kind: OsdKind) -> &'static str {
         OsdKind::Shot => "osd-gone-shot",
         OsdKind::Record => "osd-gone-record",
         OsdKind::Polkit => "osd-gone-polkit",
+        OsdKind::Clipboard => "osd-gone-clipboard",
     }
 }
 
@@ -305,7 +328,8 @@ pub fn draw(o: &mut Osd, scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, sv
     let fade = o.fade.get(now);
     let mut animating = o.fade.running(now);
     let (px, py, pw, ph) = o.panel;
-    let scale = o.min_scale + (1.0 - o.min_scale) * fade;
+    // The scale always runs OutCubic; the opacity may be linear.
+    let scale = o.min_scale + (1.0 - o.min_scale) * o.fade_scale(now);
     o.st.texts.begin_frame();
     scene.save();
     // Item.scale about the panel's centre, and the panel's opacity.
@@ -324,6 +348,7 @@ pub fn draw(o: &mut Osd, scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, sv
         OsdKind::Shot => crate::capture::draw_osd(&mut ui, false, (px, py, pw, ph), svc, pressed),
         OsdKind::Record => crate::capture::draw_osd(&mut ui, true, (px, py, pw, ph), svc, pressed),
         OsdKind::Polkit => crate::polkit::draw_osd(&mut ui, (px, py, pw, ph), svc),
+        OsdKind::Clipboard => crate::clip::draw_osd(&mut ui, (px, py, pw, ph), svc),
     }
     let (hits, codes) = (std::mem::take(&mut ui.hits), std::mem::take(&mut ui.focus_codes));
     animating |= ui.animating;
@@ -341,6 +366,7 @@ pub fn click(app: &mut App, kind: OsdKind, action: Action, button: u32) {
         OsdKind::Power => crate::power::osd_click(app, action, button),
         OsdKind::Shot | OsdKind::Record => crate::capture::click(app, kind, action),
         OsdKind::Polkit => {}
+        OsdKind::Clipboard => crate::clip::click(app, action),
     }
 }
 
@@ -352,16 +378,26 @@ pub fn dim_clicked(app: &mut App, kind: OsdKind) {
         OsdKind::Shot | OsdKind::Record => crate::capture::dim_clicked(app, kind),
         // MouseArea { anchors.fill: parent }: the dim takes clicks and does nothing.
         OsdKind::Polkit => {}
+        OsdKind::Clipboard => crate::clip::close(app),
     }
 }
 
 /// A key while the overlay has the keyboard; `scan` is Qt's nativeScanCode.
-pub fn key(app: &mut App, kind: OsdKind, sym: smithay_client_toolkit::seat::keyboard::Keysym, scan: u32, shift: bool, utf8: Option<&str>) {
+pub fn key(app: &mut App, kind: OsdKind, sym: smithay_client_toolkit::seat::keyboard::Keysym, scan: u32, mods: crate::app::Mods, utf8: Option<&str>) {
+    let shift = mods.shift;
     match kind {
         OsdKind::Layout => {}
         OsdKind::Power => crate::power::key(app, sym, scan, shift),
         OsdKind::Shot | OsdKind::Record => crate::capture::key(app, kind, sym, scan),
         OsdKind::Polkit => crate::polkit::key(app, sym, utf8),
+        OsdKind::Clipboard => crate::clip::key(app, sym, mods, utf8),
+    }
+}
+
+/// The wheel over the panel (QML angleDelta: +120 per notch away from you).
+pub fn wheel(app: &mut App, kind: OsdKind, delta: f32) {
+    if kind == OsdKind::Clipboard {
+        crate::clip::wheel(app, delta);
     }
 }
 
@@ -370,13 +406,13 @@ pub fn hovered(app: &mut App, kind: OsdKind, action: Option<Action>) {
     match kind {
         OsdKind::Layout => {}
         OsdKind::Power => crate::power::hovered(app, action),
-        OsdKind::Shot | OsdKind::Record | OsdKind::Polkit => {}
+        OsdKind::Shot | OsdKind::Record | OsdKind::Polkit | OsdKind::Clipboard => {}
     }
 }
 
 pub fn hover_changed(app: &mut App, kind: OsdKind, inside: bool) {
     match kind {
         OsdKind::Layout => crate::layout::osd_hover(app, inside),
-        OsdKind::Power | OsdKind::Shot | OsdKind::Record | OsdKind::Polkit => {}
+        OsdKind::Power | OsdKind::Shot | OsdKind::Record | OsdKind::Polkit | OsdKind::Clipboard => {}
     }
 }

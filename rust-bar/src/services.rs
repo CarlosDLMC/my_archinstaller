@@ -170,6 +170,7 @@ pub struct Services {
     pub power: crate::power::PowerState,
     pub capture: crate::capture::Capture,
     pub polkit: crate::polkit::Polkit,
+    pub clip: crate::clip::Clip,
     pub wifi: Wifi,
     pub vpn: String,
     vpn_checked: bool,
@@ -519,6 +520,7 @@ pub fn start(app: &mut App) {
     crate::power::start(app);
     crate::capture::start(app);
     crate::polkit::start(app);
+    crate::clip::start(app);
 
     app.svc.wifi.has = glob_dir("/sys/class/net", "").iter().any(|d| std::path::Path::new(&format!("{d}/wireless")).exists());
     if app.svc.wifi.has {

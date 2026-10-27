@@ -6,8 +6,10 @@ mod bar;
 mod battery;
 mod cal;
 mod capture;
+mod clip;
 mod cards;
 mod color;
+mod crt;
 mod gpu;
 mod ipc;
 mod layout;
@@ -64,7 +66,8 @@ fn main() {
     match args.get(1).map(String::as_str) {
         Some("textref") if args.len() == 4 => textref(&args[2], &args[3]),
         Some("msg") => std::process::exit(ipc::client(&args[2..])),
-        None => app::App::run(),
-        _ => eprintln!("usage: rust-bar [msg <target> <function> [args...] | textref SPEC OUT.png]"),
+        None => app::App::run(false),
+        Some("crt") => app::App::run(true),
+        _ => eprintln!("usage: rust-bar [crt | msg <target> <function> [args...] | textref SPEC OUT.png]"),
     }
 }

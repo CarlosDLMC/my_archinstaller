@@ -72,11 +72,20 @@ pub struct Strip {
     pub texts: crate::text::TextMemo,
 }
 
+/// The modifiers held (Qt's event.modifiers).
+#[derive(Clone, Copy, Default, Debug)]
+pub struct Mods {
+    pub shift: bool,
+    pub ctrl: bool,
+    pub alt: bool,
+}
+
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum WinRef {
     Strip(usize),
     Card,
     Osd(crate::osd::OsdKind),
+    Crt(usize),
 }
 
 /// Output of a finished helper process, routed back by its tag.
@@ -104,6 +113,7 @@ pub struct App {
     /// The surface holding the keyboard, and Shift.
     kbd_focus: Option<WinRef>,
     shift: bool,
+    mods: Mods,
     hand: bool,
     /// The widget a button went down on: a click is a release on the same one.
     pressed: Option<(WinRef, u32, Action)>,
@@ -114,19 +124,32 @@ pub struct App {
     pub strips: Vec<Strip>,
     pub card: Option<OpenCard>,
     pub osds: Vec<crate::osd::Osd>,
+    /// `rust-bar crt`: the CRT power-off windows instead of strips.
+    pub crt_mode: bool,
+    pub crts: Vec<crate::crt::CrtWin>,
     pub svc: Services,
     pub(crate) running: HashMap<String, (Instant, u32)>,
     pub(crate) timers: HashMap<&'static str, RegistrationToken>,
     pub exit: bool,
+    /// Results of work done off the main thread, run back on the event loop.
+    pub(crate) bg_tx: smithay_client_toolkit::reexports::calloop::channel::Sender<Box<dyn FnOnce(&mut App) + Send>>,
 }
 
 impl App {
-    pub fn run() {
+    pub fn run(crt_mode: bool) {
         let conn = Connection::connect_to_env().expect("no Wayland display");
         let (globals, queue) = registry_queue_init::<App>(&conn).expect("registry");
         let qh = queue.handle();
         let mut ev: EventLoop<'static, App> = EventLoop::try_new().expect("event loop");
         WaylandSource::new(conn.clone(), queue).insert(ev.handle()).expect("wayland source");
+        let (bg_tx, bg_rx) = smithay_client_toolkit::reexports::calloop::channel::channel::<Box<dyn FnOnce(&mut App) + Send>>();
+        ev.handle()
+            .insert_source(bg_rx, |e, _, app: &mut App| {
+                if let smithay_client_toolkit::reexports::calloop::channel::Event::Msg(f) = e {
+                    f(app);
+                }
+            })
+            .expect("background channel");
 
         let mut theme = Theme::fallback();
         if let Ok(t) = std::fs::read_to_string(crate::services::palette_path()) {
@@ -137,6 +160,7 @@ impl App {
             conn: conn.clone(),
             qh: qh.clone(),
             handle: ev.handle(),
+            bg_tx,
             registry: RegistryState::new(&globals),
             outputs: OutputState::new(&globals, &qh),
             seats: SeatState::new(&globals, &qh),
@@ -157,15 +181,22 @@ impl App {
             strips: Vec::new(),
             card: None,
             osds: Vec::new(),
+            crt_mode,
+            crts: Vec::new(),
             kbd_focus: None,
             shift: false,
+            mods: Mods::default(),
             svc: Services::default(),
             running: HashMap::new(),
             timers: HashMap::new(),
             exit: false,
         };
-        crate::services::start(&mut app);
-        crate::ipc::listen(&mut app);
+        if crt_mode {
+            crate::crt::start(&mut app);
+        } else {
+            crate::services::start(&mut app);
+            crate::ipc::listen(&mut app);
+        }
         while !app.exit {
             ev.dispatch(None, &mut app).expect("dispatch");
             app.redraw_dirty();
@@ -215,11 +246,16 @@ impl App {
         }
     }
 
+    pub fn output_name(&self, o: &wl_output::WlOutput) -> Option<String> {
+        self.outputs.info(o).and_then(|i| i.name)
+    }
+
     pub fn win_mut(&mut self, w: WinRef) -> Option<&mut Win> {
         match w {
             WinRef::Strip(i) => self.strips.get_mut(i).map(|s| &mut s.win),
             WinRef::Card => self.card.as_mut().map(|c| &mut c.win),
             WinRef::Osd(k) => self.osd_mut(k).map(|o| &mut o.win),
+            WinRef::Crt(i) => self.crts.get_mut(i).map(|c| &mut c.win),
         }
     }
 
@@ -232,6 +268,9 @@ impl App {
         }
         if let Some(o) = self.osds.iter().find(|o| o.win.layer.wl_surface() == surface) {
             return Some(WinRef::Osd(o.kind));
+        }
+        if let Some(i) = self.crts.iter().position(|c| c.win.layer.wl_surface() == surface) {
+            return Some(WinRef::Crt(i));
         }
         None
     }
@@ -309,6 +348,12 @@ impl App {
         for k in kinds {
             self.draw(WinRef::Osd(k));
         }
+        for i in 0..self.crts.len() {
+            let w = &self.crts[i].win;
+            if w.configured && w.dirty && !w.frame_pending {
+                self.draw(WinRef::Crt(i));
+            }
+        }
     }
 
     fn draw(&mut self, w: WinRef) {
@@ -335,6 +380,10 @@ impl App {
             WinRef::Osd(k) => {
                 let o = self.osds.iter_mut().find(|o| o.kind == k).unwrap();
                 crate::osd::draw(o, &mut scene, &mut self.fonts, &self.theme, &self.svc)
+            }
+            WinRef::Crt(i) => {
+                let gpu = self.gpu.as_mut().unwrap();
+                crate::crt::draw(&mut self.crts[i], &mut scene, gpu)
             }
         };
         let qh = self.qh.clone();
@@ -383,6 +432,7 @@ impl App {
             WinRef::Strip(i) => &self.strips[i].hits,
             WinRef::Card => &self.card.as_ref()?.hits,
             WinRef::Osd(k) => &self.osd(k)?.hits,
+            WinRef::Crt(_) => return None,
         };
         hits.iter().rev().find(|h| h.contains(x, y)).map(|h| h.action)
     }
@@ -400,6 +450,7 @@ impl App {
                     o.st.pointer = p;
                 }
             }
+            WinRef::Crt(_) => {}
         }
     }
 
@@ -408,6 +459,7 @@ impl App {
             WinRef::Strip(i) => self.strips[i].pointer,
             WinRef::Card => self.card.as_ref()?.pointer,
             WinRef::Osd(k) => self.osd(k)?.st.pointer,
+            WinRef::Crt(_) => None,
         }
     }
 }
@@ -445,7 +497,11 @@ impl OutputHandler for App {
         &mut self.outputs
     }
     fn new_output(&mut self, _: &Connection, _: &QueueHandle<Self>, output: wl_output::WlOutput) {
-        self.create_strip(output);
+        if self.crt_mode {
+            crate::crt::create(self, output);
+        } else {
+            self.create_strip(output);
+        }
     }
     fn update_output(&mut self, _: &Connection, _: &QueueHandle<Self>, output: wl_output::WlOutput) {
         let info = self.outputs.info(&output);
@@ -492,6 +548,9 @@ impl LayerShellHandler for App {
             WinRef::Card
         } else if let Some(o) = self.osds.iter().find(|o| &o.win.layer == layer) {
             WinRef::Osd(o.kind)
+        } else if let Some(i) = self.crts.iter().position(|c| &c.win.layer == layer) {
+            crate::crt::configured(self, i);
+            WinRef::Crt(i)
         } else {
             return;
         };
@@ -555,7 +614,7 @@ impl KeyboardHandler for App {
         if let Some(WinRef::Osd(k)) = self.kbd_focus {
             if self.osd(k).is_some() {
                 // Qt's nativeScanCode is the XKB keycode: evdev + 8.
-                crate::osd::key(self, k, event.keysym, event.raw_code + 8, self.shift, event.utf8.as_deref());
+                crate::osd::key(self, k, event.keysym, event.raw_code + 8, self.mods, event.utf8.as_deref());
                 return;
             }
         }
@@ -566,6 +625,7 @@ impl KeyboardHandler for App {
     fn release_key(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlKeyboard, _: u32, _: KeyEvent) {}
     fn update_modifiers(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlKeyboard, _: u32, m: Modifiers, _: u32) {
         self.shift = m.shift;
+        self.mods = Mods { shift: m.shift, ctrl: m.ctrl, alt: m.alt };
         if let Some(c) = &mut self.card {
             c.shift = m.shift;
         }
@@ -606,6 +666,13 @@ impl PointerHandler for App {
                 continue;
             }
             let Some(w) = self.win_of(&e.surface) else { continue };
+            if let WinRef::Crt(_) = w {
+                // Qt.BlankCursor: no pointer over the picture while it collapses.
+                if let (PointerEventKind::Enter { serial }, Some((p, _))) = (&e.kind, &self.pointer) {
+                    p.set_cursor(*serial, None, 0, 0);
+                }
+                continue;
+            }
             let (x, y) = (e.position.0 as f32, e.position.1 as f32);
             match e.kind {
                 PointerEventKind::Enter { serial } => {
@@ -665,7 +732,8 @@ impl PointerHandler for App {
                     if delta != 0.0 {
                         match w {
                             WinRef::Card => cards::wheel(self, delta),
-                            WinRef::Osd(_) => {}
+                            WinRef::Osd(k) => crate::osd::wheel(self, k, delta),
+                            WinRef::Crt(_) => {}
                             WinRef::Strip(i) => {
                                 if let Some(act) = self.hit_at(w, x, y) {
                                     bar::wheel(self, i, act, delta);
@@ -688,6 +756,7 @@ impl PointerHandler for App {
                                 WinRef::Strip(i) => bar::activate(self, i, action, button),
                                 WinRef::Card => cards::click(self, action, button),
                                 WinRef::Osd(k) => crate::osd::click(self, k, action, button),
+                                WinRef::Crt(_) => {}
                             }
                         }
                     }

@@ -251,6 +251,16 @@ impl App {
         }
     }
 
+    /// Image { asynchronous: true }: `work` runs on a thread of its own and
+    /// `done` gets its result back on the event loop.
+    pub fn background<T: Send + 'static>(&self, work: impl FnOnce() -> T + Send + 'static, done: fn(&mut App, T)) {
+        let tx = self.bg_tx.clone();
+        std::thread::spawn(move || {
+            let v = work();
+            let _ = tx.send(Box::new(move |app: &mut App| done(app, v)));
+        });
+    }
+
     /// Timer.stop() for a debounce started under `name`.
     pub fn cancel_timer(&mut self, name: &str) {
         if let Some(t) = self.timers.remove(name) {
