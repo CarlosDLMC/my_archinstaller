@@ -3,8 +3,11 @@
 //! sources and the same intervals.
 
 use std::os::unix::net::UnixStream;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
+use dbus::arg::{PropMap, Variant};
+use dbus::channel::{BusType, Channel};
+use dbus::message::{Message, MessageType};
 use serde_json::Value;
 
 use crate::app::App;
@@ -161,6 +164,17 @@ pub struct Wifi {
     pub pulse: crate::anim::Pulse,
 }
 
+/// dunst's pause state over the session bus (dnd_connect).
+#[derive(Default)]
+struct DndBus {
+    chan: Option<Channel>,
+    watch: Option<smithay_client_toolkit::reexports::calloop::RegistrationToken>,
+    /// The Properties.Get in flight: its serial and when it went out.
+    get: Option<(u32, Instant)>,
+    /// Asked again while one was out: one more read when it answers.
+    again: bool,
+}
+
 #[derive(Default)]
 pub struct Services {
     pub mango: Mango,
@@ -169,6 +183,7 @@ pub struct Services {
     pub timezone: String,
     pub dnd_enabled: bool,
     pub dnd_available: bool,
+    dnd_bus: DndBus,
     pub weather: Weather,
     pub battery: crate::battery::Battery,
     pub net: crate::network_card::NetPanel,
@@ -508,6 +523,7 @@ pub fn start(app: &mut App) {
     app.every(Duration::from_millis(1000), tick_clock);
 
     app.svc.dnd_available = true;
+    dnd_connect(app);
     dnd_poll(app);
     app.every(Duration::from_millis(5000), |app| {
         dnd_poll(app);
@@ -560,19 +576,131 @@ pub fn start(app: &mut App) {
     crate::agent::run(app, "check");
 }
 
-// ---- DND (dunstctl), as CenterInfo polls it ----
+// ---- DND (dunst's pause state), as CenterInfo polls it ----
+
+const DUNST: &str = "org.freedesktop.Notifications";
+const DUNST_PATH: &str = "/org/freedesktop/Notifications";
+const DUNST_IFACE: &str = "org.dunstproject.cmd0";
+
+/// `dunstctl is-paused` is a shell script around one D-Bus call, the
+/// Properties.Get of dunst's `paused`: two processes every five seconds. The
+/// bar makes that call itself, on its own session-bus connection and the same
+/// timer, and reads it again at once when dunst announces a change
+/// (PropertiesChanged) or comes back (NameOwnerChanged). Without a session
+/// bus it runs dunstctl, as before.
+fn dnd_connect(app: &mut App) {
+    let Ok(mut ch) = Channel::get_private(BusType::Session) else { return };
+    let rules = [
+        format!("type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path='{DUNST_PATH}',arg0='{DUNST_IFACE}'"),
+        format!("type='signal',sender='org.freedesktop.DBus',interface='org.freedesktop.DBus',member='NameOwnerChanged',arg0='{DUNST}'"),
+    ];
+    for rule in rules {
+        let Ok(m) = Message::new_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "AddMatch") else { return };
+        if ch.send(m.append1(rule)).is_err() {
+            return;
+        }
+    }
+    ch.flush();
+    ch.set_watch_enabled(true);
+    let fd = ch.watch().fd;
+    app.svc.dnd_bus.chan = Some(ch);
+    app.svc.dnd_bus.watch = app.watch_fd(fd, dnd_bus_ready);
+}
 
 fn dnd_poll(app: &mut App) {
+    let bus = &mut app.svc.dnd_bus;
+    if let Some(ch) = bus.chan.as_ref() {
+        // One read at a time, as a running Process ignores `running = true`;
+        // dbus-send gives up on dunst after 25 s.
+        if let Some((_, at)) = bus.get {
+            if at.elapsed() < Duration::from_secs(25) {
+                bus.again = true;
+                return;
+            }
+            bus.get = None;
+            dnd_apply(app, None);
+            return dnd_poll(app);
+        }
+        let Ok(m) = Message::new_method_call(DUNST, DUNST_PATH, "org.freedesktop.DBus.Properties", "Get") else { return };
+        if let Ok(serial) = ch.send(m.append2(DUNST_IFACE, "paused")) {
+            ch.flush();
+            bus.get = Some((serial, Instant::now()));
+        }
+        return;
+    }
     app.spawn("dnd", &["dunstctl", "is-paused"], |app, d| {
         let v = d.stdout.trim().lines().last().unwrap_or("").to_string();
         let ok = d.ok && (v == "true" || v == "false");
-        let (en, av) = (if ok { v == "true" } else { app.svc.dnd_enabled }, ok);
-        if (en, av) != (app.svc.dnd_enabled, app.svc.dnd_available) {
-            app.svc.dnd_enabled = en;
-            app.svc.dnd_available = av;
-            app.mark_all_dirty();
-        }
+        dnd_apply(app, ok.then_some(v == "true"));
     });
+}
+
+/// A read of dunst's pause state: Some(paused), or None when dunst did not answer.
+fn dnd_apply(app: &mut App, paused: Option<bool>) {
+    let (en, av) = (paused.unwrap_or(app.svc.dnd_enabled), paused.is_some());
+    if (en, av) != (app.svc.dnd_enabled, app.svc.dnd_available) {
+        app.svc.dnd_enabled = en;
+        app.svc.dnd_available = av;
+        app.mark_all_dirty();
+    }
+}
+
+/// The session bus has data: the answer to a read, or one of dunst's signals.
+fn dnd_bus_ready(app: &mut App) {
+    let mut msgs = Vec::new();
+    let mut lost = false;
+    if let Some(ch) = app.svc.dnd_bus.chan.as_mut() {
+        lost = ch.read_write(Some(Duration::ZERO)).is_err();
+        while let Some(m) = ch.pop_message() {
+            msgs.push(m);
+        }
+    }
+    for m in msgs {
+        match m.msg_type() {
+            MessageType::MethodReturn | MessageType::Error => {
+                let Some((serial, _)) = app.svc.dnd_bus.get else { continue };
+                if m.get_reply_serial() != Some(serial) {
+                    continue;
+                }
+                app.svc.dnd_bus.get = None;
+                let paused = if m.msg_type() == MessageType::MethodReturn { m.read1::<Variant<bool>>().ok().map(|v| v.0) } else { None };
+                dnd_apply(app, paused);
+                if std::mem::take(&mut app.svc.dnd_bus.again) {
+                    dnd_poll(app);
+                }
+            }
+            MessageType::Signal => match m.member().as_deref() {
+                Some("PropertiesChanged") => {
+                    let Ok((iface, changed, invalidated)) = m.read3::<String, PropMap, Vec<String>>() else { continue };
+                    if iface != DUNST_IFACE {
+                        continue;
+                    }
+                    if let Some(v) = changed.get("paused").and_then(|v| v.0.as_u64()) {
+                        dnd_apply(app, Some(v != 0));
+                    } else if changed.contains_key("pauseLevel") || invalidated.iter().any(|p| p == "paused" || p == "pauseLevel") {
+                        dnd_poll(app);
+                    }
+                }
+                // dunst (re)started: its state is fresh. When it goes away
+                // the next poll finds out, as dunstctl's would.
+                Some("NameOwnerChanged") => {
+                    let Ok((name, _, owner)) = m.read3::<String, String, String>() else { continue };
+                    if name == DUNST && !owner.is_empty() {
+                        dnd_poll(app);
+                    }
+                }
+                _ => {}
+            },
+            _ => {}
+        }
+    }
+    if lost {
+        // The session bus went away: dunstctl from now on.
+        if let Some(t) = app.svc.dnd_bus.watch.take() {
+            app.unwatch(t);
+        }
+        app.svc.dnd_bus = DndBus::default();
+    }
 }
 
 pub fn dnd_toggle(app: &mut App) {
