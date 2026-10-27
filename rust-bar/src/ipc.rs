@@ -66,6 +66,7 @@ fn cards_toggle(app: &mut App, card: &str) {
     use crate::cards::CardKind;
     let (kind, action) = match card {
         "power" => (CardKind::Power, Action::Logo),
+        "calendar" => (CardKind::Calendar, Action::Clock),
         _ => return,
     };
     let focused = app.svc.mango.focused().map(|m| m.name.clone()).unwrap_or_default();

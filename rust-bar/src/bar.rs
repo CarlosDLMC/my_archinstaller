@@ -84,6 +84,7 @@ struct Painter<'a> {
     hits: Vec<Hit>,
     ui: f32,
     pointer: Option<(f32, f32)>,
+    open: Option<crate::cards::CardKind>,
 }
 
 impl Painter<'_> {
@@ -178,7 +179,7 @@ pub fn draw(scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, svc: &Services,
     scene.fill(0.0, 0.0, ctx.width, (DESIGN_HEIGHT * ui).round(), theme.col_bg_wash);
     scene.save();
     scene.scale(ui, ui);
-    let mut p = Painter { now: std::time::Instant::now(), animating: false, scene, fonts, theme, hits: Vec::new(), ui, pointer: ctx.pointer };
+    let mut p = Painter { now: std::time::Instant::now(), animating: false, scene, fonts, theme, hits: Vec::new(), ui, pointer: ctx.pointer, open: ctx.open };
 
     // shell.qml's order; a hidden widget takes its separator with it.
     let mut slots = vec![Slot::Pad(12.0), Slot::Logo, Slot::Workspaces, Slot::Sep, Slot::Title, Slot::Center];
@@ -540,6 +541,9 @@ fn draw_center(p: &mut Painter, svc: &Services, x0: f32, width: f32, design_widt
     let pill_x = x0 + sep_x + sep.width + 8.0;
     let pill_y = qround((DESIGN_HEIGHT - 26.0) / 2.0);
     let pill_w = time.width + 16.0;
+    if p.open == Some(crate::cards::CardKind::Calendar) {
+        p.scene.rect(pill_x, pill_y, pill_w, 26.0, theme.col_bg, 8.0, 0.0, Color::TRANSPARENT, true);
+    }
     p.label(&time, pill_x + qround((pill_w - time.width) / 2.0), pill_y + qround((26.0 - time.height()) / 2.0), theme.col_white);
     p.hit(pill_x, pill_y, pill_w, 26.0, Action::Clock);
 }
@@ -562,6 +566,11 @@ pub fn activate(app: &mut App, strip: usize, action: Action, button: u32) {
         Action::Workspace(id) => {
             let name = app.strips[strip].name.clone();
             services::mango_dispatch(app, &format!("viewcrossmon,{id},^{name}$"));
+        }
+        Action::Clock if button == BTN_LEFT => {
+            if let Some(h) = hit {
+                crate::cards::toggle(app, strip, crate::cards::CardKind::Calendar, &h, false);
+            }
         }
         Action::LayoutCycle => crate::ipc::layout_next(app),
         Action::Bell => services::dnd_toggle(app),

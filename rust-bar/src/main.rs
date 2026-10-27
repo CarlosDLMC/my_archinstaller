@@ -1,6 +1,7 @@
 mod anim;
 mod app;
 mod bar;
+mod cal;
 mod cards;
 mod color;
 mod gpu;

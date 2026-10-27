@@ -33,6 +33,7 @@ use crate::theme::{self, Theme, FONT_SIZE};
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum CardKind {
     Power,
+    Calendar,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -66,6 +67,9 @@ pub struct OpenCard {
     stem_w: f32,
     notch: Option<(u32, u32, u32, i32)>,
     colors: HashMap<u32, Animated<Color>>,
+    /// Calendar: the month shown (year, month 1-12) and the wheel's remainder.
+    month: (i32, u32),
+    wheel_acc: f32,
 }
 
 impl OpenCard {
@@ -86,6 +90,8 @@ fn geometry(kind: CardKind) -> (f32, f32, Stem) {
     match kind {
         // PowerWidget: 210 wide; four 42 px buttons, spacing 6, + 28.
         CardKind::Power => (210.0, (4.0 * 42.0 + 3.0 * 6.0f32).ceil() + 28.0, Stem::Left),
+        // CalendarPopup: 400 wide; header 38 + 8 + plate (8 + 24 + 4 + 240 + 8) + 12 + 24.
+        CardKind::Calendar => (400.0, 38.0 + 8.0 + 284.0 + 12.0 + 24.0, Stem::Center),
     }
 }
 
@@ -105,12 +111,17 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
     // DropdownWidget.cardX: from the icon's centre on the screen.
     let icon_w = icon.w / ui;
     let icon_center = icon.x + icon.w / 2.0;
-    let stem_w = (icon_w + 16.0).floor().min(w - 60.0);
-    let card_x = match stem {
+    let mut stem_w = (icon_w + 16.0).floor().min(w - 60.0);
+    let mut card_x = match stem {
         Stem::Right => icon_center - w + stem_w / 2.0 + 10.0,
         Stem::Left => icon_center - stem_w / 2.0 - 10.0,
         Stem::Center => icon_center - w / 2.0,
     };
+    if kind == CardKind::Calendar {
+        // CalendarPopup: a fixed 60 px stem, cardX = anchorX (int) - 200.
+        stem_w = 60.0;
+        card_x = icon_center.trunc() - 200.0;
+    }
     let x = card_x.min(s.screen_width - w).max(0.0);
     let y = crate::bar::strip_height(s.screen_width) as f32 + 2.0;
     let stem_cx = match stem {
@@ -153,6 +164,8 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         stem_w,
         notch: None,
         colors: HashMap::new(),
+        month: { let (y, m, _) = crate::cal::today(); (y, m) },
+        wheel_acc: 0.0,
     });
     app.strips[strip].win.dirty = true;
 }
@@ -300,7 +313,23 @@ impl Ui<'_> {
     /// shadow lip, icon + bold caption centred one pixel high.
     #[allow(clippy::too_many_arguments)]
     fn console_button(&mut self, id: u32, x: f32, y: f32, w: f32, icon: &str, icon_color: Color, label: &str, current: bool) {
-        let font = FONT_SIZE - 4.0;
+        self.console_button_sized(id, x, y, w, FONT_SIZE - 4.0, icon, icon_color, label, current);
+    }
+
+    /// ConsoleButton.implicitWidth: max(minWidth, face + 26).
+    fn console_button_width(&mut self, font: f32, icon: &str, label: &str, min_width: f32) -> f32 {
+        let icon_box = font + 2.0;
+        let cap = if label.is_empty() { 0.0 } else { self.fonts.layout(label, theme::bar_font(true), font, 0.0).width };
+        let face = match (icon.is_empty(), label.is_empty()) {
+            (true, _) => cap,
+            (false, true) => icon_box,
+            (false, false) => icon_box + 6.0 + cap,
+        };
+        min_width.max(face + 26.0)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn console_button_sized(&mut self, id: u32, x: f32, y: f32, w: f32, font: f32, icon: &str, icon_color: Color, label: &str, current: bool) {
         let h = (font * 2.1).round();
         let (fi, focused) = self.focusable();
         let hot = self.hovered(x, y, w, h) || focused;
@@ -322,8 +351,13 @@ impl Ui<'_> {
         let icon_box = font + 2.0;
         let icon_line = self.fonts.layout(icon, theme::bar_font(false), font + 2.0, 0.0);
         let cap = self.fonts.layout(label, theme::bar_font(true), font, 0.0);
-        let row_w = if icon.is_empty() { cap.width } else { icon_box + 6.0 + cap.width };
-        let row_h = icon_box.max(cap.height());
+        // Row skips an invisible child and its spacing.
+        let row_w = match (icon.is_empty(), label.is_empty()) {
+            (true, _) => cap.width,
+            (false, true) => icon_box,
+            (false, false) => icon_box + 6.0 + cap.width,
+        };
+        let row_h = if label.is_empty() { icon_box } else if icon.is_empty() { cap.height() } else { icon_box.max(cap.height()) };
         let rx = x + ((w - row_w) / 2.0 + 0.5).floor();
         let ry = y + ((h - row_h) / 2.0 + if current { 0.0 } else { -1.0 } + 0.5).floor();
         if !icon.is_empty() {
@@ -332,9 +366,11 @@ impl Ui<'_> {
             let iy = ry + ((row_h - icon_box) / 2.0 + 0.5).floor() + ((icon_box - icon_line.height()) / 2.0 + 0.5).floor();
             self.text(&icon_line, ix, iy, ic, TextStyle::Normal);
         }
-        let cx = if icon.is_empty() { rx } else { rx + icon_box + 6.0 };
-        let cy = ry + ((row_h - cap.height()) / 2.0 + 0.5).floor();
-        self.text(&cap, cx, cy, if current { t.col_bg } else { t.col_grey }, TextStyle::Normal);
+        if !label.is_empty() {
+            let cx = if icon.is_empty() { rx } else { rx + icon_box + 6.0 };
+            let cy = ry + ((row_h - cap.height()) / 2.0 + 0.5).floor();
+            self.text(&cap, cx, cy, if current { t.col_bg } else { t.col_grey }, TextStyle::Normal);
+        }
         self.hits.push(Hit { x, y, w, h, action: Action::Card(fi as u32) });
     }
 }
@@ -378,12 +414,112 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
                 y += 42.0 + 6.0;
             }
         }
+        CardKind::Calendar => {}
+    }
+    if ui.card.kind == CardKind::Calendar {
+        draw_calendar(&mut ui, w);
     }
     let _ = svc;
     let (hits, n, animating) = (std::mem::take(&mut ui.hits), ui.focus_n, ui.animating);
     card.hits = hits;
     card.focus_count = n;
     animating
+}
+
+/// ConsolePlate: the recessed plate, with its 1 px highlight along the bottom.
+fn plate(ui: &mut Ui, x: f32, y: f32, w: f32, h: f32) {
+    ui.scene.rect(x, y, w, h, ui.theme.col_plate, 5.0, 0.0, Color::TRANSPARENT, true);
+    ui.scene.fill(x + 5.0, y + h - 1.0, w - 10.0, 1.0, Color::qt_rgba(1.0, 1.0, 1.0, 0.07));
+}
+
+const CAL_PREV: u32 = 0;
+const CAL_NEXT: u32 = 1;
+
+fn draw_calendar(ui: &mut Ui, w: f32) {
+    let t = ui.theme;
+    let (x0, y0, cw) = (12.0, STEM_H + 12.0, w - 24.0);
+    // Header: prev, month + year (28 px bold, letterSpacing 1, centred), next.
+    let font = FONT_SIZE - 6.0;
+    let bw = ui.console_button_width(font, "\u{f0141}", "", 0.0);
+    let bh = (font * 2.1).round();
+    let (year, month) = ui.card.month;
+    let title = format!("{} {}", crate::cal::month_name(month).to_uppercase(), year);
+    let tl = ui.fonts.layout(&title, theme::bar_font(true), FONT_SIZE + 4.0, 1.0);
+    let head_h = tl.height().max(bh);
+    ui.console_button_sized(100 + CAL_PREV, x0, y0 + ((head_h - bh) / 2.0 + 0.5).floor(), bw, font, "\u{f0141}", t.col_grey, "", false);
+    let tw = cw - 2.0 * bw;
+    let tx = x0 + bw + (tw - tl.width) / 2.0;
+    ui.text(&tl, tx, y0 + ((head_h - tl.height()) / 2.0 + 0.5).floor(), t.col_white, TextStyle::Normal);
+    ui.console_button_sized(100 + CAL_NEXT, x0 + cw - bw, y0 + ((head_h - bh) / 2.0 + 0.5).floor(), bw, font, "\u{f0142}", t.col_grey, "", false);
+
+    // The plate: weekday captions, then the 7 x 6 grid.
+    let py = y0 + head_h + 8.0;
+    plate(ui, x0, py, cw, 8.0 + 24.0 + 4.0 + 240.0 + 8.0);
+    let (ix, iw) = (x0 + 8.0, cw - 16.0);
+    let col = iw / 7.0;
+    let first = crate::cal::first_weekday();
+    for i in 0..7 {
+        let name = crate::cal::day_name_short((first + i) % 7).to_uppercase();
+        let l = ui.fonts.layout(&name, theme::bar_font(true), FONT_SIZE - 5.0, 1.0);
+        let cx = ix + col * i as f32 + ((col - l.width) / 2.0 + 0.5).floor();
+        let cy = py + 8.0 + ((24.0 - l.height()) / 2.0 + 0.5).floor();
+        ui.text(&l, cx, cy, t.col_dim, TextStyle::Normal);
+    }
+    let gy = py + 8.0 + 24.0 + 4.0;
+    let today = crate::cal::today();
+    let start = crate::cal::grid_start(year, month, first);
+    for k in 0..42u32 {
+        let (dy, dm, dd) = crate::cal::add_days(start, k as i64);
+        let (cx, cy) = (ix + col * (k % 7) as f32, gy + 40.0 * (k / 7) as f32);
+        let side = (col - 4.0).min(40.0 - 4.0).min(42.0);
+        let (rx, ry) = (cx + ((col - side) / 2.0 + 0.5).floor(), cy + ((40.0 - side) / 2.0 + 0.5).floor());
+        let is_today = (dy, dm, dd) == today;
+        let hover = ui.hovered(cx, cy, col, 40.0);
+        let target = if is_today { t.col_accent } else if hover { t.col_plate.lighter(1.6) } else { Color::TRANSPARENT };
+        let (bg, running) = ui.card.color(200 + k, target, 110, ui.now);
+        ui.animating |= running;
+        ui.scene.rect(rx, ry, side, side, bg, 4.0, 0.0, Color::TRANSPARENT, true);
+        let l = ui.fonts.layout(&dd.to_string(), theme::bar_font(is_today), FONT_SIZE - 2.0, 0.0);
+        let color = if is_today {
+            t.col_bg
+        } else if dm == month {
+            t.col_white
+        } else {
+            t.col_white.with_alpha(0.3)
+        };
+        ui.text(&l, rx + ((side - l.width) / 2.0 + 0.5).floor(), ry + ((side - l.height()) / 2.0 + 0.5).floor(), color, TextStyle::Normal);
+        ui.hits.push(Hit { x: cx, y: cy, w: col, h: 40.0, action: Action::Card(1000 + k) });
+    }
+}
+
+fn calendar_step(app: &mut App, delta: i32) {
+    if let Some(c) = app.card.as_mut() {
+        let (y, m) = c.month;
+        let idx = y * 12 + m as i32 - 1 + delta;
+        c.month = (idx.div_euclid(12), (idx.rem_euclid(12) + 1) as u32);
+        c.win.dirty = true;
+    }
+}
+
+/// A wheel turn over the card (QML angleDelta: +120 per notch away from you).
+pub fn wheel(app: &mut App, angle_delta_y: f32) {
+    let Some(c) = app.card.as_mut() else { return };
+    if c.kind != CardKind::Calendar {
+        return;
+    }
+    c.wheel_acc += angle_delta_y;
+    let mut steps = 0;
+    while c.wheel_acc >= 120.0 {
+        c.wheel_acc -= 120.0;
+        steps -= 1;
+    }
+    while c.wheel_acc <= -120.0 {
+        c.wheel_acc += 120.0;
+        steps += 1;
+    }
+    if steps != 0 {
+        calendar_step(app, steps);
+    }
 }
 
 // ---- input ----
@@ -393,6 +529,12 @@ pub fn activate(app: &mut App, action: Action, keyboard: bool) {
     let Action::Card(i) = action else { return };
     match card.kind {
         CardKind::Power => power_pick(app, i, keyboard),
+        CardKind::Calendar => match i {
+            // the focus chain: prev, next; day cells are mouse-only
+            CAL_PREV => calendar_step(app, -1),
+            CAL_NEXT => calendar_step(app, 1),
+            _ => {}
+        },
     }
 }
 

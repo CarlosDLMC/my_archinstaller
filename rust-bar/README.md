@@ -50,7 +50,8 @@ from libQt6Quick, uniforms and textures read back from Qt's GL calls):
 - [x] Animations (Qt easing curves, Behavior-style retargeting, looping pulse), cursor shape on hover changes, click-on-release
 - [x] Card framework: card-sized layer + 1-pixel click catcher (wp_viewporter) instead of a full-screen surface, notch canvas (arcTo, QPainter-like fill), CardKeys focus chain, hover colour animations, `cards toggle` IPC
 - [x] Power card (logo) - matches the QML card; with it open: 21 MB PSS / 24 MB VRAM against 88 MB / 127 MB
-- [ ] Cards: calendar, weather, audio, network, battery, ПУЛЬТ, VPN, agent
+- [x] Calendar card (clock) - matches; Qt's CLDR month/day names for LC_TIME, wheel steps months
+- [ ] Cards: weather, audio, network, battery, ПУЛЬТ, VPN, agent
 - [ ] The CRT power-off effect (quickshell/crt, run by CrtOff.sh before logout/reboot/shutdown)
 - [ ] Overlays: layout OSD, clipboard, polkit agent, power menu, screenshot, recording
 - [ ] Wallpaper carousel + reveal, overview

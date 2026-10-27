@@ -552,6 +552,11 @@ impl PointerHandler for App {
                 PointerEventKind::Press { button, .. } => {
                     self.pressed = self.hit_at(w, x, y).map(|a| (w, button, a));
                 }
+                PointerEventKind::Axis { vertical, .. } if w == WinRef::Card => {
+                    // Qt's angleDelta: 120 per notch, positive away from the user.
+                    let delta = if vertical.discrete != 0 { -(vertical.discrete as f32) * 120.0 } else { -(vertical.absolute as f32) * 8.0 };
+                    cards::wheel(self, delta);
+                }
                 PointerEventKind::Release { button, .. } => {
                     // MouseArea.onClicked: released over the widget it was pressed on.
                     if let Some((pw, pb, action)) = self.pressed.take() {
