@@ -338,7 +338,13 @@ pub struct Fonts {
     pub color_atlas: Atlas,
     colors: HashMap<(u16, GlyphId, i64), Option<ColorGlyph>>,
     emoji: Option<Option<u16>>,
+    /// Lines laid out lately (layout()), two generations of them.
+    lines: HashMap<LineKey, (String, Line)>,
+    lines_old: HashMap<LineKey, (String, Line)>,
 }
+
+/// A text's hash, font, size and letter spacing (bits).
+type LineKey = (u64, FontKey, u32, u32);
 
 /// QFontEngineFT::loadFlags for a gray glyph cache with fontconfig's
 /// hintslight. RUST_BAR_FT_FLAGS overrides it (calibration only).
@@ -470,6 +476,8 @@ impl Fonts {
             color_atlas: Atlas::new(4, 256, 64),
             colors: HashMap::new(),
             emoji: None,
+            lines: HashMap::new(),
+            lines_old: HashMap::new(),
         }
     }
 
@@ -521,7 +529,33 @@ impl Fonts {
     }
 
     /// One line of text at `size` px with Qt's letterSpacing (added after every glyph).
+    /// A frame lays out the strings the last one did, and shaping them again
+    /// was a good part of an animation frame's work: lines come from a cache
+    /// of what was laid out lately. Two generations - when the newer holds
+    /// 512 lines it becomes the older, and what no frame asked for since is
+    /// dropped with the one before.
     pub fn layout(&mut self, text: &str, key: FontKey, size: f32, letter_spacing: f32) -> Line {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        text.hash(&mut h);
+        let k = (h.finish(), key, size.to_bits(), letter_spacing.to_bits());
+        if let Some((t, line)) = self.lines.get(&k) {
+            if t == text {
+                return line.clone();
+            }
+        }
+        let line = match self.lines_old.remove(&k) {
+            Some((t, line)) if t == text => line,
+            _ => self.shape_line(text, key, size, letter_spacing),
+        };
+        if self.lines.len() >= 512 {
+            self.lines_old = std::mem::take(&mut self.lines);
+        }
+        self.lines.insert(k, (text.to_string(), line.clone()));
+        line
+    }
+
+    fn shape_line(&mut self, text: &str, key: FontKey, size: f32, letter_spacing: f32) -> Line {
         let primary = self.face_for(key);
         let (ascent, descent) = self.faces[primary as usize].metrics(size);
         let mut line = Line { ascent, descent, size, ..Default::default() };
