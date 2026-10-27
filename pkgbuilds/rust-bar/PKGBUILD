@@ -1,9 +1,10 @@
 # The desktop bar, built from this repo's rust-bar/ crate. Not a download:
 # install-scripts/rust-bar.sh packs rust-bar/ into rust-bar.tar.gz next to this
 # file and runs makepkg in a temp dir, so the package is always the crate as it
-# stands in the checkout. RUST_BAR_SOURCE (that script's hash of the crate)
-# lands in /usr/share/rust-bar/source; the script compares it on the next run
-# and builds again only when the crate changed.
+# stands in the checkout. That script also sets pkgver in its copy: the
+# crate's version plus a hash of the crate (0.1.0.<hash>), so `pacman -Q
+# rust-bar` says which crate is installed and a re-run builds again only when
+# the crate changed. The pkgver below is the placeholder it replaces.
 #
 # The bar is Wayland + Vulkan (wgpu): one of the Mesa Vulkan drivers that
 # graphics.sh installs, or the NVIDIA one. rust-bar.sh adds Mesa's software
@@ -51,7 +52,5 @@ build() {
 
 package() {
   install -Dm755 "$srcdir/target/release/rust-bar" "$pkgdir/usr/bin/rust-bar"
-  install -dm755 "$pkgdir/usr/share/rust-bar"
-  printf '%s\n' "${RUST_BAR_SOURCE:-unknown}" > "$pkgdir/usr/share/rust-bar/source"
   install -Dm644 "$srcdir/rust-bar/README.md" "$pkgdir/usr/share/doc/rust-bar/README.md"
 }

@@ -1376,7 +1376,7 @@ The installer's `bar` option (`install-scripts/rust-bar.sh`) builds it from
 the `rust-bar/` crate with `pkgbuilds/rust-bar` and installs the package;
 `makepkg -s` pulls in `rust` and `clang` for the build, which takes a minute
 or a few. A re-run builds again only when the crate changed (the package
-keeps a hash of it in `/usr/share/rust-bar/source`). It draws with Vulkan:
+version is the crate's plus a hash of it, `0.1.0.<hash>`). It draws with Vulkan:
 `graphics.sh` installs the driver, and a machine with none (a VM) gets Mesa's
 software Vulkan. Presets that still say `quickshell="ON"` get the bar.
 

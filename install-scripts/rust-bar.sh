@@ -6,8 +6,8 @@
 # power-off are all this one binary now. Its scripts and the wallust palette
 # stay where the QML bar had them, in ~/.config/quickshell/bar (dots).
 #
-# The package records a hash of the crate it was built from; a re-run builds
-# again only when the crate changed since.
+# The package's version is the crate's plus a hash of the crate (0.1.0.<hash>);
+# a re-run builds again only when the crate changed since.
 
 PKG=rust-bar
 
@@ -40,11 +40,14 @@ if ! ls /usr/share/vulkan/icd.d/*.json /etc/vulkan/icd.d/*.json 2>/dev/null | gr
   install_package vulkan-swrast "$LOG"
 fi
 
-# Every file of the crate, in a fixed order: the build is redone when any of them changed.
-WANT=$( cd "$CRATE" && find . -path ./target -prune -o -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -c1-16 )
-HAVE=$(cat /usr/share/rust-bar/source 2>/dev/null || true)
-if pacman -Q "$PKG" &>/dev/null && [ "$HAVE" = "$WANT" ]; then
-  echo "${INFO} ${MAGENTA}rust-bar${RESET} is already built from this crate ($WANT). Skipping..." | tee -a "$LOG"
+# The version: the crate's own, then a hash of every file of the crate in a
+# fixed order, so the build is redone when any of them changed. pkgrel stays 1.
+CRATE_VER=$(sed -n 's/^version *= *"\(.*\)"/\1/p' "$CRATE/Cargo.toml" | head -n1)
+HASH=$( cd "$CRATE" && find . -path ./target -prune -o -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -c1-12 )
+WANT="${CRATE_VER:-0}.${HASH}-1"
+HAVE=$(pacman -Q "$PKG" 2>/dev/null | awk '{print $2}')
+if [ "$HAVE" = "$WANT" ]; then
+  echo "${INFO} ${MAGENTA}rust-bar${RESET} $HAVE is already built from this crate. Skipping..." | tee -a "$LOG"
   clear_package_failure "$PKG"
   exit 0
 fi
@@ -54,6 +57,7 @@ printf "\n%s - Building ${SKY_BLUE}rust-bar${RESET} (the desktop bar) from rust-
 # sources next to the PKGBUILD (see yay.sh). The crate goes in as a tarball,
 # the PKGBUILD's only source.
 if ! TMPD=$(mktemp -d) || ! cp -r "$SRC/." "$TMPD/" \
+   || ! sed -i "s/^pkgver=.*/pkgver=${WANT%-1}/" "$TMPD/PKGBUILD" \
    || ! tar -C "$PARENT_DIR" --exclude=rust-bar/target -czf "$TMPD/rust-bar.tar.gz" rust-bar; then
   echo "${ERROR} Could not set up a build directory for rust-bar (a full /tmp?) - the desktop has no bar." | tee -a "$LOG"
   record_package_failure "$PKG"
@@ -63,7 +67,7 @@ fi
 
 # -s pulls the build deps (cargo, clang) from the repos. -f: a package of the
 # same version left in a persistent PKGDEST must not stop the build.
-( cd "$TMPD" && RUST_BAR_SOURCE="$WANT" makepkg -sf --noconfirm 2>&1 ) | tee -a "$LOG"
+( cd "$TMPD" && makepkg -sf --noconfirm 2>&1 ) | tee -a "$LOG"
 # tee is last in the pipeline: PIPESTATUS[0] is makepkg's status.
 if [ "${PIPESTATUS[0]}" -ne 0 ]; then
   echo "${ERROR} Failed to build rust-bar - the desktop has no bar. See $LOG." | tee -a "$LOG"
@@ -83,14 +87,16 @@ while IFS= read -r _p; do
   fi
 done < <(cd "$TMPD" && makepkg --packagelist 2>/dev/null)
 
+# The version is a hash, so it can sort below the installed one: pacman -U
+# then only warns that it is downgrading, and installs it.
 if [ ${#BUILT[@]} -gt 0 ]; then
   sudo pacman -U --noconfirm "${BUILT[@]}" 2>&1 | tee -a "$LOG"
 fi
 mv "$TMPD"/*.log "$PARENT_DIR/Install-Logs/" 2>/dev/null || true
 rm -rf "$TMPD"
 
-if [ "$(cat /usr/share/rust-bar/source 2>/dev/null || true)" = "$WANT" ]; then
-  echo "${OK} ${YELLOW}rust-bar${RESET} is installed." | tee -a "$LOG"
+if [ "$(pacman -Q "$PKG" 2>/dev/null | awk '{print $2}')" = "$WANT" ]; then
+  echo "${OK} ${YELLOW}rust-bar${RESET} $WANT is installed." | tee -a "$LOG"
   clear_package_failure "$PKG"
 else
   echo "${ERROR} rust-bar did not install - the desktop has no bar. See $LOG." | tee -a "$LOG"
