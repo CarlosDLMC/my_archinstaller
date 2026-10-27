@@ -108,7 +108,7 @@ pub struct App {
     pub strips: Vec<Strip>,
     pub card: Option<OpenCard>,
     pub svc: Services,
-    pub(crate) running: HashMap<String, Instant>,
+    pub(crate) running: HashMap<String, (Instant, u32)>,
     pub(crate) timers: HashMap<&'static str, RegistrationToken>,
     pub exit: bool,
 }
@@ -266,6 +266,10 @@ impl App {
     }
 
     pub fn redraw_dirty(&mut self) {
+        if self.card.as_ref().map_or(false, |c| c.win.dirty) {
+            self.svc.pult_scanning = crate::pult::scanning(self);
+            cards::update_height(self);
+        }
         for i in 0..self.strips.len() {
             let w = &self.strips[i].win;
             if w.configured && w.dirty && !w.frame_pending {

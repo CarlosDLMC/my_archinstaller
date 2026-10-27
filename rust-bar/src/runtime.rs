@@ -41,7 +41,7 @@ impl App {
             let fl = libc::fcntl(fd, libc::F_GETFL);
             libc::fcntl(fd, libc::F_SETFL, fl | libc::O_NONBLOCK);
         }
-        self.running.insert(tag.into(), Instant::now());
+        self.running.insert(tag.into(), (Instant::now(), child.id()));
         let tag = tag.to_string();
         let mut buf = Vec::new();
         let mut child: Option<Child> = Some(child);
@@ -64,8 +64,24 @@ impl App {
         });
     }
 
-    /// A long-running helper (nmcli monitor, udevadm monitor): `on_line` for each line.
+    /// Process.running = false: SIGTERM to a helper started under `tag`.
+    pub fn kill(&mut self, tag: &str) {
+        if let Some((_, pid)) = self.running.get(tag) {
+            unsafe { libc::kill(*pid as i32, libc::SIGTERM) };
+        }
+    }
+
+    /// A long-running helper (nmcli monitor, dbus-monitor, systemd-inhibit):
+    /// `on_line` for each line; kill(tag) stops it.
     pub fn spawn_lines(&mut self, argv: &[&str], on_line: fn(&mut App, &str)) {
+        let tag = format!("lines:{}", argv.join(" "));
+        self.spawn_lines_tagged(&tag, argv, on_line);
+    }
+
+    pub fn spawn_lines_tagged(&mut self, tag: &str, argv: &[&str], on_line: fn(&mut App, &str)) {
+        if self.running.contains_key(tag) {
+            return;
+        }
         let mut cmd = Command::new(argv[0]);
         cmd.args(&argv[1..]).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
         unsafe {
@@ -81,6 +97,8 @@ impl App {
             let fl = libc::fcntl(fd, libc::F_GETFL);
             libc::fcntl(fd, libc::F_SETFL, fl | libc::O_NONBLOCK);
         }
+        self.running.insert(tag.into(), (Instant::now(), child.id()));
+        let tag = tag.to_string();
         let mut buf = Vec::new();
         let mut child = Some(child);
         let _ = self.handle.insert_source(Generic::new(stdout, Interest::READ, Mode::Level), move |_, out, app: &mut App| {
@@ -91,6 +109,7 @@ impl App {
                         if let Some(mut c) = child.take() {
                             let _ = c.wait();
                         }
+                        app.running.remove(&tag);
                         return Ok(PostAction::Remove);
                     }
                     Ok(n) => {

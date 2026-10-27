@@ -24,7 +24,10 @@ from libQt6Quick, uniforms and textures read back from Qt's GL calls):
 - **Bold**: the bar's Qt uses the family's *regular* file and FreeType's
   synthetic embolden, except on fixed-pitch faces (Terminess), where bold looks
   exactly like regular.
-- Colours go through QColor's arithmetic (`color.rs`), blending is in gamma
+- **Positions**: anchors centre with qRound(half(parent) - half(size)), where
+  an odd integer part rounds a half up; RowLayout snaps sizes up and centres
+  with qRound; horizontalAlignment centres the advances (no overhang).
+- Colours go through QColor's arithmetic (Qt 6's darker/lighter in float HSV) (`color.rs`), blending is in gamma
   space on a non-sRGB, premultiplied surface, like Qt's.
 
 ## Layout
@@ -53,7 +56,8 @@ from libQt6Quick, uniforms and textures read back from Qt's GL calls):
 - [x] Calendar card (clock) - matches; Qt's CLDR month/day names for LC_TIME, wheel steps months
 - [x] Weather card - matches (tooltip parsing as CenterInfo does it, word wrap)
 - [x] Audio card - outputs, inputs + live mic meter (PipeWire peak monitor), per-app faders, default device switching, slider drag/wheel/keys; strip: left click mutes, wheel steps 5%
-- [ ] Cards: network, battery, ПУЛЬТ, VPN, agent
+- [x] ПУЛЬТ card - Bluetooth (power, paired, scan, pair, connect), night light, НЕ ЗАСЫПАТЬ (the systemd-inhibit holder), the stats switch, power profiles; grows with its lists
+- [ ] Cards: network, battery, VPN, agent
 - [ ] The CRT power-off effect (quickshell/crt, run by CrtOff.sh before logout/reboot/shutdown)
 - [ ] Overlays: layout OSD, clipboard, polkit agent, power menu, screenshot, recording
 - [ ] Wallpaper carousel + reveal, overview

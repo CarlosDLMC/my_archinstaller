@@ -27,9 +27,25 @@ pub fn exclusive_zone(height: u32, game_mode: bool) -> i32 {
     (height as i32 - gap).max(0)
 }
 
-/// qRound: what anchors.alignWhenCentered does to a centred item.
+/// qRound (JS Math.round).
 fn qround(v: f32) -> f32 {
     (v + 0.5).floor()
+}
+
+/// Half an extent the way QQuickAnchors takes it with alignWhenCentered:
+/// an odd integer part rounds the half up.
+fn anchor_half(v: f32) -> f32 {
+    if (v as i64) % 2 != 0 {
+        (v + 1.0) / 2.0
+    } else {
+        v / 2.0
+    }
+}
+
+/// Where anchors.centerIn / verticalCenter puts an item of `size` in `parent`:
+/// qRound(half(parent) - half(size)), checked against Qt on ten cases.
+pub fn ac(parent: f32, size: f32) -> f32 {
+    qround(anchor_half(parent) - anchor_half(size))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -230,8 +246,8 @@ pub fn draw(scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, svc: &Services,
             Slot::Pad(_) => {}
             Slot::Logo => {
                 let item_w = logo_line.width + 16.0;
-                let tx = qround((item_w - logo_line.width) / 2.0);
-                let ty = qround((DESIGN_HEIGHT - logo_line.height()) / 2.0);
+                let tx = ac(item_w, logo_line.width);
+                let ty = ac(DESIGN_HEIGHT, logo_line.height());
                 p.scene.text(p.fonts, &logo_line, x + tx, ty + logo_line.ascent, theme.col_logo, TextStyle::Normal);
                 p.hit(x, 0.0, item_w, DESIGN_HEIGHT, Action::Logo);
             }
@@ -245,7 +261,7 @@ pub fn draw(scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, svc: &Services,
                         p.scene.rect(wx, ry, rw, rh, Color::qt_rgba(1.0, 1.0, 1.0, 0.05), 4.0, 0.0, Color::TRANSPARENT, true);
                     }
                     let color = if *act || *has { theme.col_white } else { theme.col_grey };
-                    p.label(&line, wx, ry + qround((rh - line.height()) / 2.0), color);
+                    p.label(&line, wx, ry + ac(rh, line.height()), color);
                     p.hit(wx, ry, rw, rh, Action::Workspace(*id));
                     wx += rw;
                 }
@@ -270,12 +286,13 @@ pub fn draw(scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, svc: &Services,
                 if p.hovered(x, 0.0, line.width, DESIGN_HEIGHT) {
                     p.scene.rect(x, 0.0, line.width, DESIGN_HEIGHT, Color::qt_rgba(1.0, 1.0, 1.0, 0.1), 6.0, 0.0, Color::TRANSPARENT, true);
                 }
-                p.label(&line, x, qround((DESIGN_HEIGHT - line.height()) / 2.0), theme.col_white);
+                p.label(&line, x, ac(DESIGN_HEIGHT, line.height()), theme.col_white);
                 p.hit(x, 0.0, line.width, DESIGN_HEIGHT, Action::LayoutCycle);
             }
             Slot::Pult => {
                 let line = p.fonts.layout("\u{f0493}", theme::bar_font(false), FONT_SIZE + 2.0, 0.0);
-                icon_slot(&mut p, &line, x, theme.col_grey, Action::Pult);
+                let open = p.open == Some(crate::cards::CardKind::Pult);
+                icon_slot(&mut p, &line, x, if open { theme.col_white } else { theme.col_grey }, Action::Pult);
             }
             Slot::Agent => {
                 let line = p.line(AGENT_ICON, true, FONT_SIZE);
@@ -307,8 +324,8 @@ pub fn draw(scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, svc: &Services,
                 let w = vpn_slot_width(&mut p);
                 let on = !svc.vpn.is_empty();
                 let line = p.line(if on { VPN_UP } else { VPN_DOWN }, true, FONT_SIZE + 4.0);
-                let tx = ((w - line.width) / 2.0 + 0.5).floor();
-                p.label(&line, x + tx, qround((DESIGN_HEIGHT - line.height()) / 2.0), if on { theme.col_alert } else { theme.col_grey });
+                let tx = ac(w, line.width);
+                p.label(&line, x + tx, ac(DESIGN_HEIGHT, line.height()), if on { theme.col_alert } else { theme.col_grey });
                 p.hit(x, 0.0, w, DESIGN_HEIGHT, Action::Vpn);
             }
         }
@@ -326,7 +343,7 @@ const VPN_DOWN: &str = "\u{f099c}";
 
 /// A DropdownWidget's icon: a Text centred vertically in the 34 px slot.
 fn icon_slot(p: &mut Painter, line: &Line, x: f32, color: Color, action: Action) {
-    p.label(line, x, qround((DESIGN_HEIGHT - line.height()) / 2.0), color);
+    p.label(line, x, ac(DESIGN_HEIGHT, line.height()), color);
     p.hit(x, 0.0, line.width, DESIGN_HEIGHT, action);
 }
 
@@ -502,7 +519,7 @@ fn draw_center(p: &mut Painter, svc: &Services, x0: f32, width: f32, design_widt
     let sep_x = center_x.min(max_x.max(0.0));
     let has_weather = !svc.weather.text.is_empty();
     if has_weather {
-        p.scene.text(p.fonts, &sep, x0 + sep_x, qround((DESIGN_HEIGHT - sep.height()) / 2.0) + sep.ascent, theme.col_separator, TextStyle::Normal);
+        p.scene.text(p.fonts, &sep, x0 + sep_x, ac(DESIGN_HEIGHT, sep.height()) + sep.ascent, theme.col_separator, TextStyle::Normal);
     }
 
     // leftContent: Row { bell, weather pill }, its right edge 8 left of the "|".
@@ -521,33 +538,33 @@ fn draw_center(p: &mut Painter, svc: &Services, x0: f32, width: f32, design_widt
     let row_w: f32 = parts.iter().map(|(l, _)| l.width).sum::<f32>() + 5.0 * (parts.len().saturating_sub(1)) as f32;
     let pill_w = if has_weather { row_w + 16.0 } else { 0.0 };
     let row_h: f32 = if has_weather { 26.0f32.max(bell.height()) } else { bell.height() };
-    let row_y = qround((DESIGN_HEIGHT - row_h) / 2.0);
+    let row_y = ac(DESIGN_HEIGHT, row_h);
     let left_x = x0 + sep_x - 8.0 - (bell.width + pill_w);
-    p.label(&bell, left_x, row_y + qround((row_h - bell.height()) / 2.0), bell_color);
+    p.label(&bell, left_x, row_y + ac(row_h, bell.height()), bell_color);
     p.hit(left_x, 0.0, bell.width, DESIGN_HEIGHT, Action::Bell);
     if has_weather {
         let px = left_x + bell.width;
-        let py = row_y + qround((row_h - 26.0) / 2.0);
+        let py = row_y + ac(row_h, 26.0);
         if p.open == Some(crate::cards::CardKind::Weather) {
             p.scene.rect(px, py, pill_w, 26.0, theme.col_bg, 8.0, 0.0, Color::TRANSPARENT, true);
         }
-        let mut tx = px + qround((pill_w - row_w) / 2.0);
+        let mut tx = px + ac(pill_w, row_w);
         let row_text_h = parts.iter().map(|(l, _)| l.height()).fold(0.0, f32::max);
-        let ty = py + qround((26.0 - row_text_h) / 2.0);
+        let ty = py + ac(26.0, row_text_h);
         for (l, c) in &parts {
-            p.label(l, tx, ty + qround((row_text_h - l.height()) / 2.0), *c);
+            p.label(l, tx, ty + ac(row_text_h, l.height()), *c);
             tx += l.width + 5.0;
         }
         p.hit(px, py, pill_w, 26.0, Action::Weather);
     }
 
     let pill_x = x0 + sep_x + sep.width + 8.0;
-    let pill_y = qround((DESIGN_HEIGHT - 26.0) / 2.0);
+    let pill_y = ac(DESIGN_HEIGHT, 26.0);
     let pill_w = time.width + 16.0;
     if p.open == Some(crate::cards::CardKind::Calendar) {
         p.scene.rect(pill_x, pill_y, pill_w, 26.0, theme.col_bg, 8.0, 0.0, Color::TRANSPARENT, true);
     }
-    p.label(&time, pill_x + qround((pill_w - time.width) / 2.0), pill_y + qround((26.0 - time.height()) / 2.0), theme.col_white);
+    p.label(&time, pill_x + ac(pill_w, time.width), pill_y + ac(26.0, time.height()), theme.col_white);
     p.hit(pill_x, pill_y, pill_w, 26.0, Action::Clock);
 }
 
@@ -603,6 +620,11 @@ pub fn activate(app: &mut App, strip: usize, action: Action, button: u32) {
             let (a, n) = app.svc.audio.clone();
             if let (Some(n), Some(pw)) = (n, app.svc.pw.as_ref()) {
                 pw.set_mute(n.id, !a.muted);
+            }
+        }
+        Action::Pult if button == BTN_LEFT => {
+            if let Some(h) = hit {
+                crate::cards::toggle(app, strip, crate::cards::CardKind::Pult, &h, false);
             }
         }
         Action::LayoutCycle => crate::ipc::layout_next(app),

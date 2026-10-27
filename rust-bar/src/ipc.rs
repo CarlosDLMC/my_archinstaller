@@ -69,6 +69,8 @@ fn cards_toggle(app: &mut App, card: &str) {
         "calendar" => (CardKind::Calendar, Action::Clock),
         "weather" => (CardKind::Weather, Action::Weather),
         "audio" => (CardKind::Audio, Action::Volume),
+        // Bluetooth and the power profile live in the ПУЛЬТ card; both shortcuts open it.
+        "bluetooth" | "profile" => (CardKind::Pult, Action::Pult),
         _ => return,
     };
     let focused = app.svc.mango.focused().map(|m| m.name.clone()).unwrap_or_default();

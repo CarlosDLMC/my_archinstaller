@@ -23,7 +23,7 @@ use wayland_client::protocol::wl_shm;
 
 use crate::anim::{Animated, Easing};
 use crate::app::{App, Win, WinRef};
-use crate::bar::{Action, Hit};
+use crate::bar::{ac, Action, Hit};
 use crate::color::Color;
 use crate::gpu::{Gpu, Scene, TextStyle};
 use crate::services::{self, Services};
@@ -36,7 +36,11 @@ pub enum CardKind {
     Calendar,
     Weather,
     Audio,
+    Pult,
 }
+
+/// A fixed origin for animations that run on the clock (Spinner).
+pub static EPOCH: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Stem {
@@ -119,6 +123,8 @@ fn geometry(kind: CardKind) -> (f32, f32, Stem) {
         CardKind::Weather => (340.0, 0.0, Stem::Center),
         // VolumeWidget: 330 wide, max(120, min(content + 30, 560)) high.
         CardKind::Audio => (330.0, 0.0, Stem::Center),
+        // PultWidget: 360 wide, content + 28 high, stem on the right.
+        CardKind::Pult => (360.0, 0.0, Stem::Right),
     }
 }
 
@@ -149,6 +155,10 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         content_h = crate::audio_card::content_height(&mut app.fonts, &app.svc);
         h = 120f32.max((content_h.ceil() + 30.0).min(560.0));
         app.every(Duration::from_millis(33), crate::audio_card::meter_tick);
+    }
+    if kind == CardKind::Pult {
+        let scanning = crate::pult::scanning(app);
+        h = crate::pult::card_height(&mut app.fonts, &app.svc, scanning);
     }
     // DropdownWidget.cardX: from the icon's centre on the screen.
     let icon_w = icon.w / ui;
@@ -226,9 +236,15 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         frac,
     });
     app.strips[strip].win.dirty = true;
+    if kind == CardKind::Pult {
+        crate::pult::opened(app);
+    }
 }
 
 pub fn close(app: &mut App) {
+    if app.card.as_ref().map(|c| c.kind) == Some(CardKind::Pult) {
+        crate::pult::closed(app);
+    }
     let Some(card) = app.card.take() else { return };
     if card.kind == CardKind::Audio {
         if let Some(pw) = app.svc.pw.as_mut() {
@@ -245,6 +261,33 @@ pub fn close(app: &mut App) {
     drop(card);
     // Freed card memory goes back to the system now, not at the next allocation.
     unsafe { libc::malloc_trim(0) };
+}
+
+/// A card whose height is a binding (the lists in it change): resize the
+/// surface when the content asks for a different height.
+pub fn update_height(app: &mut App) {
+    let Some(card) = app.card.as_ref() else { return };
+    let h = match card.kind {
+        CardKind::Pult => {
+            let scanning = crate::pult::scanning(app);
+            crate::pult::card_height(&mut app.fonts, &app.svc, scanning)
+        }
+        CardKind::Audio => {
+            let content = crate::audio_card::content_height(&mut app.fonts, &app.svc);
+            if let Some(c) = app.card.as_mut() {
+                c.content_h = content;
+            }
+            120f32.max((content.ceil() + 30.0).min(560.0))
+        }
+        _ => return,
+    };
+    let card = app.card.as_mut().unwrap();
+    if (h - card.height).abs() < 0.5 {
+        return;
+    }
+    card.height = h;
+    card.win.layer.set_size(card.win.width, h as u32);
+    card.win.layer.commit();
 }
 
 /// The catcher's one transparent pixel, stretched over the screen.
@@ -422,17 +465,18 @@ impl Ui<'_> {
             (false, false) => icon_box + 6.0 + cap.width,
         };
         let row_h = if label.is_empty() { icon_box } else if icon.is_empty() { cap.height() } else { icon_box.max(cap.height()) };
-        let rx = x + ((w - row_w) / 2.0 + 0.5).floor();
-        let ry = y + ((h - row_h) / 2.0 + if current { 0.0 } else { -1.0 } + 0.5).floor();
+        let rx = x + ac(w, row_w);
+        // anchors.centerIn with verticalCenterOffset -1 when raised
+        let ry = y + ac(h, row_h) + if current { 0.0 } else { -1.0 };
         if !icon.is_empty() {
             let ic = if current { t.col_bg } else if hot { t.col_white } else { icon_color };
-            let ix = rx + ((icon_box - icon_line.width) / 2.0 + 0.5).floor();
-            let iy = ry + ((row_h - icon_box) / 2.0 + 0.5).floor() + ((icon_box - icon_line.height()) / 2.0 + 0.5).floor();
+            let ix = rx + ac(icon_box, icon_line.width);
+            let iy = ry + ac(row_h, icon_box) + ac(icon_box, icon_line.height());
             self.text(&icon_line, ix, iy, ic, TextStyle::Normal);
         }
         if !label.is_empty() {
             let cx = if icon.is_empty() { rx } else { rx + icon_box + 6.0 };
-            let cy = ry + ((row_h - cap.height()) / 2.0 + 0.5).floor();
+            let cy = ry + ac(row_h, cap.height());
             self.text(&cap, cx, cy, if current { t.col_bg } else { t.col_grey }, TextStyle::Normal);
         }
         self.hits.push(Hit { x, y, w, h, action: Action::Card(id) });
@@ -484,13 +528,16 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
                 y += 42.0 + 6.0;
             }
         }
-        CardKind::Calendar | CardKind::Weather | CardKind::Audio => {}
+        CardKind::Calendar | CardKind::Weather | CardKind::Audio | CardKind::Pult => {}
     }
     if ui.card.kind == CardKind::Calendar {
         draw_calendar(&mut ui, w);
     }
     if ui.card.kind == CardKind::Weather {
         draw_weather(&mut ui, w, svc);
+    }
+    if ui.card.kind == CardKind::Pult {
+        crate::pult::draw(&mut ui, w, svc, svc.pult_scanning);
     }
     if ui.card.kind == CardKind::Audio {
         // The Loader's area, clipped like the Flickable, scrolled by contentY.
@@ -531,11 +578,11 @@ fn draw_calendar(ui: &mut Ui, w: f32) {
     let title = format!("{} {}", crate::cal::month_name(month).to_uppercase(), year);
     let tl = ui.fonts.layout(&title, theme::bar_font(true), FONT_SIZE + 4.0, 1.0);
     let head_h = tl.height().max(bh);
-    ui.console_button_sized(CAL_PREV, x0, y0 + ((head_h - bh) / 2.0 + 0.5).floor(), bw, font, "\u{f0141}", t.col_grey, "", false);
+    ui.console_button_sized(CAL_PREV, x0, y0 + ac(head_h, bh), bw, font, "\u{f0141}", t.col_grey, "", false);
     let tw = cw - 2.0 * bw;
-    let tx = x0 + bw + (tw - tl.width) / 2.0;
-    ui.text(&tl, tx, y0 + ((head_h - tl.height()) / 2.0 + 0.5).floor(), t.col_white, TextStyle::Normal);
-    ui.console_button_sized(CAL_NEXT, x0 + cw - bw, y0 + ((head_h - bh) / 2.0 + 0.5).floor(), bw, font, "\u{f0142}", t.col_grey, "", false);
+    let tx = x0 + bw + (tw - tl.adv) / 2.0;
+    ui.text(&tl, tx, y0 + ac(head_h, tl.height()), t.col_white, TextStyle::Normal);
+    ui.console_button_sized(CAL_NEXT, x0 + cw - bw, y0 + ac(head_h, bh), bw, font, "\u{f0142}", t.col_grey, "", false);
 
     // The plate: weekday captions, then the 7 x 6 grid.
     let py = y0 + head_h + 8.0;
@@ -546,8 +593,8 @@ fn draw_calendar(ui: &mut Ui, w: f32) {
     for i in 0..7 {
         let name = crate::cal::day_name_short((first + i) % 7).to_uppercase();
         let l = ui.fonts.layout(&name, theme::bar_font(true), FONT_SIZE - 5.0, 1.0);
-        let cx = ix + col * i as f32 + ((col - l.width) / 2.0 + 0.5).floor();
-        let cy = py + 8.0 + ((24.0 - l.height()) / 2.0 + 0.5).floor();
+        let cx = ix + col * i as f32 + ac(col, l.width);
+        let cy = py + 8.0 + ac(24.0, l.height());
         ui.text(&l, cx, cy, t.col_dim, TextStyle::Normal);
     }
     let gy = py + 8.0 + 24.0 + 4.0;
@@ -557,7 +604,7 @@ fn draw_calendar(ui: &mut Ui, w: f32) {
         let (dy, dm, dd) = crate::cal::add_days(start, k as i64);
         let (cx, cy) = (ix + col * (k % 7) as f32, gy + 40.0 * (k / 7) as f32);
         let side = (col - 4.0).min(40.0 - 4.0).min(42.0);
-        let (rx, ry) = (cx + ((col - side) / 2.0 + 0.5).floor(), cy + ((40.0 - side) / 2.0 + 0.5).floor());
+        let (rx, ry) = (cx + ac(col, side), cy + ac(40.0, side));
         let is_today = (dy, dm, dd) == today;
         let hover = ui.hovered(cx, cy, col, 40.0);
         let target = if is_today { t.col_accent } else if hover { t.col_plate.lighter(1.6) } else { Color::TRANSPARENT };
@@ -572,7 +619,7 @@ fn draw_calendar(ui: &mut Ui, w: f32) {
         } else {
             t.col_white.with_alpha(0.3)
         };
-        ui.text(&l, rx + ((side - l.width) / 2.0 + 0.5).floor(), ry + ((side - l.height()) / 2.0 + 0.5).floor(), color, TextStyle::Normal);
+        ui.text(&l, rx + ac(side, l.width), ry + ac(side, l.height()), color, TextStyle::Normal);
         ui.hits.push(Hit { x: cx, y: cy, w: col, h: 40.0, action: Action::Card(1000 + k) });
     }
 }
@@ -683,8 +730,8 @@ fn draw_weather(ui: &mut Ui, w: f32, svc: &Services) {
     // Plate 1 (pad 12): the sky glyph, temperature, condition, place.
     plate(ui, x0, y, cw, l.p1);
     let iy = y + 12.0;
-    ui.text(&l.sky, x0 + 12.0, iy + ((l.row_h - l.sky.height()) / 2.0 + 0.5).floor(), condition_color(&wx.alt, t), TextStyle::Normal);
-    let mut ry = iy + ((l.row_h - l.read_h) / 2.0 + 0.5).floor();
+    ui.text(&l.sky, x0 + 12.0, iy + ac(l.row_h, l.sky.height()), condition_color(&wx.alt, t), TextStyle::Normal);
+    let mut ry = iy + ac(l.row_h, l.read_h);
     ui.text(&l.temp, l.read_x, ry, temp_color(&wx.text), TextStyle::Normal);
     ry += l.temp.height() + 2.0;
     for line in &l.cond {
@@ -709,10 +756,10 @@ fn draw_weather(ui: &mut Ui, w: f32, svc: &Services) {
         for i in 0..3 {
             let cx = x0 + 10.0 + i as f32 * (colw + 8.0);
             let cl = ui.fonts.layout(caps[i], theme::bar_font(true), FONT_SIZE - 5.0, 1.0);
-            ui.text(&cl, cx + (colw - cl.width) / 2.0, y + 10.0 + ((r1 - cl.height()) / 2.0 + 0.5).floor(), t.col_dim, TextStyle::Normal);
+            ui.text(&cl, cx + (colw - cl.adv) / 2.0, y + 10.0 + ac(r1, cl.height()), t.col_dim, TextStyle::Normal);
             let v = if vals[i].is_empty() { "—" } else { vals[i].as_str() };
             let vl = ui.fonts.layout(v, theme::bar_font(true), FONT_SIZE, 0.0);
-            ui.text(&vl, cx + (colw - vl.width) / 2.0, y + 10.0 + r1 + 2.0 + ((r2 - vl.height()) / 2.0 + 0.5).floor(), temp_color(vals[i]), TextStyle::Normal);
+            ui.text(&vl, cx + (colw - vl.adv) / 2.0, y + 10.0 + r1 + 2.0 + ac(r2, vl.height()), temp_color(vals[i]), TextStyle::Normal);
         }
         y += l.p2 + 8.0;
     }
@@ -733,7 +780,7 @@ fn draw_weather(ui: &mut Ui, w: f32, svc: &Services) {
                 ui.scene.rect(cx, by + k as f32 * 7.0, colw, 5.0, c, 1.0, 0.0, Color::TRANSPARENT, true);
             }
             let pl = ui.fonts.layout(&format!("{v}%"), theme::bar_font(true), FONT_SIZE - 8.0, 0.0);
-            ui.text(&pl, cx + (colw - pl.width) / 2.0, by + 44.0, if lit > 0 { t.col_white } else { t.col_grey }, TextStyle::Normal);
+            ui.text(&pl, cx + (colw - pl.adv) / 2.0, by + 44.0, if lit > 0 { t.col_white } else { t.col_grey }, TextStyle::Normal);
         }
     }
 }
@@ -819,6 +866,7 @@ pub fn activate(app: &mut App, action: Action, keyboard: bool) {
         CardKind::Power => power_pick(app, i, keyboard),
         CardKind::Weather => {}
         CardKind::Audio => crate::audio_card::activate(app, i),
+        CardKind::Pult => crate::pult::activate(app, i),
         CardKind::Calendar => match i {
             // the focus chain: prev, next; day cells are mouse-only
             CAL_PREV => calendar_step(app, -1),

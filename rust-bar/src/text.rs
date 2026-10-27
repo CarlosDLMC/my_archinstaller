@@ -161,7 +161,10 @@ pub struct PlacedGlyph {
 #[derive(Clone, Debug, Default)]
 pub struct Line {
     pub glyphs: Vec<PlacedGlyph>,
+    /// implicitWidth: the advances plus the last glyph's overhang.
     pub width: f32,
+    /// The advances alone - what horizontalAlignment centres.
+    pub adv: f32,
     pub ascent: f32,
     pub descent: f32,
     pub size: f32,
@@ -403,6 +406,7 @@ impl Fonts {
             line.glyphs.push(PlacedGlyph { face: fi, gid, x: x26 as f32 / 64.0, bold });
             x26 += face.advance26(units, size) + spacing26;
         }
+        line.adv = x26 as f32 / 64.0;
         // QTextLine adds the last glyph's negative right bearing, so a Text's
         // width covers a glyph that overhangs its advance (the Nerd icons do).
         if let Some(last) = line.glyphs.last().copied() {
@@ -458,6 +462,7 @@ impl Fonts {
             out.glyphs.push(PlacedGlyph { x: start + g.x, ..*g });
         }
         out.width = start + dots.width;
+        out.adv = start + dots.adv;
         out
     }
 

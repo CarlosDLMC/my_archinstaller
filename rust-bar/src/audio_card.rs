@@ -4,7 +4,7 @@
 use std::time::Instant;
 
 use crate::app::App;
-use crate::bar::{Action, Hit};
+use crate::bar::{ac, Action, Hit};
 use crate::cards::{plate, Ui};
 use crate::color::Color;
 use crate::gpu::TextStyle;
@@ -153,10 +153,10 @@ fn qround(v: f32) -> f32 {
 fn section_header(ui: &mut Ui, x: f32, y: f32, w: f32, h: f32, label: &str, detail: &str) {
     let t = ui.theme;
     let cap = ui.fonts.layout(label, theme::bar_font(true), FONT_SIZE - 5.0, 1.0);
-    ui.text(&cap, x, y + qround((h - cap.height()) / 2.0), t.col_dim, TextStyle::Normal);
+    ui.text(&cap, x, y + ac(h, cap.height()), t.col_dim, TextStyle::Normal);
     if !detail.is_empty() {
         let d = ui.fonts.layout(detail, theme::bar_font(true), HEADER + 2.0, 0.0);
-        ui.text(&d, x + w - d.width, y + qround((h - d.height()) / 2.0), t.col_white, TextStyle::Normal);
+        ui.text(&d, x + w - d.width, y + ac(h, d.height()), t.col_white, TextStyle::Normal);
     }
 }
 
@@ -189,7 +189,7 @@ fn slider(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, value: f32, max: f32, 
         let marker = 100.0 / max * 100.0;
         if marker > 0.0 && marker < 100.0 {
             let mx = (w * marker / 100.0).round() - 1.0;
-            ui.scene.fill(x + mx, gy + qround((10.0 - 18.0) / 2.0), 2.0, 18.0, t.col_white);
+            ui.scene.fill(x + mx, gy + ac(10.0, 18.0), 2.0, 18.0, t.col_white);
         }
     }
     let hx = x + ((w - 6.0) * ratio).round();
@@ -234,7 +234,7 @@ fn console_row(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32, icon: &st
     let icon_w = ROW_FONT + 2.0;
     let ix = lx + 10.0 + 8.0;
     let il = ui.fonts.layout(icon, theme::bar_font(false), ROW_FONT, 0.0);
-    ui.text(&il, ix + (icon_w - il.width) / 2.0, y + qround((h - il.height()) / 2.0), fg, TextStyle::Normal);
+    ui.text(&il, ix + (icon_w - il.adv) / 2.0, y + qround((h - il.height()) / 2.0), fg, TextStyle::Normal);
     let tx = ix + icon_w + 8.0;
     let tw = x + w - 6.0 - tx;
     let key = theme::bar_font(lit);
@@ -266,7 +266,7 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
     ui.card.tint_alert = true;
     ui.console_button_sized(OUT_MUTE, ix, cy, m.btn_w, font, mute_icon(muted), t.col_grey, "", muted);
     ui.card.tint_alert = false;
-    slider(ui, OUT_SLIDER, ix + m.btn_w + 10.0, cy + qround((m.btn_h - 20.0) / 2.0), iw - m.btn_w - 10.0, l.sink.0.volume, 1.0, muted, l.sink.0.ready);
+    slider(ui, OUT_SLIDER, ix + m.btn_w + 10.0, cy + ac(m.btn_h, 20.0), iw - m.btn_w - 10.0, l.sink.0.volume, 1.0, muted, l.sink.0.ready);
     cy += m.btn_h;
     for (i, n) in l.sinks.iter().enumerate() {
         cy += 6.0;
@@ -287,7 +287,7 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
         ui.card.tint_alert = true;
         ui.console_button_sized(IN_MUTE, ix, cy, m.btn_w, font, if muted { "\u{f036d}" } else { "\u{f036c}" }, t.col_grey, "", muted);
         ui.card.tint_alert = false;
-        slider(ui, IN_SLIDER, ix + m.btn_w + 10.0, cy + qround((m.btn_h - 20.0) / 2.0), iw - m.btn_w - 10.0, l.source.0.volume, 1.0, muted, l.source.0.ready);
+        slider(ui, IN_SLIDER, ix + m.btn_w + 10.0, cy + ac(m.btn_h, 20.0), iw - m.btn_w - 10.0, l.source.0.volume, 1.0, muted, l.source.0.ready);
         cy += m.btn_h + 6.0;
         level_meter(ui, ix + m.btn_w + 10.0, cy, iw - m.btn_w - 10.0, l.source.0.ready);
         cy += 6.0;
@@ -312,11 +312,11 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
             cy += 8.0;
             let i = i as u32;
             ui.card.tint_alert = true;
-            ui.console_button_sized(STREAM_MUTE + i, ix, cy + qround((row - m.btn_h) / 2.0), m.btn_w, font, mute_icon(a.muted), t.col_grey, "", a.muted);
+            ui.console_button_sized(STREAM_MUTE + i, ix, cy + ac(row, m.btn_h), m.btn_w, font, mute_icon(a.muted), t.col_grey, "", a.muted);
             ui.card.tint_alert = false;
             let colx = ix + m.btn_w + 10.0;
             let colw = iw - m.btn_w - 10.0;
-            let col_y = cy + qround((row - (m.name_h + 2.0 + 20.0)) / 2.0);
+            let col_y = cy + ac(row, (m.name_h + 2.0 + 20.0));
             let pl = ui.fonts.layout(&format!("{}%", (a.volume * 100.0).round() as i64), theme::bar_font(true), HEADER + 1.0, 0.0);
             ui.text(&pl, colx + colw - pl.width, col_y, t.col_white, TextStyle::Normal);
             let name = stream_label(n);
@@ -331,7 +331,7 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
     }
     if l.sinks.is_empty() && l.streams.is_empty() {
         let e = ui.fonts.layout("Нет аудиоустройств", theme::bar_font(false), LABEL, 0.0);
-        ui.text(&e, x0 + (cw - e.width) / 2.0, y, t.col_grey, TextStyle::Normal);
+        ui.text(&e, x0 + (cw - e.adv) / 2.0, y, t.col_grey, TextStyle::Normal);
     }
 }
 

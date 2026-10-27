@@ -185,6 +185,9 @@ pub struct Services {
     pub agent_installed: bool,
     /// The command PowerWidget.endSession() runs 250 ms after its card closes.
     pub pending_end: String,
+    pub pult: crate::pult::Pult,
+    /// btScanProc.running, mirrored for drawing.
+    pub pult_scanning: bool,
 }
 
 pub fn home() -> String {
@@ -441,6 +444,8 @@ pub fn start(app: &mut App) {
             }
         });
     }
+
+    crate::pult::start(app);
 
     battery_probe(app);
     app.every(Duration::from_secs(60), |app| {
