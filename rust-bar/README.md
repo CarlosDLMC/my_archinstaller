@@ -43,9 +43,9 @@ from libQt6Quick, uniforms and textures read back from Qt's GL calls):
   anti-aliasing ring moves every edge vertex half a pixel in x *and* in y, so
   alpha is `0.5 - max((n·q - c) / (n.x + n.y))` over the edges and chords
   (exact on the battery gauge's 1 px corners, where `fwidth` was 60 levels off).
-- **Translucent text stays subpixel**: Qt's subpixel material blends with the
-  premultiplied colour as the constant and scales the coverage by
-  alpha × opacity, so an Item at opacity .8 keeps its colour fringes.
+- **Translucent text stays subpixel**: Qt keeps the subpixel material for any
+  colour alpha or item opacity; coverage is scaled by alpha × opacity and the
+  colour goes in once (white at alpha .3 over 16 reads 84 = 242·.3 + 16·.7).
 - **Unsmoothed rectangles** (radius 0) are triangles under the GPU fill rule:
   a 1 px border at x.5 lands on the pixel whose centre the left edge passes.
 - Colours go through QColor's arithmetic (Qt 6's darker/lighter in float HSV) (`color.rs`), blending is in gamma
@@ -88,7 +88,8 @@ from libQt6Quick, uniforms and textures read back from Qt's GL calls):
 - [x] Overlay framework (osd.rs): Overlay-layer panel on the focused screen, its own size, input only on the panel; the dialogs' dim is one stretched pixel; fade 0..1 OutCubic with scale .94..1
 - [x] Layout OSD + LayoutState: MRU `layout next`, the strip label cycles, the switcher shows on every change, hover holds it, click picks
 - [x] Power menu (PowerOsd + PowerState): the character-cell console, hover/arrows/letters by scan code, the five-second launch countdown (sync on ПРОДУВКА, fires at zero), UEFI/Windows keys from login1/efibootmgr; the logo card's keyboard path arms it
-- [ ] Overlays: clipboard, polkit agent, screenshot, recording
+- [x] Screenshot + recording dialogs (ShotOsd/RecordOsd + their states): big keys with hover/held looks, monitor picker (wlr-randr) with double click, the recorder's audio switches saved to ~/.cache/screenrecord_audio, a running recording stops instead; same scripts
+- [ ] Overlays: clipboard, polkit agent
 - [ ] Wallpaper carousel + reveal, overview
 - [ ] Switch-over: keybinds, scripts, installer build step
 

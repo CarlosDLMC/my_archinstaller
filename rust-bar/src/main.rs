@@ -5,6 +5,7 @@ mod audio_card;
 mod bar;
 mod battery;
 mod cal;
+mod capture;
 mod cards;
 mod color;
 mod gpu;

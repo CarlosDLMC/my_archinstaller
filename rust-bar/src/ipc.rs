@@ -59,6 +59,18 @@ fn call(app: &mut App, target: &str, function: &str, args: &[&str]) -> Result<()
             crate::power::open_on(app, "E");
             Ok(())
         }
+        ("shot", "open") => {
+            crate::capture::shot_open(app);
+            Ok(())
+        }
+        ("record", "open") => {
+            crate::capture::rec_open(app);
+            Ok(())
+        }
+        ("record", "stop") => {
+            crate::capture::rec_stop(app);
+            Ok(())
+        }
         ("layout", "next") => {
             layout_next(app);
             Ok(())

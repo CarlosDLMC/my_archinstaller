@@ -649,6 +649,12 @@ impl PointerHandler for App {
                 }
                 PointerEventKind::Press { button, .. } => {
                     self.pressed = self.hit_at(w, x, y).map(|a| (w, button, a));
+                    if let (WinRef::Osd(k), Some(Action::Card(code))) = (w, self.hit_at(w, x, y)) {
+                        if let Some(o) = self.osd_mut(k) {
+                            o.st.pressed = Some(code);
+                            o.win.dirty = true;
+                        }
+                    }
                     if let (WinRef::Card, Some(a)) = (w, self.hit_at(w, x, y)) {
                         cards::press(self, a, x, button);
                     }
@@ -669,6 +675,12 @@ impl PointerHandler for App {
                     }
                 }
                 PointerEventKind::Release { button, .. } => {
+                    if let WinRef::Osd(k) = w {
+                        if let Some(o) = self.osd_mut(k) {
+                            o.st.pressed = None;
+                            o.win.dirty = true;
+                        }
+                    }
                     // MouseArea.onClicked: released over the widget it was pressed on.
                     if let Some((pw, pb, action)) = self.pressed.take() {
                         if pw == w && pb == button && self.hit_at(w, x, y) == Some(action) {

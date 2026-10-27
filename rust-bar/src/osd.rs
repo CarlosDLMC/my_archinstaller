@@ -30,6 +30,8 @@ use crate::theme::Theme;
 pub enum OsdKind {
     Layout,
     Power,
+    Shot,
+    Record,
 }
 
 /// Hover, focus and the animated values of an overlay's controls.
@@ -39,6 +41,8 @@ pub struct OsdState {
     pub focus: Option<usize>,
     pub focus_codes: Vec<u32>,
     pub tint_alert: bool,
+    /// The control a button is held down on.
+    pub pressed: Option<u32>,
     colors: HashMap<u32, Animated<Color>>,
     numbers: HashMap<u32, Animated<f32>>,
     pub texts: TextMemo,
@@ -209,6 +213,8 @@ pub fn hide(app: &mut App, kind: OsdKind) {
     let gone: fn(&mut App) = match kind {
         OsdKind::Layout => |app| destroy(app, OsdKind::Layout),
         OsdKind::Power => |app| destroy(app, OsdKind::Power),
+        OsdKind::Shot => |app| destroy(app, OsdKind::Shot),
+        OsdKind::Record => |app| destroy(app, OsdKind::Record),
     };
     app.debounce(gone_timer(kind), Duration::from_millis(ms), gone);
 }
@@ -217,6 +223,8 @@ fn gone_timer(kind: OsdKind) -> &'static str {
     match kind {
         OsdKind::Layout => "osd-gone-layout",
         OsdKind::Power => "osd-gone-power",
+        OsdKind::Shot => "osd-gone-shot",
+        OsdKind::Record => "osd-gone-record",
     }
 }
 
@@ -305,10 +313,13 @@ pub fn draw(o: &mut Osd, scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, sv
     // Hover is tested in the panel's own coordinates, before the scale.
     let pointer = o.st.pointer;
     o.st.pointer = pointer.map(|(x, y)| (px + pw / 2.0 + (x - px - pw / 2.0) / scale, py + ph / 2.0 + (y - py - ph / 2.0) / scale));
+    let pressed = o.st.pressed;
     let mut ui = Ui { card: &mut o.st, scene, fonts, theme, now, animating: false, hits: Vec::new(), focus_codes: Vec::new() };
     match o.kind {
         OsdKind::Layout => crate::layout::draw_osd(&mut ui, (px, py, pw, ph), svc),
         OsdKind::Power => crate::power::draw_osd(&mut ui, (px, py, pw, ph), svc),
+        OsdKind::Shot => crate::capture::draw_osd(&mut ui, false, (px, py, pw, ph), svc, pressed),
+        OsdKind::Record => crate::capture::draw_osd(&mut ui, true, (px, py, pw, ph), svc, pressed),
     }
     let (hits, codes) = (std::mem::take(&mut ui.hits), std::mem::take(&mut ui.focus_codes));
     animating |= ui.animating;
@@ -324,6 +335,7 @@ pub fn click(app: &mut App, kind: OsdKind, action: Action, button: u32) {
     match kind {
         OsdKind::Layout => crate::layout::osd_click(app, action, button),
         OsdKind::Power => crate::power::osd_click(app, action, button),
+        OsdKind::Shot | OsdKind::Record => crate::capture::click(app, kind, action),
     }
 }
 
@@ -332,6 +344,7 @@ pub fn dim_clicked(app: &mut App, kind: OsdKind) {
     match kind {
         OsdKind::Layout => {}
         OsdKind::Power => crate::power::close(app),
+        OsdKind::Shot | OsdKind::Record => crate::capture::dim_clicked(app, kind),
     }
 }
 
@@ -340,6 +353,7 @@ pub fn key(app: &mut App, kind: OsdKind, sym: smithay_client_toolkit::seat::keyb
     match kind {
         OsdKind::Layout => {}
         OsdKind::Power => crate::power::key(app, sym, scan, shift),
+        OsdKind::Shot | OsdKind::Record => crate::capture::key(app, kind, sym, scan),
     }
 }
 
@@ -348,12 +362,13 @@ pub fn hovered(app: &mut App, kind: OsdKind, action: Option<Action>) {
     match kind {
         OsdKind::Layout => {}
         OsdKind::Power => crate::power::hovered(app, action),
+        OsdKind::Shot | OsdKind::Record => {}
     }
 }
 
 pub fn hover_changed(app: &mut App, kind: OsdKind, inside: bool) {
     match kind {
         OsdKind::Layout => crate::layout::osd_hover(app, inside),
-        OsdKind::Power => {}
+        OsdKind::Power | OsdKind::Shot | OsdKind::Record => {}
     }
 }
