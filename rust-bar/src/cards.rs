@@ -282,7 +282,7 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
 
     // The catcher first, so the card stacks above it.
     let surface = app.compositor.create_surface(&app.qh);
-    let catcher = app.layer_shell.create_layer_surface(&app.qh, surface, Layer::Top, Some("rust-bar:catcher"), Some(&output));
+    let catcher = app.layer_shell.create_layer_surface(&app.qh, surface, Layer::Top, Some("quickshell:catcher"), Some(&output));
     catcher.set_anchor(Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT);
     catcher.set_exclusive_zone(-1);
     catcher.set_keyboard_interactivity(KeyboardInteractivity::None);

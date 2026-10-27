@@ -5,7 +5,7 @@
 #
 #     CrtOff.sh systemctl poweroff
 #
-# The animation is quickshell/crt, a config of its own - not part of the bar.
+# The animation is `rust-bar crt`, a mode of the bar binary - not the running bar.
 # The command runs once the picture is gone. If it fails (an inhibitor, a refused
 # reboot) the black overlay is taken down and the desktop comes back; if the
 # overlay never starts, the command still runs after 3s.
@@ -20,11 +20,11 @@ while read -r name; do
 done < <(mmsg get all-monitors | jq -r '.monitors[] | select(.width > 0) | .name')
 wait
 
-# The overlay hides the pointer itself while it is up (quickshell/crt).
-qs -c crt >/dev/null 2>&1 &
+# The overlay hides the pointer itself while it is up.
+rust-bar crt >/dev/null 2>&1 &
 crt=$!
 
-# quickshell/crt touches $dir/done once the dot has faded.
+# rust-bar crt touches $dir/done once the dot has faded.
 for _ in $(seq 1 30); do
     [ -e "$dir/done" ] && break
     sleep 0.1

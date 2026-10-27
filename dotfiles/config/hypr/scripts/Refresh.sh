@@ -43,7 +43,7 @@ sleep 0.1
 # overview was relaunched without its previous instance being killed, and when
 # qs was not running at all, pkill failed and the bar was never brought back.
 #
-# To restart the bar by hand: pkill -f 'qs -c bar'; qs -c bar &
+# To restart the bar: SUPER+CTRL+B (RestartBar.sh).
 
 # some process to kill
 for pid in $(pidof rofi ags swaybg); do

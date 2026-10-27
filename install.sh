@@ -203,7 +203,7 @@ fi
 gtk_themes="OFF"
 bluetooth="auto"
 thunar="OFF"
-quickshell="OFF"
+bar="OFF"
 # No sddm/sddm_theme keys here any more. They were defaults for options that
 # have no menu entry, no preset-loop entry, no case branch and no install
 # script - setting sddm="ON" in a preset did precisely nothing, silently. The
@@ -267,7 +267,7 @@ omarchy_apps="OFF"
 # Every option name the installer acts on. Kept next to load_preset() because
 # its only job is to catch a preset key that no longer matches one - see below.
 known_options="ly nvidia nouveau gtk_themes bluetooth thunar \
-quickshell portals zsh pokemon rog dots handy nopasswd_sudo printing plymouth \
+bar portals zsh pokemon rog dots handy nopasswd_sudo printing plymouth \
 text_boot limine hackbgrt docker herdr neovim hunk ly_flag thp_madvise keyd_nav \
 omarchy_apps"
 # The ones that also take "auto" (resolved from the hardware further down).
@@ -294,9 +294,13 @@ load_preset() {
         # blank line a command named $'\r' ("command not found").
         source <(tr -d '\r' < "$1")
         # Renamed options: an older preset's name still counts, unless the
-        # preset sets the new one too. xdph became portals.
+        # preset sets the new one too. xdph became portals, quickshell became
+        # bar (the bar is rust-bar now, quickshell is not installed).
         if [ -n "${xdph+x}" ] && ! tr -d '\r' < "$1" | grep -qE '^[[:space:]]*portals='; then
             portals="$xdph"
+        fi
+        if [ -n "${quickshell+x}" ] && ! tr -d '\r' < "$1" | grep -qE '^[[:space:]]*bar='; then
+            bar="$quickshell"
         fi
 
         # Collect any key the preset sets that this installer does not use.
@@ -316,6 +320,7 @@ load_preset() {
             [ -n "$_key" ] || continue
             [[ " $known_options " == *" $_key "* ]] && continue
             [ "$_key" = xdph ] && continue # renamed to portals, mapped above
+            [ "$_key" = quickshell ] && continue # renamed to bar, mapped above
             preset_unknown_keys+=("$_key")
         # No [[:space:]] before the '=': a shell assignment cannot have one, so
         # `docker = "OFF"` is not setting docker at all (it tries to *run*
@@ -768,7 +773,7 @@ options_command+=(
     "gtk_themes" "Install GTK themes? (required for Dark/Light function)" "OFF"
     "bluetooth" "Do you want script to configure Bluetooth?" "OFF"
     "thunar" "Do you want Thunar file manager to be installed?" "OFF"
-    "quickshell" "Install quickshell for Desktop-Like Overview?" "OFF"
+    "bar" "Build the desktop bar (rust-bar: bar, overview, menus, polkit agent)?" "OFF"
     "portals" "Install the XDG desktop portals (wlr + gtk, for screen share)?" "OFF"
     "zsh" "Install zsh shell with Oh-My-Zsh?" "OFF"
     "pokemon" "Add Pokemon color scripts to your terminal?" "OFF"
@@ -798,7 +803,7 @@ options_command+=(
 if [ "$preset_mode" == "true" ]; then
     selected_options=""
     for _opt in ly nvidia nouveau gtk_themes bluetooth thunar \
-                quickshell portals zsh pokemon rog dots handy nopasswd_sudo \
+                bar portals zsh pokemon rog dots handy nopasswd_sudo \
                 printing plymouth text_boot thp_madvise keyd_nav limine hackbgrt docker herdr neovim hunk \
                 omarchy_apps; do
         [ "${!_opt}" == "ON" ] || continue
@@ -1287,9 +1292,9 @@ for option in "${options[@]}"; do
             echo "${INFO} Installing ${SKY_BLUE}GTK themes...${RESET}" | tee -a "$LOG"
             execute_script "gtk_themes.sh"
             ;;
-        quickshell)
-            echo "${INFO} Installing ${SKY_BLUE}quickshell for Desktop Overview...${RESET}" | tee -a "$LOG"
-            execute_script "quickshell.sh"
+        bar)
+            echo "${INFO} Building ${SKY_BLUE}the desktop bar (rust-bar)...${RESET}" | tee -a "$LOG"
+            execute_script "rust-bar.sh"
             ;;
         portals)
             echo "${INFO} Installing ${SKY_BLUE}the XDG desktop portals (wlr + gtk)...${RESET}" | tee -a "$LOG"

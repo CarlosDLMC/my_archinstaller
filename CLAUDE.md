@@ -69,7 +69,10 @@ do. Back up a live file before overwriting it.
   (hyprlock and hypridle are kept on mango).
 - The wallpaper daemon (swww) ships here under the renamed binary `awww` /
   `awww-daemon`. Theming after a wallpaper change goes through `wallust`.
-- The bar is `quickshell` (QML) under `dotfiles/config/quickshell/bar/`;
-  the overview (SUPER+A) is part of the bar now (`bar/overview/`). It talks to
-  mango through `bar/Mango.qml` (the IPC socket) and gets the keybinds' calls
-  through `qs -c bar ipc call <target> <function>`.
+- The bar is `rust-bar` (Rust, crate `rust-bar/`, built by
+  `install-scripts/rust-bar.sh` from `pkgbuilds/rust-bar`), a rewrite of the
+  quickshell (QML) bar in `dotfiles/config/quickshell/bar/` - which stays as the
+  reference it was matched against, and still holds the bar's `scripts/` and
+  `wallust-colors.json`. The overview (SUPER+A), the menus and the polkit agent
+  are part of it. It talks to mango over the IPC socket and gets the keybinds'
+  calls through `rust-bar msg <target> <function>`.

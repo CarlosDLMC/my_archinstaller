@@ -141,8 +141,15 @@ pub fn client(args: &[String]) -> i32 {
         return 1;
     };
     let _ = s.write_all(format!("{}\n", args.join(" ")).as_bytes());
+    // A bar that hangs must not hang the caller: LayoutNext.sh falls back to
+    // mango when this fails, which is what gets a password typed on the lock screen.
+    let _ = s.set_read_timeout(Some(std::time::Duration::from_secs(2)));
     let mut reply = String::new();
     let _ = BufReader::new(&s).read_line(&mut reply);
+    if reply.is_empty() {
+        eprintln!("rust-bar: the bar did not answer");
+        return 1;
+    }
     if reply.starts_with("error") {
         eprint!("{reply}");
         1

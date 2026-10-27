@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
-# Toggle quickshell bar visibility
-
-# Check if quickshell bar is running
-if pgrep -f "qs -c bar" > /dev/null; then
-    # Bar is running, kill it
-    pkill -f "qs -c bar"
+# Toggle the bar on/off (SUPER+CTRL+ALT+B). The whole command line is matched,
+# as in RestartBar.sh.
+if pgrep -x -f '(/usr/bin/)?rust-bar' >/dev/null; then
+    pkill -x -f '(/usr/bin/)?rust-bar'
 else
-    # Bar is not running, start it
-    qs -c bar &
+    mkdir -p "$HOME/.cache/quickshell"
+    setsid -f rust-bar >/dev/null 2>&1
 fi

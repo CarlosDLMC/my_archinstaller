@@ -117,7 +117,7 @@ essential_packages=(
     # dunst, not mako: dunst is the notification daemon this setup runs.
     "dunst"
     "xdg-desktop-portal-wlr"
-    "quickshell"
+    "rust-bar"
     "foot"
     "wlsunset"
     "wlopm"

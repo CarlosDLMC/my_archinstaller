@@ -493,7 +493,7 @@ The ones that matter:
 
 | Family | Package | Used by |
 | --- | --- | --- |
-| `Terminess Nerd Font` | `ttf-terminus-nerd` | **the quickshell bar** — `bar/Theme.qml`; the stamps on dunst's cards; the overview's workspace numbers |
+| `Terminess Nerd Font` | `ttf-terminus-nerd` | **the bar** — `rust-bar/src/theme.rs`; the stamps on dunst's cards; the overview's workspace numbers |
 | `JetBrainsMono Nerd Font Mono` | `ttf-jetbrains-mono-nerd` | foot, hyprlock, `SovietLockGen.py` |
 | `JetBrainsMono Nerd Font` | `ttf-jetbrains-mono-nerd` | dunst, the overview's tooltips |
 | `Fira Code` | `ttf-fira-code` | `gtk-3.0/settings.ini` - but see below |
@@ -504,10 +504,9 @@ to `JetBrains Mono NL` (Fira Code has no ligature-free cut), and on Wayland
 GTK takes its font from gsettings, which `initial-boot.sh` sets, rather than
 from `settings.ini`.
 
-To change the bar's font, edit `fontFamily` in
-`dotfiles/config/quickshell/bar/Theme.qml` — every widget renders through
-it — and add the package to `fonts.sh` and the family to `required_families`
-in the same file.
+To change the bar's font, edit `FONT` in `rust-bar/src/theme.rs` — every
+widget renders through it — and add the package to `fonts.sh` and the family
+to `required_families` in the same file.
 
 One place names a font that is **not** installed and never has been:
 `config/rofi/themes/LonerOrZ.rasi` asks for `Iosevka`. It renders substituted
@@ -1363,18 +1362,28 @@ sudo lpadmin -p Brother -E -v ipp://192.168.1.110/ipp/print -m everywhere
 lpstat -p          # should report the printer as idle
 ```
 
-### quickshell version
+### The bar (rust-bar)
 
-The installer uses the stable `quickshell` package, **not** `quickshell-git`,
-even though this machine happens to run the `-git` build the bar was written
-against. A `-git` PKGBUILD compiles whatever upstream HEAD is on the day you
-install, so it pins nothing and can only drift further from what was tested.
+The bar is `rust-bar`, a Rust rewrite of the quickshell (QML) bar that keeps
+its look, animations and behaviour with a fraction of the memory. One binary
+is the bar strip and its cards, the overview (SUPER+A), the wallpaper
+carousel, the clipboard history, the screenshot and recording dialogs, the
+power menu, the polkit agent and the CRT power-off (`rust-bar crt`). The
+keybinds call it with `rust-bar msg <target> <function>` - the same targets
+and functions as the old `qs -c bar ipc call`. See `rust-bar/README.md`.
 
-Stable was verified rather than assumed: the exported QML API of 0.3.1 was
-diffed against the `0.3.0.r6.gb66495f` build this bar was developed on — 118 →
-119 types and 1056 → 1057 members, with nothing removed or renamed. The bar
-only uses `PanelWindow`, `PopupWindow`, `Variants`, `ShellRoot`, `Singleton`,
-`Process`, `Timer`, `Socket` and `IpcHandler`, all unchanged.
+The installer's `bar` option (`install-scripts/rust-bar.sh`) builds it from
+the `rust-bar/` crate with `pkgbuilds/rust-bar` and installs the package;
+`makepkg -s` pulls in `rust` and `clang` for the build, which takes a minute
+or a few. A re-run builds again only when the crate changed (the package
+keeps a hash of it in `/usr/share/rust-bar/source`). It draws with Vulkan:
+`graphics.sh` installs the driver, and a machine with none (a VM) gets Mesa's
+software Vulkan. Presets that still say `quickshell="ON"` get the bar.
+
+The bar's scripts and the wallust palette stay in
+`dotfiles/config/quickshell/bar/` (`scripts/`, `wallust-colors.json`), where
+the QML bar kept them; the QML files there are the reference the Rust bar was
+matched against.
 
 ### Wallpapers
 
@@ -1566,8 +1575,8 @@ sudo wg-quick down de-ber
 
 Nothing needs restarting: the bar's VPN dropdown reads `/etc/wireguard` again
 every time it opens. (To restart the bar anyway, use SUPER+CTRL+B. A
-`pkill qs; qs -c bar &` in a terminal leaves the new bar a job of that
-terminal, which takes it down when it closes.)
+`pkill -xf rust-bar; rust-bar &` in a terminal leaves the new bar a job of
+that terminal, which takes it down when it closes.)
 
 **This needs passwordless sudo.** `VpnWidget.qml` runs `sudo find`,
 `sudo wg-quick up|down` and `sudo timedatectl set-timezone` from a QML `Process`,
@@ -1597,12 +1606,12 @@ those three commands — the VPN widget is the only thing here that depends on i
   the first), `SUPER + SHIFT + Tab` / `SUPER + ALT + Tab` move a tab
 - `SUPER + ALT + scroll` - Zoom the desktop in and out around the cursor (up to 10x;
   four-finger swipes up and down on a touchpad)
-- `SUPER + CTRL + ALT + B` - Toggle quickshell bar
+- `SUPER + CTRL + ALT + B` - Toggle the bar
 - `SUPER + CTRL + F8` - Handy: toggle speech-to-text (press once to start recording, press again to stop and transcribe into the focused field)
 - `SUPER + ALT + <1-0>` - Move *every* window of the current workspace to that workspace, keeping the tiling layout intact (`SUPER + CTRL + <1-0>` still moves one window silently)
 - `CTRL + ALT + L` - Lock screen (Soviet TUI)
 - `SUPER + CTRL + ALT + L` - Screensaver, then lock screen (see [Screensaver](#screensaver-ascii-art))
-- `CTRL + ALT + P` - Power menu («ПУСК · ПУЛЬТ» in the quickshell bar; also the Arch logo)
+- `CTRL + ALT + P` - Power menu («ПУСК · ПУЛЬТ» in the bar; also the Arch logo)
 - `SUPER + N` - Close all notifications
 - `SUPER + CTRL + <letter>` - Open one of the bar's cards with the keyboard in it: `A`
   audio, `W` Wi-Fi, `P` power, `T` or `E` the ⚙ control panel, `C` calendar, `M`
@@ -2486,7 +2495,7 @@ chmod +x install.sh
 ```
 
 **Important:** Make sure to select:
-- ✅ quickshell
+- ✅ bar (the desktop bar, rust-bar)
 - ✅ dots (Download and install pre-configured dotfiles)
 - ✅ ly (lightweight TUI display manager)
 - ✅ gtk_themes (the Flat-Remix icons the wallust icon theme is made from)
