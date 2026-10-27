@@ -61,7 +61,8 @@ from libQt6Quick, uniforms and textures read back from Qt's GL calls):
 - [x] VPN card - tunnel + off key, ВРЕМЯ/ПОГОДА sync with busy spinners, WireGuard configs with flags; the same scripts
 - [x] Theme follows wallust live (inotify, 80 ms debounce); timezone and weather city follow their cache files
 - [x] Claude Code card - plan, limit meters with reset times and stale-data note, tokens by day and by model (hover shows the split), the same agent-usage.py modes and refresh cadence
-- [ ] Cards: network, battery
+- [x] Wi-Fi card (networks): link header, scanned networks with signal and lock, rescan timing, password entry (● echo, blinking cursor), connect watchdog, disconnect; the strip icon blinks while connecting
+- [ ] Cards: network details (NetworkPanel, right click), battery
 - [ ] The CRT power-off effect (quickshell/crt, run by CrtOff.sh before logout/reboot/shutdown)
 - [ ] Overlays: layout OSD, clipboard, polkit agent, power menu, screenshot, recording
 - [ ] Wallpaper carousel + reveal, overview

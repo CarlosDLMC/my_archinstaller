@@ -15,6 +15,7 @@ mod services;
 mod text;
 mod theme;
 mod vpn;
+mod wifi_card;
 
 use color::Color;
 use gpu::{Gpu, Scene, TextStyle};

@@ -641,6 +641,13 @@ pub fn activate(app: &mut App, strip: usize, action: Action, button: u32) {
         }
         // AgentWidget.onOtherClicked: the middle button forces a full probe.
         Action::Agent if button == 0x112 => crate::agent::run(app, "full"),
+        // WifiWidget: left click lists the networks (right click: the details
+        // card, NetworkPanel - not ported yet, so the list for now).
+        Action::Wifi if button == BTN_LEFT || button == BTN_RIGHT => {
+            if let Some(h) = hit {
+                crate::cards::toggle(app, strip, crate::cards::CardKind::Wifi, &h, false);
+            }
+        }
         Action::LayoutCycle => crate::ipc::layout_next(app),
         Action::Bell => services::dnd_toggle(app),
         _ => {}

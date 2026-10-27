@@ -187,6 +187,8 @@ pub struct Services {
     pub pending_end: String,
     pub pult: crate::pult::Pult,
     pub vpn_card: crate::vpn::Vpn,
+    pub wifi_card: crate::wifi_card::WifiCard,
+    pub wifi_connecting: bool,
     pub agent: crate::agent::Usage,
     pub agent_busy: bool,
     /// (time sync busy, weather sync busy), mirrored for drawing.
@@ -672,6 +674,10 @@ pub fn split_terse(line: &str) -> Vec<String> {
         }
     }
     out
+}
+
+pub fn wifi_refresh(app: &mut App) {
+    wifi_status(app);
 }
 
 fn wifi_status(app: &mut App) {

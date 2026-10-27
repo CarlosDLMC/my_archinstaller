@@ -266,6 +266,13 @@ impl App {
     }
 
     pub fn redraw_dirty(&mut self) {
+        // The Wi-Fi icon blinks while a connection attempt runs.
+        let connecting = crate::wifi_card::connecting(self);
+        if connecting != self.svc.wifi_connecting {
+            self.svc.wifi_connecting = connecting;
+            self.svc.wifi.pulse.set_running(connecting, Instant::now(), 450);
+            self.mark_all_dirty();
+        }
         if self.card.as_ref().map_or(false, |c| c.win.dirty) {
             self.svc.pult_scanning = crate::pult::scanning(self);
             self.svc.vpn_busy = (crate::vpn::time_busy(self), crate::vpn::weather_busy(self));

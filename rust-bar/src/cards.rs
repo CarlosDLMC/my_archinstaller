@@ -39,6 +39,7 @@ pub enum CardKind {
     Pult,
     Vpn,
     Agent,
+    Wifi,
 }
 
 /// A fixed origin for animations that run on the clock (Spinner).
@@ -90,6 +91,10 @@ pub struct OpenCard {
     scroll: f32,
     content_h: f32,
     notch_stale: bool,
+    /// The anchoring icon's centre on screen (for cards whose width changes).
+    icon_center: f32,
+    /// The card's top on screen (its layer margin).
+    top: f32,
     /// The card's x on screen is fractional in QML (the icon centre is); the
     /// surface sits at the whole pixel and the content is drawn this far in.
     frac: f32,
@@ -137,6 +142,8 @@ fn geometry(kind: CardKind) -> (f32, f32, Stem) {
         CardKind::Vpn => (260.0, 0.0, Stem::Center),
         // AgentWidget: 420 wide, max(160, min(content + 30, 85% of the screen)).
         CardKind::Agent => (420.0, 0.0, Stem::Center),
+        // WifiWidget (networks): as wide as the longest SSID needs.
+        CardKind::Wifi => (300.0, 0.0, Stem::Center),
     }
 }
 
@@ -150,9 +157,14 @@ pub fn toggle(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard:
 }
 
 fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool) {
+    let (mut w, mut h, stem) = geometry(kind);
+    if kind == CardKind::Wifi {
+        crate::wifi_card::opened(app);
+        w = crate::wifi_card::card_width(&mut app.fonts, &app.svc);
+        h = crate::wifi_card::card_height(&mut app.fonts, &app.svc);
+    }
     let s = &app.strips[strip];
     let ui = crate::bar::ui_scale(s.screen_width);
-    let (w, mut h, stem) = geometry(kind);
     if kind == CardKind::Weather {
         h = weather_height(&mut app.fonts, &app.svc, w);
     }
@@ -254,6 +266,8 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         content_h,
         frac,
         notch_stale: false,
+        icon_center,
+        top: y.round(),
     });
     app.strips[strip].win.dirty = true;
     if kind == CardKind::Pult {
@@ -299,6 +313,21 @@ pub fn update_height(app: &mut App) {
             crate::pult::card_height(&mut app.fonts, &app.svc, scanning)
         }
         CardKind::Vpn => crate::vpn::card_height(&mut app.fonts, &app.svc),
+        CardKind::Wifi => {
+            let w = crate::wifi_card::card_width(&mut app.fonts, &app.svc);
+            let h = crate::wifi_card::card_height(&mut app.fonts, &app.svc);
+            let card = app.card.as_mut().unwrap();
+            if (w - card.width).abs() >= 0.5 {
+                // popupWidth moved: the centred card moves with it.
+                let screen_w = app.strips.get(card.strip).map_or(2560.0, |s| s.screen_width);
+                let x = (card.icon_center - w / 2.0).min(screen_w - w).max(0.0).round();
+                card.width = w;
+                card.stem_cx = w / 2.0;
+                card.win.width = w as u32;
+                card.win.layer.set_margin(card.top as i32, 0, 0, x as i32);
+            }
+            h
+        }
         CardKind::Agent => {
             let busy = app.is_running("agent-usage");
             let w = app.card.as_ref().unwrap().width;
@@ -590,7 +619,7 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
                 y += 42.0 + 6.0;
             }
         }
-        CardKind::Calendar | CardKind::Weather | CardKind::Audio | CardKind::Pult | CardKind::Vpn | CardKind::Agent => {}
+        CardKind::Calendar | CardKind::Weather | CardKind::Audio | CardKind::Pult | CardKind::Vpn | CardKind::Agent | CardKind::Wifi => {}
     }
     if ui.card.kind == CardKind::Calendar {
         draw_calendar(&mut ui, w);
@@ -600,6 +629,9 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
     }
     if ui.card.kind == CardKind::Pult {
         crate::pult::draw(&mut ui, w, svc, svc.pult_scanning);
+    }
+    if ui.card.kind == CardKind::Wifi {
+        crate::wifi_card::draw(&mut ui, w, svc, svc.wifi_connecting);
     }
     if ui.card.kind == CardKind::Agent {
         let scroll = ui.card.scroll;
@@ -636,17 +668,22 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
 /// ConsolePlate: the recessed plate, with its 1 px highlight along the bottom.
 /// ConsoleLamp in its 10 x 10 slot at (x, y): halo and dot fade over 160 ms.
 pub(crate) fn lamp(ui: &mut Ui, id: u32, x: f32, y: f32, lit: bool) {
+    let tint = ui.theme.col_accent;
+    lamp_tinted(ui, id, x, y, lit, tint);
+}
+
+pub(crate) fn lamp_tinted(ui: &mut Ui, id: u32, x: f32, y: f32, lit: bool, tint: Color) {
     let t = ui.theme;
     let (halo, r1) = ui.card.number(0x3_0000 + id, if lit { 0.22 } else { 0.0 }, 160, ui.now);
-    let (dot, r2) = ui.card.color(0x4_0000 + id, if lit { t.col_accent } else { t.col_plate.darker(1.3) }, 160, ui.now);
+    let (dot, r2) = ui.card.color(0x4_0000 + id, if lit { tint } else { t.col_plate.darker(1.3) }, 160, ui.now);
     ui.animating |= r1 || r2;
     if halo > 0.0 {
         ui.scene.save();
         ui.scene.multiply_opacity(halo);
-        ui.scene.rect(x + ac(10.0, 18.0), y + ac(10.0, 18.0), 18.0, 18.0, t.col_accent, 9.0, 0.0, Color::TRANSPARENT, true);
+        ui.scene.rect(x + ac(10.0, 18.0), y + ac(10.0, 18.0), 18.0, 18.0, tint, 9.0, 0.0, Color::TRANSPARENT, true);
         ui.scene.restore();
     }
-    let border = if lit { t.col_accent.lighter(1.25) } else { Color::qt_rgba(1.0, 1.0, 1.0, 0.12) };
+    let border = if lit { tint.lighter(1.25) } else { Color::qt_rgba(1.0, 1.0, 1.0, 0.12) };
     ui.scene.rect(x + ac(10.0, 9.0), y + ac(10.0, 9.0), 9.0, 9.0, dot, 4.5, 1.0, border, true);
 }
 
@@ -654,6 +691,18 @@ pub(crate) fn lamp(ui: &mut Ui, id: u32, x: f32, y: f32, lit: bool) {
 /// trailing text (an emoji flag), laid out by its RowLayout.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn console_row(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32, icon: &str, label: &str, lit: bool, interactive: bool, detail: Option<(&str, Color)>, trailing: Option<&str>) {
+    let tint = ui.theme.col_accent;
+    console_row_inner(ui, code, x, y, w, h, icon, label, lit, interactive, tint, detail, trailing.map(|t| (t, None)));
+}
+
+/// ConsoleRow with a lamp tint and a trailing glyph in the bar font (the lock).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn console_row_full(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32, icon: &str, label: &str, lit: bool, interactive: bool, tint: Color, detail: Option<(&str, Color)>, trailing: Option<(&str, Color)>) {
+    console_row_inner(ui, code, x, y, w, h, icon, label, lit, interactive, tint, detail, trailing.map(|(s, c)| (s, Some(c))));
+}
+
+#[allow(clippy::too_many_arguments)]
+fn console_row_inner(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32, icon: &str, label: &str, lit: bool, interactive: bool, tint: Color, detail: Option<(&str, Color)>, trailing: Option<(&str, Option<Color>)>) {
     let t = ui.theme;
     let font = FONT_SIZE - 3.0;
     let focused = interactive && ui.focusable(code);
@@ -662,7 +711,7 @@ pub(crate) fn console_row(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32
     ui.animating |= run;
     ui.scene.rect(x, y, w, h, bg, 4.0, if focused { 2.0 } else { 0.0 }, t.col_white, true);
     let mut cx = x + 6.0;
-    lamp(ui, code, cx, y + qround((h - 10.0) / 2.0), lit);
+    lamp_tinted(ui, code, cx, y + qround((h - 10.0) / 2.0), lit, tint);
     cx += 10.0 + 8.0;
     let fg = if lit || hot { t.col_white } else { t.col_grey };
     if !icon.is_empty() {
@@ -671,11 +720,22 @@ pub(crate) fn console_row(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32
         cx += font + 2.0 + 8.0;
     }
     let mut right = x + w - 6.0;
-    if let Some(tr) = trailing {
-        let tl = ui.fonts.layout(tr, theme::FontKey { family: "Fira Code:medium", bold: false }, FONT_SIZE + 2.0, 0.0);
-        right -= tl.width;
-        ui.text(&tl, right, y + qround((h - tl.height()) / 2.0), t.col_white, TextStyle::Normal);
-        right -= 8.0;
+    match trailing {
+        // The VPN card's flag: a Text with the app font at fontSize + 2.
+        Some((tr, None)) => {
+            let tl = ui.fonts.layout(tr, theme::FontKey { family: "Fira Code:medium", bold: false }, FONT_SIZE + 2.0, 0.0);
+            right -= tl.width;
+            ui.text(&tl, right, y + qround((h - tl.height()) / 2.0), t.col_white, TextStyle::Normal);
+            right -= 8.0;
+        }
+        // The Wi-Fi lock: Terminess at fontSize - 4.
+        Some((tr, Some(col))) => {
+            let tl = ui.fonts.layout(tr, theme::bar_font(false), FONT_SIZE - 4.0, 0.0);
+            right -= tl.width;
+            ui.text(&tl, right, y + qround((h - tl.height()) / 2.0), col, TextStyle::Normal);
+            right -= 8.0;
+        }
+        None => {}
     }
     if let Some((d, dc)) = detail.filter(|d| !d.0.is_empty()) {
         let dl = ui.fonts.layout(d, theme::bar_font(false), font - 2.0, 0.0);
@@ -1013,6 +1073,7 @@ pub fn activate(app: &mut App, action: Action, keyboard: bool) {
         CardKind::Pult => crate::pult::activate(app, i),
         CardKind::Vpn => crate::vpn::activate(app, i),
         CardKind::Agent => {}
+        CardKind::Wifi => crate::wifi_card::activate(app, i),
         CardKind::Calendar => match i {
             // the focus chain: prev, next; day cells are mouse-only
             CAL_PREV => calendar_step(app, -1),
@@ -1051,7 +1112,10 @@ fn power_pick(app: &mut App, i: u32, keyboard: bool) {
 }
 
 /// CardKeys: Esc closes, Tab/arrows walk the focus chain, Return/Enter/Space press.
-pub fn key(app: &mut App, sym: Keysym, _utf8: Option<&str>) {
+pub fn key(app: &mut App, sym: Keysym, utf8: Option<&str>) {
+    if app.card.as_ref().map(|c| c.kind) == Some(CardKind::Wifi) && crate::wifi_card::input_key(app, sym, utf8) {
+        return;
+    }
     let Some(card) = app.card.as_mut() else { return };
     // A focused VolumeSlider takes Left/Right and its mute keys first.
     let focused = card.focus.and_then(|f| card.focus_codes.get(f).copied());
