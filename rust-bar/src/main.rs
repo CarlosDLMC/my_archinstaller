@@ -64,6 +64,11 @@ fn textref(spec: &str, out: &str) {
 }
 
 fn main() {
+    // A fixed threshold: every buffer of 128 KiB or more (decoded images, the
+    // GPU uploads) is its own mapping and goes back to the system when it is
+    // freed. glibc's default raises the threshold after the first such free,
+    // and the next image buffers then came from the heap and stayed there.
+    unsafe { libc::mallopt(libc::M_MMAP_THRESHOLD, 128 * 1024) };
     let args: Vec<String> = std::env::args().collect();
     match args.get(1).map(String::as_str) {
         Some("textref") if args.len() == 4 => textref(&args[2], &args[3]),

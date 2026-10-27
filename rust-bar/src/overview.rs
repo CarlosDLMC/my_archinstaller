@@ -418,15 +418,8 @@ fn render_icon(path: &str, size: u32) -> Option<(u32, u32, Vec<u8>)> {
         return Some((size, size, pm.take()));
     }
     let img = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?.decode().ok()?.to_rgba8();
-    let img = image::imageops::resize(&img, size, size, image::imageops::FilterType::Triangle);
-    let mut rgba = img.into_raw();
-    for p in rgba.chunks_exact_mut(4) {
-        let a = p[3] as u32;
-        for v in &mut p[..3] {
-            *v = ((*v as u32 * a + 127) / 255) as u8;
-        }
-    }
-    Some((size, size, rgba))
+    let img = crate::gpu::scale(img, size, size);
+    Some((size, size, crate::gpu::premultiply(img.into_raw())))
 }
 
 /// The icons the open overview needs, rendered off the main thread.

@@ -136,6 +136,8 @@ pub struct App {
     pub exit: bool,
     /// Results of work done off the main thread, run back on the event loop.
     pub(crate) bg_tx: smithay_client_toolkit::reexports::calloop::channel::Sender<Box<dyn FnOnce(&mut App) + Send>>,
+    /// The one decode thread's queue (runtime.rs, background()).
+    pub(crate) bg_jobs: std::sync::mpsc::Sender<Box<dyn FnOnce() + Send>>,
 }
 
 impl App {
@@ -164,6 +166,7 @@ impl App {
             qh: qh.clone(),
             handle: ev.handle(),
             bg_tx,
+            bg_jobs: crate::runtime::decode_thread(),
             registry: RegistryState::new(&globals),
             outputs: OutputState::new(&globals, &qh),
             seats: SeatState::new(&globals, &qh),

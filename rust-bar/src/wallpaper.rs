@@ -660,28 +660,18 @@ fn load_visible(app: &mut App) {
     }
 }
 
-fn premultiply(mut rgba: Vec<u8>) -> Vec<u8> {
-    for p in rgba.chunks_exact_mut(4) {
-        let a = p[3] as u32;
-        for v in &mut p[..3] {
-            *v = ((*v as u32 * a + 127) / 255) as u8;
-        }
-    }
-    rgba
-}
-
 /// sourceSize.height only: scaled down (never up) to that height.
 fn decode_height(path: &str, h: u32) -> Option<(u32, u32, Vec<u8>)> {
     let img = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?.decode().ok()?.to_rgba8();
     let (iw, ih) = img.dimensions();
     let img = if ih > h {
         let nw = ((iw as f32 * h as f32 / ih as f32).round() as u32).max(1);
-        image::imageops::resize(&img, nw, h, image::imageops::FilterType::Triangle)
+        crate::gpu::scale(img, nw, h)
     } else {
         img
     };
     let (w, hh) = img.dimensions();
-    Some((w, hh, premultiply(img.into_raw())))
+    Some((w, hh, crate::gpu::premultiply(img.into_raw())))
 }
 
 /// sourceSize width and height with PreserveAspectCrop: scaled to cover.
@@ -690,12 +680,12 @@ fn decode_cover(path: &str, w: u32, h: u32) -> Option<(u32, u32, Vec<u8>)> {
     let (iw, ih) = img.dimensions();
     let s = (w as f32 / iw as f32).max(h as f32 / ih as f32);
     let img = if s < 1.0 {
-        image::imageops::resize(&img, ((iw as f32 * s).round() as u32).max(1), ((ih as f32 * s).round() as u32).max(1), image::imageops::FilterType::Triangle)
+        crate::gpu::scale(img, ((iw as f32 * s).round() as u32).max(1), ((ih as f32 * s).round() as u32).max(1))
     } else {
         img
     };
     let (ow, oh) = img.dimensions();
-    Some((ow, oh, premultiply(img.into_raw())))
+    Some((ow, oh, crate::gpu::premultiply(img.into_raw())))
 }
 
 /// PreserveAspectCrop of a texture into (w, h): the uv window.

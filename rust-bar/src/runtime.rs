@@ -251,14 +251,14 @@ impl App {
         }
     }
 
-    /// Image { asynchronous: true }: `work` runs on a thread of its own and
+    /// Image { asynchronous: true }: `work` runs on the decode thread and
     /// `done` gets its result back on the event loop.
     pub fn background<T: Send + 'static>(&self, work: impl FnOnce() -> T + Send + 'static, done: fn(&mut App, T)) {
         let tx = self.bg_tx.clone();
-        std::thread::spawn(move || {
+        let _ = self.bg_jobs.send(Box::new(move || {
             let v = work();
             let _ = tx.send(Box::new(move |app: &mut App| done(app, v)));
-        });
+        }));
     }
 
     /// Timer.stop() for a debounce started under `name`.
@@ -345,3 +345,26 @@ pub fn write_line(mut s: &UnixStream, line: &str) {
     let _ = s.write_all(line.as_bytes());
 }
 
+/// The thread every background() job runs on, in order - one, as Qt's
+/// QQuickPixmapReader is one. A thread per image made glibc open an arena per
+/// thread, and the decode buffers they had held stayed with the process: the
+/// carousel, clipboard and overview opened three times each took the bar from
+/// 54 to 165 MiB. Once the queue is empty the freed memory goes back.
+pub fn decode_thread() -> std::sync::mpsc::Sender<Box<dyn FnOnce() + Send>> {
+    let (tx, rx) = std::sync::mpsc::channel::<Box<dyn FnOnce() + Send>>();
+    let _ = std::thread::Builder::new().name("decode".into()).spawn(move || loop {
+        let job = match rx.try_recv() {
+            Ok(job) => job,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => break,
+            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                unsafe { libc::malloc_trim(0) };
+                match rx.recv() {
+                    Ok(job) => job,
+                    Err(_) => break,
+                }
+            }
+        };
+        job();
+    });
+    tx
+}

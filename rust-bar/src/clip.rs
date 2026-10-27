@@ -361,19 +361,12 @@ fn decode(path: &str, req: (u32, u32), crop: bool) -> Option<(u32, u32, Vec<u8>)
     let ratio = if crop { sx.max(sy) } else { sx.min(sy) };
     let img = if ratio < 1.0 {
         let (nw, nh) = (((w as f32 * ratio).round() as u32).max(1), ((h as f32 * ratio).round() as u32).max(1));
-        image::imageops::resize(&img, nw, nh, image::imageops::FilterType::Triangle)
+        crate::gpu::scale(img, nw, nh)
     } else {
         img
     };
     let (w, h) = img.dimensions();
-    let mut rgba = img.into_raw();
-    for p in rgba.chunks_exact_mut(4) {
-        let a = p[3] as u32;
-        for v in &mut p[..3] {
-            *v = ((*v as u32 * a + 127) / 255) as u8;
-        }
-    }
-    Some((w, h, rgba))
+    Some((w, h, crate::gpu::premultiply(img.into_raw())))
 }
 
 // ---- actions ----

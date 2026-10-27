@@ -23,6 +23,7 @@ freetype-sys = "0.23"
 pipewire = "0.9"
 dbus = { version = "0.9", default-features = false }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp", "pnm"] }
+fast_image_resize = { version = "5", features = ["only_u8x4"] }
 unicode-linebreak = "0.1"
 resvg = { version = "0.45", default-features = false }
 
