@@ -41,6 +41,10 @@ pub struct Face {
     has_bitmaps: bool,
     /// post.isFixedPitch - FT_IS_FIXED_WIDTH, which turns Qt's synthetic bold off.
     pub fixed_pitch: bool,
+    /// HarfBuzz (rustybuzz) view of the same data, for shaping.
+    hb: rustybuzz::Face<'static>,
+    /// A colour bitmap font (CBDT/sbix: Noto Color Emoji): drawn from its strike.
+    pub color: bool,
 }
 
 fn be16(d: &[u8], o: usize) -> i64 {
@@ -79,7 +83,9 @@ impl Face {
         }
         let has_bitmaps = table(b"EBLC").is_some() || table(b"CBLC").is_some() || table(b"bdat").is_some();
         let fixed_pitch = table(b"post").map_or(false, |d| d.len() >= 16 && u32::from_be_bytes([d[12], d[13], d[14], d[15]]) != 0);
-        Face { font, data: font.data, index: 0, ft_face: None, upem, hhea, typo, win, strikes, has_bitmaps, fixed_pitch }
+        let color = table(b"CBDT").is_some() || table(b"sbix").is_some();
+        let hb = rustybuzz::Face::from_slice(font.data, 0).expect("font for shaping");
+        Face { font, data: font.data, index: 0, ft_face: None, upem, hhea, typo, win, strikes, has_bitmaps, fixed_pitch, hb, color }
     }
 
     fn scale26(&self, size: f32) -> i64 {
@@ -156,6 +162,19 @@ pub struct PlacedGlyph {
     /// Synthetic bold: FreeType's embolden, which Qt applies to a bold
     /// request on a regular face unless the face is fixed-pitch.
     pub bold: bool,
+    /// From a colour bitmap font (emoji).
+    pub color: bool,
+}
+
+/// A colour glyph scaled from its strike, in the RGBA atlas.
+#[derive(Clone, Copy, Debug)]
+pub struct ColorGlyph {
+    pub ax: u32,
+    pub ay: u32,
+    pub w: u32,
+    pub h: u32,
+    pub left: f32,
+    pub top: f32,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -184,6 +203,8 @@ pub struct FontKey {
 }
 
 pub struct Atlas {
+    /// Bytes per texel: 1 (distance fields, coverage) or 4 (colour glyphs).
+    pub bpp: u32,
     pub width: u32,
     pub height: u32,
     pub pixels: Vec<u8>,
@@ -197,8 +218,8 @@ pub struct Atlas {
 }
 
 impl Atlas {
-    fn new() -> Atlas {
-        Atlas { width: 1024, height: 256, pixels: vec![0; 1024 * 256], shelf_x: 0, shelf_y: 0, shelf_h: 0, dirty: vec![], resized: true }
+    fn new(bpp: u32, width: u32, height: u32) -> Atlas {
+        Atlas { bpp, width, height, pixels: vec![0; (width * height * bpp) as usize], shelf_x: 0, shelf_y: 0, shelf_h: 0, dirty: vec![], resized: true }
     }
 
     fn alloc(&mut self, w: u32, h: u32) -> (u32, u32) {
@@ -210,7 +231,7 @@ impl Atlas {
         while self.shelf_y + h > self.height {
             let old = self.height;
             self.height *= 2;
-            self.pixels.resize((self.width * self.height) as usize, 0);
+            self.pixels.resize((self.width * self.height * self.bpp) as usize, 0);
             self.resized = true;
             let _ = old;
         }
@@ -231,6 +252,9 @@ pub struct Fonts {
     library: ft::FT_Library,
     scale: ScaleContext,
     pub atlas: Atlas,
+    pub color_atlas: Atlas,
+    colors: HashMap<(u16, GlyphId, i64), Option<ColorGlyph>>,
+    emoji: Option<Option<u16>>,
 }
 
 /// QFontEngineFT::loadFlags for a gray glyph cache with fontconfig's
@@ -240,6 +264,28 @@ fn native_load_flags() -> i32 {
         return v;
     }
     (ft::FT_LOAD_DEFAULT | ft::FT_LOAD_TARGET_LIGHT) as i32
+}
+
+/// Unicode Emoji_Presentation=Yes (emoji-data.txt): drawn as colour emoji
+/// even without a variation selector.
+fn is_emoji_presentation(c: char) -> bool {
+    let u = c as u32;
+    const R: &[(u32, u32)] = &[
+        (0x231A, 0x231B), (0x23E9, 0x23EC), (0x23F0, 0x23F0), (0x23F3, 0x23F3), (0x25FD, 0x25FE), (0x2614, 0x2615),
+        (0x2648, 0x2653), (0x267F, 0x267F), (0x2693, 0x2693), (0x26A1, 0x26A1), (0x26AA, 0x26AB), (0x26BD, 0x26BE),
+        (0x26C4, 0x26C5), (0x26CE, 0x26CE), (0x26D4, 0x26D4), (0x26EA, 0x26EA), (0x26F2, 0x26F3), (0x26F5, 0x26F5),
+        (0x26FA, 0x26FA), (0x26FD, 0x26FD), (0x2705, 0x2705), (0x270A, 0x270B), (0x2728, 0x2728), (0x274C, 0x274C),
+        (0x274E, 0x274E), (0x2753, 0x2755), (0x2757, 0x2757), (0x2795, 0x2797), (0x27B0, 0x27B0), (0x27BF, 0x27BF),
+        (0x2B1B, 0x2B1C), (0x2B50, 0x2B50), (0x2B55, 0x2B55), (0x1F004, 0x1F004), (0x1F0CF, 0x1F0CF), (0x1F18E, 0x1F18E),
+        (0x1F191, 0x1F19A), (0x1F1E6, 0x1F1FF), (0x1F201, 0x1F201), (0x1F21A, 0x1F21A), (0x1F22F, 0x1F22F), (0x1F232, 0x1F236),
+        (0x1F238, 0x1F23A), (0x1F250, 0x1F251), (0x1F300, 0x1F320), (0x1F32D, 0x1F335), (0x1F337, 0x1F37C), (0x1F37E, 0x1F393),
+        (0x1F3A0, 0x1F3CA), (0x1F3CF, 0x1F3D3), (0x1F3E0, 0x1F3F0), (0x1F3F4, 0x1F3F4), (0x1F3F8, 0x1F43E), (0x1F440, 0x1F440),
+        (0x1F442, 0x1F4FC), (0x1F4FF, 0x1F53D), (0x1F54B, 0x1F54E), (0x1F550, 0x1F567), (0x1F57A, 0x1F57A), (0x1F595, 0x1F596),
+        (0x1F5A4, 0x1F5A4), (0x1F5FB, 0x1F64F), (0x1F680, 0x1F6C5), (0x1F6CC, 0x1F6CC), (0x1F6D0, 0x1F6D2), (0x1F6D5, 0x1F6D7),
+        (0x1F6DC, 0x1F6DF), (0x1F6EB, 0x1F6EC), (0x1F6F4, 0x1F6FC), (0x1F7E0, 0x1F7EB), (0x1F7F0, 0x1F7F0), (0x1F90C, 0x1F93A),
+        (0x1F93C, 0x1F945), (0x1F947, 0x1F9FF), (0x1FA70, 0x1FAFF),
+    ];
+    R.iter().any(|&(a, b)| u >= a && u <= b)
 }
 
 /// FT_Outline_Decompose into line segments; curves flattened finely enough
@@ -337,7 +383,10 @@ impl Fonts {
                 lib
             },
             scale: ScaleContext::new(),
-            atlas: Atlas::new(),
+            atlas: Atlas::new(1, 1024, 256),
+            color_atlas: Atlas::new(4, 256, 64),
+            colors: HashMap::new(),
+            emoji: None,
         }
     }
 
@@ -353,6 +402,7 @@ impl Fonts {
         let mut face = Face::new(font);
         face.data = data;
         face.index = index;
+        face.hb = rustybuzz::Face::from_slice(data, index)?;
         self.faces.push(face);
         let i = (self.faces.len() - 1) as u16;
         self.by_file.insert((file.to_string(), index), i);
@@ -393,30 +443,205 @@ impl Fonts {
         let (ascent, descent) = self.faces[primary as usize].metrics(size);
         let mut line = Line { ascent, descent, size, ..Default::default() };
         let spacing26 = (letter_spacing * 64.0).round() as i64;
-        let mut x26 = 0i64;
-        for ch in text.chars() {
-            if ch == '\n' {
-                break;
+        // Itemise by face, as QTextEngine does with its fallback fonts; emoji
+        // joiners, variation selectors and skin tones stay with their emoji.
+        let mut runs: Vec<(u16, String)> = Vec::new();
+        let chars: Vec<char> = text.chars().take_while(|c| *c != '\n').collect();
+        for (i, &ch) in chars.iter().enumerate() {
+            let joiner = matches!(ch, '\u{200d}' | '\u{fe0e}' | '\u{fe0f}' | '\u{1f3fb}'..='\u{1f3ff}' | '\u{e0020}'..='\u{e007f}');
+            let next = chars.get(i + 1).copied();
+            // Qt's emoji segmentation: emoji presentation (or VS16) goes to the emoji font.
+            let emoji = (is_emoji_presentation(ch) && next != Some('\u{fe0e}')) || next == Some('\u{fe0f}');
+            let fi = match runs.last() {
+                Some((f, _)) if joiner => *f,
+                _ if emoji => self.emoji_face().unwrap_or_else(|| self.face_with(key, ch)),
+                _ => self.face_with(key, ch),
+            };
+            match runs.last_mut() {
+                Some((f, s)) if *f == fi => s.push(ch),
+                _ => runs.push((fi, ch.to_string())),
             }
-            let fi = self.face_with(key, ch);
-            let face = &self.faces[fi as usize];
-            let gid = face.font.charmap().map(ch);
-            let units = face.font.glyph_metrics(&[]).advance_width(gid) as i64;
-            let bold = key.bold && !face.fixed_pitch;
-            line.glyphs.push(PlacedGlyph { face: fi, gid, x: x26 as f32 / 64.0, bold });
-            x26 += face.advance26(units, size) + spacing26;
+        }
+        let mut x26 = 0i64;
+        for (fi, s) in runs {
+            let shaped: Vec<(rustybuzz::GlyphInfo, rustybuzz::GlyphPosition)> = {
+                let face = &self.faces[fi as usize];
+                let mut buf = rustybuzz::UnicodeBuffer::new();
+                buf.push_str(&s);
+                let out = rustybuzz::shape(&face.hb, &[], buf);
+                out.glyph_infos().iter().copied().zip(out.glyph_positions().iter().copied()).collect()
+            };
+            for (info, pos) in shaped {
+                let face = &self.faces[fi as usize];
+                let scale = size as f64 / face.upem as f64;
+                let gid = info.glyph_id as GlyphId;
+                let hmtx = face.font.glyph_metrics(&[]).advance_width(gid) as i64;
+                let adv26 = if face.color {
+                    0
+                } else {
+                    // Qt's advance for the glyph, plus whatever GPOS added to it.
+                    face.advance26(hmtx, size) + ((pos.x_advance as i64 - hmtx) as f64 * scale * 64.0).round() as i64
+                };
+                let xoff = pos.x_offset as f64 * scale;
+                let bold = key.bold && !face.fixed_pitch;
+                let is_color = face.color;
+                line.glyphs.push(PlacedGlyph { face: fi, gid, x: (x26 as f64 / 64.0 + xoff) as f32, bold, color: is_color });
+                let adv26 = if is_color { self.color_advance26(fi, gid, size) } else { adv26 };
+                x26 += adv26 + spacing26;
+            }
+        }
+        // QTextLine's ascent/descent: the largest of every font the line uses.
+        let mut used: Vec<u16> = line.glyphs.iter().map(|g| g.face).collect();
+        used.sort_unstable();
+        used.dedup();
+        for f in used {
+            if f == primary {
+                continue;
+            }
+            let (a, d) = self.face_metrics(f, size);
+            line.ascent = line.ascent.max(a);
+            line.descent = line.descent.max(d);
         }
         line.adv = x26 as f32 / 64.0;
         // QTextLine adds the last glyph's negative right bearing, so a Text's
         // width covers a glyph that overhangs its advance (the Nerd icons do).
         if let Some(last) = line.glyphs.last().copied() {
-            let rb = self.right_bearing26(last.face, last.gid, size);
-            if rb < 0 {
-                x26 -= rb;
+            if !last.color {
+                let rb = self.right_bearing26(last.face, last.gid, size);
+                if rb < 0 {
+                    x26 -= rb;
+                }
             }
         }
         line.width = x26 as f32 / 64.0;
         line
+    }
+
+    /// Ascent/descent of a face at `size` as Qt reports them; a colour bitmap
+    /// font gives its strike's metrics times the strike scale.
+    fn face_metrics(&mut self, face: u16, size: f32) -> (f32, f32) {
+        if !self.faces[face as usize].color {
+            return self.faces[face as usize].metrics(size);
+        }
+        let f = self.strike_scale(face, size);
+        let Some(fc) = self.ft_face(face) else { return (0.0, 0.0) };
+        unsafe {
+            if (*fc).num_fixed_sizes > 0 {
+                ft::FT_Select_Size(fc, 0);
+            }
+            let m = &(*(*fc).size).metrics;
+            (m.ascender as f32 / 64.0 * f, -(m.descender as f32) / 64.0 * f)
+        }
+    }
+
+    /// The colour emoji face (fontconfig's "emoji"), if there is one.
+    fn emoji_face(&mut self) -> Option<u16> {
+        if let Some(f) = self.emoji {
+            return f;
+        }
+        let f = fc_match("emoji:color=true").and_then(|(file, idx)| self.load_file(&file, idx)).filter(|&i| self.faces[i as usize].color);
+        self.emoji = Some(f);
+        f
+    }
+
+    /// QFontEngineFT's scale for a scalable bitmap font: pixel size over the
+    /// strike's height (128 for Noto Color Emoji, not its 109 ppem).
+    fn strike_scale(&mut self, face: u16, size: f32) -> f32 {
+        let Some(fc) = self.ft_face(face) else { return 1.0 };
+        unsafe {
+            if (*fc).num_fixed_sizes > 0 {
+                let h = (*(*fc).available_sizes).height as f32;
+                return size / h.max(1.0);
+            }
+        }
+        1.0
+    }
+
+    /// The strike advance of a colour glyph, scaled, in 1/64 px.
+    fn color_advance26(&mut self, face: u16, gid: GlyphId, size: f32) -> i64 {
+        let f = self.strike_scale(face, size);
+        let Some(fc) = self.ft_face(face) else { return 0 };
+        unsafe {
+            if (*fc).num_fixed_sizes > 0 {
+                ft::FT_Select_Size(fc, 0);
+            }
+            if ft::FT_Load_Glyph(fc, gid as u32, ft::FT_LOAD_COLOR as i32) != 0 {
+                return 0;
+            }
+            ((*(*fc).glyph).metrics.horiAdvance as f32 * f).round() as i64
+        }
+    }
+
+    /// A colour glyph (emoji) the way QFontEngineFT draws a scalable bitmap
+    /// font: the strike's BGRA bitmap, smooth-scaled to the pixel size.
+    pub fn color_glyph(&mut self, face: u16, gid: GlyphId, size: f32) -> Option<ColorGlyph> {
+        let key = (face, gid, (size * 64.0).round() as i64);
+        if let Some(g) = self.colors.get(&key) {
+            return *g;
+        }
+        let g = unsafe { self.rasterise_color(face, gid, size) };
+        self.colors.insert(key, g);
+        g
+    }
+
+    unsafe fn rasterise_color(&mut self, face: u16, gid: GlyphId, size: f32) -> Option<ColorGlyph> {
+        let fc = self.ft_face(face)?;
+        if (*fc).num_fixed_sizes > 0 {
+            ft::FT_Select_Size(fc, 0);
+        }
+        let f = if (*fc).num_fixed_sizes > 0 { size / ((*(*fc).available_sizes).height as f32).max(1.0) } else { 1.0 };
+        if ft::FT_Load_Glyph(fc, gid as u32, ft::FT_LOAD_COLOR as i32) != 0 {
+            return None;
+        }
+        let slot = (*fc).glyph;
+        if (*slot).format != ft::FT_GLYPH_FORMAT_BITMAP && ft::FT_Render_Glyph(slot, ft::FT_RENDER_MODE_NORMAL) != 0 {
+            return None;
+        }
+        let bm = &(*slot).bitmap;
+        if bm.pixel_mode as u32 != ft::FT_PIXEL_MODE_BGRA as u32 || bm.width == 0 || bm.rows == 0 {
+            return None;
+        }
+        let (sw, sh) = (bm.width as usize, bm.rows as usize);
+        let (dw, dh) = (((sw as f32 * f).round() as usize).max(1), ((sh as f32 * f).round() as usize).max(1));
+        // Area-average down (QImage::scaled, SmoothTransformation), BGRA -> RGBA.
+        let mut out = vec![0u8; dw * dh * 4];
+        for y in 0..dh {
+            let (y0, y1) = (y as f32 * sh as f32 / dh as f32, (y + 1) as f32 * sh as f32 / dh as f32);
+            for x in 0..dw {
+                let (x0, x1) = (x as f32 * sw as f32 / dw as f32, (x + 1) as f32 * sw as f32 / dw as f32);
+                let mut acc = [0f32; 4];
+                let mut wsum = 0f32;
+                let mut sy = y0.floor() as usize;
+                while (sy as f32) < y1 && sy < sh {
+                    let wy = (y1.min(sy as f32 + 1.0) - y0.max(sy as f32)).max(0.0);
+                    let mut sx = x0.floor() as usize;
+                    while (sx as f32) < x1 && sx < sw {
+                        let wx = (x1.min(sx as f32 + 1.0) - x0.max(sx as f32)).max(0.0);
+                        let p = bm.buffer.offset(sy as isize * bm.pitch as isize + sx as isize * 4);
+                        let w = wx * wy;
+                        acc[0] += *p.add(2) as f32 * w;
+                        acc[1] += *p.add(1) as f32 * w;
+                        acc[2] += *p as f32 * w;
+                        acc[3] += *p.add(3) as f32 * w;
+                        wsum += w;
+                        sx += 1;
+                    }
+                    sy += 1;
+                }
+                let o = (y * dw + x) * 4;
+                for c in 0..4 {
+                    out[o + c] = (acc[c] / wsum.max(1e-6)).round().clamp(0.0, 255.0) as u8;
+                }
+            }
+        }
+        let (ax, ay) = self.color_atlas.alloc(dw as u32, dh as u32);
+        let aw = self.color_atlas.width as usize;
+        for y in 0..dh {
+            let dst = ((ay as usize + y) * aw + ax as usize) * 4;
+            self.color_atlas.pixels[dst..dst + dw * 4].copy_from_slice(&out[y * dw * 4..(y + 1) * dw * 4]);
+        }
+        self.color_atlas.dirty.push((ax, ay, dw as u32, dh as u32));
+        Some(ColorGlyph { ax, ay, w: dw as u32, h: dh as u32, left: (*slot).bitmap_left as f32 * f, top: (*slot).bitmap_top as f32 * f })
     }
 
     /// Text.WordWrap: lines no wider than `max`, broken at spaces (a word

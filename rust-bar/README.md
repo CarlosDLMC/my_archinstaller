@@ -49,7 +49,8 @@ from libQt6Quick, uniforms and textures read back from Qt's GL calls):
 
 - [x] Engine, text parity (≥99.6 % of pixels within 8/255 of Qt on the test sets)
 - [x] Strip: every widget - logo, workspaces, dividers, title, clock, bell (DND), weather pill, agent, CPU, memory, volume (PipeWire, event-driven), battery (sysfs), Wi-Fi (nmcli monitor), VPN, layout, ПУЛЬТ icon; matches the QML strip in the sandbox
-- [ ] Strip: Wi-Fi blink while connecting, colour emoji in titles, battery change events (netlink instead of udevadm)
+- [x] Shaping (rustybuzz: flags, ZWJ sequences, JetBrains Mono ligatures - Qt applies them) and colour emoji (Noto strike scaled by size/strike height, as Qt does)
+- [ ] Strip: battery change events (netlink instead of udevadm)
 - [x] Animations (Qt easing curves, Behavior-style retargeting, looping pulse), cursor shape on hover changes, click-on-release
 - [x] Card framework: card-sized layer + 1-pixel click catcher (wp_viewporter) instead of a full-screen surface, notch canvas (arcTo, QPainter-like fill), CardKeys focus chain, hover colour animations, `cards toggle` IPC
 - [x] Power card (logo) - matches the QML card; with it open: 21 MB PSS / 24 MB VRAM against 88 MB / 127 MB

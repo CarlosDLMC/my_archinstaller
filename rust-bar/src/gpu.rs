@@ -28,6 +28,8 @@ pub enum Pipe {
     Image(u32),
     /// Qt's native glyph path with style: Text.Outline (outlinedtext.frag).
     NativeOutline,
+    /// A colour glyph from the RGBA atlas (emoji).
+    Color,
 }
 
 /// A 2D affine transform: x' = a x + c y + tx, y' = b x + d y + ty.
@@ -232,6 +234,9 @@ impl Scene {
         let subpixel = style == TextStyle::Normal && color.a >= 1.0 && self.opacity >= 1.0;
         for &outline_pass in passes {
             for g in &line.glyphs {
+                if g.color {
+                    continue;
+                }
                 let Some(df) = fonts.df_glyph(g.face, g.gid, g.bold) else { continue };
                 self.atlas_size = (fonts.atlas.width as f32, fonts.atlas.height as f32);
                 let mut i = self.base(
@@ -257,6 +262,31 @@ impl Scene {
                     self.push(Pipe::Text, i);
                 }
             }
+        }
+        if line.glyphs.iter().any(|g| g.color) {
+            self.color_glyphs(fonts, line, x, baseline);
+        }
+    }
+
+    /// Colour glyphs (emoji): the scaled strike bitmap, on whole device pixels
+    /// like Qt's native (ARGB) glyph cache.
+    pub fn color_glyphs(&mut self, fonts: &mut Fonts, line: &Line, x: f32, baseline: f32) {
+        let size = line.size * self.xf.scale();
+        for g in line.glyphs.iter().filter(|g| g.color) {
+            let (dx, dy) = self.xf.apply(x + g.x, baseline);
+            let Some(cg) = fonts.color_glyph(g.face, g.gid, size) else { continue };
+            let px = (dx + cg.left).round();
+            let py = (dy - cg.top).round();
+            let mut i = Inst {
+                rect: [px, py, cg.w as f32, cg.h as f32],
+                xf0: [1.0, 0.0, 0.0],
+                xf1: [0.0, 1.0, 0.0],
+                clip: self.clip,
+                ..Default::default()
+            };
+            i.uv = [cg.ax as f32, cg.ay as f32, (cg.ax + cg.w) as f32, (cg.ay + cg.h) as f32];
+            i.p0 = [self.opacity, 0.0, 0.0, 0.0];
+            self.push(Pipe::Color, i);
         }
     }
 
@@ -300,6 +330,18 @@ impl Scene {
     }
 
     /// Atlas texel coordinates become normalised uv once the atlas size is final.
+    fn finish_color(&mut self, w: f32, h: f32) {
+        for (p, r) in &self.batches {
+            if *p == Pipe::Color {
+                for i in &mut self.insts[r.start as usize..r.end as usize] {
+                    if i.uv[2] > 1.0 || i.uv[3] > 1.0 || i.uv[0] > 1.0 {
+                        i.uv = [i.uv[0] / w, i.uv[1] / h, i.uv[2] / w, i.uv[3] / h];
+                    }
+                }
+            }
+        }
+    }
+
     fn finish(&mut self, atlas_w: f32, atlas_h: f32) {
         for (p, r) in &self.batches {
             if matches!(p, Pipe::Text | Pipe::TextSub | Pipe::NativeOutline) {
@@ -336,6 +378,7 @@ pub struct Gpu {
     pipelines: Vec<(wgpu::TextureFormat, [wgpu::RenderPipeline; 5])>,
     globals: wgpu::Buffer,
     atlas: Option<(wgpu::Texture, wgpu::BindGroup, u32, u32)>,
+    color_atlas: Option<(wgpu::Texture, wgpu::BindGroup, u32, u32)>,
     sampler: wgpu::Sampler,
     inst_buf: Option<wgpu::Buffer>,
     pub images: Vec<Option<Image>>,
@@ -446,6 +489,7 @@ impl Gpu {
             pipelines: Vec::new(),
             globals,
             atlas: None,
+            color_atlas: None,
             sampler,
             inst_buf: None,
             images: Vec::new(),
@@ -559,6 +603,42 @@ impl Gpu {
         }
     }
 
+    fn sync_color_atlas(&mut self, fonts: &mut Fonts) {
+        let a = &mut fonts.color_atlas;
+        if a.resized || self.color_atlas.is_none() {
+            let tex = self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("colour glyphs"),
+                size: wgpu::Extent3d { width: a.width, height: a.height, depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+            let view = tex.create_view(&Default::default());
+            let bind = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: None,
+                layout: &self.layout1,
+                entries: &[wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&view) }],
+            });
+            self.color_atlas = Some((tex, bind, a.width, a.height));
+            a.dirty.clear();
+            a.dirty.push((0, 0, a.width, a.height));
+            a.resized = false;
+        }
+        let (tex, _, w, _) = self.color_atlas.as_ref().unwrap();
+        for (x, y, rw, rh) in a.dirty.drain(..) {
+            let start = ((y * *w + x) * 4) as usize;
+            self.queue.write_texture(
+                wgpu::TexelCopyTextureInfo { texture: tex, mip_level: 0, origin: wgpu::Origin3d { x, y, z: 0 }, aspect: wgpu::TextureAspect::All },
+                &a.pixels[start..],
+                wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(*w * 4), rows_per_image: Some(rh) },
+                wgpu::Extent3d { width: rw, height: rh, depth_or_array_layers: 1 },
+            );
+        }
+    }
+
     /// Premultiplied RGBA8 pixels -> an image id for Scene::image.
     pub fn add_image(&mut self, width: u32, height: u32, rgba: &[u8], mipmaps: bool) -> u32 {
         let mips = if mipmaps { 32 - width.max(height).leading_zeros() } else { 1 };
@@ -624,6 +704,11 @@ impl Gpu {
         self.sync_atlas(fonts);
         let (_, _, aw, ah) = self.atlas.as_ref().map(|a| (0, 0, a.2, a.3)).unwrap();
         scene.finish(aw as f32, ah as f32);
+        if scene.batches.iter().any(|b| b.0 == Pipe::Color) {
+            self.sync_color_atlas(fonts);
+            let (_, _, cw, ch) = self.color_atlas.as_ref().unwrap();
+            scene.finish_color(*cw as f32, *ch as f32);
+        }
         let pi = self.pipelines_for(format);
         let g = [size.0 as f32, size.1 as f32, aw as f32, ah as f32];
         self.queue.write_buffer(&self.globals, 0, bytes(&g));
@@ -668,6 +753,12 @@ impl Gpu {
                     Pipe::Text => rp.set_pipeline(&pipes[1]),
                     Pipe::TextSub => rp.set_pipeline(&pipes[2]),
                     Pipe::NativeOutline => rp.set_pipeline(&pipes[4]),
+                    Pipe::Color => {
+                        let Some((_, bind, ..)) = self.color_atlas.as_ref() else { continue };
+                        rp.set_pipeline(&pipes[3]);
+                        rp.set_bind_group(1, bind, &[]);
+                        bound_image = Some(u32::MAX);
+                    }
                     Pipe::Image(id) => {
                         let Some(Some(img)) = self.images.get(*id as usize) else { continue };
                         rp.set_pipeline(&pipes[3]);
