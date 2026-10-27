@@ -32,6 +32,7 @@ pub enum OsdKind {
     Power,
     Shot,
     Record,
+    Polkit,
 }
 
 /// Hover, focus and the animated values of an overlay's controls.
@@ -215,6 +216,7 @@ pub fn hide(app: &mut App, kind: OsdKind) {
         OsdKind::Power => |app| destroy(app, OsdKind::Power),
         OsdKind::Shot => |app| destroy(app, OsdKind::Shot),
         OsdKind::Record => |app| destroy(app, OsdKind::Record),
+        OsdKind::Polkit => |app| destroy(app, OsdKind::Polkit),
     };
     app.debounce(gone_timer(kind), Duration::from_millis(ms), gone);
 }
@@ -225,6 +227,7 @@ fn gone_timer(kind: OsdKind) -> &'static str {
         OsdKind::Power => "osd-gone-power",
         OsdKind::Shot => "osd-gone-shot",
         OsdKind::Record => "osd-gone-record",
+        OsdKind::Polkit => "osd-gone-polkit",
     }
 }
 
@@ -320,6 +323,7 @@ pub fn draw(o: &mut Osd, scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, sv
         OsdKind::Power => crate::power::draw_osd(&mut ui, (px, py, pw, ph), svc),
         OsdKind::Shot => crate::capture::draw_osd(&mut ui, false, (px, py, pw, ph), svc, pressed),
         OsdKind::Record => crate::capture::draw_osd(&mut ui, true, (px, py, pw, ph), svc, pressed),
+        OsdKind::Polkit => crate::polkit::draw_osd(&mut ui, (px, py, pw, ph), svc),
     }
     let (hits, codes) = (std::mem::take(&mut ui.hits), std::mem::take(&mut ui.focus_codes));
     animating |= ui.animating;
@@ -336,6 +340,7 @@ pub fn click(app: &mut App, kind: OsdKind, action: Action, button: u32) {
         OsdKind::Layout => crate::layout::osd_click(app, action, button),
         OsdKind::Power => crate::power::osd_click(app, action, button),
         OsdKind::Shot | OsdKind::Record => crate::capture::click(app, kind, action),
+        OsdKind::Polkit => {}
     }
 }
 
@@ -345,15 +350,18 @@ pub fn dim_clicked(app: &mut App, kind: OsdKind) {
         OsdKind::Layout => {}
         OsdKind::Power => crate::power::close(app),
         OsdKind::Shot | OsdKind::Record => crate::capture::dim_clicked(app, kind),
+        // MouseArea { anchors.fill: parent }: the dim takes clicks and does nothing.
+        OsdKind::Polkit => {}
     }
 }
 
 /// A key while the overlay has the keyboard; `scan` is Qt's nativeScanCode.
-pub fn key(app: &mut App, kind: OsdKind, sym: smithay_client_toolkit::seat::keyboard::Keysym, scan: u32, shift: bool) {
+pub fn key(app: &mut App, kind: OsdKind, sym: smithay_client_toolkit::seat::keyboard::Keysym, scan: u32, shift: bool, utf8: Option<&str>) {
     match kind {
         OsdKind::Layout => {}
         OsdKind::Power => crate::power::key(app, sym, scan, shift),
         OsdKind::Shot | OsdKind::Record => crate::capture::key(app, kind, sym, scan),
+        OsdKind::Polkit => crate::polkit::key(app, sym, utf8),
     }
 }
 
@@ -362,13 +370,13 @@ pub fn hovered(app: &mut App, kind: OsdKind, action: Option<Action>) {
     match kind {
         OsdKind::Layout => {}
         OsdKind::Power => crate::power::hovered(app, action),
-        OsdKind::Shot | OsdKind::Record => {}
+        OsdKind::Shot | OsdKind::Record | OsdKind::Polkit => {}
     }
 }
 
 pub fn hover_changed(app: &mut App, kind: OsdKind, inside: bool) {
     match kind {
         OsdKind::Layout => crate::layout::osd_hover(app, inside),
-        OsdKind::Power | OsdKind::Shot | OsdKind::Record => {}
+        OsdKind::Power | OsdKind::Shot | OsdKind::Record | OsdKind::Polkit => {}
     }
 }

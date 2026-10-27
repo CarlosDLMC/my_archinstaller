@@ -13,6 +13,7 @@ mod ipc;
 mod layout;
 mod network_card;
 mod osd;
+mod polkit;
 mod power;
 mod pult;
 mod pw;

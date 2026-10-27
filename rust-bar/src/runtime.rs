@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use smithay_client_toolkit::reexports::calloop::{
     generic::Generic,
     timer::{TimeoutAction, Timer},
-    Interest, Mode, PostAction,
+    Interest, Mode, PostAction, RegistrationToken,
 };
 
 use crate::app::{App, ProcDone};
@@ -221,12 +221,19 @@ impl App {
     }
 
     /// Calls `ready` whenever `fd` (owned elsewhere) is readable.
-    pub fn watch_fd(&self, fd: std::os::fd::RawFd, ready: fn(&mut App)) {
+    pub fn watch_fd(&self, fd: std::os::fd::RawFd, ready: fn(&mut App)) -> Option<RegistrationToken> {
         let src = Generic::new(unsafe { smithay_client_toolkit::reexports::calloop::generic::FdWrapper::new(fd) }, Interest::READ, Mode::Level);
-        let _ = self.handle.insert_source(src, move |_, _, app: &mut App| {
-            ready(app);
-            Ok(PostAction::Continue)
-        });
+        self.handle
+            .insert_source(src, move |_, _, app: &mut App| {
+                ready(app);
+                Ok(PostAction::Continue)
+            })
+            .ok()
+    }
+
+    /// Stops watching an fd (before it is closed).
+    pub fn unwatch(&self, token: RegistrationToken) {
+        self.handle.remove(token);
     }
 
     /// Restarts a one-shot timer by name: a debounce (Timer.restart()).

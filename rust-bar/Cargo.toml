@@ -21,6 +21,7 @@ png = "0.17"
 libc = "0.2"
 freetype-sys = "0.23"
 pipewire = "0.9"
+dbus = { version = "0.9", default-features = false }
 
 [profile.release]
 opt-level = 3

@@ -563,27 +563,8 @@ pub fn card_height(fonts: &mut Fonts, svc: &Services, w: f32, screen_h: f32) -> 
     200f32.max((content_height(fonts, svc, w).ceil() + 30.0).min(screen_h * 0.85))
 }
 
-/// Qt's ElideMiddle on a text that does not fit: as many characters from
-/// each end as fit beside the ellipsis.
 fn elide_middle(fonts: &mut Fonts, text: &str, size: f32, bold: bool, max: f32) -> Line {
-    let key = theme::bar_font(bold);
-    let full = fonts.layout(text, key, size, 0.0);
-    if full.width <= max {
-        return full;
-    }
-    let avail = max - fonts.layout("…", key, size, 0.0).width;
-    let chars: Vec<char> = text.chars().collect();
-    let mut keep = 0;
-    for k in 1..=chars.len() / 2 {
-        let left: String = chars[..k].iter().collect();
-        let right: String = chars[chars.len() - k..].iter().collect();
-        if fonts.layout(&left, key, size, 0.0).adv + fonts.layout(&right, key, size, 0.0).adv >= avail {
-            break;
-        }
-        keep = k;
-    }
-    let s: String = chars[..keep].iter().chain(std::iter::once(&'…')).chain(chars[chars.len() - keep..].iter()).collect();
-    fonts.layout(&s, key, size, 0.0)
+    fonts.elide_middle(text, theme::bar_font(bold), size, 0.0, max)
 }
 
 pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {

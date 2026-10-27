@@ -89,7 +89,8 @@ from libQt6Quick, uniforms and textures read back from Qt's GL calls):
 - [x] Layout OSD + LayoutState: MRU `layout next`, the strip label cycles, the switcher shows on every change, hover holds it, click picks
 - [x] Power menu (PowerOsd + PowerState): the character-cell console, hover/arrows/letters by scan code, the five-second launch countdown (sync on ПРОДУВКА, fires at zero), UEFI/Windows keys from login1/efibootmgr; the logo card's keyboard path arms it
 - [x] Screenshot + recording dialogs (ShotOsd/RecordOsd + their states): big keys with hover/held looks, monitor picker (wlr-randr) with double click, the recorder's audio switches saved to ~/.cache/screenrecord_audio, a running recording stops instead; same scripts
-- [ ] Overlays: clipboard, polkit agent
+- [x] Polkit agent + dialog (PolkitState/PolkitOsd and quickshell's PolkitAgent): registers as the session's agent on the system bus (libdbus), queues BeginAuthentication, runs the PAM conversation through polkit 128's helper socket like libpolkit-agent-1, retries after a wrong password, Esc cancels, polkitd's CancelAuthentication honoured. The dialog matches a QML mock at 99.9%; registration is checked; **the conversation and success path are not tested yet** - that needs the live test (never trigger pkexec on the live session for tests)
+- [ ] Overlays: clipboard
 - [ ] Wallpaper carousel + reveal, overview
 - [ ] Switch-over: keybinds, scripts, installer build step
 

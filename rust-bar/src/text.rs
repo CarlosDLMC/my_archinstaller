@@ -757,6 +757,28 @@ impl Fonts {
         out
     }
 
+    /// Qt's ElideMiddle (QTextEngine::elidedText): as many characters from
+    /// each end as fit beside the ellipsis.
+    pub fn elide_middle(&mut self, text: &str, key: FontKey, size: f32, letter_spacing: f32, max: f32) -> Line {
+        let full = self.layout(text, key, size, letter_spacing);
+        if full.width <= max {
+            return full;
+        }
+        let avail = max - self.layout("…", key, size, letter_spacing).width;
+        let chars: Vec<char> = text.chars().collect();
+        let mut keep = 0;
+        for k in 1..=chars.len() / 2 {
+            let left: String = chars[..k].iter().collect();
+            let right: String = chars[chars.len() - k..].iter().collect();
+            if self.layout(&left, key, size, letter_spacing).adv + self.layout(&right, key, size, letter_spacing).adv >= avail {
+                break;
+            }
+            keep = k;
+        }
+        let s: String = chars[..keep].iter().chain(std::iter::once(&'…')).chain(chars[chars.len() - keep..].iter()).collect();
+        self.layout(&s, key, size, letter_spacing)
+    }
+
     /// QFontMetricsF::boundingRect(text).width for one glyph: the hinted ink box.
     pub fn ink_width(&mut self, text: &str, key: FontKey, size: f32) -> f32 {
         let line = self.layout(text, key, size, 0.0);

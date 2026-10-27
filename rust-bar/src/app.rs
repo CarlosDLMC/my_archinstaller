@@ -555,7 +555,7 @@ impl KeyboardHandler for App {
         if let Some(WinRef::Osd(k)) = self.kbd_focus {
             if self.osd(k).is_some() {
                 // Qt's nativeScanCode is the XKB keycode: evdev + 8.
-                crate::osd::key(self, k, event.keysym, event.raw_code + 8, self.shift);
+                crate::osd::key(self, k, event.keysym, event.raw_code + 8, self.shift, event.utf8.as_deref());
                 return;
             }
         }
