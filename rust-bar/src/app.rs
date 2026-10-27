@@ -68,6 +68,8 @@ pub struct Strip {
     pub screen_height: f32,
     pub hits: Vec<Hit>,
     pub pointer: Option<(f32, f32)>,
+    /// Which plain Texts have changed (see TextMemo).
+    pub texts: crate::text::TextMemo,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -193,6 +195,7 @@ impl App {
             screen_height: sh,
             hits: Vec::new(),
             pointer: None,
+            texts: Default::default(),
         });
     }
 
@@ -300,10 +303,12 @@ impl App {
         scene.clear(width as f32, height as f32);
         let animating = match w {
             WinRef::Strip(i) => {
+                let mut memo = std::mem::take(&mut self.strips[i].texts);
                 let s = &self.strips[i];
                 let ctx = bar::Ctx { width: width as f32, screen_width: s.screen_width, name: &s.name, pointer: s.pointer, open: self.card.as_ref().filter(|c| c.strip == i).map(|c| c.kind) };
-                let (hits, animating) = bar::draw(&mut scene, &mut self.fonts, &self.theme, &self.svc, &ctx);
+                let (hits, animating) = bar::draw(&mut scene, &mut self.fonts, &self.theme, &self.svc, &ctx, &mut memo);
                 self.strips[i].hits = hits;
+                self.strips[i].texts = memo;
                 animating
             }
             WinRef::Card => {

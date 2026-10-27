@@ -25,8 +25,18 @@ from libQt6Quick, uniforms and textures read back from Qt's GL calls):
   synthetic embolden, except on fixed-pitch faces (Terminess), where bold looks
   exactly like regular.
 - **Positions**: anchors centre with qRound(half(parent) - half(size)), where
-  an odd integer part rounds a half up; RowLayout snaps sizes up and centres
-  with qRound; horizontalAlignment centres the advances (no overhang).
+  an odd integer part rounds a half up; horizontalAlignment centres the
+  advances (no overhang).
+- **Layouts** snap to the pixel grid (QGridLayoutEngine): an item that cannot
+  shrink has its preferred size, margins included, as a minimum that is
+  rounded *up*, so the strip's cells are whole pixels and the fill item takes
+  the rest; a GridLayout's fill columns get qRound()ed starts with the
+  neighbours absorbing the difference, then qRound()ed sizes.
+- **Subpixel only until a Text changes**: Qt 6.12 rebuilds a Text's node on
+  any change of text, colour or layout, and the distance-field glyph nodes it
+  recycles come back with gray anti-aliasing - so a card's live values, hover
+  colours and anything updated after the card opened are gray, the rest
+  subpixel (`TextMemo`).
 - **Rounded rectangles** are Qt's smooth rectangle node, not a circle SDF:
   each corner is an inscribed polygon of `clamp(ceil(r·π/6), 3, 18)` chords,
   radius capped at `min(w, h)·0.4999` and dropped at ≤ 0.5 px, and the
@@ -68,7 +78,7 @@ from libQt6Quick, uniforms and textures read back from Qt's GL calls):
 - [x] Claude Code card - plan, limit meters with reset times and stale-data note, tokens by day and by model (hover shows the split), the same agent-usage.py modes and refresh cadence
 - [x] Wi-Fi card (networks): link header, scanned networks with signal and lock, rescan timing, password entry (● echo, blinking cursor), connect watchdog, disconnect; the strip icon blinks while connecting
 - [x] Battery card - level, segment gauge with the limit marker, time left / draw, capacity, cycles, health, per-pack rows, charge-limit presets through the same root helper; kernel power_supply uevents (netlink, no `udevadm monitor` process) keep it and the strip fresh
-- [ ] Cards: network details (NetworkPanel, right click)
+- [x] Network details card (Wi-Fi right click, NetworkPanel): radio key, SSID, channel gauge, addresses, traffic and latency every 3 s from network-status.sh, the DNS picker, the speed test (streamed, cancellable) and the share-by-QR view, with the same scripts and nmcli calls
 - [ ] The CRT power-off effect (quickshell/crt, run by CrtOff.sh before logout/reboot/shutdown)
 - [ ] Overlays: layout OSD, clipboard, polkit agent, power menu, screenshot, recording
 - [ ] Wallpaper carousel + reveal, overview

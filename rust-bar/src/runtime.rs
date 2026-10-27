@@ -16,6 +16,21 @@ use smithay_client_toolkit::reexports::calloop::{
 
 use crate::app::{App, ProcDone};
 
+/// A child's pipe for the event loop: the reader and its fd.
+struct Stream(Box<dyn Read>, std::os::fd::RawFd);
+
+impl AsRawFd for Stream {
+    fn as_raw_fd(&self) -> std::os::fd::RawFd {
+        self.1
+    }
+}
+
+impl std::os::fd::AsFd for Stream {
+    fn as_fd(&self) -> std::os::fd::BorrowedFd<'_> {
+        unsafe { std::os::fd::BorrowedFd::borrow_raw(self.1) }
+    }
+}
+
 impl App {
     /// Runs `argv` with its stdout collected; `done` gets it when the process ends.
     /// Children die with the bar (PR_SET_PDEATHSIG), as setpriv --pdeathsig does for the QML bar.
@@ -79,51 +94,96 @@ impl App {
     }
 
     pub fn spawn_lines_tagged(&mut self, tag: &str, argv: &[&str], on_line: fn(&mut App, &str)) {
+        self.spawn_stream(tag, argv, on_line, None, None);
+    }
+
+    /// Process with SplitParsers on stdout (and stderr, if `on_err`) and an
+    /// onExited (`on_exit`, once both streams are closed and it is reaped).
+    pub fn spawn_stream(&mut self, tag: &str, argv: &[&str], on_out: fn(&mut App, &str), on_err: Option<fn(&mut App, &str)>, on_exit: Option<fn(&mut App)>) {
         if self.running.contains_key(tag) {
             return;
         }
         let mut cmd = Command::new(argv[0]);
-        cmd.args(&argv[1..]).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
+        let stderr = if on_err.is_some() { Stdio::piped() } else { Stdio::null() };
+        cmd.args(&argv[1..]).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(stderr);
         unsafe {
             cmd.pre_exec(|| {
                 libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM);
                 Ok(())
             });
         }
-        let Ok(mut child) = cmd.spawn() else { return };
-        let stdout = child.stdout.take().unwrap();
-        let fd = stdout.as_raw_fd();
-        unsafe {
-            let fl = libc::fcntl(fd, libc::F_GETFL);
-            libc::fcntl(fd, libc::F_SETFL, fl | libc::O_NONBLOCK);
-        }
-        self.running.insert(tag.into(), (Instant::now(), child.id()));
-        let tag = tag.to_string();
-        let mut buf = Vec::new();
-        let mut child = Some(child);
-        let _ = self.handle.insert_source(Generic::new(stdout, Interest::READ, Mode::Level), move |_, out, app: &mut App| {
-            let mut chunk = [0u8; 4096];
-            loop {
-                match unsafe { out.get_mut() }.read(&mut chunk) {
-                    Ok(0) => {
-                        if let Some(mut c) = child.take() {
-                            let _ = c.wait();
-                        }
-                        app.running.remove(&tag);
-                        return Ok(PostAction::Remove);
-                    }
-                    Ok(n) => {
-                        buf.extend_from_slice(&chunk[..n]);
-                        while let Some(p) = buf.iter().position(|&b| b == b'\n') {
-                            let line: Vec<u8> = buf.drain(..=p).collect();
-                            on_line(app, String::from_utf8_lossy(&line[..line.len() - 1]).as_ref());
-                        }
-                    }
-                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => return Ok(PostAction::Continue),
-                    Err(_) => return Ok(PostAction::Remove),
-                }
+        let Ok(mut child) = cmd.spawn() else {
+            if let Some(f) = on_exit {
+                f(self);
             }
-        });
+            return;
+        };
+        self.running.insert(tag.into(), (Instant::now(), child.id()));
+        let stdout = child.stdout.take().unwrap();
+        let stderr = child.stderr.take();
+        // The child is reaped when the last open stream closes.
+        let state = std::rc::Rc::new(std::cell::RefCell::new((Some(child), 1 + stderr.is_some() as u8)));
+        let mut streams: Vec<(Box<dyn Read>, std::os::fd::RawFd, fn(&mut App, &str))> = Vec::new();
+        let fd = stdout.as_raw_fd();
+        streams.push((Box::new(stdout), fd, on_out));
+        if let (Some(e), Some(f)) = (stderr, on_err) {
+            let fd = e.as_raw_fd();
+            streams.push((Box::new(e), fd, f));
+        }
+        for (reader, fd, on_line) in streams {
+            unsafe {
+                let fl = libc::fcntl(fd, libc::F_GETFL);
+                libc::fcntl(fd, libc::F_SETFL, fl | libc::O_NONBLOCK);
+            }
+            let tag = tag.to_string();
+            let state = state.clone();
+            let mut buf = Vec::new();
+            let src = Generic::new(Stream(reader, fd), Interest::READ, Mode::Level);
+            let _ = self.handle.insert_source(src, move |_, out, app: &mut App| {
+                let mut chunk = [0u8; 4096];
+                loop {
+                    let r = unsafe { out.get_mut() }.0.read(&mut chunk);
+                    if matches!(&r, Err(e) if e.kind() == std::io::ErrorKind::WouldBlock) {
+                        return Ok(PostAction::Continue);
+                    }
+                    match r {
+                        Ok(0) | Err(_) => {
+                            let last = {
+                                let mut st = state.borrow_mut();
+                                st.1 -= 1;
+                                if st.1 == 0 {
+                                    if let Some(mut c) = st.0.take() {
+                                        let _ = c.wait();
+                                    }
+                                    true
+                                } else {
+                                    false
+                                }
+                            };
+                            if !buf.is_empty() {
+                                let line = String::from_utf8_lossy(&buf).into_owned();
+                                buf.clear();
+                                on_line(app, &line);
+                            }
+                            if last {
+                                app.running.remove(&tag);
+                                if let Some(f) = on_exit {
+                                    f(app);
+                                }
+                            }
+                            return Ok(PostAction::Remove);
+                        }
+                        Ok(n) => {
+                            buf.extend_from_slice(&chunk[..n]);
+                            while let Some(p) = buf.iter().position(|&b| b == b'\n') {
+                                let line: Vec<u8> = buf.drain(..=p).collect();
+                                on_line(app, String::from_utf8_lossy(&line[..line.len() - 1]).as_ref());
+                            }
+                        }
+                    }
+                }
+            });
+        }
     }
 
     /// FileView { watchChanges: true } for a directory: `changed(app, name)`

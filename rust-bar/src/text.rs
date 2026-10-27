@@ -177,6 +177,68 @@ pub struct ColorGlyph {
     pub top: f32,
 }
 
+/// Which plain Texts Qt still draws with subpixel anti-aliasing. Qt 6.12
+/// rebuilds a Text's node whenever its text, colour or layout changes, and
+/// the glyph nodes it recycles for that come back with gray anti-aliasing
+/// (QSGDistanceFieldGlyphNode::recycle). So a Text is subpixel from its first
+/// frame until it first changes, then gray for as long as the item lives. A
+/// text here is a call site plus its occurrence number in the frame.
+#[derive(Default)]
+pub struct TextMemo {
+    seen: HashMap<(u64, u32), (u64, bool)>,
+    sites: HashMap<u64, u32>,
+}
+
+impl TextMemo {
+    pub fn begin_frame(&mut self) {
+        self.sites.clear();
+    }
+
+    /// The style to draw `line` with: Normal turns Gray once this text changed.
+    pub fn style(&mut self, site: u64, line: &Line, color: crate::color::Color, style: crate::gpu::TextStyle) -> crate::gpu::TextStyle {
+        if !matches!(style, crate::gpu::TextStyle::Normal) {
+            return style;
+        }
+        let n = self.sites.entry(site).or_insert(0);
+        let key = (site, *n);
+        *n += 1;
+        self.style_keyed(key, line, color, style)
+    }
+
+    /// The same for a text named by its control (a key's caption, a row's
+    /// label), so texts hidden in some frames do not shift the others.
+    pub fn style_keyed(&mut self, key: (u64, u32), line: &Line, color: crate::color::Color, style: crate::gpu::TextStyle) -> crate::gpu::TextStyle {
+        use std::hash::{Hash, Hasher};
+        if !matches!(style, crate::gpu::TextStyle::Normal) {
+            return style;
+        }
+        // An empty Text has no node; the next text gets a new one.
+        if line.glyphs.is_empty() {
+            self.seen.remove(&key);
+            return style;
+        }
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        for g in &line.glyphs {
+            (g.face, g.gid, g.x.to_bits(), g.bold).hash(&mut h);
+        }
+        (line.size.to_bits(), color.r.to_bits(), color.g.to_bits(), color.b.to_bits(), color.a.to_bits()).hash(&mut h);
+        let sig = h.finish();
+        let e = self.seen.entry(key).or_insert((sig, false));
+        if e.0 != sig {
+            *e = (sig, true);
+        }
+        if e.1 { crate::gpu::TextStyle::Gray } else { style }
+    }
+
+    /// A call site's id, for #[track_caller] callers.
+    pub fn site(loc: &std::panic::Location) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        (loc.file(), loc.line(), loc.column()).hash(&mut h);
+        h.finish()
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct Line {
     pub glyphs: Vec<PlacedGlyph>,

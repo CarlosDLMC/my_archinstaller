@@ -165,6 +165,7 @@ pub struct Services {
     pub dnd_available: bool,
     pub weather: Weather,
     pub battery: crate::battery::Battery,
+    pub net: crate::network_card::NetPanel,
     pub wifi: Wifi,
     pub vpn: String,
     vpn_checked: bool,
@@ -340,6 +341,23 @@ pub(crate) fn glob_dir(dir: &str, prefix: &str) -> Vec<String> {
         .unwrap_or_default();
     v.sort();
     v
+}
+
+/// Number.prototype.toFixed(digits): the nearest multiple of 10^-digits to
+/// the exact value, an exact tie going up (Rust's formatter picks the even one).
+pub fn to_fixed(v: f64, digits: i32) -> String {
+    let scale = 10f64.powi(digits);
+    let s = v * scale;
+    let d = digits.max(0) as usize;
+    if v.mul_add(scale, -s) == 0.0 && (s - s.floor()) == 0.5 {
+        return format!("{:.*}", d, (s + 0.5).floor() / scale);
+    }
+    format!("{v:.d$}")
+}
+
+/// A JS number as String() prints it (shortest round trip; whole numbers bare).
+pub fn js_num(v: f64) -> String {
+    if v.fract() == 0.0 && v.abs() < 1e21 { format!("{}", v as i64) } else { format!("{v}") }
 }
 
 /// `[ -x path ]`.

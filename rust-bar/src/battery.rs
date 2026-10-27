@@ -7,7 +7,7 @@ use crate::bar::ac;
 use crate::cards::{lamp, lamp_tinted, plate, Ui};
 use crate::color::Color;
 use crate::gpu::TextStyle;
-use crate::services::{glob_dir, Services};
+use crate::services::{glob_dir, js_num, to_fixed, Services};
 use crate::text::{Fonts, Line};
 use crate::theme::{self, FONT_SIZE};
 
@@ -73,21 +73,6 @@ impl Battery {
 /// Math.round: halves go up.
 fn js_round(v: f64) -> f64 {
     (v + 0.5).floor()
-}
-
-/// Number.prototype.toFixed(1): the nearest tenth of the exact value, an
-/// exact tie going up (Rust's formatter would pick the even one).
-pub fn to_fixed1(v: f64) -> String {
-    let s = v * 10.0;
-    if v.mul_add(10.0, -s) == 0.0 && (s - s.floor()) == 0.5 {
-        return format!("{:.1}", (s + 0.5).floor() / 10.0);
-    }
-    format!("{v:.1}")
-}
-
-/// A JS number as String() prints it (the counts here are whole).
-fn js_num(v: f64) -> String {
-    if v.fract() == 0.0 { format!("{}", v as i64) } else { format!("{v}") }
 }
 
 fn read_kv(path: &str) -> Vec<(String, String)> {
@@ -341,7 +326,7 @@ fn fmt_wh(micro_wh: f64) -> String {
     if !(micro_wh > 0.0) {
         return "—".into();
     }
-    format!("{} Вт·ч", to_fixed1(micro_wh / 1e6))
+    format!("{} Вт·ч", to_fixed(micro_wh / 1e6, 1))
 }
 
 fn state_label(b: &Battery) -> String {
@@ -398,10 +383,6 @@ enum Block {
     Warn(Vec<Line>),
 }
 
-fn caption(fonts: &mut Fonts, text: &str) -> Line {
-    fonts.layout(text, theme::bar_font(true), FONT_SIZE - 5.0, 1.0)
-}
-
 fn level_plate_h(fonts: &mut Fonts, b: &Battery) -> f32 {
     let readout = fonts.layout("0%", theme::bar_font(true), FONT_SIZE + 6.0, 0.0).height();
     let mut h = readout + 6.0 + 12.0;
@@ -411,17 +392,11 @@ fn level_plate_h(fonts: &mut Fonts, b: &Battery) -> f32 {
     h + 20.0
 }
 
-fn grid_row_h(fonts: &mut Fonts) -> f32 {
-    let l = fonts.layout("Ё", theme::bar_font(false), LABEL - 1.0, 1.0).height();
-    let v = fonts.layout("0", theme::bar_font(true), LABEL, 0.0).height();
-    l.max(v)
-}
-
 const PACK_ROW: f32 = 32.0; // Math.round(labelSize * 1.5)
 
 fn blocks(fonts: &mut Fonts, b: &Battery, w: f32) -> Vec<(Block, f32)> {
     let mut out = vec![(Block::Level, level_plate_h(fonts, b))];
-    out.push((Block::Info, 2.0 * grid_row_h(fonts) + 4.0 + 20.0));
+    out.push((Block::Info, crate::cards::info_grid_height(fonts, 2) + 20.0));
     if b.packs.len() > 1 {
         let n = b.packs.len() as f32;
         out.push((Block::Packs, n * PACK_ROW + (n - 1.0) * 6.0 + 20.0));
@@ -475,7 +450,7 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
                 // ЗАРЯД, the level, and the mains lamp with the state on the right.
                 let readout = ui.fonts.layout(&format!("{}%", b.level), theme::bar_font(true), FONT_SIZE + 6.0, 0.0);
                 let rh = readout.height();
-                let cap = caption(ui.fonts, "ЗАРЯД");
+                let cap = crate::cards::caption(ui.fonts, "ЗАРЯД");
                 ui.text(&cap, ix, cy + ac(rh, cap.height()), t.col_dim, TextStyle::Normal);
                 let level_col = if b.low() { t.col_alert } else { t.col_white };
                 ui.text(&readout, ix + cap.width + 10.0, cy + ac(rh, readout.height()), level_col, TextStyle::Normal);
@@ -486,13 +461,13 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
                 lamp(ui, 0x7000, row_x, row_y + ac(row_h, 10.0), b.on_ac);
                 ui.text(&state, row_x + 18.0, row_y + ac(row_h, state.height()), t.col_grey, TextStyle::Normal);
                 cy += rh + 6.0;
-                gauge(ui, ix, cy, iw, b.level as f32, b.effective_limit() as f32, if b.low() { t.col_alert } else { t.col_accent });
+                crate::cards::gauge(ui, ix, cy, iw, b.level as f32, b.effective_limit() as f32, if b.low() { t.col_alert } else { t.col_accent });
                 cy += 12.0;
                 if time_visible(b) {
                     cy += 6.0;
                     let key = theme::bar_font(false);
                     let left = format!("{}{}", if b.charging() { "ДО ПОЛНОЙ  " } else { "ОСТАЛОСЬ  " }, fmt_duration(b.seconds_left));
-                    let watts = if b.draw_watts > 0.2 { format!("{} Вт", to_fixed1(b.draw_watts)) } else { "—".into() };
+                    let watts = if b.draw_watts > 0.2 { format!("{} Вт", to_fixed(b.draw_watts, 1)) } else { "—".into() };
                     let right = format!("{}{}", if b.charging() { "ЗАРЯДКА  " } else { "РАСХОД  " }, watts);
                     let l = ui.fonts.layout(&left, key, LABEL - 2.0, 0.0);
                     let r = ui.fonts.layout(&right, key, LABEL - 2.0, 0.0);
@@ -513,7 +488,7 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
                 }
             }
             Block::Limit => {
-                let cap = caption(ui.fonts, "ПРЕДЕЛ ЗАРЯДА");
+                let cap = crate::cards::caption(ui.fonts, "ПРЕДЕЛ ЗАРЯДА");
                 ui.text(&cap, x0, y + ac(h, cap.height()), t.col_dim, TextStyle::Normal);
                 let font = FONT_SIZE - 4.0;
                 let widths: Vec<f32> = PRESETS.iter().map(|p| ui.console_button_width(font, "", p.1, 58.0)).collect();
@@ -544,57 +519,15 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
     }
 }
 
-/// SegmentGauge: 28 cells, 2 px apart, the lit ones fading over 200 ms;
-/// a white 2 px marker at the charge limit.
-fn gauge(ui: &mut Ui, x: f32, y: f32, w: f32, value: f32, marker: f32, tint: Color) {
-    const SEGMENTS: u32 = 28;
-    let lit = js_round((value.clamp(0.0, 100.0) / 100.0 * SEGMENTS as f32) as f64) as u32;
-    let cell = (w - 2.0 * (SEGMENTS - 1) as f32) / SEGMENTS as f32;
-    for i in 0..SEGMENTS {
-        let target = if i < lit { tint } else { Color::qt_rgba(1.0, 1.0, 1.0, 0.07) };
-        let (c, run) = ui.card.color(0x6_0000 + i, target, 200, ui.now);
-        ui.animating |= run;
-        ui.scene.rect(x + i as f32 * (cell + 2.0), y, cell, 12.0, c, 1.0, 0.0, Color::TRANSPARENT, true);
-    }
-    if marker > 0.0 && marker < 100.0 {
-        let mx = (w * marker / 100.0).round() - 1.0;
-        ui.scene.fill(x + mx, y + ac(12.0, 20.0), 2.0, 20.0, ui.theme.col_white);
-    }
-}
-
-/// InfoGrid: four columns (label, value, label, value), the values sharing
-/// what the labels leave, right-aligned and elided.
+/// The info plate's grid: capacity, cycles, health, energy.
 fn info_grid(ui: &mut Ui, x: f32, y: f32, w: f32, b: &Battery) {
     let t = ui.theme;
     let health = b.health();
-    let cells: [[(&str, String, Color); 2]; 2] = [
-        [("ЁМКОСТЬ", fmt_wh(b.energy_full), t.col_white), ("ЦИКЛЫ", if b.cycles > 0.0 { js_num(b.cycles) } else { "—".into() }, t.col_white)],
-        [("РЕСУРС", if health > 0 { format!("{health}%") } else { "—".into() }, health_color(health, t)), ("ЗАПАС", fmt_wh(b.energy_now), t.col_white)],
+    let rows = [
+        vec![("ЁМКОСТЬ", fmt_wh(b.energy_full), t.col_white), ("ЦИКЛЫ", if b.cycles > 0.0 { js_num(b.cycles) } else { "—".into() }, t.col_white)],
+        vec![("РЕСУРС", if health > 0 { format!("{health}%") } else { "—".into() }, health_color(health, t)), ("ЗАПАС", fmt_wh(b.energy_now), t.col_white)],
     ];
-    let lkey = theme::bar_font(false);
-    let vkey = theme::bar_font(true);
-    let mut label_w = [0f32; 2];
-    for row in &cells {
-        for (c, cell) in row.iter().enumerate() {
-            label_w[c] = label_w[c].max(ui.fonts.layout(cell.0, lkey, LABEL - 1.0, 1.0).width.ceil());
-        }
-    }
-    let value_w = ((w - 3.0 * 14.0 - label_w[0] - label_w[1]) / 2.0).max(0.0);
-    let row_h = grid_row_h(ui.fonts);
-    let mut ry = y;
-    for row in &cells {
-        let mut cx = x;
-        for (c, (label, value, vc)) in row.iter().enumerate() {
-            let l = ui.fonts.layout(label, lkey, LABEL - 1.0, 1.0);
-            ui.text(&l, cx, ry + ac(row_h, l.height()), t.col_dim, TextStyle::Normal);
-            cx += label_w[c] + 14.0;
-            let full = ui.fonts.layout(value, vkey, LABEL, 0.0);
-            let v = ui.fonts.elide_right(&full, value, vkey, value_w, 0.0);
-            ui.text(&v, cx + value_w - v.adv, ry + ac(row_h, v.height()), *vc, TextStyle::Normal);
-            cx += value_w + 14.0;
-        }
-        ry += row_h + 4.0;
-    }
+    crate::cards::info_grid(ui, x, y, w, &rows);
 }
 
 /// One pack: lamp, name, model (elided), capacity · health · cycles.

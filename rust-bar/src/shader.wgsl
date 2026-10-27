@@ -13,7 +13,9 @@
 // q is folded into one quadrant, relative to the corner's centre.
 fn qt_alpha(q: vec2<f32>, r: f32, segments: f32, px: f32) -> f32 {
     var s = max(q.x, q.y) - r;
-    if (r > 0.0 && q.x > 0.0 && q.y > 0.0) {
+    // The shift reaches the chords from just past the arc's ends too; deeper
+    // inside an edge they never beat the edge itself.
+    if (r > 0.0 && q.x > -2.0 * px && q.y > -2.0 * px) {
         let step = 1.5707964 / segments;
         let c = r * cos(step * 0.5);
         for (var k = 0.0; k < segments; k += 1.0) {

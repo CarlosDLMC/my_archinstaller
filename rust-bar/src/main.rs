@@ -9,6 +9,7 @@ mod cards;
 mod color;
 mod gpu;
 mod ipc;
+mod network_card;
 mod pult;
 mod pw;
 mod runtime;

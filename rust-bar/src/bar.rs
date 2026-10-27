@@ -103,6 +103,7 @@ struct Painter<'a> {
     ui: f32,
     pointer: Option<(f32, f32)>,
     open: Option<crate::cards::CardKind>,
+    memo: &'a mut crate::text::TextMemo,
 }
 
 impl Painter<'_> {
@@ -190,14 +191,15 @@ fn layout_label(raw: &str) -> String {
 }
 
 /// Draws the strip; returns its click areas and whether it is animating.
-pub fn draw(scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, svc: &Services, ctx: &Ctx) -> (Vec<Hit>, bool) {
+pub fn draw(scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, svc: &Services, ctx: &Ctx, memo: &mut crate::text::TextMemo) -> (Vec<Hit>, bool) {
+    memo.begin_frame();
     let ui = ui_scale(ctx.screen_width);
     let dw = ctx.width / ui;
     // PanelWindow.color: the wash under the compositor blur.
     scene.fill(0.0, 0.0, ctx.width, (DESIGN_HEIGHT * ui).round(), theme.col_bg_wash);
     scene.save();
     scene.scale(ui, ui);
-    let mut p = Painter { now: std::time::Instant::now(), animating: false, scene, fonts, theme, hits: Vec::new(), ui, pointer: ctx.pointer, open: ctx.open };
+    let mut p = Painter { now: std::time::Instant::now(), animating: false, scene, fonts, theme, hits: Vec::new(), ui, pointer: ctx.pointer, open: ctx.open, memo };
 
     // shell.qml's order; a hidden widget takes its separator with it.
     let mut slots = vec![Slot::Pad(12.0), Slot::Logo, Slot::Workspaces, Slot::Sep, Slot::Title, Slot::Center];
@@ -239,18 +241,24 @@ pub fn draw(scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, svc: &Services,
         }
     };
     let widths: Vec<f32> = slots.iter().map(|s| width_of(&mut p, s)).collect();
-    let fixed: f32 = widths.iter().sum();
+    // RowLayout on the pixel grid: an item that cannot shrink has its
+    // preferred size (margins included) as its minimum, and the minimum is
+    // rounded up - so every fixed cell is whole pixels and the items start
+    // on whole pixels; the centre takes what is left.
+    let cells: Vec<f32> = widths.iter().map(|w| w.ceil()).collect();
+    let fixed: f32 = cells.iter().sum();
     let center_w = (dw - fixed).max(0.0);
 
     let mut x = 0.0f32;
-    for (s, w) in slots.iter().zip(widths.iter()) {
+    for (s, cell) in slots.iter().zip(cells.iter()) {
         match s {
             Slot::Pad(_) => {}
             Slot::Logo => {
                 let item_w = logo_line.width + 16.0;
                 let tx = ac(item_w, logo_line.width);
                 let ty = ac(DESIGN_HEIGHT, logo_line.height());
-                p.scene.text(p.fonts, &logo_line, x + tx, ty + logo_line.ascent, theme.col_logo, TextStyle::Normal);
+                let st = p.memo.style(1, &logo_line, theme.col_logo, TextStyle::Normal);
+                p.scene.text(p.fonts, &logo_line, x + tx, ty + logo_line.ascent, theme.col_logo, st);
                 p.hit(x, 0.0, item_w, DESIGN_HEIGHT, Action::Logo);
             }
             Slot::Workspaces => {
@@ -331,7 +339,7 @@ pub fn draw(scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, svc: &Services,
                 p.hit(x, 0.0, w, DESIGN_HEIGHT, Action::Vpn);
             }
         }
-        x += if matches!(s, Slot::Center) { center_w } else { *w };
+        x += if matches!(s, Slot::Center) { center_w } else { *cell };
     }
     let hits = std::mem::take(&mut p.hits);
     let animating = p.animating;
@@ -521,7 +529,8 @@ fn draw_center(p: &mut Painter, svc: &Services, x0: f32, width: f32, design_widt
     let sep_x = center_x.min(max_x.max(0.0));
     let has_weather = !svc.weather.text.is_empty();
     if has_weather {
-        p.scene.text(p.fonts, &sep, x0 + sep_x, ac(DESIGN_HEIGHT, sep.height()) + sep.ascent, theme.col_separator, TextStyle::Normal);
+        let st = p.memo.style(2, &sep, theme.col_separator, TextStyle::Normal);
+        p.scene.text(p.fonts, &sep, x0 + sep_x, ac(DESIGN_HEIGHT, sep.height()) + sep.ascent, theme.col_separator, st);
     }
 
     // leftContent: Row { bell, weather pill }, its right edge 8 left of the "|".
@@ -641,11 +650,16 @@ pub fn activate(app: &mut App, strip: usize, action: Action, button: u32) {
         }
         // AgentWidget.onOtherClicked: the middle button forces a full probe.
         Action::Agent if button == 0x112 => crate::agent::run(app, "full"),
-        // WifiWidget: left click lists the networks (right click: the details
-        // card, NetworkPanel - not ported yet, so the list for now).
-        Action::Wifi if button == BTN_LEFT || button == BTN_RIGHT => {
+        // WifiWidget: left click lists the networks (or closes either view),
+        // right click the details card (NetworkPanel).
+        Action::Wifi if button == BTN_LEFT => {
             if let Some(h) = hit {
                 crate::cards::toggle(app, strip, crate::cards::CardKind::Wifi, &h, false);
+            }
+        }
+        Action::Wifi if button == BTN_RIGHT => {
+            if let Some(h) = hit {
+                crate::cards::wifi_details(app, strip, &h);
             }
         }
         Action::Battery if button == BTN_LEFT => {

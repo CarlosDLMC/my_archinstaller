@@ -41,6 +41,7 @@ pub enum CardKind {
     Agent,
     Wifi,
     Battery,
+    Network,
 }
 
 /// A fixed origin for animations that run on the clock (Spinner).
@@ -99,6 +100,8 @@ pub struct OpenCard {
     /// The card's x on screen is fractional in QML (the icon centre is); the
     /// surface sits at the whole pixel and the content is drawn this far in.
     frac: f32,
+    /// Which of the card's Texts have changed since it opened.
+    pub texts: crate::text::TextMemo,
 }
 
 impl OpenCard {
@@ -147,16 +150,61 @@ fn geometry(kind: CardKind) -> (f32, f32, Stem) {
         CardKind::Wifi => (300.0, 0.0, Stem::Center),
         // BatteryWidget: 440 wide, max(200, min(content + 30, 620)).
         CardKind::Battery => (440.0, 0.0, Stem::Center),
+        // WifiWidget's details view (NetworkPanel): 520 wide, max(200,
+        // min(content + 30, 85% of the screen)).
+        CardKind::Network => (520.0, 0.0, Stem::Center),
     }
 }
 
+/// The widget a card belongs to: the Wi-Fi widget's two views are one.
+fn widget(kind: CardKind) -> CardKind {
+    if kind == CardKind::Network { CardKind::Wifi } else { kind }
+}
+
 pub fn toggle(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool) {
-    let was = app.card.as_ref().map(|c| (c.kind, c.strip));
+    let was = app.card.as_ref().map(|c| (widget(c.kind), c.strip));
     close(app);
-    if was == Some((kind, strip)) {
+    if was == Some((widget(kind), strip)) {
         return;
     }
     open(app, strip, kind, icon, keyboard);
+}
+
+/// WifiWidget.onOtherClicked (right click): the details view closes itself,
+/// the networks view turns into it in place, otherwise it opens.
+pub fn wifi_details(app: &mut App, strip: usize, icon: &Hit) {
+    match app.card.as_ref().map(|c| (c.kind, c.strip)) {
+        Some((CardKind::Network, s)) if s == strip => close(app),
+        Some((CardKind::Wifi, s)) if s == strip => {
+            let w = geometry(CardKind::Network).0;
+            let screen_h = app.strips.get(strip).map_or(1440.0, |s| s.screen_height);
+            let card = app.card.as_mut().unwrap();
+            card.kind = CardKind::Network;
+            card.focus = None;
+            card.scroll = 0.0;
+            card.hits.clear();
+            card.colors.clear();
+            card.numbers.clear();
+            card.texts = Default::default();
+            crate::network_card::opened(app);
+            let h = crate::network_card::card_height(&mut app.fonts, &app.svc, w, screen_h);
+            let screen_w = app.strips.get(strip).map_or(2560.0, |s| s.screen_width);
+            let card = app.card.as_mut().unwrap();
+            let x = (card.icon_center - w / 2.0).min(screen_w - w).max(0.0).round();
+            card.width = w;
+            card.stem_cx = w / 2.0;
+            card.height = h;
+            card.win.width = w as u32;
+            card.win.layer.set_margin(card.top as i32, 0, 0, x as i32);
+            card.win.layer.set_size(w as u32, h as u32);
+            card.win.layer.commit();
+            card.win.dirty = true;
+        }
+        _ => {
+            close(app);
+            open(app, strip, CardKind::Network, icon, false);
+        }
+    }
 }
 
 fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool) {
@@ -167,6 +215,11 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         h = crate::wifi_card::card_height(&mut app.fonts, &app.svc);
     }
     let mut content_h = 0.0;
+    if kind == CardKind::Network {
+        let screen_h = app.strips[strip].screen_height;
+        content_h = crate::network_card::content_height(&mut app.fonts, &app.svc, w);
+        h = crate::network_card::card_height(&mut app.fonts, &app.svc, w, screen_h);
+    }
     if kind == CardKind::Battery {
         crate::battery::opened(app);
         content_h = crate::battery::content_height(&mut app.fonts, &app.svc, w);
@@ -273,6 +326,7 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         scroll: 0.0,
         content_h,
         frac,
+        texts: Default::default(),
         notch_stale: false,
         icon_center,
         top: y.round(),
@@ -287,11 +341,19 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
     if kind == CardKind::Agent {
         crate::agent::opened(app);
     }
+    if kind == CardKind::Network {
+        crate::network_card::opened(app);
+        // The first status may change the height; the card follows.
+        update_height(app);
+    }
 }
 
 pub fn close(app: &mut App) {
     if app.card.as_ref().map(|c| c.kind) == Some(CardKind::Pult) {
         crate::pult::closed(app);
+    }
+    if app.card.as_ref().map(|c| c.kind) == Some(CardKind::Network) {
+        crate::network_card::closed(app);
     }
     let Some(card) = app.card.take() else { return };
     if card.kind == CardKind::Audio {
@@ -345,6 +407,15 @@ pub fn update_height(app: &mut App) {
                 c.content_h = content;
             }
             160f32.max((content.ceil() + 30.0).min(screen_h * 0.85))
+        }
+        CardKind::Network => {
+            let w = app.card.as_ref().unwrap().width;
+            let screen_h = app.strips.get(app.card.as_ref().unwrap().strip).map_or(1440.0, |s| s.screen_height);
+            let content = crate::network_card::content_height(&mut app.fonts, &app.svc, w);
+            if let Some(c) = app.card.as_mut() {
+                c.content_h = content;
+            }
+            crate::network_card::card_height(&mut app.fonts, &app.svc, w, screen_h)
         }
         CardKind::Battery => {
             let w = app.card.as_ref().unwrap().width;
@@ -494,7 +565,18 @@ impl Ui<'_> {
         self.card.focus == Some(i)
     }
 
+    /// A Text at (x, y): subpixel until it changes while the card is open
+    /// (TextMemo), as Qt draws it.
+    #[track_caller]
     pub fn text(&mut self, line: &Line, x: f32, y: f32, color: Color, style: TextStyle) {
+        let site = crate::text::TextMemo::site(std::panic::Location::caller());
+        let style = self.card.texts.style(site, line, color, style);
+        self.scene.text(self.fonts, line, x, y + line.ascent, color, style);
+    }
+
+    /// A control's own Text (`part` of control `id`).
+    pub fn text_of(&mut self, id: u32, part: u64, line: &Line, x: f32, y: f32, color: Color) {
+        let style = self.card.texts.style_keyed((part, id), line, color, TextStyle::Normal);
         self.scene.text(self.fonts, line, x, y + line.ascent, color, style);
     }
 
@@ -576,12 +658,12 @@ impl Ui<'_> {
             let ic = if current { t.col_bg } else if hot { t.col_white } else { icon_color };
             let ix = rx + ac(icon_box, icon_line.width);
             let iy = ry + ac(row_h, icon_box) + ac(icon_box, icon_line.height());
-            self.text(&icon_line, ix, iy, ic, TextStyle::Normal);
+            self.text_of(id, 0xB1, &icon_line, ix, iy, ic);
         }
         if !label.is_empty() {
             let cx = if icon.is_empty() { rx } else { rx + icon_box + 6.0 };
             let cy = ry + ac(row_h, cap.height());
-            self.text(&cap, cx, cy, if current { t.col_bg } else { t.col_grey }, TextStyle::Normal);
+            self.text_of(id, 0xB2, &cap, cx, cy, if current { t.col_bg } else { t.col_grey });
         }
         if enabled {
             self.hits.push(Hit { x, y, w, h, action: Action::Card(id) });
@@ -618,6 +700,7 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
     let pointer = card.pointer;
     card.pointer = pointer.map(|(px, py)| (px - frac, py));
 
+    card.texts.begin_frame();
     let mut ui = Ui { card, scene, fonts, theme, now: Instant::now(), animating: false, hits: Vec::new(), focus_codes: Vec::new() };
     // The Loader's margins: top stemHeight + 8, 8 around.
     let (cx, cy, cw) = (8.0, STEM_H + 8.0, w - 16.0);
@@ -635,7 +718,7 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
                 y += 42.0 + 6.0;
             }
         }
-        CardKind::Calendar | CardKind::Weather | CardKind::Audio | CardKind::Pult | CardKind::Vpn | CardKind::Agent | CardKind::Wifi | CardKind::Battery => {}
+        CardKind::Calendar | CardKind::Weather | CardKind::Audio | CardKind::Pult | CardKind::Vpn | CardKind::Agent | CardKind::Wifi | CardKind::Battery | CardKind::Network => {}
     }
     if ui.card.kind == CardKind::Calendar {
         draw_calendar(&mut ui, w);
@@ -654,6 +737,13 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
         ui.scene.save();
         ui.scene.clip_rect(8.0, STEM_H + 8.0, w - 16.0, h - 28.0);
         crate::agent::draw(&mut ui, w, svc, svc.agent_busy, STEM_H + 8.0 - scroll);
+        ui.scene.restore();
+    }
+    if ui.card.kind == CardKind::Network {
+        let scroll = ui.card.scroll;
+        ui.scene.save();
+        ui.scene.clip_rect(8.0, STEM_H + 8.0, w - 16.0, h - 28.0);
+        crate::network_card::draw(&mut ui, w, svc, STEM_H + 8.0 - scroll);
         ui.scene.restore();
     }
     if ui.card.kind == CardKind::Battery {
@@ -739,7 +829,7 @@ fn console_row_inner(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32, ico
     let fg = if lit || hot { t.col_white } else { t.col_grey };
     if !icon.is_empty() {
         let il = ui.fonts.layout(icon, theme::bar_font(false), font, 0.0);
-        ui.text(&il, cx + (font + 2.0 - il.adv) / 2.0, y + qround((h - il.height()) / 2.0), fg, TextStyle::Normal);
+        ui.text_of(code, 0xC1, &il, cx + (font + 2.0 - il.adv) / 2.0, y + qround((h - il.height()) / 2.0), fg);
         cx += font + 2.0 + 8.0;
     }
     let mut right = x + w - 6.0;
@@ -748,14 +838,14 @@ fn console_row_inner(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32, ico
         Some((tr, None)) => {
             let tl = ui.fonts.layout(tr, theme::FontKey { family: "Fira Code:medium", bold: false }, FONT_SIZE + 2.0, 0.0);
             right -= tl.width;
-            ui.text(&tl, right, y + qround((h - tl.height()) / 2.0), t.col_white, TextStyle::Normal);
+            ui.text_of(code, 0xC2, &tl, right, y + qround((h - tl.height()) / 2.0), t.col_white);
             right -= 8.0;
         }
         // The Wi-Fi lock: Terminess at fontSize - 4.
         Some((tr, Some(col))) => {
             let tl = ui.fonts.layout(tr, theme::bar_font(false), FONT_SIZE - 4.0, 0.0);
             right -= tl.width;
-            ui.text(&tl, right, y + qround((h - tl.height()) / 2.0), col, TextStyle::Normal);
+            ui.text_of(code, 0xC2, &tl, right, y + qround((h - tl.height()) / 2.0), col);
             right -= 8.0;
         }
         None => {}
@@ -763,13 +853,13 @@ fn console_row_inner(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32, ico
     if let Some((d, dc)) = detail.filter(|d| !d.0.is_empty()) {
         let dl = ui.fonts.layout(d, theme::bar_font(false), font - 2.0, 0.0);
         right -= dl.width;
-        ui.text(&dl, right, y + qround((h - dl.height()) / 2.0), dc, TextStyle::Normal);
+        ui.text_of(code, 0xC3, &dl, right, y + qround((h - dl.height()) / 2.0), dc);
         right -= 8.0;
     }
     let key = theme::bar_font(lit);
     let full = ui.fonts.layout(label, key, font, 0.0);
     let line = ui.fonts.elide_right(&full, label, key, right - cx, 0.0);
-    ui.text(&line, cx, y + qround((h - line.height()) / 2.0), fg, TextStyle::Normal);
+    ui.text_of(code, 0xC4, &line, cx, y + qround((h - line.height()) / 2.0), fg);
     if interactive {
         ui.hits.push(Hit { x, y, w, h, action: Action::Card(code) });
     }
@@ -777,6 +867,103 @@ fn console_row_inner(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32, ico
 
 fn qround(v: f32) -> f32 {
     (v + 0.5).floor()
+}
+
+/// ConsoleCaption: bold, fontSize - 5, letterSpacing 1.
+pub(crate) fn caption(fonts: &mut Fonts, text: &str) -> crate::text::Line {
+    fonts.layout(text, theme::bar_font(true), FONT_SIZE - 5.0, 1.0)
+}
+
+/// SegmentGauge: 28 cells, 2 px apart, the lit ones fading over 200 ms;
+/// a white 2 px marker (when 0 < marker < 100).
+pub(crate) fn gauge(ui: &mut Ui, x: f32, y: f32, w: f32, value: f32, marker: f32, tint: Color) {
+    const SEGMENTS: u32 = 28;
+    let lit = ((value.clamp(0.0, 100.0) / 100.0 * SEGMENTS as f32) + 0.5).floor() as u32;
+    let cell = (w - 2.0 * (SEGMENTS - 1) as f32) / SEGMENTS as f32;
+    for i in 0..SEGMENTS {
+        let target = if i < lit { tint } else { Color::qt_rgba(1.0, 1.0, 1.0, 0.07) };
+        let (c, run) = ui.card.color(0x6_0000 + i, target, 200, ui.now);
+        ui.animating |= run;
+        ui.scene.rect(x + i as f32 * (cell + 2.0), y, cell, 12.0, c, 1.0, 0.0, Color::TRANSPARENT, true);
+    }
+    if marker > 0.0 && marker < 100.0 {
+        let mx = (w * marker / 100.0).round() - 1.0;
+        ui.scene.fill(x + mx, y + ac(12.0, 20.0), 2.0, 20.0, ui.theme.col_white);
+    }
+}
+
+/// An InfoGrid label/value pair: GLabel text, GValue text and colour.
+pub(crate) type GridPair<'a> = (&'a str, String, Color);
+
+const GRID_LABEL: f32 = FONT_SIZE - 4.0;
+const GRID_VALUE: f32 = FONT_SIZE - 3.0;
+
+fn grid_row_h(fonts: &mut Fonts) -> f32 {
+    let l = fonts.layout("Ё", theme::bar_font(false), GRID_LABEL, 1.0).height();
+    let v = fonts.layout("0", theme::bar_font(true), GRID_VALUE, 0.0).height();
+    l.max(v)
+}
+
+pub(crate) fn info_grid_height(fonts: &mut Fonts, rows: usize) -> f32 {
+    rows as f32 * grid_row_h(fonts) + rows.saturating_sub(1) as f32 * 4.0
+}
+
+/// InfoGrid: four columns (label, value, label, value), spacing 14 x 4; the
+/// values (preferredWidth 0, fillWidth) share what the labels leave and are
+/// right-aligned, elided. A row of one pair spans its value over the rest.
+pub(crate) fn info_grid(ui: &mut Ui, x: f32, y: f32, w: f32, rows: &[Vec<GridPair>]) {
+    let t = ui.theme;
+    let lkey = theme::bar_font(false);
+    let vkey = theme::bar_font(true);
+    let mut label_w = [0f32; 2];
+    for row in rows {
+        for (c, cell) in row.iter().enumerate().take(2) {
+            label_w[c] = label_w[c].max(ui.fonts.layout(cell.0, lkey, GRID_LABEL, 1.0).width.ceil());
+        }
+    }
+    let value_w = ((w - 3.0 * 14.0 - label_w[0] - label_w[1]) / 2.0).max(0.0);
+    let (cx, cw) = snap_columns([label_w[0], value_w, label_w[1], value_w], 14.0, w, [label_w[0], 0.0, label_w[1], 0.0]);
+    let row_h = grid_row_h(ui.fonts);
+    let mut ry = y;
+    for row in rows {
+        for (c, (label, value, vc)) in row.iter().enumerate().take(2) {
+            let l = ui.fonts.layout(label, lkey, GRID_LABEL, 1.0);
+            ui.text(&l, x + cx[2 * c], ry + ac(row_h, l.height()), t.col_dim, TextStyle::Normal);
+            // A lone pair's value spans columns 1-3.
+            let (vx, vw) = if row.len() == 1 { (cx[1], cx[3] + cw[3] - cx[1]) } else { (cx[2 * c + 1], cw[2 * c + 1]) };
+            let full = ui.fonts.layout(value, vkey, GRID_VALUE, 0.0);
+            let v = ui.fonts.elide_right(&full, value, vkey, vw, 0.0);
+            ui.text(&v, x + vx + vw - v.adv, ry + ac(row_h, v.height()), *vc, TextStyle::Normal);
+        }
+        ry += row_h + 4.0;
+    }
+}
+
+/// QGridLayoutRowData::calculateGeometries with snapToPixelGrid: each cell's
+/// start is qRound()ed, its neighbours absorb the difference, the last one
+/// ends at the layout's edge, then every size is qRound()ed (not below its
+/// minimum).
+fn snap_columns<const N: usize>(sizes: [f32; N], spacing: f32, target: f32, minimum: [f32; N]) -> ([f32; N], [f32; N]) {
+    let mut pos = [0f32; N];
+    let mut size = sizes;
+    for i in 1..N {
+        pos[i] = pos[i - 1] + size[i - 1] + spacing;
+    }
+    let qround = |v: f32| (v + 0.5).floor();
+    for i in 0..N {
+        let old = pos[i];
+        pos[i] = qround(old);
+        let delta = pos[i] - old;
+        size[i] -= delta;
+        if i > 0 {
+            size[i - 1] += delta;
+        }
+    }
+    size[N - 1] = target - pos[N - 1];
+    for i in 0..N {
+        size[i] = minimum[i].max(qround(size[i]));
+    }
+    (pos, size)
 }
 
 pub(crate) fn plate(ui: &mut Ui, x: f32, y: f32, w: f32, h: f32) {
@@ -1017,7 +1204,7 @@ fn calendar_step(app: &mut App, delta: i32) {
 /// A wheel turn over the card (QML angleDelta: +120 per notch away from you).
 pub fn wheel(app: &mut App, angle_delta_y: f32) {
     let Some(c) = app.card.as_mut() else { return };
-    if c.kind == CardKind::Agent || c.kind == CardKind::Battery {
+    if c.kind == CardKind::Agent || c.kind == CardKind::Battery || c.kind == CardKind::Network {
         let view = c.height - 28.0;
         let max = (c.content_h - view).max(0.0);
         c.scroll = (c.scroll - angle_delta_y / 120.0 * 3.0 * 20.0).clamp(0.0, max);
@@ -1098,6 +1285,7 @@ pub fn activate(app: &mut App, action: Action, keyboard: bool) {
         CardKind::Agent => {}
         CardKind::Wifi => crate::wifi_card::activate(app, i),
         CardKind::Battery => crate::battery::activate(app, i),
+        CardKind::Network => crate::network_card::activate(app, i),
         CardKind::Calendar => match i {
             // the focus chain: prev, next; day cells are mouse-only
             CAL_PREV => calendar_step(app, -1),
