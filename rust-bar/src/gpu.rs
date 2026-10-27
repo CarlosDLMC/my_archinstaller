@@ -477,6 +477,8 @@ pub struct Gpu {
     sampler: wgpu::Sampler,
     inst_buf: Option<wgpu::Buffer>,
     pub images: Vec<Option<Image>>,
+    /// Bytes of image uploads since the GPU was last waited for (upload()).
+    in_flight: usize,
 }
 
 const INST_ATTRS: [wgpu::VertexAttribute; 10] = wgpu::vertex_attr_array![
@@ -588,9 +590,10 @@ impl Gpu {
             sampler,
             inst_buf: None,
             images: Vec::new(),
+            in_flight: 0,
         };
         // Image 0: one transparent texel, bound whenever no image is.
-        gpu.add_image(1, 1, &[0, 0, 0, 0], false);
+        gpu.add_image(1, 1, vec![0; 4], false);
         gpu
     }
 
@@ -737,43 +740,31 @@ impl Gpu {
     }
 
     /// Premultiplied RGBA8 pixels -> an image id for Scene::image.
-    pub fn add_image(&mut self, width: u32, height: u32, rgba: &[u8], mipmaps: bool) -> u32 {
-        let mips = if mipmaps { 32 - width.max(height).leading_zeros() } else { 1 };
+    pub fn add_image(&mut self, width: u32, height: u32, rgba: Vec<u8>, mipmaps: bool) -> u32 {
+        self.add_levels(mip_levels(width, height, rgba, mipmaps))
+    }
+
+    /// An image with its mip levels already built by mip_levels() - the
+    /// carousel and the overview build them on the decode thread.
+    pub fn add_levels(&mut self, levels: Vec<(u32, u32, Vec<u8>)>) -> u32 {
+        let (width, height) = (levels[0].0, levels[0].1);
         let tex = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("image"),
             size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
-            mip_level_count: mips,
+            mip_level_count: levels.len() as u32,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba8Unorm,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
-        let mut level = rgba.to_vec();
-        let (mut w, mut h) = (width, height);
-        for m in 0..mips {
-            self.queue.write_texture(
-                wgpu::TexelCopyTextureInfo { texture: &tex, mip_level: m, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
-                &level,
-                wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(4 * w), rows_per_image: Some(h) },
-                wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-            );
-            if m + 1 < mips {
-                let (nw, nh) = ((w / 2).max(1), (h / 2).max(1));
-                let mut next = vec![0u8; (nw * nh * 4) as usize];
-                for y in 0..nh {
-                    for x in 0..nw {
-                        for c in 0..4 {
-                            let px = |xx: u32, yy: u32| level[((yy.min(h - 1) * w + xx.min(w - 1)) * 4 + c) as usize] as u32;
-                            let s = px(2 * x, 2 * y) + px(2 * x + 1, 2 * y) + px(2 * x, 2 * y + 1) + px(2 * x + 1, 2 * y + 1);
-                            next[((y * nw + x) * 4 + c) as usize] = ((s + 2) / 4) as u8;
-                        }
-                    }
-                }
-                level = next;
-                (w, h) = (nw, nh);
-            }
+        for (m, (w, h, px)) in levels.iter().enumerate() {
+            self.upload(&tex, m as u32, *w, *h, px);
         }
+        // Submitted now, not with the next frame: a staging buffer is freed
+        // once its submission is done, and a burst of thumbnails no longer
+        // piles up until then.
+        self.queue.submit([]);
         let view = tex.create_view(&Default::default());
         let bind = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
@@ -787,6 +778,37 @@ impl Gpu {
         } else {
             self.images.push(Some(img));
             (self.images.len() - 1) as u32
+        }
+    }
+
+    /// One level's pixels in bands of at most 1 MiB, waiting for the GPU
+    /// whenever 4 MiB have gone out since the last wait. wgpu's allocator
+    /// (gpu-alloc) takes staging buffers from a chunk that starts at 8 MiB,
+    /// doubles each time it runs out, and keeps its last chunk for good: a
+    /// carousel's burst of thumbnails or the reveal's 15 MB wallpaper left
+    /// 16-32 MiB of GTT behind. Bounded like this the first chunk is enough.
+    fn upload(&mut self, tex: &wgpu::Texture, mip: u32, w: u32, h: u32, px: &[u8]) {
+        let row = 4 * w as usize;
+        // The staging copy pads every row to 256 bytes.
+        let staged = row.div_ceil(256) * 256;
+        let band = ((1usize << 20) / staged).max(1) as u32;
+        let mut y = 0;
+        while y < h {
+            let rows = band.min(h - y);
+            let size = rows as usize * staged;
+            if self.in_flight > 0 && self.in_flight + size > 4 << 20 {
+                self.queue.submit([]);
+                let _ = self.device.poll(wgpu::PollType::Wait);
+                self.in_flight = 0;
+            }
+            self.queue.write_texture(
+                wgpu::TexelCopyTextureInfo { texture: tex, mip_level: mip, origin: wgpu::Origin3d { x: 0, y, z: 0 }, aspect: wgpu::TextureAspect::All },
+                &px[y as usize * row..(y + rows) as usize * row],
+                wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row as u32), rows_per_image: Some(rows) },
+                wgpu::Extent3d { width: w, height: rows, depth_or_array_layers: 1 },
+            );
+            self.in_flight += size;
+            y += rows;
         }
     }
 
@@ -943,6 +965,34 @@ pub fn scale(img: image::RgbaImage, w: u32, h: u32) -> image::RgbaImage {
     let opts = ResizeOptions::new().resize_alg(ResizeAlg::Convolution(FilterType::Bilinear)).use_alpha(false);
     let _ = Resizer::new().resize(&src, &mut dst, &opts);
     image::RgbaImage::from_raw(w, h, dst.into_vec()).unwrap_or_else(|| image::RgbaImage::new(w, h))
+}
+
+/// An image and its mip chain for add_levels(): each level the 2x2 box
+/// average of the one above, (sum + 2) / 4, the last row or column repeated
+/// where a side is 1. Pure, so it can run on the decode thread.
+pub fn mip_levels(width: u32, height: u32, rgba: Vec<u8>, mipmaps: bool) -> Vec<(u32, u32, Vec<u8>)> {
+    let mips = if mipmaps { 32 - width.max(height).leading_zeros() } else { 1 };
+    let mut levels = Vec::with_capacity(mips as usize);
+    levels.push((width, height, rgba));
+    for _ in 1..mips {
+        let (w, h, level) = levels.last().unwrap();
+        let (w, h) = (*w as usize, *h as usize);
+        let (nw, nh) = ((w / 2).max(1), (h / 2).max(1));
+        let mut next = vec![0u8; nw * nh * 4];
+        for (y, out) in next.chunks_exact_mut(nw * 4).enumerate() {
+            let r0 = &level[(2 * y).min(h - 1) * w * 4..][..w * 4];
+            let r1 = &level[(2 * y + 1).min(h - 1) * w * 4..][..w * 4];
+            for (x, o) in out.chunks_exact_mut(4).enumerate() {
+                let (c0, c1) = ((2 * x).min(w - 1) * 4, (2 * x + 1).min(w - 1) * 4);
+                for c in 0..4 {
+                    let s = r0[c0 + c] as u32 + r0[c1 + c] as u32 + r1[c0 + c] as u32 + r1[c1 + c] as u32;
+                    o[c] = ((s + 2) / 4) as u8;
+                }
+            }
+        }
+        levels.push((nw as u32, nh as u32, next));
+    }
+    levels
 }
 
 /// Premultiplied alpha, what add_image takes. An opaque picture (every JPEG)

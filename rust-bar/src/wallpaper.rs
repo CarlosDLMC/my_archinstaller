@@ -640,15 +640,16 @@ fn load_visible(app: &mut App) {
     for (id, path) in jobs {
         app.svc.wall.loading.insert(id.clone());
         app.background(
-            move || (id.clone(), decode_height(&path, target_h)),
+            move || (id.clone(), decode_height(&path, target_h).map(|(w, h, rgba)| crate::gpu::mip_levels(w, h, rgba, true))),
             |app, (id, img)| {
                 app.svc.wall.loading.remove(&id);
-                let Some((w, h, rgba)) = img else { return };
+                let Some(levels) = img else { return };
                 if !app.svc.wall.open {
                     return;
                 }
                 let Some(gpu) = app.gpu.as_mut() else { return };
-                let t = Tex { id: gpu.add_image(w, h, &rgba, true), w, h };
+                let (w, h) = (levels[0].0, levels[0].1);
+                let t = Tex { id: gpu.add_levels(levels), w, h };
                 if let Some(old) = app.svc.wall.textures.insert(id, t) {
                     gpu.drop_image(old.id);
                 }
@@ -976,7 +977,7 @@ fn start_reveal(app: &mut App, it: Item) {
         app.background(move || (i, decode_cover(&path, w, h)), |app, (i, img)| {
             let Some(r) = app.reveals.get_mut(i) else { return };
             if let (Some((w, h, rgba)), Some(gpu)) = (img, app.gpu.as_mut()) {
-                r.tex = Some(Tex { id: gpu.add_image(w, h, &rgba, false), w, h });
+                r.tex = Some(Tex { id: gpu.add_image(w, h, rgba, false), w, h });
             }
             if !r.reported {
                 r.reported = true;

@@ -722,7 +722,7 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
             let a = m as f32 / 255.0 * bg.a;
             rgba.extend_from_slice(&[(bg.r * a * 255.0).round() as u8, (bg.g * a * 255.0).round() as u8, (bg.b * a * 255.0).round() as u8, (a * 255.0).round() as u8]);
         }
-        let id = gpu.add_image(iw, ih, &rgba, false);
+        let id = gpu.add_image(iw, ih, rgba, false);
         card.notch = Some((id, key.0, key.1, key.2));
     }
     let (id, iw, ih, _) = card.notch.unwrap();

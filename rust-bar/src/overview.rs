@@ -242,14 +242,14 @@ fn take_shots(app: &mut App) {
         for id in ids {
             if app.svc.overview.preview_loading.insert(id) {
                 let path = format!("{}/{id}.ppm", shot_dir());
-                app.background(move || (id, decode(&path)), |app, (id, img)| {
+                app.background(move || (id, decode(&path).map(|(w, h, rgba)| crate::gpu::mip_levels(w, h, rgba, true))), |app, (id, img)| {
                     app.svc.overview.preview_loading.remove(&id);
-                    let Some((w, h, rgba)) = img else { return };
+                    let Some(levels) = img else { return };
                     if !app.svc.overview.open {
                         return;
                     }
                     let Some(gpu) = app.gpu.as_mut() else { return };
-                    let t = Tex { id: gpu.add_image(w, h, &rgba, true) };
+                    let t = Tex { id: gpu.add_levels(levels) };
                     if let Some(old) = app.svc.overview.previews.insert(id, t) {
                         gpu.drop_image(old.id);
                     }
@@ -457,7 +457,7 @@ fn load_icons(app: &mut App) {
                 return;
             }
             let tex = match (img, app.gpu.as_mut()) {
-                (Some((w, h, rgba)), Some(gpu)) => Some(Tex { id: gpu.add_image(w, h, &rgba, false) }),
+                (Some((w, h, rgba)), Some(gpu)) => Some(Tex { id: gpu.add_image(w, h, rgba, false) }),
                 _ => None,
             };
             app.svc.overview.icons.insert(key, tex);

@@ -72,7 +72,7 @@ pub fn draw(c: &mut CrtWin, scene: &mut Scene, gpu: &mut Gpu) -> bool {
     scene.fill(0.0, 0.0, w, h, Color::qt_rgba(0.0, 0.0, 0.0, 1.0));
     if c.tex.is_none() {
         if let Some((fw, fh, rgba)) = c.frame.take() {
-            c.tex = Some(gpu.add_image(fw, fh, &rgba, false));
+            c.tex = Some(gpu.add_image(fw, fh, rgba, false));
         }
     }
     let t = c.start.map_or(0.0, |s| Instant::now().saturating_duration_since(s).as_millis() as f32);

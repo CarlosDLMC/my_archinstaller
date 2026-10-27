@@ -336,7 +336,7 @@ fn load_textures(app: &mut App) {
                     return;
                 }
                 let Some(gpu) = app.gpu.as_mut() else { return };
-                let tex = Tex { id: gpu.add_image(w, h, &rgba, false), w, h };
+                let tex = Tex { id: gpu.add_image(w, h, rgba, false), w, h };
                 let c = &mut app.svc.clip;
                 if preview {
                     if let Some((_, old)) = c.preview_tex.replace((id, tex)) {
