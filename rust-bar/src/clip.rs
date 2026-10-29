@@ -51,8 +51,10 @@ pub struct Clip {
     blink_since: Option<Instant>,
     pub selected: usize,
     pub loading: bool,
-    /// ListView.contentY.
+    /// ListView.contentY where the list comes to rest, and the wheel's glide
+    /// towards it: (from, to, start).
     pub scroll: f32,
+    glide: Option<(f32, f32, Instant)>,
     /// Decoded thumbnail files (id -> path), the queue, the one decoding.
     thumbs: HashMap<String, String>,
     pending: VecDeque<String>,
@@ -113,6 +115,16 @@ impl Clip {
     fn current(&self) -> Option<Entry> {
         self.filtered().get(self.selected).map(|e| (*e).clone())
     }
+    /// ListView.contentY on the wheel's glide; None once it has ended.
+    fn glide_at(&self, now: Instant) -> Option<f32> {
+        let (from, to, start) = self.glide?;
+        let t = now.saturating_duration_since(start).as_secs_f32() * 1000.0 / GLIDE_MS;
+        (t < 1.0).then(|| from + (to - from) * out_expo(t))
+    }
+    /// ListView.contentY now.
+    fn scroll_at(&self, now: Instant) -> f32 {
+        self.glide_at(now).unwrap_or(self.scroll)
+    }
 }
 
 /// Component.onCompleted: reload(); and the IPC's toggle.
@@ -149,6 +161,7 @@ fn open(app: &mut App) {
     c.select_all = false;
     c.selected = 0;
     c.scroll = 0.0;
+    c.glide = None;
     c.open = true;
     c.blink_since = Some(Instant::now());
     reload(app);
@@ -266,6 +279,45 @@ fn view_h() -> f32 {
 fn body_h() -> f32 {
     let m = met();
     m.card_h - 2.0 * m.pad - (m.title * 2.0).round() - (m.hint * 2.4).round() - px(20.0)
+}
+
+/// The ListView in the panel, where draw_osd puts it: (x, y, w, h).
+fn list_rect() -> (f32, f32, f32, f32) {
+    let m = met();
+    let list_w = ((m.card_w - 2.0 * m.pad) * 0.52).round();
+    (m.pad + 6.0, m.pad + (m.title * 2.0).round() + px(10.0) + 6.0, list_w - 12.0, view_h())
+}
+
+/// contentHeight - height for `n` rows of row_h, 2 px apart.
+fn max_scroll(n: usize) -> f32 {
+    (n as f32 * (met().row_h + 2.0) - 2.0 - view_h()).max(0.0)
+}
+
+/// QQuickFlickable::wheelEvent's glide: 3/4 of fixupDuration (400 ms).
+const GLIDE_MS: f32 = 300.0;
+
+/// easing.cpp easeOutExpo: a hair past 1 just before the end.
+fn out_expo(t: f32) -> f32 {
+    if t >= 1.0 {
+        1.0
+    } else {
+        1.001 * (1.0 - 2f32.powf(-10.0 * t))
+    }
+}
+
+/// QQuickFlickablePrivate::fixup: between the ends contentY goes to a whole
+/// pixel - the nearest within a quarter, else back against the motion (`dir`
+/// is the sign of smoothVelocity; 0 rounds).
+fn fixup(y: f32, dir: f32, max: f32) -> f32 {
+    if y <= 0.0 || y >= max || y.fract() == 0.0 {
+        y.clamp(0.0, max)
+    } else if (y.round() - y).abs() < 0.25 || dir == 0.0 {
+        y.round()
+    } else if dir > 0.0 {
+        y.floor()
+    } else {
+        y.ceil()
+    }
 }
 
 /// Delegates exist for the rows in view plus ListView's cacheBuffer; each
@@ -452,20 +504,25 @@ fn move_sel(app: &mut App, delta: i64) {
     position_view(app);
 }
 
-/// positionViewAtIndex(currentIndex, ListView.Contain).
+/// positionViewAtIndex(currentIndex, ListView.Contain), from where the list
+/// is now: a glide stops there (cancelFlick), and fixupPosition() puts the
+/// list on a whole pixel.
 fn position_view(app: &mut App) {
     let step = met().row_h + 2.0;
     let c = &mut app.svc.clip;
-    let n = c.filtered().len() as f32;
+    let now = Instant::now();
+    let dir = c.glide.filter(|_| c.glide_at(now).is_some()).map_or(0.0, |(from, to, _)| to - from);
+    let mut y = c.scroll_at(now);
+    c.glide = None;
     let top = c.selected as f32 * step;
     let bottom = top + met().row_h;
-    if top < c.scroll {
-        c.scroll = top;
-    } else if bottom > c.scroll + view_h() {
-        c.scroll = bottom - view_h();
+    if top < y {
+        y = top;
+    } else if bottom > y + view_h() {
+        y = bottom - view_h();
     }
-    let max = (n * step - 2.0 - view_h()).max(0.0);
-    c.scroll = c.scroll.clamp(0.0, max);
+    let max = max_scroll(c.filtered().len());
+    c.scroll = fixup(y.clamp(0.0, max), dir, max);
     changed(app);
 }
 
@@ -474,16 +531,35 @@ fn filter_changed(app: &mut App) {
     let c = &mut app.svc.clip;
     c.selected = 0;
     c.scroll = 0.0;
+    c.glide = None;
     model_reset(app);
     changed(app);
 }
 
+/// The wheel: QQuickFlickable::wheelEvent (Qt 6.12; wheelDeceleration is past
+/// _q_MaximumWheelDeceleration): wheelScrollLines (3) x 24 px per 120 of
+/// angleDelta, glided 300 ms OutExpo from where the list is now and cut at its
+/// ends (StopAtBounds). Only the ListView takes it: over the preview, the
+/// search line or the hints no item accepts the wheel.
 pub fn wheel(app: &mut App, delta: f32) {
-    let step = met().row_h + 2.0;
+    let Some((x, y)) = app.osd(OsdKind::Clipboard).and_then(|o| o.st.pointer) else { return };
+    let (lx, ly, lw, lh) = list_rect();
+    if x < lx || x >= lx + lw || y < ly || y >= ly + lh {
+        return;
+    }
+    let now = Instant::now();
     let c = &mut app.svc.clip;
-    let n = c.filtered().len() as f32;
-    let max = (n * step - 2.0 - view_h()).max(0.0);
-    c.scroll = (c.scroll - delta / 120.0 * 3.0 * 20.0).clamp(0.0, max);
+    let max = max_scroll(c.filtered().len());
+    let from = c.scroll_at(now);
+    let step = -delta / 120.0 * 72.0;
+    // At an end in that direction the list lets the wheel go.
+    if step == 0.0 || (step < 0.0 && from <= 0.0) || (step > 0.0 && from >= max) {
+        return;
+    }
+    let to = (from + step).clamp(0.0, max);
+    c.glide = Some((from, to, now));
+    // Where fixup() leaves it when the glide ends.
+    c.scroll = fixup(to, step, max);
     changed(app);
 }
 
@@ -698,8 +774,12 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
     ui.scene.save();
     ui.scene.clip_rect(lx, ly, lw, lh);
     let step = m.row_h + 2.0;
+    // contentY, on its way while the wheel's glide runs.
+    let glide = c.glide_at(ui.now);
+    ui.animating |= glide.is_some();
+    let scroll = glide.unwrap_or(c.scroll);
     for (i, e) in filtered.iter().enumerate() {
-        let ry = ly + i as f32 * step - c.scroll;
+        let ry = ly + i as f32 * step - scroll;
         if ry + m.row_h < ly || ry > ly + lh {
             continue;
         }
