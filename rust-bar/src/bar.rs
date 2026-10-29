@@ -68,8 +68,9 @@ pub enum Action {
     Hover(u32),
 }
 
-/// Action::Hover(TEXT_FIELD) over a TextInput: the I-beam cursor
-/// (QQuickTextInput's Qt::IBeamCursor) and no click of its own.
+/// Action::Hover(TEXT_FIELD) over a TextInput's own rect: a press there is
+/// the field's, not what lies under it, and it has no click of its own. The
+/// cursor stays the arrow (Qt 6.12's QQuickTextInput sets none).
 pub const TEXT_FIELD: u32 = 0xFFFF_FFFE;
 
 #[derive(Clone, Debug)]

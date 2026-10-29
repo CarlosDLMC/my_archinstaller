@@ -800,9 +800,10 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
         let (s0, s1) = (x_at(ui.fonts, p, f.response_visible, p.sel.0), x_at(ui.fonts, p, f.response_visible, p.sel.1));
         ui.scene.fill(fx + s0 - shift, fy, s1 - s0, fl.height(), t.col_grey);
     }
-    if !shown.is_empty() {
-        ui.text(&fl, fx - shift, fy, t.col_white, TextStyle::Normal);
-    }
+    // Drawn empty too: an empty TextInput discards its glyph node
+    // (QQuickTextInput::updatePaintNode), so the next text is a new node -
+    // subpixel until it changes.
+    ui.text(&fl, fx - shift, fy, t.col_white, TextStyle::Normal);
     if enabled {
         // 1 px, the text colour, 500 ms on / 500 ms off.
         let on = p.blink_since.map_or(true, |s| s.elapsed().as_millis() / 500 % 2 == 0);
@@ -842,9 +843,9 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
         kx += ll.width;
     }
     ui.hits.push(Hit { x: x0, y: y0, w, h, action: Action::Hover(0) });
-    // QQuickTextInput's I-beam over the TextInput - the plate less gap on
+    // The TextInput's own rect (the arrow over it) - the plate less gap on
     // each side, its full height (PolkitOsd.qml:163-166) - while it takes
-    // input: a disabled one shows none.
+    // input: a disabled one takes no press.
     if enabled {
         ui.hits.push(Hit { x: fx, y: field_y, w: fw, h: m.field_h, action: Action::Hover(crate::bar::TEXT_FIELD) });
     }

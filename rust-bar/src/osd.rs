@@ -374,12 +374,11 @@ pub fn destroy(app: &mut App, kind: OsdKind) {
 fn drop_now(app: &mut App, kind: OsdKind) {
     let Some(o) = app.osd_mut(kind) else { return };
     let hovered = o.st.pointer.is_some();
-    // LayoutOsd's window is only hidden: its Texts live on (TextMemo).
-    let texts = (kind == OsdKind::Layout).then(|| std::mem::take(&mut o.st.texts));
+    // Every overlay's Texts go with it: LayoutOsd's items live on (no
+    // OnDemand), but hiding a layer-shell PanelWindow deletes its window
+    // (quickshell 0.3.2, WlrLayershell::deleteOnInvisible), so its nodes
+    // are new - subpixel - when it shows again.
     app.osds.retain(|o| o.kind != kind);
-    if let Some(t) = texts {
-        crate::layout::keep_texts(app, t);
-    }
     // A hidden window clears its hover (QQuickWindow::hideEvent): the
     // MouseArea still under the pointer gets onExited. No wl_pointer.leave
     // comes for a surface that is gone.
@@ -564,9 +563,6 @@ const BTN_LEFT: u32 = 0x110;
 pub fn wheel(app: &mut App, kind: OsdKind, delta: f32, time: u32) {
     if kind == OsdKind::Clipboard {
         crate::clip::wheel(app, delta, time);
-    }
-    if kind == OsdKind::Wallpaper {
-        crate::wallpaper::wheel(app, delta);
     }
 }
 

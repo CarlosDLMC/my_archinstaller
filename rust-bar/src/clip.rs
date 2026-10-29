@@ -616,12 +616,26 @@ pub fn finger_scroll(app: &mut App, s: crate::cards::Scroll) {
     let c = &mut app.svc.clip;
     let (cur, max, gliding) = (c.scroll_at(now), max_scroll(c.filtered().len()), c.glide_at(now).is_some());
     let to = match s {
-        Scroll::Begin => {
+        Scroll::Begin { time } => {
             c.drag = over.then(|| PixelDrag::begin(cur));
+            // ScrollBegin leaves lastPosTime at its own time (cards::finger_scroll).
+            if over {
+                c.wheel_time = Some(time);
+            }
             None
         }
-        Scroll::End => c.drag.take().and_then(|d| d.end(cur, max)),
-        Scroll::Update { dx, dy, .. } if over => c.drag.as_mut().and_then(|d| d.update(dx, dy, cur, max, gliding).0),
+        Scroll::End => {
+            // ScrollEnd: lastPosTime = -1.
+            if c.drag.is_some() {
+                c.wheel_time = None;
+            }
+            c.drag.take().and_then(|d| d.end(cur, max))
+        }
+        // The first update, at ScrollBegin's time, fails lastPosTime's test.
+        Scroll::Update { dx, dy, time, .. } if over => match crate::cards::wheel_time(&mut c.wheel_time, time) {
+            true => c.drag.as_mut().and_then(|d| d.update(dx, dy, cur, max, gliding).0),
+            false => None,
+        },
         Scroll::Update { .. } => None,
     };
     if let Some(to) = to {
@@ -827,16 +841,17 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
     // TextInput scrolls to keep its cursor in view: ensureVisible's hscroll =
     // cursorX - width, the cursor just past the box, inside the wider clip.
     let shift = (cursor_x - sw).max(0.0);
-    if !c.filter.is_empty() {
-        ui.text(&line, sx - shift, sy, t.col_white, TextStyle::Normal);
-    }
+    // Drawn empty too: an empty TextInput discards its glyph node
+    // (QQuickTextInput::updatePaintNode), so the next text is a new node -
+    // subpixel until it changes.
+    ui.text(&line, sx - shift, sy, t.col_white, TextStyle::Normal);
     // No cursor once closed: the keyboard leaves with `shown`, and an
     // unfocused TextInput draws none while the card fades out.
     if c.open && c.blink_since.map_or(true, |s| s.elapsed().as_millis() / 500 % 2 == 0) {
         ui.scene.fill(sx + cursor_x - shift, sy, 1.0, ih, t.col_white);
     }
     ui.scene.restore();
-    // QQuickTextInput's I-beam over the search TextInput: from the caption
+    // The search TextInput's own rect (the arrow over it): from the caption
     // row's right + 20 to the count's left - 10, a line high, centred
     // (ClipboardOsd.qml:199-206). A click there is the field's, not a row's.
     ui.hits.push(Hit { x: sx, y: sy, w: sw, h: ih, action: Action::Hover(crate::bar::TEXT_FIELD) });

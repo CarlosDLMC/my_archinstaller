@@ -49,7 +49,6 @@ pub static EPOCH: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
 struct Kept {
     output: WlOutput,
     kind: CardKind,
-    texts: crate::text::TextMemo,
     /// CardKeys' focused control when the card closed.
     focus: Option<u32>,
 }
@@ -57,13 +56,14 @@ struct Kept {
 thread_local! {
     /// CalendarPopup and CenterInfo's weather card are no Loaders: every bar
     /// has its own of each, made once and only hidden when it closes
-    /// (CenterInfo.qml:903-911). Their Texts keep what happened to them - a
-    /// month paged or an arrow hovered is gray from then on - and the
-    /// calendar's CardKeys keeps its focused arrow, which the next opening
-    /// by the mouse shows again: the window gives its focus back down the
-    /// focus scopes (QQuickWindow::focusInEvent). Kept by the bar's output:
-    /// a new output is a new bar, and a gone one's state goes at the next
-    /// closing.
+    /// (CenterInfo.qml:903-911). The calendar's CardKeys keeps its focused
+    /// arrow, which the next opening by the mouse shows again: the window
+    /// gives its focus back down the focus scopes (QQuickWindow::
+    /// focusInEvent). Their Texts start subpixel at every opening all the
+    /// same: hiding a layer-shell PanelWindow deletes its QQuickWindow
+    /// (quickshell 0.3.2, WlrLayershell::deleteOnInvisible), so every node
+    /// is new when it shows again. Kept by the bar's output: a new output is
+    /// a new bar, and a gone one's state goes at the next closing.
     static KEPT: std::cell::RefCell<Vec<Kept>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
@@ -296,11 +296,11 @@ struct Flick {
 /// (QWaylandInputDevice::Pointer::flushScrollEvent).
 #[derive(Clone, Copy, PartialEq)]
 pub enum Scroll {
-    /// ScrollBegin, before the first frame.
-    Begin,
-    /// ScrollUpdate: the frame's pixelDelta (contentY up for dy > 0) and its
-    /// angleDelta.y, for what reads the angle.
-    Update { dx: f32, dy: f32, angle: f32 },
+    /// ScrollBegin, before the first frame, with that frame's time.
+    Begin { time: u32 },
+    /// ScrollUpdate: the frame's pixelDelta (contentY up for dy > 0), its
+    /// angleDelta (x, y), for what reads the angle, and its time.
+    Update { dx: f32, dy: f32, angle: (f32, f32), time: u32 },
     /// ScrollEnd, at axis_stop.
     End,
 }
@@ -392,9 +392,10 @@ impl PixelDrag {
     /// One ScrollUpdate on a Flickable at contentY `cur` with ends 0 and
     /// `max` (`gliding`: the wheel's glide runs, it is moving): where contentY
     /// goes, and whether the Flickable takes the event - between its ends
-    /// only, else it goes on to what is under it. The first update only
-    /// arms stealGrab and the second sets dragStartOffset to the sum so far,
-    /// so the content does not jump: it moves from the third on.
+    /// only, else it goes on to what is under it. The first update it gets
+    /// (the scroll's second: lastPosTime drops the first) only arms
+    /// stealGrab and the next sets dragStartOffset to the sum so far, so the
+    /// content does not jump: it moves from the one after.
     pub(crate) fn update(&mut self, dx: f32, dy: f32, cur: f32, max: f32, gliding: bool) -> (Option<f32>, bool) {
         self.acc = (self.acc.0 + dx, self.acc.1 + dy);
         let a = self.acc.1;
@@ -828,13 +829,10 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
     });
     app.strips[strip].win.dirty = true;
     if matches!(kind, CardKind::Calendar | CardKind::Weather) {
-        // This bar's own (KEPT): Qt made its Texts' nodes the first time it
-        // was shown, so what changed since is gray (the palette load at
-        // startup came before any node).
+        // This bar's own (KEPT): its focus scope's last focused control.
         let output = &app.strips[strip].output;
         let kept = KEPT.with_borrow_mut(|v| v.iter().position(|k| k.kind == kind && k.output == *output).map(|i| v.swap_remove(i)));
         if let (Some(k), Some(card)) = (kept, app.card.as_mut()) {
-            card.texts = k.texts;
             // A keyboard opening focuses the first control (focusFirst).
             if !keyboard {
                 card.focus_code = k.focus;
@@ -875,7 +873,7 @@ pub fn close(app: &mut App) {
     card.meter_win = None;
     if matches!(card.kind, CardKind::Calendar | CardKind::Weather) {
         if let Some(s) = app.strips.get(card.strip) {
-            let kept = Kept { output: s.output.clone(), kind: card.kind, texts: std::mem::take(&mut card.texts), focus: card.focus_code };
+            let kept = Kept { output: s.output.clone(), kind: card.kind, focus: card.focus_code };
             KEPT.with_borrow_mut(|v| {
                 v.retain(|k| app.strips.iter().any(|s| s.output == k.output));
                 v.push(kept);
@@ -2104,23 +2102,29 @@ pub fn wheel(app: &mut App, angle_delta_y: f32, time: u32) {
 pub fn finger_scroll(app: &mut App, s: Scroll) {
     let now = Instant::now();
     match s {
-        Scroll::Begin => {
+        Scroll::Begin { time } => {
             let Some(c) = app.card.as_mut() else { return };
             for i in flicks_under(c) {
                 let y = c.flicks[i].y(now);
                 c.flicks[i].drag = Some(PixelDrag::begin(y));
+                // ScrollBegin sets lastPosTime to -1, then (its angle path
+                // moving nothing) to its own time: the frame's.
+                c.flicks[i].wheel_time = Some(time);
             }
         }
         Scroll::End => {
             let Some(c) = app.card.as_mut() else { return };
             for f in c.flicks.iter_mut() {
-                if let Some(to) = f.drag.take().and_then(|d| d.end(f.y(now), f.max)) {
+                let Some(d) = f.drag.take() else { continue };
+                // ScrollEnd: lastPosTime = -1.
+                f.wheel_time = None;
+                if let Some(to) = d.end(f.y(now), f.max) {
                     f.jump(to);
                     c.win.dirty = true;
                 }
             }
         }
-        Scroll::Update { dx, dy, angle } => {
+        Scroll::Update { dx, dy, angle: (_, angle), time } => {
             if angle != 0.0 && slider_wheel(app, angle) {
                 return;
             }
@@ -2129,6 +2133,13 @@ pub fn finger_scroll(app: &mut App, s: Scroll) {
                 let f = &mut c.flicks[i];
                 let (cur, max, gliding) = (f.y(now), f.max, f.glide.running(now));
                 let Some(d) = f.drag.as_mut() else { continue };
+                // QtWayland stamps ScrollBegin and the first ScrollUpdate with
+                // the same time, so that update fails wheelEvent's lastPosTime
+                // test in every Flickable under the pointer: it moves nothing
+                // and goes on (wheel_time).
+                if !wheel_time(&mut f.wheel_time, time) {
+                    continue;
+                }
                 let (to, taken) = d.update(dx, dy, cur, max, gliding);
                 if let Some(to) = to {
                     f.jump(to);
