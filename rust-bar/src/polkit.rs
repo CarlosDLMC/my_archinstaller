@@ -132,6 +132,8 @@ pub fn start(app: &mut App) {
     let fd = ch.watch().fd;
     app.svc.polkit.chan = Some(ch);
     app.watch_fd(fd, dbus_ready);
+    // Anything read while the registration and the match were on their way.
+    app.after(Duration::ZERO, dbus_ready);
 }
 
 /// RegisterAuthenticationAgent for this session, in the locale polkitd
@@ -168,8 +170,8 @@ fn owner_changed(app: &mut App, m: &Message) {
     let Some(msg) = register_msg() else { return };
     if let Some(ch) = p.chan.as_ref() {
         p.register_serial = ch.send(msg).ok();
-        ch.flush();
     }
+    flush(app);
 }
 
 /// The answer to that registration.
@@ -189,7 +191,19 @@ fn registered_again(app: &mut App, m: &Message) {
 fn send(app: &mut App, msg: Message) {
     if let Some(ch) = app.svc.polkit.chan.as_ref() {
         let _ = ch.send(msg);
+    }
+    flush(app);
+}
+
+/// Writes what is queued. dbus_connection_flush also READS (it iterates with
+/// DBUS_ITERATION_DO_READING): a call polkitd sent meanwhile lands in
+/// libdbus's queue, the socket has nothing left to wake the fd watch, and the
+/// call would wait there - polkitd with it, no timeout - until the bus next
+/// had something for the bar. One more pass of dbus_ready picks it up.
+fn flush(app: &mut App) {
+    if let Some(ch) = app.svc.polkit.chan.as_ref() {
         ch.flush();
+        app.after(Duration::ZERO, dbus_ready);
     }
 }
 
