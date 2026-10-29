@@ -347,6 +347,7 @@ fn scan_line(app: &mut App, line: &str) {
         w.failed.clear();
         w.scanned = true;
         let cur = s(&v, "current");
+        let folder = w.folder_index;
         if cur != w.current_id && w.picked_id.is_empty() {
             w.current_id = cur.clone();
             if w.open && !w.navigated {
@@ -354,7 +355,10 @@ fn scan_line(app: &mut App, line: &str) {
                 w.pending = Pending::Current;
             }
         }
-        if !same || w.pending == Pending::Current {
+        if app.svc.wall.folder_index != folder {
+            reveal_tab(app);
+        }
+        if !same || app.svc.wall.pending == Pending::Current {
             reselect(app);
         }
     } else if let Some(id) = line.strip_prefix("thumb ") {
@@ -399,6 +403,7 @@ pub fn open(app: &mut App) {
     // The handlers' wheel sums belong to the Loader's content, new each open.
     w.wheel_acc = 0.0;
     w.tab_acc = 0.0;
+    w.tab_scroll = 0.0;
     w.folder_index = w.folder_of(&w.current_id.clone());
     w.open = true;
     w.pending = Pending::Current;
@@ -636,7 +641,28 @@ fn step_folder(app: &mut App, delta: i64) {
     let n = w.folders().len() as i64;
     w.folder_index = ((w.folder_index as i64 + delta) % n + n) as usize % n as usize;
     w.pending = Pending::Current;
+    reveal_tab(app);
     reselect(app);
+}
+
+/// tabsView.reveal() on every folderIndex change while the carousel is up:
+/// when the tabs overflow their row (the Flickable is interactive), scroll
+/// just enough to show the chosen one. Opening starts at contentX 0.
+fn reveal_tab(app: &mut App) {
+    let (sw, sh) = screen_of(app);
+    let (_, _, width, _) = tab_row(&geo(sw, sh));
+    let (cells, total) = tab_cells(&mut app.fonts, &app.svc.wall);
+    let w = &mut app.svc.wall;
+    let Some(tw) = cells.get(w.folder_index).map(|c| c.3) else { return };
+    if total <= width {
+        return;
+    }
+    let tx: f32 = cells[..w.folder_index].iter().map(|c| c.3 + px(26.0)).sum();
+    if tx < w.tab_scroll {
+        w.tab_scroll = tx;
+    } else if tx + tw > w.tab_scroll + width {
+        w.tab_scroll = tx + tw - width;
+    }
 }
 
 /// pick(): the card flies up, the dialog goes; a picture is revealed, a video applied.
@@ -790,6 +816,7 @@ pub fn click(app: &mut App, action: Action) {
         w.cursor = 0;
         w.folder_index = (code - TAB) as usize;
         w.pending = Pending::Current;
+        reveal_tab(app);
         reselect(app);
     } else if code >= CARD {
         let i = (code - CARD) as usize;
@@ -1156,10 +1183,18 @@ fn draw_tabs(ui: &mut Ui<OsdState>, w: &Wall, x0: f32, y0: f32, width: f32, h: f
     let fx = x0 + ac(width, vw);
     ui.scene.save();
     ui.scene.clip_rect(fx, y0, vw, h);
-    let mut tx = fx - w.tab_scroll;
+    // An interactive (overflowing) Flickable takes the presses between its
+    // tabs; one that fits lets them through to the dim.
+    if total > width {
+        ui.hits.push(crate::bar::Hit { x: fx, y: y0, w: vw, h, action: Action::Hover(TAB) });
+    }
+    // boundsBehavior: StopAtBounds.
+    let mut tx = fx - w.tab_scroll.clamp(0.0, (total - vw).max(0.0));
     for (i, (label, count, chosen, tw)) in cells.iter().enumerate() {
         let tw = *tw;
-        let hot = ui.hovered(tx, y0, tw, h);
+        // A clipping parent gets the pointer only inside its clip.
+        let (hx0, hx1) = (tx.max(fx), (tx + tw).min(fx + vw));
+        let hot = hx1 > hx0 && ui.hovered(hx0, y0, hx1 - hx0, h);
         let row_h = label.height().max(count.height());
         let ry = y0 + ac(h, row_h);
         let ly = ry;
@@ -1170,7 +1205,9 @@ fn draw_tabs(ui: &mut Ui<OsdState>, w: &Wall, x0: f32, y0: f32, width: f32, h: f
         if *chosen {
             ui.scene.fill(tx, y0 + h - 2.0, tw, 2.0, t.col_white);
         }
-        ui.hits.push(crate::bar::Hit { x: tx, y: y0, w: tw, h, action: Action::Card(TAB + i as u32) });
+        if hx1 > hx0 {
+            ui.hits.push(crate::bar::Hit { x: hx0, y: y0, w: hx1 - hx0, h, action: Action::Card(TAB + i as u32) });
+        }
         tx += tw + sp;
     }
     ui.scene.restore();
