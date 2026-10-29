@@ -4,7 +4,7 @@
 use std::ops::Range;
 
 use crate::color::Color;
-use crate::text::{Fonts, Line, DF_BASE, DF_RADIUS};
+use crate::text::{Atlas, Fonts, Line, DF_BASE, DF_RADIUS};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
@@ -664,79 +664,29 @@ impl Gpu {
     }
 
     fn sync_atlas(&mut self, fonts: &mut Fonts) {
-        let a = &mut fonts.atlas;
-        if a.resized || self.atlas.is_none() {
-            let tex = self.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("glyphs"),
-                size: wgpu::Extent3d { width: a.width, height: a.height, depth_or_array_layers: 1 },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::R8Unorm,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                view_formats: &[],
-            });
-            let view = tex.create_view(&Default::default());
-            let bind = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let (device, layout, globals, sampler) = (&self.device, &self.layout0, &self.globals, &self.sampler);
+        sync_glyphs(device, &self.queue, &mut fonts.atlas, &mut self.atlas, "glyphs", wgpu::TextureFormat::R8Unorm, |view| {
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: None,
-                layout: &self.layout0,
+                layout,
                 entries: &[
-                    wgpu::BindGroupEntry { binding: 0, resource: self.globals.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&view) },
-                    wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&self.sampler) },
+                    wgpu::BindGroupEntry { binding: 0, resource: globals.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(view) },
+                    wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(sampler) },
                 ],
-            });
-            self.atlas = Some((tex, bind, a.width, a.height));
-            a.dirty.clear();
-            a.dirty.push((0, 0, a.width, a.height));
-            a.resized = false;
-        }
-        let (tex, _, w, _) = self.atlas.as_ref().unwrap();
-        for (x, y, rw, rh) in a.dirty.drain(..) {
-            let start = (y * *w + x) as usize;
-            self.queue.write_texture(
-                wgpu::TexelCopyTextureInfo { texture: tex, mip_level: 0, origin: wgpu::Origin3d { x, y, z: 0 }, aspect: wgpu::TextureAspect::All },
-                &a.pixels[start..],
-                wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(*w), rows_per_image: Some(rh) },
-                wgpu::Extent3d { width: rw, height: rh, depth_or_array_layers: 1 },
-            );
-        }
+            })
+        });
     }
 
     fn sync_color_atlas(&mut self, fonts: &mut Fonts) {
-        let a = &mut fonts.color_atlas;
-        if a.resized || self.color_atlas.is_none() {
-            let tex = self.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("colour glyphs"),
-                size: wgpu::Extent3d { width: a.width, height: a.height, depth_or_array_layers: 1 },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8Unorm,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                view_formats: &[],
-            });
-            let view = tex.create_view(&Default::default());
-            let bind = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let (device, layout) = (&self.device, &self.layout1);
+        sync_glyphs(device, &self.queue, &mut fonts.color_atlas, &mut self.color_atlas, "colour glyphs", wgpu::TextureFormat::Rgba8Unorm, |view| {
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: None,
-                layout: &self.layout1,
-                entries: &[wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&view) }],
-            });
-            self.color_atlas = Some((tex, bind, a.width, a.height));
-            a.dirty.clear();
-            a.dirty.push((0, 0, a.width, a.height));
-            a.resized = false;
-        }
-        let (tex, _, w, _) = self.color_atlas.as_ref().unwrap();
-        for (x, y, rw, rh) in a.dirty.drain(..) {
-            let start = ((y * *w + x) * 4) as usize;
-            self.queue.write_texture(
-                wgpu::TexelCopyTextureInfo { texture: tex, mip_level: 0, origin: wgpu::Origin3d { x, y, z: 0 }, aspect: wgpu::TextureAspect::All },
-                &a.pixels[start..],
-                wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(*w * 4), rows_per_image: Some(rh) },
-                wgpu::Extent3d { width: rw, height: rh, depth_or_array_layers: 1 },
-            );
-        }
+                layout,
+                entries: &[wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(view) }],
+            })
+        });
     }
 
     /// Premultiplied RGBA8 pixels -> an image id for Scene::image.
@@ -746,7 +696,28 @@ impl Gpu {
 
     /// An image with its mip levels already built by mip_levels() - the
     /// carousel and the overview build them on the decode thread.
-    pub fn add_levels(&mut self, levels: Vec<(u32, u32, Vec<u8>)>) -> u32 {
+    pub fn add_levels(&mut self, mut levels: Vec<(u32, u32, Vec<u8>)>) -> u32 {
+        // A texture past the device's limit is a validation error, which
+        // wgpu makes a panic (and panic = abort). Qt scales such an image
+        // down to the limit before the upload (QSGPlainTexture: each side
+        // clamped, aspect ignored - the texture coordinates are normalised,
+        // so it still fills its rect); a mip chain just loses its biggest
+        // levels. Reached by e.g. a clipboard image of 20000 x 50, whose
+        // 96 px thumbnail is not scaled at all.
+        let max = self.device.limits().max_texture_dimension_2d;
+        let fits = |l: &(u32, u32, Vec<u8>)| l.0 <= max && l.1 <= max;
+        while levels.len() > 1 && !fits(&levels[0]) {
+            levels.remove(0);
+        }
+        if !fits(&levels[0]) {
+            let (w, h, px) = levels.remove(0);
+            let (nw, nh) = (w.min(max), h.min(max));
+            let px = match image::RgbaImage::from_raw(w, h, px) {
+                Some(img) => scale(img, nw, nh).into_raw(),
+                None => vec![0; nw as usize * nh as usize * 4],
+            };
+            levels.insert(0, (nw, nh, px));
+        }
         let (width, height) = (levels[0].0, levels[0].1);
         let tex = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("image"),
@@ -893,6 +864,16 @@ impl Gpu {
             }
         }
         self.queue.submit([enc.finish()]);
+        // Between frames no scene refers to atlas places: the time for an
+        // atlas grown past what it keeps to start over (strip-6). Its
+        // texture goes too; wgpu keeps it until this frame is done with it.
+        let (gray, colour) = fonts.restart_full_atlases();
+        if gray {
+            self.atlas = None;
+        }
+        if colour {
+            self.color_atlas = None;
+        }
     }
 
     /// Renders offscreen and returns straight-alpha RGBA8 rows (tests and references).
@@ -940,6 +921,56 @@ impl Gpu {
             }
         }
         px
+    }
+}
+
+/// A glyph atlas onto its texture. An atlas that grew gets a new texture
+/// with the old one's texels copied over on the GPU (wgpu zeroes the rest,
+/// as it does every new texture); a fresh one gets an empty texture. Then
+/// the bitmaps placed since the last frame go up, each its own small write.
+fn sync_glyphs(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    a: &mut Atlas,
+    slot: &mut Option<(wgpu::Texture, wgpu::BindGroup, u32, u32)>,
+    label: &str,
+    format: wgpu::TextureFormat,
+    bind: impl Fn(&wgpu::TextureView) -> wgpu::BindGroup,
+) {
+    if a.resized || slot.is_none() {
+        let tex = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some(label),
+            size: wgpu::Extent3d { width: a.width, height: a.height, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        if let (Some((old, _, ow, oh)), false) = (slot.as_ref(), a.fresh) {
+            // Submitted now, before this frame's bitmaps are written (those
+            // go with the frame's own submission), so it overwrites none.
+            let mut enc = device.create_command_encoder(&Default::default());
+            let size = wgpu::Extent3d { width: (*ow).min(a.width), height: (*oh).min(a.height), depth_or_array_layers: 1 };
+            enc.copy_texture_to_texture(old.as_image_copy(), tex.as_image_copy(), size);
+            queue.submit([enc.finish()]);
+        }
+        let view = tex.create_view(&Default::default());
+        let group = bind(&view);
+        *slot = Some((tex, group, a.width, a.height));
+        a.resized = false;
+        a.fresh = false;
+    }
+    let Some((tex, ..)) = slot.as_ref() else { return };
+    let bpp = a.bpp;
+    for (x, y, w, h, px) in a.pending.drain(..) {
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo { texture: tex, mip_level: 0, origin: wgpu::Origin3d { x, y, z: 0 }, aspect: wgpu::TextureAspect::All },
+            &px,
+            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(w * bpp), rows_per_image: Some(h) },
+            wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+        );
     }
 }
 

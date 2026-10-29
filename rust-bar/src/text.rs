@@ -56,7 +56,12 @@ fn ube16(d: &[u8], o: usize) -> i64 {
 }
 
 impl Face {
-    fn new(font: FontRef<'static>) -> Face {
+    /// None when HarfBuzz's parser (rustybuzz) does not take the face: a
+    /// broken font, or a file fontconfig lists that is no usable OpenType.
+    /// It checks head (unitsPerEm 16..16384), hhea and maxp, so the reads
+    /// of those below stay inside them.
+    fn new(font: FontRef<'static>, index: u32) -> Option<Face> {
+        let hb = rustybuzz::Face::from_slice(font.data, index)?;
         let table = |tag: &[u8; 4]| font.table(swash::tag_from_bytes(tag));
         let upem = table(b"head").map(|d| ube16(d, 18)).unwrap_or(1000);
         let hhea = table(b"hhea").map(|d| (be16(d, 4), be16(d, 6))).unwrap_or((800, -200));
@@ -71,7 +76,7 @@ impl Face {
             }
         }
         let mut strikes = vec![];
-        if let Some(d) = table(b"EBLC") {
+        if let Some(d) = table(b"EBLC").filter(|d| d.len() >= 8) {
             let n = u32::from_be_bytes([d[4], d[5], d[6], d[7]]) as usize;
             for i in 0..n {
                 let b = 8 + 48 * i;
@@ -84,8 +89,7 @@ impl Face {
         let has_bitmaps = table(b"EBLC").is_some() || table(b"CBLC").is_some() || table(b"bdat").is_some();
         let fixed_pitch = table(b"post").map_or(false, |d| d.len() >= 16 && u32::from_be_bytes([d[12], d[13], d[14], d[15]]) != 0);
         let color = table(b"CBDT").is_some() || table(b"sbix").is_some();
-        let hb = rustybuzz::Face::from_slice(font.data, 0).expect("font for shaping");
-        Face { font, data: font.data, index: 0, ft_face: None, upem, hhea, typo, win, strikes, has_bitmaps, fixed_pitch, hb, color }
+        Some(Face { font, data: font.data, index, ft_face: None, upem, hhea, typo, win, strikes, has_bitmaps, fixed_pitch, hb, color })
     }
 
     fn scale26(&self, size: f32) -> i64 {
@@ -285,51 +289,84 @@ pub struct FontKey {
     pub plain: bool,
 }
 
+/// Glyph bitmaps packed on shelves. The texels live on the GPU only: a
+/// glyph's bitmap waits in `pending` until the next frame uploads it, and
+/// when the atlas grows the texture's content is copied over on the GPU,
+/// so no copy of the whole atlas is kept in memory.
 pub struct Atlas {
     /// Bytes per texel: 1 (distance fields, coverage) or 4 (colour glyphs).
     pub bpp: u32,
     pub width: u32,
     pub height: u32,
-    pub pixels: Vec<u8>,
     shelf_x: u32,
     shelf_y: u32,
     shelf_h: u32,
-    /// Regions written since the last upload (x, y, w, h).
-    pub dirty: Vec<(u32, u32, u32, u32)>,
+    /// Bitmaps placed since the last upload: (x, y, w, h) and their texels.
+    pub pending: Vec<(u32, u32, u32, u32, Vec<u8>)>,
     /// The texture must be recreated (it grew).
     pub resized: bool,
+    /// Nothing of it is on the GPU yet: its texture starts empty (zeroed).
+    pub fresh: bool,
 }
+
+/// The most rows an atlas grows to within a frame. wgpu turns a texture
+/// past the device's limit into a panic (and panic = abort); every Vulkan
+/// driver here takes 8192 (radv, anv, lavapipe: 16384).
+const ATLAS_MAX_ROWS: u32 = 8192;
+/// The most rows an atlas keeps from one frame to the next (4 MiB): one
+/// that grew past them starts over (Fonts::restart_full_atlases).
+const ATLAS_KEEP_ROWS: u32 = 4096;
 
 impl Atlas {
     fn new(bpp: u32, width: u32, height: u32) -> Atlas {
-        Atlas { bpp, width, height, pixels: vec![0; (width * height * bpp) as usize], shelf_x: 0, shelf_y: 0, shelf_h: 0, dirty: vec![], resized: true }
+        Atlas { bpp, width, height, shelf_x: 0, shelf_y: 0, shelf_h: 0, pending: vec![], resized: true, fresh: true }
     }
 
-    fn alloc(&mut self, w: u32, h: u32) -> (u32, u32) {
-        if self.shelf_x + w > self.width {
-            self.shelf_y += self.shelf_h + 1;
-            self.shelf_x = 0;
-            self.shelf_h = 0;
+    /// The distance fields' and native glyphs' atlas, as it starts.
+    fn gray() -> Atlas {
+        Atlas::new(1, 1024, 256)
+    }
+
+    /// The colour glyphs' atlas, as it starts.
+    fn colour() -> Atlas {
+        Atlas::new(4, 256, 64)
+    }
+
+    /// Room for a w x h bitmap: next on the shelf, on a new shelf when the
+    /// row is full, the atlas twice as tall when that is. None for a bitmap
+    /// wider than the atlas or one that would take it past ATLAS_MAX_ROWS.
+    fn alloc(&mut self, w: u32, h: u32) -> Option<(u32, u32)> {
+        if w > self.width {
+            return None;
         }
-        while self.shelf_y + h > self.height {
-            let old = self.height;
+        let (mut x, mut y, mut shelf_h) = (self.shelf_x, self.shelf_y, self.shelf_h);
+        if x + w > self.width {
+            y += shelf_h + 1;
+            x = 0;
+            shelf_h = 0;
+        }
+        if y + h > ATLAS_MAX_ROWS {
+            return None;
+        }
+        while y + h > self.height {
             self.height *= 2;
-            self.pixels.resize((self.width * self.height * self.bpp) as usize, 0);
             self.resized = true;
-            let _ = old;
         }
-        let at = (self.shelf_x, self.shelf_y);
-        self.shelf_x += w + 1;
-        self.shelf_h = self.shelf_h.max(h);
-        at
+        self.shelf_x = x + w + 1;
+        self.shelf_y = y;
+        self.shelf_h = shelf_h.max(h);
+        Some((x, y))
     }
 }
 
 pub struct Fonts {
     pub faces: Vec<Face>,
-    by_key: HashMap<FontKey, u16>,
+    /// The family's own face: bold and plain map the same (regular) file.
+    by_family: HashMap<&'static str, u16>,
     by_file: HashMap<(String, u32), u16>,
-    fallback: HashMap<(FontKey, char), u16>,
+    /// fontconfig's pick for a character the family lacks, by family:
+    /// bold and plain resolve to the same file, so they share it.
+    fallback: HashMap<(&'static str, char), u16>,
     glyphs: HashMap<(u16, GlyphId, bool), Option<DfGlyph>>,
     native: HashMap<(u16, GlyphId, i64, u8, u8), Option<NativeGlyph>>,
     library: ft::FT_Library,
@@ -341,10 +378,15 @@ pub struct Fonts {
     /// Lines laid out lately (layout()), two generations of them.
     lines: HashMap<LineKey, (String, Line)>,
     lines_old: HashMap<LineKey, (String, Line)>,
+    /// Texts broken into lines lately (wrap_strings), two generations too.
+    wraps: HashMap<WrapKey, (String, Vec<String>)>,
+    wraps_old: HashMap<WrapKey, (String, Vec<String>)>,
 }
 
 /// A text's hash, font, size and letter spacing (bits).
 type LineKey = (u64, FontKey, u32, u32);
+/// The same plus the width (bits) and Text.Wrap (break anywhere).
+type WrapKey = (u64, FontKey, u32, u32, u32, bool);
 
 /// QFontEngineFT::loadFlags for a gray glyph cache with fontconfig's
 /// hintslight. RUST_BAR_FT_FLAGS overrides it (calibration only).
@@ -461,7 +503,7 @@ impl Fonts {
     pub fn new() -> Fonts {
         Fonts {
             faces: vec![],
-            by_key: HashMap::new(),
+            by_family: HashMap::new(),
             by_file: HashMap::new(),
             fallback: HashMap::new(),
             glyphs: HashMap::new(),
@@ -472,12 +514,14 @@ impl Fonts {
                 lib
             },
             scale: ScaleContext::new(),
-            atlas: Atlas::new(1, 1024, 256),
-            color_atlas: Atlas::new(4, 256, 64),
+            atlas: Atlas::gray(),
+            color_atlas: Atlas::colour(),
             colors: HashMap::new(),
             emoji: None,
             lines: HashMap::new(),
             lines_old: HashMap::new(),
+            wraps: HashMap::new(),
+            wraps_old: HashMap::new(),
         }
     }
 
@@ -490,10 +534,7 @@ impl Fonts {
         let map = unsafe { memmap2::Mmap::map(&f).ok()? };
         let data: &'static [u8] = Box::leak(Box::new(map));
         let font = FontRef::from_index(data, index as usize)?;
-        let mut face = Face::new(font);
-        face.data = data;
-        face.index = index;
-        face.hb = rustybuzz::Face::from_slice(data, index)?;
+        let face = Face::new(font, index)?;
         self.faces.push(face);
         let i = (self.faces.len() - 1) as u16;
         self.by_file.insert((file.to_string(), index), i);
@@ -501,14 +542,17 @@ impl Fonts {
     }
 
     pub fn face_for(&mut self, key: FontKey) -> u16 {
-        if let Some(&i) = self.by_key.get(&key) {
+        if let Some(&i) = self.by_family.get(key.family) {
             return i;
         }
         // The bar's Qt resolves bold to the family's regular file (the live bar
         // maps only TerminessNerdFont-Regular.ttf) and emboldens it - see layout().
-        let (file, index) = fc_match(key.family).unwrap_or_else(|| ("/usr/share/fonts/TTF/DejaVuSans.ttf".into(), 0));
-        let i = self.load_file(&file, index).expect("no usable font");
-        self.by_key.insert(key, i);
+        // A match that does not load falls back as a failed match does.
+        let i = fc_match(key.family)
+            .and_then(|(file, index)| self.load_file(&file, index))
+            .or_else(|| self.load_file("/usr/share/fonts/TTF/DejaVuSans.ttf", 0))
+            .expect("no usable font");
+        self.by_family.insert(key.family, i);
         i
     }
 
@@ -519,12 +563,14 @@ impl Fonts {
         if self.faces[primary as usize].font.charmap().map(ch) != 0 || ch.is_control() {
             return primary;
         }
-        if let Some(&i) = self.fallback.get(&(key, ch)) {
+        if let Some(&i) = self.fallback.get(&(key.family, ch)) {
             return i;
         }
+        // An fc-match process (about 6 ms, on this thread): once per family
+        // and character.
         let pat = format!("{}:charset={:x}", key.family, ch as u32);
         let i = fc_match(&pat).and_then(|(f, idx)| self.load_file(&f, idx)).unwrap_or(primary);
-        self.fallback.insert((key, ch), i);
+        self.fallback.insert((key.family, ch), i);
         i
     }
 
@@ -753,13 +799,8 @@ impl Fonts {
                 }
             }
         }
-        let (ax, ay) = self.color_atlas.alloc(dw as u32, dh as u32);
-        let aw = self.color_atlas.width as usize;
-        for y in 0..dh {
-            let dst = ((ay as usize + y) * aw + ax as usize) * 4;
-            self.color_atlas.pixels[dst..dst + dw * 4].copy_from_slice(&out[y * dw * 4..(y + 1) * dw * 4]);
-        }
-        self.color_atlas.dirty.push((ax, ay, dw as u32, dh as u32));
+        let (ax, ay) = self.color_atlas.alloc(dw as u32, dh as u32)?;
+        self.color_atlas.pending.push((ax, ay, dw as u32, dh as u32, out));
         Some(ColorGlyph { ax, ay, w: dw as u32, h: dh as u32, left: (*slot).bitmap_left as f32 * f, top: (*slot).bitmap_top as f32 * f })
     }
 
@@ -776,7 +817,35 @@ impl Fonts {
         self.wrap_strings(text, key, size, letter_spacing, max, true).iter().map(|l| self.layout(l, key, size, letter_spacing)).collect()
     }
 
+    /// A wrapped Text breaks its lines once (QQuickText lays out again only
+    /// on a change); breaking measures every candidate line, and a long
+    /// text without break opportunities (a token, base64, a long URL in the
+    /// clipboard's preview) has one candidate per character - hundreds of
+    /// strings, more than the line cache keeps, so every frame shaped most
+    /// of them again. The breaks are kept like the lines are: what a frame
+    /// asks for again is one lookup.
     pub fn wrap_strings(&mut self, text: &str, key: FontKey, size: f32, letter_spacing: f32, max: f32, anywhere: bool) -> Vec<String> {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        text.hash(&mut h);
+        let k = (h.finish(), key, size.to_bits(), letter_spacing.to_bits(), max.to_bits(), anywhere);
+        if let Some((t, out)) = self.wraps.get(&k) {
+            if t == text {
+                return out.clone();
+            }
+        }
+        let out = match self.wraps_old.remove(&k) {
+            Some((t, out)) if t == text => out,
+            _ => self.break_lines(text, key, size, letter_spacing, max, anywhere),
+        };
+        if self.wraps.len() >= 64 {
+            self.wraps_old = std::mem::take(&mut self.wraps);
+        }
+        self.wraps.insert(k, (text.to_string(), out.clone()));
+        out
+    }
+
+    fn break_lines(&mut self, text: &str, key: FontKey, size: f32, letter_spacing: f32, max: f32, anywhere: bool) -> Vec<String> {
         use unicode_linebreak::{linebreaks, BreakOpportunity};
         let mut out: Vec<String> = Vec::new();
         let mut cur = String::new();
@@ -973,16 +1042,14 @@ impl Fonts {
         if w == 0 || h == 0 {
             return Some(NativeGlyph { ax: 0, ay: 0, w: 0, h: 0, left, top });
         }
-        let (ax, ay) = self.atlas.alloc(w + 4, h + 4);
-        let aw = self.atlas.width;
-        for j in 0..h + 4 {
-            let row = ((ay + j) * aw + ax) as usize;
-            self.atlas.pixels[row..row + (w + 4) as usize].fill(0);
-        }
+        let (ax, ay) = self.atlas.alloc(w + 4, h + 4)?;
+        // The coverage inside two zero texels on every side.
+        let pw = w + 4;
+        let mut px = vec![0u8; (pw * (h + 4)) as usize];
         let mono = bm.pixel_mode as u32 == ft::FT_PIXEL_MODE_MONO as u32;
         for j in 0..h {
             let src = bm.buffer.offset((j as isize) * bm.pitch as isize);
-            let dst = ((ay + 2 + j) * aw + ax + 2) as usize;
+            let dst = ((2 + j) * pw + 2) as usize;
             for i in 0..w {
                 let v = if mono {
                     let byte = *src.add((i / 8) as usize);
@@ -990,10 +1057,10 @@ impl Fonts {
                 } else {
                     *src.add(i as usize)
                 };
-                self.atlas.pixels[dst + i as usize] = v;
+                px[dst + i as usize] = v;
             }
         }
-        self.atlas.dirty.push((ax, ay, w + 4, h + 4));
+        self.atlas.pending.push((ax, ay, pw, h + 4, px));
         Some(NativeGlyph { ax: ax + 2, ay: ay + 2, w, h, left, top })
     }
 
@@ -1005,6 +1072,29 @@ impl Fonts {
         let g = self.make_df(face, gid, bold);
         self.glyphs.insert((face, gid, bold), g);
         g
+    }
+
+    /// After a frame is submitted (Gpu::render): an atlas that grew past
+    /// ATLAS_KEEP_ROWS starts over, its glyph cache with it. Nothing ever
+    /// left an atlas, so the glyphs of everything a long session showed -
+    /// window titles and clipboard text in every script - piled up until
+    /// the texture limit aborted the bar; now the next frames make again
+    /// only what they draw. (Qt's distance-field cache is bounded too: it
+    /// reuses the room of glyphs no longer drawn.) Returns which restarted:
+    /// (distance fields and native glyphs, colour glyphs).
+    pub fn restart_full_atlases(&mut self) -> (bool, bool) {
+        let gray = self.atlas.height > ATLAS_KEEP_ROWS;
+        if gray {
+            self.atlas = Atlas::gray();
+            self.glyphs.clear();
+            self.native.clear();
+        }
+        let colour = self.color_atlas.height > ATLAS_KEEP_ROWS;
+        if colour {
+            self.color_atlas = Atlas::colour();
+            self.colors.clear();
+        }
+        (gray, colour)
     }
 
     fn ft_face(&mut self, face: u16) -> Option<ft::FT_Face> {
@@ -1065,19 +1155,37 @@ impl Fonts {
         let w = (xmax.ceil() as i32 + DF_PAD - x0) as u32;
         let h = (ymax.ceil() as i32 + DF_PAD - y0) as u32;
         let mut bits = vec![0u8; (w * h) as usize];
+        // Testing every segment at every texel gave these same numbers with
+        // far more work. A texel's sign is the winding of the segments that
+        // cross its row to its right, found once per row; its distance only
+        // counts up to DF_RADIUS, so a segment whose box, grown by a pixel
+        // more (out of the floats' way), misses the texel cannot lower the
+        // minimum. The rest is the same arithmetic: bit-identical fields,
+        // 1.25x faster on Terminess, 1.8x on JetBrains Mono, 2.4x on icons.
+        const REACH: f32 = DF_RADIUS + 1.0;
+        let mut crossings: Vec<(f32, i32)> = Vec::new();
+        let mut near: Vec<[f32; 4]> = Vec::new();
         for j in 0..h {
             let py = y0 as f32 + j as f32 + 0.5;
+            crossings.clear();
+            near.clear();
+            for s in &segs {
+                let (ax, ay, bx, by) = (s[0], s[1], s[2], s[3]);
+                if (ay <= py) != (by <= py) {
+                    crossings.push((ax + (py - ay) * (bx - ax) / (by - ay), if by > ay { 1 } else { -1 }));
+                }
+                if py >= ay.min(by) - REACH && py <= ay.max(by) + REACH {
+                    near.push(*s);
+                }
+            }
             for i in 0..w {
                 let px = x0 as f32 + i as f32 + 0.5;
+                let winding: i32 = crossings.iter().filter(|c| c.0 > px).map(|c| c.1).sum();
                 let mut d2 = DF_RADIUS * DF_RADIUS;
-                let mut winding = 0i32;
-                for s in &segs {
+                for s in &near {
                     let (ax, ay, bx, by) = (s[0], s[1], s[2], s[3]);
-                    if (ay <= py) != (by <= py) {
-                        let xi = ax + (py - ay) * (bx - ax) / (by - ay);
-                        if xi > px {
-                            winding += if by > ay { 1 } else { -1 };
-                        }
+                    if px < ax.min(bx) - REACH || px > ax.max(bx) + REACH {
+                        continue;
                     }
                     let (dx, dy) = (bx - ax, by - ay);
                     let l2 = dx * dx + dy * dy;
@@ -1091,13 +1199,8 @@ impl Fonts {
                 bits[(j * w + i) as usize] = (v * 255.0).round() as u8;
             }
         }
-        let (ax, ay) = self.atlas.alloc(w, h);
-        let aw = self.atlas.width;
-        for j in 0..h {
-            let dst = ((ay + j) * aw + ax) as usize;
-            self.atlas.pixels[dst..dst + w as usize].copy_from_slice(&bits[(j * w) as usize..((j + 1) * w) as usize]);
-        }
-        self.atlas.dirty.push((ax, ay, w, h));
+        let (ax, ay) = self.atlas.alloc(w, h)?;
+        self.atlas.pending.push((ax, ay, w, h, bits));
         Some(DfGlyph { ax, ay, w, h, x0: x0 as f32, y0: y0 as f32 })
     }
 }
