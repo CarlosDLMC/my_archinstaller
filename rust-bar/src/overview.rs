@@ -227,18 +227,35 @@ fn watch(app: &mut App) {
     let _ = s.set_nonblocking(true);
     let token = app.watch_fd(s.as_raw_fd(), |app| {
         let mut lines = Vec::new();
+        let mut gone = false;
         if let Some((s, _, buf)) = app.svc.overview.watch.as_mut() {
             let mut chunk = [0u8; 65536];
             loop {
                 match s.read(&mut chunk) {
-                    Ok(0) => break,
+                    Ok(0) => {
+                        gone = true;
+                        break;
+                    }
                     Ok(n) => buf.extend_from_slice(&chunk[..n]),
-                    Err(_) => break,
+                    Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+                    Err(e) => {
+                        gone = e.kind() != std::io::ErrorKind::WouldBlock;
+                        break;
+                    }
                 }
             }
             while let Some(p) = buf.iter().position(|&b| b == b'\n') {
                 let l: Vec<u8> = buf.drain(..=p).collect();
                 lines.push(String::from_utf8_lossy(&l[..l.len() - 1]).into_owned());
+            }
+        }
+        // mango hung up (it drops a watcher whose buffer filled, and all of
+        // them when it quits): stop, as the QML Socket does. A readable EOF
+        // would call this back without end. calloop takes the source out
+        // after this callback; the fd stays open until close().
+        if gone {
+            if let Some(t) = app.svc.overview.watch.as_mut().and_then(|w| w.1.take()) {
+                app.unwatch(t);
             }
         }
         for l in lines {
