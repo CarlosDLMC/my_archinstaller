@@ -73,6 +73,8 @@ pub struct Polkit {
     register_serial: Option<u32>,
     queue: VecDeque<Request>,
     pub flow: Option<Flow>,
+    /// Helper sockets of ended sessions, open until the next loop turn.
+    closed: Vec<UnixStream>,
     /// PolkitState.error / checking, and the password field.
     pub error: String,
     pub checking: bool,
@@ -330,6 +332,13 @@ fn close_session(app: &mut App) {
     if let Some(t) = s.token {
         app.unwatch(t);
     }
+    // From helper_ready itself (a failure starts the retry's session, a
+    // success the next queued request's), calloop takes the fd out of epoll
+    // by its number only after the callback returns. Closed now, the new
+    // session's socket got that number and lost its watch: the retry prompt
+    // never came. The old socket stays open until the next loop turn.
+    app.svc.polkit.closed.push(s.stream);
+    app.after(Duration::ZERO, |app| app.svc.polkit.closed.clear());
 }
 
 /// g_strcompress: the helper escapes its lines like C strings (g_strescape),
