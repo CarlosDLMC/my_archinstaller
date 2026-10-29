@@ -730,7 +730,8 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
     ui.scene.rect(cx, y, cw, m.field_h, t.col_plate, 5.0, 1.0, if enabled { t.col_accent } else { Color::TRANSPARENT }, true);
     let (fx, fw) = (cx + m.gap, cw - 2.0 * m.gap);
     ui.scene.save();
-    ui.scene.clip_rect(fx, y, fw, m.field_h);
+    // QQuickTextInput::clipRect: one cursor width wider on the right.
+    ui.scene.clip_rect(fx, y, fw + 1.0, m.field_h);
     if p.field.is_empty() {
         // inputPrompt.replace(/:\s*$/, ""): one colon at the end and the
         // blanks after it; a prompt without one keeps its own blanks.
@@ -749,8 +750,9 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
     let fl = ui.fonts.layout(&shown, FIELD, m.body, 0.0);
     let fy = y + (m.field_h - fl.height()) / 2.0;
     // TextInput.autoScroll: a line longer than the field slides left so the
-    // cursor at its end stays in view (as the clipboard's search line does).
-    let shift = (fl.adv + 1.0 - fw).max(0.0);
+    // cursor at its end stays in view - ensureVisible's hscroll = cursorX -
+    // width, the cursor just past the box, inside the wider clip.
+    let shift = (fl.adv - fw).max(0.0);
     if !shown.is_empty() {
         ui.text(&fl, fx - shift, fy, t.col_white, TextStyle::Normal);
     }

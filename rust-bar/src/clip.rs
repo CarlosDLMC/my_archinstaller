@@ -748,14 +748,16 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
     let ih = ui.fonts.layout("Н", CONTENT, m.title, 0.0).height();
     let sy = y + ac(head_h, ih);
     ui.scene.save();
-    ui.scene.clip_rect(sx, sy, sw, ih);
+    // QQuickTextInput::clipRect: one cursor width wider on the right.
+    ui.scene.clip_rect(sx, sy, sw + 1.0, ih);
     if c.filter.is_empty() {
         let pl = ui.fonts.layout("Поиск…", CONTENT, m.title, 0.0);
         ui.text(&pl, sx, sy + (ih - pl.height()) / 2.0, t.col_grey, TextStyle::Normal);
     }
     let cursor_x = ui.fonts.layout(&c.filter[..c.cursor.min(c.filter.len())], CONTENT, m.title, 0.0).adv;
-    // TextInput scrolls to keep its cursor in view.
-    let shift = (cursor_x + 1.0 - sw).max(0.0);
+    // TextInput scrolls to keep its cursor in view: ensureVisible's hscroll =
+    // cursorX - width, the cursor just past the box, inside the wider clip.
+    let shift = (cursor_x - sw).max(0.0);
     if !c.filter.is_empty() {
         ui.text(&line, sx - shift, sy, t.col_white, TextStyle::Normal);
     }
