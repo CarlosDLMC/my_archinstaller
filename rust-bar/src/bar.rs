@@ -68,6 +68,10 @@ pub enum Action {
     Hover(u32),
 }
 
+/// Action::Hover(TEXT_FIELD) over a TextInput: the I-beam cursor
+/// (QQuickTextInput's Qt::IBeamCursor) and no click of its own.
+pub const TEXT_FIELD: u32 = 0xFFFF_FFFE;
+
 #[derive(Clone, Debug)]
 pub struct Hit {
     pub x: f32,

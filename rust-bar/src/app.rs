@@ -171,7 +171,8 @@ pub struct App {
     latin: LatinKeys,
     /// Qt's event.isAutoRepeat: true while a held key's repeat is dispatched.
     pub key_repeat: bool,
-    hand: bool,
+    /// The cursor shape sent since the pointer last entered a surface.
+    cursor: Option<Shape>,
     /// The widget a button went down on: a click is a release on the same one.
     pressed: Option<(WinRef, u32, Action)>,
     pub instance: wgpu::Instance,
@@ -250,7 +251,7 @@ impl App {
             pointer: None,
             keyboard: None,
             enter_serial: 0,
-            hand: false,
+            cursor: None,
             pressed: None,
             instance: Gpu::new_instance(),
             gpu: None,
@@ -584,13 +585,25 @@ impl App {
         m.frame_pending = true;
     }
 
-    fn set_cursor(&mut self, hand: bool) {
-        if hand == self.hand {
+    fn set_cursor(&mut self, shape: Shape) {
+        if self.cursor == Some(shape) {
             return;
         }
-        self.hand = hand;
+        self.cursor = Some(shape);
         if let Some((_, Some(dev))) = &self.pointer {
-            dev.set_shape(self.enter_serial, if hand { Shape::Pointer } else { Shape::Default });
+            dev.set_shape(self.enter_serial, shape);
+        }
+    }
+
+    /// The cursor over a hit: QQuickTextInput's I-beam over a text field, the
+    /// hand of the MouseAreas' cursorShape over a control, else the arrow.
+    fn cursor_at(&self, w: WinRef, hit: Option<Action>) -> Shape {
+        match hit {
+            Some(Action::Hover(bar::TEXT_FIELD)) => Shape::Text,
+            // The Wi-Fi password TextInput is a control of the card's chain.
+            Some(Action::Card(crate::wifi_card::INPUT)) if w == WinRef::Card && self.card.as_ref().map_or(false, |c| c.kind == cards::CardKind::Wifi) => Shape::Text,
+            Some(Action::Hover(_)) | None => Shape::Default,
+            Some(_) => Shape::Pointer,
         }
     }
 
@@ -887,14 +900,14 @@ impl PointerHandler for App {
                         PointerEventKind::Press { button: BTN_LEFT | BTN_RIGHT | BTN_MIDDLE, .. } => cards::close(self),
                         PointerEventKind::Enter { serial } => {
                             self.enter_serial = serial;
-                            self.hand = true;
-                            self.set_cursor(false);
+                            self.cursor = None;
+                            self.set_cursor(Shape::Default);
                         }
                         PointerEventKind::Motion { .. } => {
                             if self.card.as_ref().map_or(false, |c| c.pointer.is_some()) {
                                 self.set_pointer(WinRef::Card, None);
                                 self.win_mut(WinRef::Card).unwrap().dirty = true;
-                                self.set_cursor(false);
+                                self.set_cursor(Shape::Default);
                             }
                         }
                         _ => {}
@@ -910,8 +923,8 @@ impl PointerHandler for App {
                 match e.kind {
                     PointerEventKind::Enter { serial } => {
                         self.enter_serial = serial;
-                        self.hand = true;
-                        self.set_cursor(false);
+                        self.cursor = None;
+                        self.set_cursor(Shape::Default);
                     }
                     PointerEventKind::Press { button: BTN_LEFT, .. } => self.pressed = Some((WinRef::Osd(k), BTN_LEFT, Action::Hover(u32::MAX))),
                     PointerEventKind::Release { button: BTN_LEFT, .. } => {
@@ -952,12 +965,12 @@ impl PointerHandler for App {
                     self.enter_serial = serial;
                     self.set_pointer(w, Some((x, y)));
                     self.win_mut(w).unwrap().dirty = true;
-                    let hand = self.hit_at(w, x, y).map_or(false, |a| !matches!(a, Action::Hover(_)));
                     // wl_pointer.enter leaves the image to the client, and
                     // mango keeps the last app's (an I-beam) until one comes:
                     // send it every time, as Qt does - also over a Hover area.
-                    self.hand = !hand;
-                    self.set_cursor(hand);
+                    self.cursor = None;
+                    let shape = self.cursor_at(w, self.hit_at(w, x, y));
+                    self.set_cursor(shape);
                 }
                 PointerEventKind::Leave { .. } => {
                     if let WinRef::Osd(k) = w {
@@ -985,7 +998,8 @@ impl PointerHandler for App {
                             crate::osd::hovered(self, k, after);
                         }
                     }
-                    self.set_cursor(after.map_or(false, |a| !matches!(a, Action::Hover(_))));
+                    let shape = self.cursor_at(w, after);
+                    self.set_cursor(shape);
                 }
                 PointerEventKind::Press { button, .. } => {
                     // The card's own MouseArea and its controls take the left
