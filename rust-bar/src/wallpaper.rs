@@ -227,8 +227,10 @@ fn script() -> String {
     format!("{}/.config/quickshell/bar/scripts/wallpapers.py", home())
 }
 
+/// WallpaperState.thumbDir: `env("XDG_CACHE_HOME") || home + "/.cache"` -
+/// an empty value falls back too.
 fn thumb_dir() -> String {
-    let cache = std::env::var("XDG_CACHE_HOME").unwrap_or_else(|_| format!("{}/.cache", home()));
+    let cache = std::env::var("XDG_CACHE_HOME").ok().filter(|c| !c.is_empty()).unwrap_or_else(|| format!("{}/.cache", home()));
     format!("{cache}/quickshell/wall-thumbs")
 }
 
