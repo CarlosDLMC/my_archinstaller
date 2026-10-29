@@ -498,7 +498,12 @@ fn stats_shown_changed(app: &mut App) {
 /// time, as Qt does for local time, so a new /etc/localtime shows.
 fn local_now() -> (i32, String) {
     unsafe { tzset() };
-    let t = unsafe { libc::time(std::ptr::null_mut()) };
+    // CLOCK_REALTIME, as Qt's current time: time() is the kernel's coarse
+    // clock, a tick behind, and when the minute timer fires it still reads
+    // the second before the minute - the clock kept the old one up.
+    let mut now = libc::timespec { tv_sec: 0, tv_nsec: 0 };
+    unsafe { libc::clock_gettime(libc::CLOCK_REALTIME, &mut now) };
+    let t: libc::time_t = now.tv_sec;
     let mut tm: libc::tm = unsafe { std::mem::zeroed() };
     unsafe { libc::localtime_r(&t, &mut tm) };
     (tm.tm_min, format!("{:02}:{:02}", tm.tm_hour, tm.tm_min))
