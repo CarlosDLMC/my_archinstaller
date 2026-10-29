@@ -5,6 +5,8 @@
 //! wallpapers.py applies it.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use smithay_client_toolkit::{
@@ -57,6 +59,10 @@ struct Tex {
     w: u32,
     h: u32,
 }
+
+/// A decode on its way to the decode thread: once set, it is skipped or its
+/// result dropped (an Image that goes away cancels its request).
+type Cancel = Arc<AtomicBool>;
 
 /// QSmoothedAnimation, which ListView moves its highlight with: velocity
 /// 400 px/s (highlightMoveVelocity) and highlightMoveDuration, the shorter
@@ -190,7 +196,7 @@ pub struct Wall {
     tab_acc: f32,
     tab_scroll: f32,
     textures: HashMap<String, Tex>,
-    loading: HashSet<String>,
+    loading: HashMap<String, Cancel>,
     // The reveal.
     reveal_item: Option<Item>,
     pub reveal_phase: &'static str,
@@ -350,12 +356,8 @@ fn scan_line(app: &mut App, line: &str) {
         }
     } else if let Some(id) = line.strip_prefix("thumb ") {
         app.svc.wall.ready.insert(id.to_string());
-        // The card had the picture; the thumbnail replaces it.
-        if let Some(t) = app.svc.wall.textures.remove(id) {
-            if let Some(gpu) = app.gpu.as_mut() {
-                gpu.drop_image(t.id);
-            }
-        }
+        // The card had the picture (or was decoding it); the thumbnail replaces it.
+        forget_card(app, id);
     } else if let Some(id) = line.strip_prefix("fail ") {
         app.svc.wall.failed.insert(id.to_string());
     }
@@ -405,6 +407,10 @@ pub fn close(app: &mut App) {
         return;
     }
     app.svc.wall.open = false;
+    // Nothing decoded now would be shown: the queue is not worked through.
+    for (_, f) in app.svc.wall.loading.drain() {
+        f.store(true, Ordering::Relaxed);
+    }
     osd::hide(app, OsdKind::Wallpaper);
     app.after(Duration::from_millis(FADE_MS + 20), drop_textures);
 }
@@ -414,7 +420,9 @@ fn drop_textures(app: &mut App) {
         return;
     }
     let ids: Vec<u32> = app.svc.wall.textures.drain().map(|(_, t)| t.id).collect();
-    app.svc.wall.loading.clear();
+    for (_, f) in app.svc.wall.loading.drain() {
+        f.store(true, Ordering::Relaxed);
+    }
     if let Some(gpu) = app.gpu.as_mut() {
         for id in ids {
             gpu.drop_image(id);
@@ -521,6 +529,12 @@ fn move_to(app: &mut App, i: usize) {
     }
     set_centred(app);
     redraw(app);
+    // Once the strip has come to rest, the cards it passed are let go.
+    app.debounce("wall-settle", Duration::from_millis(MOVE_MS + 10), |app| {
+        if app.svc.wall.open {
+            load_visible(app);
+        }
+    });
 }
 
 fn step(app: &mut App, delta: i64) {
@@ -729,36 +743,69 @@ pub fn click(app: &mut App, action: Action) {
 
 // ---- thumbnails ----
 
-/// The delegates that exist: the strip in view plus cacheBuffer (2 card widths).
+/// A card's Image lost its source or its delegate: its picture goes, and a
+/// decode still on its way is cancelled.
+fn forget_card(app: &mut App, id: &str) {
+    if let Some(f) = app.svc.wall.loading.remove(id) {
+        f.store(true, Ordering::Relaxed);
+    }
+    if let Some(t) = app.svc.wall.textures.remove(id) {
+        if let Some(gpu) = app.gpu.as_mut() {
+            gpu.drop_image(t.id);
+        }
+    }
+}
+
+/// The delegates that exist: the strip in view plus cacheBuffer (2 card
+/// widths) each side. A card coming into that range has its picture decoded;
+/// one that left it - where the view is, where it is going, and on the way
+/// there - loses it, as ListView destroys the delegate and its Image drops
+/// the texture and cancels a request still queued.
 fn load_visible(app: &mut App) {
     let (sw, sh) = screen_of(app);
     let g = geo(sw, sh);
+    let now = Instant::now();
     let w = &app.svc.wall;
-    let vx = w.view_x.as_ref().map_or(content_x(&g, w.index), |a| a.target());
-    let lo = vx - 2.0 * g.card_w;
-    let hi = vx + g.w + 2.0 * g.card_w;
+    let (cur, vx) = w.view_x.as_ref().map_or((content_x(&g, w.index), content_x(&g, w.index)), |a| (a.get(now), a.target()));
+    let alive = |x: f32, from: f32, to: f32| x + g.card_w >= from - 2.0 * g.card_w && x <= to + g.w + 2.0 * g.card_w;
     let step_w = g.card_w + g.spacing;
+    let strip = w.strip();
+    let mut keep: HashSet<&str> = HashSet::new();
     let mut jobs = Vec::new();
-    for (i, it) in w.strip().iter().enumerate() {
+    for (i, it) in strip.iter().enumerate() {
         let x = i as f32 * step_w;
-        if x + g.card_w < lo || x > hi || w.textures.contains_key(&it.id) || w.loading.contains(&it.id) {
+        if !alive(x, cur.min(vx), cur.max(vx)) {
+            continue;
+        }
+        keep.insert(&it.id);
+        if !alive(x, vx, vx) || w.textures.contains_key(&it.id) || w.loading.contains_key(&it.id) {
             continue;
         }
         if let Some(p) = w.thumb_path(it) {
             jobs.push((it.id.clone(), p));
         }
     }
+    let gone: Vec<String> = w.textures.keys().chain(w.loading.keys()).filter(|id| !keep.contains(id.as_str())).cloned().collect();
+    for id in gone {
+        forget_card(app, &id);
+    }
     let target_h = g.card_h as u32;
     for (id, path) in jobs {
-        app.svc.wall.loading.insert(id.clone());
+        let cancel = Cancel::default();
+        app.svc.wall.loading.insert(id.clone(), cancel.clone());
         app.background(
-            move || (id.clone(), decode_height(&path, target_h).map(|(w, h, rgba)| crate::gpu::mip_levels(w, h, rgba, true))),
-            |app, (id, img)| {
-                app.svc.wall.loading.remove(&id);
-                let Some(levels) = img else { return };
-                if !app.svc.wall.open {
+            move || {
+                let img = if cancel.load(Ordering::Relaxed) { None } else { decode_height(&path, target_h).map(|(w, h, rgba)| crate::gpu::mip_levels(w, h, rgba, true)) };
+                (id, cancel, img)
+            },
+            |app, (id, cancel, img)| {
+                // Only the decode the card still waits for: not a cancelled
+                // one, nor an older one for the same card.
+                if !app.svc.wall.loading.get(&id).is_some_and(|c| Arc::ptr_eq(c, &cancel)) {
                     return;
                 }
+                app.svc.wall.loading.remove(&id);
+                let Some(levels) = img else { return };
                 let Some(gpu) = app.gpu.as_mut() else { return };
                 let (w, h) = (levels[0].0, levels[0].1);
                 let t = Tex { id: gpu.add_levels(levels), w, h };
