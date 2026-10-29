@@ -969,15 +969,18 @@ pub fn wifi_refresh(app: &mut App) {
 /// wifiCurrentProc.running = true. On a read still running, Process runs it
 /// once more when that one ends (its targetRunning): a change nmcli monitor
 /// reported meanwhile, or the card's connect finishing, is not dropped.
+/// QML pipes nmcli through `grep '^\*' | head -1`; the line is picked here,
+/// one process per read instead of four.
 fn wifi_status(app: &mut App) {
     if app.is_running("wifi-current") {
         app.svc.wifi.again = true;
         return;
     }
-    app.spawn("wifi-current", &["sh", "-c", "nmcli -t -f IN-USE,SSID,SIGNAL device wifi list --rescan no | grep '^\\*' | head -1"], |app, d| {
+    app.spawn("wifi-current", &["nmcli", "-t", "-f", "IN-USE,SSID,SIGNAL", "device", "wifi", "list", "--rescan", "no"], |app, d| {
         let w = &mut app.svc.wifi;
         let before = (w.connected, w.ssid.clone());
-        let out = d.stdout.trim();
+        // The first line of the access point in use, trimmed (output.trim()).
+        let out = d.stdout.lines().find(|l| l.starts_with('*')).unwrap_or("").trim();
         if out.is_empty() {
             w.connected = false;
             w.ssid.clear();
