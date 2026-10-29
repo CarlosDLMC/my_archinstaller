@@ -197,15 +197,18 @@ fn is_open(app: &App) -> bool {
 
 // ---- the processes ----
 
-/// onActiveChanged(true): fresh rate samples, every source once, then the
-/// status every 3 s (triggeredOnStart).
+/// A new NetworkPanel: QML makes one with every opening, in the card's
+/// Loader (WifiWidget.qml:429-439, DropdownWidget.qml:174-176), so every
+/// reading starts at its declared default (NetworkPanel.qml:28-33, 147-151,
+/// 281-298, 391-394) - dashes, no gauge, Готов / СТАРТ, no QR - until the
+/// first answers land. The speed test's generation goes on, so the exit of
+/// a test still dying from the last opening stays ignored, and an action
+/// still running keeps its spinner until it ends. Then onActiveChanged(true):
+/// every source once, the status every 3 s (triggeredOnStart).
 pub fn opened(app: &mut App) {
-    let n = &mut app.svc.net;
-    n.last_rx = -1.0;
-    n.last_tx = -1.0;
-    n.last_sample = None;
-    n.rx_rate = -1.0;
-    n.tx_rate = -1.0;
+    let old = std::mem::take(&mut app.svc.net);
+    let busy = if app.is_running("net-action") { old.busy } else { String::new() };
+    app.svc.net = NetPanel { speed_run: old.speed_run, proc_gen: old.proc_gen, proc_phase: old.proc_phase, busy, ..NetPanel::default() };
     refresh(app);
     status_tick(app);
 }
