@@ -791,13 +791,13 @@ fn load_visible(app: &mut App) {
     for id in gone {
         forget_card(app, &id);
     }
-    let target_h = g.card_h as u32;
+    let (target_h, max) = (g.card_h as u32, max_texture(app));
     for (id, path) in jobs {
         let cancel = Cancel::default();
         app.svc.wall.loading.insert(id.clone(), cancel.clone());
         app.background(
             move || {
-                let img = if cancel.load(Ordering::Relaxed) { None } else { decode_height(&path, target_h).map(|(w, h, rgba)| crate::gpu::mip_levels(w, h, rgba, true)) };
+                let img = if cancel.load(Ordering::Relaxed) { None } else { decode_height(&path, target_h, max).map(|(w, h, rgba)| crate::gpu::mip_levels(w, h, rgba, true)) };
                 (id, cancel, img)
             },
             |app, (id, cancel, img)| {
@@ -822,8 +822,24 @@ fn load_visible(app: &mut App) {
     }
 }
 
+/// The GPU's largest texture side (8192, wgpu's downlevel floor, before the
+/// GPU is up).
+fn max_texture(app: &App) -> u32 {
+    app.gpu.as_ref().map_or(8192, |g| g.device.limits().max_texture_dimension_2d)
+}
+
+/// Each side cut down to the GPU's limit: a texture past it is a wgpu
+/// validation error, which aborts the bar (panic = "abort") where Qt carries on.
+fn fit_texture(img: image::RgbaImage, max: u32) -> image::RgbaImage {
+    let (w, h) = img.dimensions();
+    if w <= max && h <= max {
+        return img;
+    }
+    crate::gpu::scale(img, w.min(max), h.min(max))
+}
+
 /// sourceSize.height only: scaled down (never up) to that height.
-fn decode_height(path: &std::path::Path, h: u32) -> Option<(u32, u32, Vec<u8>)> {
+fn decode_height(path: &std::path::Path, h: u32, max: u32) -> Option<(u32, u32, Vec<u8>)> {
     let img = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?.decode().ok()?.to_rgba8();
     let (iw, ih) = img.dimensions();
     let img = if ih > h {
@@ -832,12 +848,13 @@ fn decode_height(path: &std::path::Path, h: u32) -> Option<(u32, u32, Vec<u8>)> 
     } else {
         img
     };
+    let img = fit_texture(img, max);
     let (w, hh) = img.dimensions();
     Some((w, hh, crate::gpu::premultiply(img.into_raw())))
 }
 
 /// sourceSize width and height with PreserveAspectCrop: scaled to cover.
-fn decode_cover(path: &std::path::Path, w: u32, h: u32) -> Option<(u32, u32, Vec<u8>)> {
+fn decode_cover(path: &std::path::Path, w: u32, h: u32, max: u32) -> Option<(u32, u32, Vec<u8>)> {
     let img = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?.decode().ok()?.to_rgba8();
     let (iw, ih) = img.dimensions();
     let s = (w as f32 / iw as f32).max(h as f32 / ih as f32);
@@ -846,6 +863,7 @@ fn decode_cover(path: &std::path::Path, w: u32, h: u32) -> Option<(u32, u32, Vec
     } else {
         img
     };
+    let img = fit_texture(img, max);
     let (ow, oh) = img.dimensions();
     Some((ow, oh, crate::gpu::premultiply(img.into_raw())))
 }
@@ -1123,6 +1141,7 @@ fn start_reveal(app: &mut App, it: Item) {
     w.reveal_ready = 0;
     w.reveal_start = None;
     let outputs: Vec<(WlOutput, f32, f32)> = app.strips.iter().map(|s| (s.output.clone(), s.screen_width, s.screen_height)).collect();
+    let max = max_texture(app);
     for (output, sw, sh) in outputs {
         let surface = app.compositor.create_surface(&app.qh);
         let layer = app.layer_shell.create_layer_surface(&app.qh, surface, Layer::Bottom, Some("quickshell:wallpaper-reveal"), Some(&output));
@@ -1137,7 +1156,7 @@ fn start_reveal(app: &mut App, it: Item) {
         app.reveals.push(RevealWin { output, win: Win::new(layer, sw as u32, sh as u32), tex: None, reported: false });
         let path = path_of(&it.src);
         let (w, h) = (sw as u32, sh as u32);
-        app.background(move || (i, decode_cover(&path, w, h)), |app, (i, img)| {
+        app.background(move || (i, decode_cover(&path, w, h, max)), |app, (i, img)| {
             let Some(r) = app.reveals.get_mut(i) else { return };
             if let (Some((w, h, rgba)), Some(gpu)) = (img, app.gpu.as_mut()) {
                 r.tex = Some(Tex { id: gpu.add_image(w, h, rgba, false), w, h });
