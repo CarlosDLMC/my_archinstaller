@@ -7,13 +7,13 @@ use serde_json::Value;
 
 use crate::app::App;
 use crate::bar::ac;
-use crate::cards::{plate, Ui};
+use crate::cards::{plate, CardKind, Ui};
 use crate::color::Color;
 use crate::gpu::TextStyle;
 use crate::services::{self, Services};
 use crate::theme::{self, FONT_SIZE};
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, PartialEq)]
 pub struct Limit {
     pub label: String,
     pub window: String,
@@ -23,7 +23,7 @@ pub struct Limit {
     pub resets_at: String,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, PartialEq)]
 pub struct ModelUse {
     pub model: String,
     pub tokens: f64,
@@ -43,7 +43,13 @@ pub struct Usage {
     pub loaded: bool,
     pub stale_at: f64,
     last_probe_at: f64,
+    /// The open card's ticks, and its clock-driven texts as last seen.
+    ticks: u32,
+    clock_texts: String,
 }
+
+/// The open card's 30 s timer (AgentPanel's nowTick + AgentUsage's stats Timer).
+const TICK: &str = "agent-tick";
 
 fn now_s() -> f64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map_or(0.0, |d| d.as_secs_f64())
@@ -60,12 +66,15 @@ fn apply(app: &mut App, text: &str) {
         return;
     }
     let u = &mut app.svc.agent;
+    // A Repeater handed an array that differs from its model makes all its
+    // rows anew: new Texts (subpixel again). An equal one keeps them.
+    let mut remade: Vec<u64> = Vec::new();
     if j.get("probed").and_then(Value::as_bool) == Some(true) {
         if let Some(p) = j.get("plan").and_then(Value::as_str).filter(|p| !p.is_empty()) {
             u.plan = p.into();
         }
         if let Some(l) = j.get("limits").and_then(Value::as_array).filter(|l| !l.is_empty()) {
-            u.limits = l
+            let limits: Vec<Limit> = l
                 .iter()
                 .map(|x| Limit {
                     label: x.get("label").and_then(Value::as_str).unwrap_or("").into(),
@@ -76,6 +85,10 @@ fn apply(app: &mut App, text: &str) {
                     resets_at: x.get("resetsAt").and_then(Value::as_str).unwrap_or("").into(),
                 })
                 .collect();
+            if limits != u.limits {
+                remade.extend(LIMIT_TEXTS);
+            }
+            u.limits = limits;
         }
         u.limits_error = j.get("limitsError").and_then(Value::as_str).unwrap_or("").into();
         u.stale_at = j.get("staleAt").and_then(Value::as_f64).unwrap_or(0.0);
@@ -85,45 +98,101 @@ fn apply(app: &mut App, text: &str) {
         u.oldest_hour = h;
     }
     if let Some(d) = j.get("byDay").and_then(Value::as_array).filter(|d| !d.is_empty()) {
-        u.by_day = d.iter().map(|x| (x.get("day").and_then(Value::as_str).unwrap_or("").to_string(), x.get("tokens").and_then(Value::as_f64).unwrap_or(0.0))).collect();
+        let by_day: Vec<(String, f64)> = d.iter().map(|x| (x.get("day").and_then(Value::as_str).unwrap_or("").to_string(), x.get("tokens").and_then(Value::as_f64).unwrap_or(0.0))).collect();
+        if by_day != u.by_day {
+            remade.extend(DAY_TEXTS);
+        }
+        u.by_day = by_day;
     }
     if let Some(m) = j.get("byModel").and_then(Value::as_array).filter(|m| !m.is_empty()) {
         let n = |x: &Value, k: &str| x.get(k).and_then(Value::as_f64).unwrap_or(0.0);
-        u.by_model = m.iter().map(|x| ModelUse { model: x.get("model").and_then(Value::as_str).unwrap_or("").into(), tokens: n(x, "tokens"), input: n(x, "input"), output: n(x, "output"), cache_read: n(x, "cacheRead") }).collect();
+        let by_model: Vec<ModelUse> = m.iter().map(|x| ModelUse { model: x.get("model").and_then(Value::as_str).unwrap_or("").into(), tokens: n(x, "tokens"), input: n(x, "input"), output: n(x, "output"), cache_read: n(x, "cacheRead") }).collect();
+        if by_model != u.by_model {
+            remade.extend(MODEL_TEXTS);
+        }
+        u.by_model = by_model;
     }
     u.loaded = true;
+    u.clock_texts = clock_texts(u);
+    if let Some(c) = app.card.as_mut().filter(|c| c.kind == CardKind::Agent) {
+        c.texts.forget_parts(&remade);
+    }
     app.mark_all_dirty();
 }
 
 pub fn run(app: &mut App, mode: &str) {
     let cmd = format!("{}/.config/quickshell/bar/scripts/agent-usage.py {mode}", services::home());
-    app.spawn("agent-usage", &["sh", "-c", &cmd], |app, d| apply(app, &d.stdout));
+    app.spawn("agent-usage", &["sh", "-c", &cmd], |app, d| {
+        apply(app, &d.stdout);
+        busy_changed(app);
+    });
+    busy_changed(app);
 }
 
-/// cardOpen: a full probe if the last one is over two minutes old, then
-/// stats every minute while the card stays open.
+/// AgentUsage.busy follows the process, whatever it prints (onRunningChanged,
+/// AgentUsage.qml:111-115), and the open card's no-data text follows busy.
+fn busy_changed(app: &mut App) {
+    let u = &app.svc.agent;
+    if !(u.by_day.is_empty() && u.limits.is_empty()) {
+        return;
+    }
+    if let Some(c) = app.card.as_mut().filter(|c| c.kind == CardKind::Agent) {
+        c.win.dirty = true;
+    }
+}
+
+/// cardOpen: a full probe if the last one is over two minutes old, then the
+/// tick while the card stays open; opening again restarts it.
 pub fn opened(app: &mut App) {
     let mode = if now_s() - app.svc.agent.last_probe_at > 120.0 { "full" } else { "stats" };
     run(app, mode);
-    app.every(Duration::from_secs(60), |app| {
-        if app.card.as_ref().map(|c| c.kind) != Some(crate::cards::CardKind::Agent) {
-            return false;
-        }
-        run(app, "stats");
-        true
-    });
+    let u = &mut app.svc.agent;
+    u.ticks = 0;
+    u.clock_texts = clock_texts(u);
+    app.debounce(TICK, Duration::from_secs(30), tick);
 }
 
-/// compact(): 1.2B / 3.4M / 56k / 7.
+/// While the card is open: AgentPanel's nowTick every 30 s (AgentPanel.qml:94-100),
+/// which moves the reset countdowns and the stale age, and AgentUsage's 60 s
+/// stats Timer (AgentUsage.qml:149-154) on every second tick. Both stop with
+/// the card; a stray tick after it closed ends here.
+fn tick(app: &mut App) {
+    if app.card.as_ref().map(|c| c.kind) != Some(CardKind::Agent) {
+        return;
+    }
+    let u = &mut app.svc.agent;
+    u.ticks += 1;
+    // Qt redraws a Text only when its string changed.
+    let texts = clock_texts(u);
+    if texts != u.clock_texts {
+        u.clock_texts = texts;
+        if let Some(c) = app.card.as_mut() {
+            c.win.dirty = true;
+        }
+    }
+    if app.svc.agent.ticks % 2 == 0 {
+        run(app, "stats");
+    }
+    app.debounce(TICK, Duration::from_secs(30), tick);
+}
+
+/// What the two Texts reading nowTick show: the limits error with its age,
+/// and the reset countdowns.
+fn clock_texts(u: &Usage) -> String {
+    let error = if u.limits_error.is_empty() { String::new() } else { limits_error_text(u) };
+    format!("{error}\n{}", session_text(u).unwrap_or_default())
+}
+
+/// compact(): 1.2B / 3.4M / 56k / 7, toFixed's ties going up (2,500 is 3k).
 fn compact(n: f64) -> String {
     if n.is_nan() {
         "—".into()
     } else if n >= 1e9 {
-        format!("{:.1}B", n / 1e9)
+        format!("{}B", services::to_fixed(n / 1e9, 1))
     } else if n >= 1e6 {
-        format!("{:.1}M", n / 1e6)
+        format!("{}M", services::to_fixed(n / 1e6, 1))
     } else if n >= 1e3 {
-        format!("{:.0}k", n / 1e3)
+        format!("{}k", services::to_fixed(n / 1e3, 0))
     } else {
         format!("{}", n.round())
     }
@@ -211,6 +280,17 @@ fn since_label(oldest_hour: f64) -> String {
 const LABEL: f32 = FONT_SIZE - 3.0;
 const HEADER: f32 = FONT_SIZE - 5.0;
 
+/// TextMemo parts of the Repeaters' rows, named by row so a row's texts keep
+/// their key whatever is drawn before them: (label, value) of the limit and
+/// day MeterRows, (name, total) of the model rows.
+const LIMIT_TEXTS: [u64; 2] = [0xA1, 0xA2];
+const DAY_TEXTS: [u64; 2] = [0xA3, 0xA4];
+const MODEL_TEXTS: [u64; 2] = [0xA5, 0xA6];
+/// TextMemo parts of the wrapped Texts: one Text each, one verdict for all
+/// its lines (AgentPanel.qml:283-297, 319-335).
+const ERROR_TEXT: u64 = 0xA7;
+const RESET_TEXT: u64 = 0xA8;
+
 fn meter_color(sev: &str, pct: f64, t: &theme::Theme) -> Color {
     let s = sev.to_lowercase();
     if !s.is_empty() && s != "normal" || pct >= 80.0 {
@@ -282,19 +362,19 @@ pub fn content_height(fonts: &mut crate::text::Fonts, svc: &Services, w: f32, bu
     b.iter().map(|x| x.1).sum::<f32>() + 8.0 * (b.len().saturating_sub(1)) as f32
 }
 
-/// MeterRow: label, SegmentGauge, value.
+/// MeterRow: label, SegmentGauge, value; `parts` names its two Texts.
 #[allow(clippy::too_many_arguments)]
-fn meter_row(ui: &mut Ui, id: u32, x: f32, y: f32, w: f32, label: &str, value: &str, fraction: f64, fill: Color, emphasise: bool) {
+fn meter_row(ui: &mut Ui, id: u32, parts: [u64; 2], x: f32, y: f32, w: f32, label: &str, value: &str, fraction: f64, fill: Color, emphasise: bool) {
     let t = ui.theme;
     let h = (LABEL * 1.35).round();
     let lw = (LABEL * 4.6).round();
     let key = theme::bar_font(emphasise);
     let full = ui.fonts.layout(label, key, LABEL - 1.0, 0.0);
     let l = ui.fonts.elide_right(&full, label, key, lw, 0.0);
-    ui.text(&l, x, y + ac(h, l.height()), if emphasise { t.col_white } else { t.col_grey }, TextStyle::Normal);
+    ui.text_of(id, parts[0], &l, x, y + ac(h, l.height()), if emphasise { t.col_white } else { t.col_grey });
     let vw = (LABEL * 3.0).round();
     let vl = ui.fonts.layout(value, theme::bar_font(true), LABEL, 0.0);
-    ui.text(&vl, x + w - vl.adv, y + ac(h, vl.height()), fill, TextStyle::Normal);
+    ui.text_of(id, parts[1], &vl, x + w - vl.adv, y + ac(h, vl.height()), fill);
     let gx = x + lw + 8.0;
     let gw = (x + w - vw - 10.0) - gx;
     let n = 10.max((gw / 10.0).round() as i32);
@@ -304,15 +384,20 @@ fn meter_row(ui: &mut Ui, id: u32, x: f32, y: f32, w: f32, label: &str, value: &
     gauge(ui, id, gx, y + ac(h, 10.0), gw, 10.0, n, value as f32, tint);
 }
 
-/// SegmentGauge (200 ms colour per segment).
+/// SegmentGauge in a Repeater's row. Its cells have Behavior on color
+/// (200 ms), but the row is made anew whenever its data changes and a new
+/// item does not animate: what fades is the lit cells' tint on a palette
+/// change. So the lit count applies at once, and the tint is animated, one
+/// per row and kind (accent or alert).
 #[allow(clippy::too_many_arguments)]
 fn gauge(ui: &mut Ui, id: u32, x: f32, y: f32, w: f32, h: f32, n: i32, value: f32, tint: Color) {
     let cell = (w - 2.0 * (n - 1) as f32) / n as f32;
     let lit = (value.clamp(0.0, 100.0) / 100.0 * n as f32).round() as i32;
+    let kind = (tint == ui.theme.col_alert) as u32;
+    let (tint, run) = ui.card.color(0x9_0000 + id * 2 + kind, tint, 200, ui.now);
+    ui.animating |= run;
     for i in 0..n {
-        let target = if i < lit { tint } else { Color::qt_rgba(1.0, 1.0, 1.0, 0.07) };
-        let (c, run) = ui.card.color(0x9_0000 + id * 128 + i as u32, target, 200, ui.now);
-        ui.animating |= run;
+        let c = if i < lit { tint } else { Color::qt_rgba(1.0, 1.0, 1.0, 0.07) };
         ui.scene.rect(x + i as f32 * (cell + 2.0), y, cell, h, c, 1.0, 0.0, Color::TRANSPARENT, true);
     }
 }
@@ -345,10 +430,8 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, busy: bool, top: f32) {
                 cy += cap.height();
                 if !u.limits_error.is_empty() {
                     cy += 6.0;
-                    for l in ui.fonts.wrap(&limits_error_text(u), theme::bar_font(false), HEADER, 0.0, iw) {
-                        ui.text(&l, ix, cy, t.col_alert, TextStyle::Normal);
-                        cy += l.height();
-                    }
+                    let lines = ui.fonts.wrap(&limits_error_text(u), theme::bar_font(false), HEADER, 0.0, iw);
+                    cy += ui.text_block(0, ERROR_TEXT, &lines, ix, cy, t.col_alert);
                 }
                 for (i, l) in u.limits.iter().enumerate() {
                     cy += 6.0;
@@ -361,15 +444,13 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, busy: bool, top: f32) {
                             other => other.into(),
                         }
                     };
-                    meter_row(ui, i as u32, ix, cy, iw, &label, &format!("{}%", l.percent.round()), l.percent / 100.0, meter_color(&l.severity, l.percent, t), l.active);
+                    meter_row(ui, i as u32, LIMIT_TEXTS, ix, cy, iw, &label, &format!("{}%", l.percent.round()), l.percent / 100.0, meter_color(&l.severity, l.percent, t), l.active);
                     cy += (LABEL * 1.35).round();
                 }
                 if let Some(s) = session_text(u) {
                     cy += 6.0;
-                    for l in ui.fonts.wrap(&s, theme::bar_font(false), HEADER, 0.0, iw) {
-                        ui.text(&l, ix, cy, t.col_grey, TextStyle::Normal);
-                        cy += l.height();
-                    }
+                    let lines = ui.fonts.wrap(&s, theme::bar_font(false), HEADER, 0.0, iw);
+                    ui.text_block(0, RESET_TEXT, &lines, ix, cy, t.col_grey);
                 }
             }
             2 => {
@@ -384,7 +465,7 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, busy: bool, top: f32) {
                     cy += 6.0;
                     let today = i == n - 1;
                     let label = if today { "Сегодня".to_string() } else { crate::cal::day_name_of_iso(day) };
-                    meter_row(ui, 16 + i as u32, ix, cy, iw, &label, &compact(*tokens), if max > 0.0 { tokens / max } else { 0.0 }, t.col_white, today);
+                    meter_row(ui, 16 + i as u32, DAY_TEXTS, ix, cy, iw, &label, &compact(*tokens), if max > 0.0 { tokens / max } else { 0.0 }, t.col_white, today);
                     cy += (LABEL * 1.35).round();
                 }
             }
@@ -403,18 +484,21 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, busy: bool, top: f32) {
                     let name_h = ui.fonts.layout("a", theme::bar_font(false), LABEL - 1.0, 0.0).height();
                     let rh = name_h + 12.0;
                     let hover = ui.hovered(ix, cy, iw, rh);
-                    let mut name = m.model.trim_start_matches("claude-").to_string();
-                    if name.len() > 9 && name[name.len() - 9..].starts_with('-') && name[name.len() - 8..].chars().all(|c| c.is_ascii_digit()) {
-                        name.truncate(name.len() - 9);
-                    }
+                    // .replace(/^claude-/, "").replace(/-\d{8}$/, "") (AgentPanel.qml:396-397),
+                    // on char boundaries: the id comes from the transcripts on disk.
+                    let base = m.model.strip_prefix("claude-").unwrap_or(&m.model);
+                    let name = match base.rsplit_once('-') {
+                        Some((head, tail)) if tail.len() == 8 && tail.bytes().all(|b| b.is_ascii_digit()) => head,
+                        _ => base,
+                    };
                     let detail = format!("ввод {} · вывод {} · кэш {}", compact(m.input), compact(m.output), compact(m.cache_read));
                     let total = ui.fonts.layout(&compact(m.tokens), theme::bar_font(true), LABEL - 1.0, 0.0);
-                    ui.text(&total, ix + iw - total.width, cy, t.col_white, TextStyle::Normal);
-                    let shown = if hover { detail } else { name };
+                    ui.text_of(i as u32, MODEL_TEXTS[1], &total, ix + iw - total.width, cy, t.col_white);
+                    let shown: &str = if hover { &detail } else { name };
                     let key = theme::bar_font(false);
-                    let full = ui.fonts.layout(&shown, key, LABEL - 1.0, 0.0);
-                    let line = ui.fonts.elide_right(&full, &shown, key, iw - total.width - 8.0, 0.0);
-                    ui.text(&line, ix, cy, if hover { t.col_grey } else { t.col_white }, TextStyle::Normal);
+                    let full = ui.fonts.layout(shown, key, LABEL - 1.0, 0.0);
+                    let line = ui.fonts.elide_right(&full, shown, key, iw - total.width - 8.0, 0.0);
+                    ui.text_of(i as u32, MODEL_TEXTS[0], &line, ix, cy, if hover { t.col_grey } else { t.col_white });
                     let n = 10.max((iw / 10.0).round() as i32);
                     gauge(ui, 64 + i as u32, ix, cy + rh - 8.0, iw, 8.0, n, ((if max > 0.0 { m.tokens / max } else { 0.0 }).clamp(0.0, 1.0) * 100.0) as f32, t.col_accent);
                     ui.hits.push(crate::bar::Hit { x: ix, y: cy, w: iw, h: rh, action: crate::bar::Action::Hover(0xA00 + i as u32) });
