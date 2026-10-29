@@ -720,28 +720,33 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
     ui.scene.save();
     ui.scene.clip_rect(fx, y, fw, m.field_h);
     if p.field.is_empty() {
-        let prompt = f.prompt.trim_end().trim_end_matches(':').trim_end().to_string();
+        // inputPrompt.replace(/:\s*$/, ""): one colon at the end and the
+        // blanks after it; a prompt without one keeps its own blanks.
+        let prompt = f.prompt.trim_end().strip_suffix(':').unwrap_or(f.prompt);
         let ph_text = if p.checking {
-            "Проверка…".to_string()
+            "Проверка…"
         } else if prompt.is_empty() || prompt.eq_ignore_ascii_case("password") {
-            "Пароль".into()
+            "Пароль"
         } else {
             prompt
         };
-        let pl = ui.fonts.layout(&ph_text, CONTENT, m.body, 0.0);
+        let pl = ui.fonts.layout(ph_text, CONTENT, m.body, 0.0);
         ui.text(&pl, fx, y + ac(m.field_h, pl.height()), t.col_grey, TextStyle::Normal);
     }
     let shown: String = if f.response_visible { p.field.clone() } else { "\u{2022}".repeat(p.field.chars().count()) };
     let fl = ui.fonts.layout(&shown, FIELD, m.body, 0.0);
     let fy = y + (m.field_h - fl.height()) / 2.0;
+    // TextInput.autoScroll: a line longer than the field slides left so the
+    // cursor at its end stays in view (as the clipboard's search line does).
+    let shift = (fl.adv + 1.0 - fw).max(0.0);
     if !shown.is_empty() {
-        ui.text(&fl, fx, fy, t.col_white, TextStyle::Normal);
+        ui.text(&fl, fx - shift, fy, t.col_white, TextStyle::Normal);
     }
     if enabled {
         // 1 px, the text colour, 500 ms on / 500 ms off.
         let on = p.blink_since.map_or(true, |s| s.elapsed().as_millis() / 500 % 2 == 0);
         if on {
-            ui.scene.fill(fx + fl.adv, fy, 1.0, fl.height(), t.col_white);
+            ui.scene.fill(fx + fl.adv - shift, fy, 1.0, fl.height(), t.col_white);
         }
     }
     ui.scene.restore();
