@@ -44,6 +44,8 @@ use crate::theme::Theme;
 
 /// Linux input button codes (Qt's Left, Right and Middle buttons).
 const BTN_LEFT: u32 = 0x110;
+const BTN_RIGHT: u32 = 0x111;
+const BTN_MIDDLE: u32 = 0x112;
 
 /// A wgpu surface on a Wayland surface.
 fn raw_surface(conn: &Connection, instance: &wgpu::Instance, wl: &wl_surface::WlSurface) -> wgpu::Surface<'static> {
@@ -847,11 +849,13 @@ impl PointerHandler for App {
             if self.card.as_ref().map_or(false, |c| c.win.layer.wl_surface() == &e.surface) && self.pressed.is_none() {
                 // CardSurface: around the card, a press dismisses it and the
                 // wheel is eaten; the pointer is not over the card there. (A
-                // drag that started on the card keeps going.)
+                // drag that started on the card keeps going.) Its MouseArea
+                // takes the left, right and middle buttons (CardSurface.qml:47):
+                // a side button reaches nothing.
                 let (x, y) = (e.position.0 as f32, e.position.1 as f32);
                 if !matches!(e.kind, PointerEventKind::Leave { .. }) && !cards::inside(self, x, y) {
                     match e.kind {
-                        PointerEventKind::Press { .. } => cards::close(self),
+                        PointerEventKind::Press { button: BTN_LEFT | BTN_RIGHT | BTN_MIDDLE, .. } => cards::close(self),
                         PointerEventKind::Enter { serial } => {
                             self.enter_serial = serial;
                             self.hand = true;
@@ -955,6 +959,24 @@ impl PointerHandler for App {
                     self.set_cursor(after.map_or(false, |a| !matches!(a, Action::Hover(_))));
                 }
                 PointerEventKind::Press { button, .. } => {
+                    // The card's own MouseArea and its controls take the left
+                    // button only (DropdownWidget.qml:160): a right or middle
+                    // press falls through to CardSurface's, under the card,
+                    // and closes it - unless the control there takes that
+                    // button: a VolumeSlider the right one (its mute,
+                    // VolumeSlider.qml:104), the Wi-Fi password TextInput the
+                    // middle one (the primary selection's paste).
+                    if w == WinRef::Card && matches!(button, BTN_RIGHT | BTN_MIDDLE) {
+                        let takes = match (self.card.as_ref().map(|c| c.kind), self.hit_at(w, x, y)) {
+                            (Some(cards::CardKind::Audio), Some(Action::Card(c))) => button == BTN_RIGHT && crate::audio_card::is_slider(c),
+                            (Some(cards::CardKind::Wifi), Some(Action::Card(crate::wifi_card::INPUT))) => button == BTN_MIDDLE,
+                            _ => false,
+                        };
+                        if !takes {
+                            cards::close(self);
+                            continue;
+                        }
+                    }
                     self.pressed = self.hit_at(w, x, y).map(|a| (w, button, a));
                     if let (WinRef::Osd(k), Some(Action::Card(code))) = (w, self.hit_at(w, x, y)) {
                         if let Some(o) = self.osd_mut(k) {
