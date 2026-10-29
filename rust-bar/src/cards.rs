@@ -97,6 +97,10 @@ pub struct OpenCard {
     pub(crate) meter_win: Option<crate::audio_card::MeterWin>,
     /// ConsoleButton.tint for the next button: colAlert (the mute buttons).
     pub(crate) tint_alert: bool,
+    /// The control and button a press went down on in this card (its
+    /// MouseArea's grab, which dies with the card): a release or a drag
+    /// whose press began on a card closed since is not this card's.
+    held: Option<(Action, u32)>,
     numbers: HashMap<u32, Animated<f32>>,
     /// The card's Flickable and ListViews: where each is scrolled to.
     flicks: Vec<Flick>,
@@ -347,8 +351,10 @@ pub fn wifi_details(app: &mut App, strip: usize, icon: &Hit) {
             card.focus = None;
             card.focus_code = None;
             card.focus_seen = None;
-            // NetworkPanel is new content: its Flickable starts at the top.
+            // NetworkPanel is new content: its Flickable starts at the top,
+            // and no press on the old view is one on the new.
             card.flicks.clear();
+            card.held = None;
             card.hits.clear();
             card.colors.clear();
             card.numbers.clear();
@@ -479,6 +485,7 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         meter_node: false,
         meter_win: None,
         tint_alert: false,
+        held: None,
         numbers: HashMap::new(),
         flicks: Vec::new(),
         hover_clip: None,
@@ -1670,20 +1677,36 @@ pub fn wheel(app: &mut App, angle_delta_y: f32) {
 
 /// A button went down on a card control: a slider jumps to the pointer.
 pub fn press(app: &mut App, action: Action, x: f32, button: u32) {
+    let Some(card) = app.card.as_mut() else { return };
+    card.held = Some((action, button));
+    if button == 0x110 {
+        slide(app, action, x);
+    }
+}
+
+/// The pointer moved with the left button held on a control of this card.
+pub fn drag(app: &mut App, action: Action, x: f32) {
+    if app.card.as_ref().map_or(false, |c| c.held == Some((action, 0x110))) {
+        slide(app, action, x);
+    }
+}
+
+/// A VolumeSlider under the left button follows the pointer.
+fn slide(app: &mut App, action: Action, x: f32) {
     if let (Action::Card(code), Some(card)) = (action, app.card.as_ref()) {
-        if card.kind == CardKind::Audio && button == 0x110 && crate::audio_card::is_slider(code) {
+        if card.kind == CardKind::Audio && crate::audio_card::is_slider(code) {
             crate::audio_card::slider_to(app, code, x);
         }
     }
 }
 
-/// The pointer moved with the left button held on a slider.
-pub fn drag(app: &mut App, action: Action, x: f32) {
-    press(app, action, x, 0x110);
-}
-
 /// A click (release over the pressed control) with a button.
 pub fn click(app: &mut App, action: Action, button: u32) {
+    // Only a press this card took: one held while its card closed (a focus
+    // change, a shortcut) is no click on the card opened in its place.
+    if app.card.as_mut().map_or(true, |c| c.held.take() != Some((action, button))) {
+        return;
+    }
     let Action::Card(code) = action else { return };
     let Some(card) = app.card.as_ref() else { return };
     if card.kind == CardKind::Audio && crate::audio_card::is_slider(code) {
