@@ -958,8 +958,17 @@ pub fn pointer(app: &mut App, screen: u8, ev: &PointerEventKind, x: f32, y: f32)
         }
         PointerEventKind::Press { button, .. } => {
             // The MouseArea that took a press keeps the pointer until it ends.
-            if app.svc.overview.press.is_some() {
-                return true;
+            // The same button going down again means its release went to
+            // another surface (a grab the compositor broke, e.g. a lock
+            // screen): that press is over, and this one counts.
+            match app.svc.overview.press.as_ref().map(|p| (p.button, p.screen)) {
+                Some((b, _)) if b != *button => return true,
+                Some((_, s)) => {
+                    app.svc.overview.press = None;
+                    app.svc.overview.drop_ws = None;
+                    redraw_screen(app, s);
+                }
+                None => {}
             }
             // A press beside the panel (outside its width) leaves.
             if let Some(m) = app.svc.overview_screens.get(screen as usize).and_then(|n| app.svc.mango.monitor(n)) {
