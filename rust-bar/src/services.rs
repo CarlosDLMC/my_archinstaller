@@ -807,8 +807,11 @@ fn dnd_bus_ready(app: &mut App) {
 
 pub fn dnd_toggle(app: &mut App) {
     app.spawn("dnd-toggle", &["dunstctl", "set-paused", "toggle"], |app, d| {
-        if !d.ok {
+        // dndToggleProc.onExited: the hollow warn bell at once; the re-poll
+        // confirms or clears it.
+        if !d.ok && app.svc.dnd_available {
             app.svc.dnd_available = false;
+            app.mark_all_dirty();
         }
         dnd_poll(app);
     });
