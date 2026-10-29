@@ -7,7 +7,7 @@ use serde_json::Value;
 
 use crate::app::App;
 use crate::bar::ac;
-use crate::cards::{plate, Ui};
+use crate::cards::{plate, CardKind, Ui};
 use crate::color::Color;
 use crate::gpu::TextStyle;
 use crate::services::{self, Services};
@@ -43,7 +43,13 @@ pub struct Usage {
     pub loaded: bool,
     pub stale_at: f64,
     last_probe_at: f64,
+    /// The open card's ticks, and its clock-driven texts as last seen.
+    ticks: u32,
+    clock_texts: String,
 }
+
+/// The open card's 30 s timer (AgentPanel's nowTick + AgentUsage's stats Timer).
+const TICK: &str = "agent-tick";
 
 fn now_s() -> f64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map_or(0.0, |d| d.as_secs_f64())
@@ -92,6 +98,7 @@ fn apply(app: &mut App, text: &str) {
         u.by_model = m.iter().map(|x| ModelUse { model: x.get("model").and_then(Value::as_str).unwrap_or("").into(), tokens: n(x, "tokens"), input: n(x, "input"), output: n(x, "output"), cache_read: n(x, "cacheRead") }).collect();
     }
     u.loaded = true;
+    u.clock_texts = clock_texts(u);
     app.mark_all_dirty();
 }
 
@@ -100,18 +107,46 @@ pub fn run(app: &mut App, mode: &str) {
     app.spawn("agent-usage", &["sh", "-c", &cmd], |app, d| apply(app, &d.stdout));
 }
 
-/// cardOpen: a full probe if the last one is over two minutes old, then
-/// stats every minute while the card stays open.
+/// cardOpen: a full probe if the last one is over two minutes old, then the
+/// tick while the card stays open; opening again restarts it.
 pub fn opened(app: &mut App) {
     let mode = if now_s() - app.svc.agent.last_probe_at > 120.0 { "full" } else { "stats" };
     run(app, mode);
-    app.every(Duration::from_secs(60), |app| {
-        if app.card.as_ref().map(|c| c.kind) != Some(crate::cards::CardKind::Agent) {
-            return false;
+    let u = &mut app.svc.agent;
+    u.ticks = 0;
+    u.clock_texts = clock_texts(u);
+    app.debounce(TICK, Duration::from_secs(30), tick);
+}
+
+/// While the card is open: AgentPanel's nowTick every 30 s (AgentPanel.qml:94-100),
+/// which moves the reset countdowns and the stale age, and AgentUsage's 60 s
+/// stats Timer (AgentUsage.qml:149-154) on every second tick. Both stop with
+/// the card; a stray tick after it closed ends here.
+fn tick(app: &mut App) {
+    if app.card.as_ref().map(|c| c.kind) != Some(CardKind::Agent) {
+        return;
+    }
+    let u = &mut app.svc.agent;
+    u.ticks += 1;
+    // Qt redraws a Text only when its string changed.
+    let texts = clock_texts(u);
+    if texts != u.clock_texts {
+        u.clock_texts = texts;
+        if let Some(c) = app.card.as_mut() {
+            c.win.dirty = true;
         }
+    }
+    if app.svc.agent.ticks % 2 == 0 {
         run(app, "stats");
-        true
-    });
+    }
+    app.debounce(TICK, Duration::from_secs(30), tick);
+}
+
+/// What the two Texts reading nowTick show: the limits error with its age,
+/// and the reset countdowns.
+fn clock_texts(u: &Usage) -> String {
+    let error = if u.limits_error.is_empty() { String::new() } else { limits_error_text(u) };
+    format!("{error}\n{}", session_text(u).unwrap_or_default())
 }
 
 /// compact(): 1.2B / 3.4M / 56k / 7, toFixed's ties going up (2,500 is 3k).
