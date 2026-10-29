@@ -283,8 +283,22 @@ pub fn draw(scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, svc: &Services,
                 let title = svc.mango.focused_title();
                 if !title.is_empty() {
                     let key = theme::bar_font(true);
-                    let full = p.fonts.layout(title, key, FONT_SIZE, 0.0);
-                    let line = p.fonts.elide_right(&full, title, key, 375.0, 0.0);
+                    let line = match title.split_once('\n') {
+                        // maximumLineCount: 1 on a title with a newline: Qt
+                        // sizes the Text to its first line (RowLayout rounds
+                        // that up) and elides the line with "…" in it -
+                        // "first lin…", measured on Qt 6.12.
+                        Some((first, _)) => {
+                            let width = p.fonts.layout(first, key, FONT_SIZE, 0.0).width.ceil().min(375.0);
+                            let text = format!("{first}…");
+                            let full = p.fonts.layout(&text, key, FONT_SIZE, 0.0);
+                            p.fonts.elide_right(&full, &text, key, width, 0.0)
+                        }
+                        None => {
+                            let full = p.fonts.layout(title, key, FONT_SIZE, 0.0);
+                            p.fonts.elide_right(&full, title, key, 375.0, 0.0)
+                        }
+                    };
                     p.label(&line, x + 5.0, ((DESIGN_HEIGHT - line.height()) / 2.0).round(), theme.col_window);
                 }
             }
