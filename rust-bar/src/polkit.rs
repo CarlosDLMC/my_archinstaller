@@ -407,14 +407,26 @@ fn helper_ready(app: &mut App) {
     }
 }
 
+/// The field's `enabled` (PolkitOsd.qml:168): it has the keyboard focus then.
+fn enabled(p: &Polkit) -> bool {
+    p.flow.as_ref().map_or(false, |f| f.response_required) && !p.checking
+}
+
 fn request(app: &mut App, prompt: &str, echo: bool) {
     let p = &mut app.svc.polkit;
+    let was = enabled(p);
     if let Some(f) = p.flow.as_mut() {
         f.response_required = true;
         f.input_prompt = prompt.into();
         f.response_visible = echo;
         // onIsResponseRequiredChanged: a prompt ends the checking state.
         p.checking = false;
+    }
+    // Enabled again, the field gets the focus back: focusInEvent shows the
+    // cursor and starts its blink over (QQuickTextInputPrivate::
+    // handleFocusEvent -> updateCursorBlinking).
+    if !was && enabled(&app.svc.polkit) {
+        restart_blink(app);
     }
     redraw(app);
 }
@@ -788,20 +800,20 @@ pub fn key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Keysym, u
     match sym {
         Keysym::Return | Keysym::KP_Enter => submit(app),
         Keysym::Escape => cancel(app),
-        Keysym::BackSpace => {
-            app.svc.polkit.field.pop();
+        _ => {
+            // A disabled TextInput takes no keys. Every key the field takes
+            // starts the cursor's blink over (processKeyEvent ->
+            // updateCursorBlinking), Shift and the arrows too.
+            if !enabled(&app.svc.polkit) {
+                return;
+            }
+            if sym == Keysym::BackSpace {
+                app.svc.polkit.field.pop();
+            } else if let Some(s) = utf8.filter(|s| !s.is_empty() && !s.chars().any(char::is_control)) {
+                app.svc.polkit.field.push_str(s);
+            }
             restart_blink(app);
             redraw(app);
-        }
-        _ => {
-            let enabled = app.svc.polkit.flow.as_ref().map_or(false, |f| f.response_required) && !app.svc.polkit.checking;
-            if let Some(s) = utf8.filter(|s| !s.is_empty() && !s.chars().any(char::is_control)) {
-                if enabled {
-                    app.svc.polkit.field.push_str(s);
-                    restart_blink(app);
-                    redraw(app);
-                }
-            }
         }
     }
 }
