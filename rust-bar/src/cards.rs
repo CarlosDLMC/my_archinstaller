@@ -208,7 +208,7 @@ impl OpenCard {
         let i = match self.flicks.iter().position(|f| f.id == id) {
             Some(i) => i,
             None => {
-                self.flicks.push(Flick { id, glide: Animated::new(0.0, 300, Easing::OutExpo), rest: 0.0, max: 0.0, content: 0.0, height: 0.0, sig, rect: None, drag: None });
+                self.flicks.push(Flick { id, glide: Animated::new(0.0, 300, Easing::OutExpo), flicking: false, rest: 0.0, max: 0.0, content: 0.0, height: 0.0, sig, rect: None, drag: None, mouse: None });
                 self.flicks.len() - 1
             }
         };
@@ -260,8 +260,10 @@ const BODY: u32 = 0;
 struct Flick {
     /// BODY, or a ListView's first row code.
     id: u32,
-    /// The wheel's glide (300 ms OutExpo) towards its target.
+    /// The wheel's glide (300 ms OutExpo) towards its target, or a flick's
+    /// deceleration (`flicking`).
     glide: Animated<f32>,
+    flicking: bool,
     /// Where contentY comes to rest when no glide runs.
     rest: f32,
     /// contentHeight - height at the last draw.
@@ -275,6 +277,8 @@ struct Flick {
     rect: Option<[f32; 4]>,
     /// A finger's scroll that began over it (QQuickFlickable's pixel path).
     drag: Option<PixelDrag>,
+    /// A left-button drag that began over it.
+    mouse: Option<MouseDrag>,
 }
 
 /// QtWayland's phases of a finger's scroll on a touchpad, as QWheelEvents
@@ -290,31 +294,88 @@ pub enum Scroll {
     End,
 }
 
-/// QQuickFlickable::wheelEvent's pixel path, for a finger's scroll: a
-/// Flickable under the pointer at ScrollBegin follows the deltas summed
-/// since then 1:1 (QQuickFlickablePrivate::drag, StopAtBounds) - once the
-/// motion so far is mostly vertical, or it already moves - and ScrollEnd
-/// puts it back on a whole pixel (returnToBounds). Wayland sends no
-/// ScrollMomentum: there is no flick after it. Positions are contentY.
+/// QQuickFlickablePrivate::drag() on the y axis, shared by a drag of the
+/// mouse and a finger's scroll: contentY follows `a`, the motion since the
+/// press in contentY's terms, 1:1 from where it was then, less the motion
+/// at which the drag took over (dragStartOffset), StopAtBounds. It moves
+/// only once it holds the grab (stealGrab): from the update after the one
+/// that took it.
 #[derive(Clone, Copy, Default)]
-pub(crate) struct PixelDrag {
-    /// vData.pressPos (contentY when the scroll began), the deltas summed
-    /// (accumulatedWheelPixelDelta), dragStartOffset and previousDragDelta.
+struct Drag {
+    /// vData.pressPos (contentY at the press), dragStartOffset,
+    /// previousDragDelta, vMoved (and dragging), stealGrab, the way it went.
     press: f32,
-    acc: (f32, f32),
     offset: f32,
     prev: f32,
-    /// vMoved (and dragging), stealGrab, and the way it last went.
     moved: bool,
     steal: bool,
     down: bool,
+}
+
+impl Drag {
+    fn begin(y: f32) -> Drag {
+        Drag { press: y, ..Default::default() }
+    }
+
+    /// One move to `a` at contentY `cur` between 0 and `max`: `over` is
+    /// overThreshold, `late` the 200 ms after the press past which a slow
+    /// drag counts too, `wheel` a finger's scroll (it holds the grab from
+    /// its first update: stealY = scrollingPhase). Where contentY goes, if
+    /// it moves, and whether it was refused (pushing on at an end).
+    fn update(&mut self, a: f32, over: bool, late: bool, wheel: bool, cur: f32, max: f32) -> (Option<f32>, bool) {
+        let mut reject = false;
+        let mut to = None;
+        if over || late {
+            if !self.moved {
+                self.offset = a;
+            }
+            let mut y = self.press + a - self.offset;
+            if y >= max {
+                y = max;
+                reject = self.press == max && cur == max && a > 0.0;
+            }
+            if y <= 0.0 {
+                y = 0.0;
+                reject |= self.press == 0.0 && cur == 0.0 && a < 0.0;
+            }
+            if !reject && self.steal && a != self.prev {
+                self.moved = true;
+                if y != cur {
+                    self.down = y > cur;
+                    to = Some(y);
+                }
+            }
+        }
+        self.prev = a;
+        self.steal |= wheel || (over && !reject);
+        (to, reject)
+    }
+
+    /// returnToBounds / fixupY: a contentY between two pixels goes onto one
+    /// (against the motion past a quarter).
+    fn fixup(&self, y: f32, max: f32) -> Option<f32> {
+        (y > 0.0 && y < max && y.fract() != 0.0).then(|| pixel(y, self.down))
+    }
+}
+
+/// QQuickFlickable::wheelEvent's pixel path, for a finger's scroll: a
+/// Flickable under the pointer at ScrollBegin follows the deltas summed
+/// since then 1:1 (Drag) - once the motion so far is mostly vertical, or it
+/// already moves - and ScrollEnd puts it back on a whole pixel
+/// (returnToBounds). Wayland sends no ScrollMomentum: there is no flick
+/// after it. Positions are contentY.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct PixelDrag {
+    core: Drag,
+    /// accumulatedWheelPixelDelta.
+    acc: (f32, f32),
 }
 
 impl PixelDrag {
     /// maybeBeginDrag at ScrollBegin: contentY now; a glide still running
     /// goes on until the drag moves the content.
     pub(crate) fn begin(y: f32) -> PixelDrag {
-        PixelDrag { press: y, ..Default::default() }
+        PixelDrag { core: Drag::begin(y), acc: (0.0, 0.0) }
     }
 
     /// One ScrollUpdate on a Flickable at contentY `cur` with ends 0 and
@@ -325,41 +386,53 @@ impl PixelDrag {
     /// so the content does not jump: it moves from the third on.
     pub(crate) fn update(&mut self, dx: f32, dy: f32, cur: f32, max: f32, gliding: bool) -> (Option<f32>, bool) {
         self.acc = (self.acc.0 + dx, self.acc.1 + dy);
-        if dy != 0.0 {
-            self.down = dy > 0.0;
-        }
         let a = self.acc.1;
         // Not yet mostly vertical: it waits for more, and the event goes on.
-        if !(self.moved || gliding || a.abs() > (self.acc.0 * 2.0).abs()) {
+        if !(self.core.moved || gliding || a.abs() > (self.acc.0 * 2.0).abs()) {
             return (None, false);
         }
-        let between = |y: f32| y > 0.0 && y < max.floor();
-        if !self.moved {
-            self.offset = a;
-        }
-        let (mut to, mut reject) = (self.press + a - self.offset, false);
-        if to >= max {
-            to = max;
-            reject = self.press == max && cur == max && a > 0.0;
-        }
-        if to <= 0.0 {
-            to = 0.0;
-            reject |= self.press == 0.0 && cur == 0.0 && a < 0.0;
-        }
-        let go = !reject && self.steal && a != self.prev;
-        self.moved |= go;
-        self.prev = a;
-        self.steal = true;
-        let y = if go { to } else { cur };
-        (Some(to).filter(|_| go && to != cur), between(y))
+        let (to, _) = self.core.update(a, true, false, true, cur, max);
+        let y = to.unwrap_or(cur);
+        (to, y > 0.0 && y < max.floor())
     }
 
-    /// ScrollEnd's returnToBounds: a contentY between two pixels goes onto
-    /// one (fixup, against the motion past a quarter).
+    /// ScrollEnd's returnToBounds.
     pub(crate) fn end(&self, y: f32, max: f32) -> Option<f32> {
-        (y > 0.0 && y < max && y.fract() != 0.0).then(|| pixel(y, self.down))
+        self.core.fixup(y, max)
     }
 }
+
+/// A left-button drag over a Flickable: QQuickFlickablePrivate's
+/// handlePressEvent / handleMoveEvent / handleReleaseEvent, on its own
+/// area or filtering the press of a control in it (filterPointerEvent).
+#[derive(Clone, Copy)]
+struct MouseDrag {
+    core: Drag,
+    /// The press: the pointer's y on the surface and its time (ms).
+    press_y: f32,
+    press_time: u32,
+    /// The pointer's last y and time, its velocity as QEventPoint estimates
+    /// it for a device without the Velocity capability, and the Flickable's
+    /// last three samples of it (velocityBuffer, QML_FLICK_SAMPLEBUFFER).
+    last: (f32, u32),
+    velocity: f32,
+    samples: [f32; 3],
+    count: usize,
+    /// isMoving() at the press: a flick it stopped still counts.
+    moving: bool,
+    /// The Flickable has the pointer: pressed on its own area, or taken
+    /// from the control pressed in it.
+    grabbed: bool,
+}
+
+/// QStyleHints::startDragDistance, FlickStartDistance, maximumFlickVelocity
+/// and flickDeceleration as Qt 6.12 has them here (qt6ct: 10, 15, 2500,
+/// 1500 - asked of Qt), and _q_MinimumFlickVelocity.
+const DRAG_DISTANCE: f32 = 10.0;
+const FLICK_DISTANCE: f32 = 15.0;
+const MAX_FLICK_VELOCITY: f32 = 2500.0;
+const FLICK_DECELERATION: f32 = 1500.0;
+const MIN_FLICK_VELOCITY: f32 = 75.0;
 
 impl Flick {
     /// contentY now.
@@ -371,6 +444,56 @@ impl Flick {
     fn jump(&mut self, y: f32) {
         self.glide.snap(y);
         self.rest = y;
+        self.flicking = false;
+    }
+
+    /// The wheel's glide from contentY `from` to `to`: 3/4 of fixupDuration
+    /// (300 ms), OutExpo.
+    fn glide_to(&mut self, from: f32, to: f32, now: Instant) {
+        self.glide = Animated::new(from, 300, Easing::OutExpo);
+        self.glide.set(to, now);
+        self.flicking = false;
+    }
+
+    /// yflick() with AutoFlickDirection: content and view differ by a pixel.
+    fn yflick(&self) -> bool {
+        (self.content - self.height).abs().floor() != 0.0
+    }
+
+    /// QQuickFlickablePrivate::flickY on a release at `v` (contentY/s, cut
+    /// at maximumFlickVelocity): contentY decelerates at flickDeceleration,
+    /// adjusted to stop on a whole pixel, and harder still to stop at the
+    /// end it would pass (QQuickTimeLine::accel with maxDistance) - a
+    /// constant deceleration, so OutQuad over its time. At that end
+    /// already: fixup only.
+    fn flick(&mut self, v: f32, down: bool, now: Instant) {
+        let cur = self.y(now);
+        let room = if v > 0.0 { self.max - cur } else { cur };
+        if room <= 0.0 {
+            if let Some(to) = (Drag { down, ..Default::default() }).fixup(cur, self.max) {
+                self.jump(to);
+            }
+            return;
+        }
+        let v = v.clamp(-MAX_FLICK_VELOCITY, MAX_FLICK_VELOCITY);
+        let target = (cur + v.signum() * v * v / (2.0 * FLICK_DECELERATION)).round();
+        let dist = (target - cur).abs();
+        if dist == 0.0 {
+            return;
+        }
+        let (mut accel, mut to) = (v * v / (2.0 * dist), target);
+        if v * v / (2.0 * room) > accel {
+            accel = v * v / (2.0 * room);
+            to = cur + v.signum() * room;
+        }
+        let ms = (1000.0 * v.abs() / accel) as u64;
+        if ms == 0 {
+            return;
+        }
+        self.glide = Animated::new(cur, ms, Easing::OutQuad);
+        self.glide.set(to, now);
+        self.rest = to;
+        self.flicking = true;
     }
 
     /// QQuickFlickable::wheelEvent (Qt 6.12, wheelDeceleration 15000 > 14999):
@@ -385,8 +508,7 @@ impl Flick {
             return false;
         }
         let to = (y + step).clamp(0.0, self.max);
-        self.glide.snap(y);
-        self.glide.set(to, now);
+        self.glide_to(y, to, now);
         // fixup() when the glide ends: between the bounds, contentY goes to a
         // whole pixel. A glide started mid-glide ends off the pixel grid.
         self.rest = if to <= 0.0 || to >= self.max { to } else { pixel(to, step > 0.0) };
@@ -423,8 +545,7 @@ impl Flick {
         let y = self.glide.get(now);
         if y <= 0.0 || self.max <= 0.0 || y >= self.max {
             let to = if y <= 0.0 || self.max <= 0.0 { 0.0 } else { self.max };
-            self.glide.snap(y);
-            self.glide.set(to, now);
+            self.glide_to(y, to, now);
             self.rest = to;
         } else if y.fract() != 0.0 {
             let down = self.glide.target() > y;
@@ -1903,7 +2024,12 @@ fn slider_wheel(app: &mut App, angle_delta_y: f32) -> bool {
 /// own body: the order the wheel visits them in. The card's margins and
 /// stem are no Flickable.
 fn flicks_under(c: &OpenCard) -> Vec<usize> {
-    let at = c.pointer.map(|(px, py)| (px - c.left, py - c.top));
+    flicks_at(c, c.pointer)
+}
+
+/// The same under a point of the card's surface.
+fn flicks_at(c: &OpenCard, p: Option<(f32, f32)>) -> Vec<usize> {
+    let at = p.map(|(px, py)| (px - c.left, py - c.top));
     let under = |f: &Flick| match (f.rect, at) {
         (Some(r), Some((x, y))) => x >= r[0] && x < r[0] + r[2] && y >= r[1] && y < r[1] + r[3],
         _ => false,
@@ -1995,6 +2121,105 @@ fn calendar_wheel(app: &mut App, angle_delta_y: f32) {
 }
 
 // ---- input ----
+
+/// A left press at (x, y) on the card's surface, at `time` (ms);
+/// `on_control` when a control there takes the press, which its Flickable
+/// filters (filterPointerEvent) - else the press is the Flickable's own.
+/// handlePressEvent: the innermost Flickable under it begins a drag; a
+/// flick it had running stops there (maybeBeginDrag's resetTimeline - the
+/// wheel's glide, a fixup, runs on).
+pub fn grab(app: &mut App, x: f32, y: f32, time: u32, on_control: bool) {
+    let Some(c) = app.card.as_mut() else { return };
+    c.flicks.iter_mut().for_each(|f| f.mouse = None);
+    let Some(&i) = flicks_at(c, Some((x, y))).first() else { return };
+    let now = Instant::now();
+    let f = &mut c.flicks[i];
+    let moving = f.glide.running(now);
+    if moving && f.flicking {
+        let at = f.y(now);
+        f.jump(at);
+    }
+    f.mouse = Some(MouseDrag { core: Drag::begin(f.y(now)), press_y: y, press_time: time, last: (y, time), velocity: 0.0, samples: [0.0; 3], count: 0, moving, grabbed: !on_control });
+}
+
+/// Whether a left-button drag over one of the card's Flickables goes on:
+/// the pointer is the Flickable's wherever it goes, not the area around
+/// the card's.
+pub fn grabbing(app: &App) -> bool {
+    app.card.as_ref().map_or(false, |c| c.flicks.iter().any(|f| f.mouse.is_some()))
+}
+
+/// The pointer moved to `y` with the left button down (handleMoveEvent):
+/// past startDragDistance - at once while the content moves - the
+/// Flickable takes the pointer and the content follows it from the next
+/// move (Drag). True when it took the pointer from the control it was
+/// pressed on at this move: the control's MouseArea is canceled, and its
+/// release clicks nothing.
+pub fn grab_move(app: &mut App, y: f32, time: u32) -> bool {
+    let Some(c) = app.card.as_mut() else { return false };
+    let now = Instant::now();
+    let Some(f) = c.flicks.iter_mut().find(|f| f.mouse.is_some()) else { return false };
+    if !f.yflick() {
+        return false;
+    }
+    let (cur, max, gliding) = (f.y(now), f.max, f.glide.running(now));
+    let Some(m) = f.mouse.as_mut() else { return false };
+    // QEventPoint's velocity: the move over its time, a 0.7 Kalman gain on
+    // the estimate so far.
+    let dt = time.wrapping_sub(m.last.1);
+    if dt > 0 && dt < 1 << 31 {
+        m.velocity = (y - m.last.0) / (dt as f32 / 1000.0) * 0.7 + m.velocity * 0.3;
+    }
+    m.last = (y, time);
+    let dy = y - m.press_y;
+    let over = dy.abs() > DRAG_DISTANCE || m.moving || gliding;
+    let late = time.wrapping_sub(m.press_time) > 200;
+    let had = m.core.steal;
+    // contentY goes against the pointer.
+    let (to, reject) = m.core.update(-dy, over, late, false, cur, max);
+    if !reject {
+        m.samples[m.count % 3] = m.velocity.clamp(-MAX_FLICK_VELOCITY, MAX_FLICK_VELOCITY);
+        m.count += 1;
+    }
+    let stole = !had && m.core.steal && !m.grabbed;
+    m.grabbed |= m.core.steal;
+    if let Some(to) = to {
+        f.jump(to);
+        c.win.dirty = true;
+    }
+    if stole {
+        c.held = None;
+    }
+    stole
+}
+
+/// The left button came up at `y` (handleReleaseEvent): released within
+/// 100 ms of its last move, the drag's velocity - its last samples' mean,
+/// halved pushing on at an end - flicks the content when the Flickable has
+/// the pointer, it is over _q_MinimumFlickVelocity and the pointer went
+/// past FlickStartDistance; otherwise the content goes onto a whole pixel.
+pub fn grab_end(app: &mut App, y: f32, time: u32) {
+    let Some(c) = app.card.as_mut() else { return };
+    let now = Instant::now();
+    let Some(f) = c.flicks.iter_mut().find(|f| f.mouse.is_some()) else { return };
+    let Some(m) = f.mouse.take() else { return };
+    let (cur, max) = (f.y(now), f.max);
+    let n = m.count.min(3);
+    let mean = if n == 0 { 0.0 } else { m.samples[..n].iter().sum::<f32>() / n as f32 };
+    // contentY's velocity: against the pointer's.
+    let mut v = if time.wrapping_sub(m.last.1) < 100 { -mean } else { 0.0 };
+    if (cur <= 0.0 && v < 0.0) || (cur >= max.floor() && v > 0.0) {
+        v /= 2.0;
+    }
+    if m.grabbed && f.yflick() && v.abs() > MIN_FLICK_VELOCITY && (y - m.press_y).abs() > FLICK_DISTANCE {
+        f.flick(v, v > 0.0, now);
+    } else if let Some(to) = m.core.fixup(cur, max) {
+        f.jump(to);
+    } else {
+        return;
+    }
+    c.win.dirty = true;
+}
 
 /// A button went down on a card control: a slider jumps to the pointer.
 pub fn press(app: &mut App, action: Action, x: f32, button: u32) {

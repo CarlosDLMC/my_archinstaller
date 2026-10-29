@@ -943,7 +943,7 @@ impl KeyboardHandler for App {
 impl PointerHandler for App {
     fn pointer_frame(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlPointer, events: &[PointerEvent]) {
         for e in events {
-            if self.card.as_ref().map_or(false, |c| c.win.layer.wl_surface() == &e.surface) && self.pressed.is_none() {
+            if self.card.as_ref().map_or(false, |c| c.win.layer.wl_surface() == &e.surface) && self.pressed.is_none() && !cards::grabbing(self) {
                 // CardSurface: around the card, a press dismisses it and the
                 // wheel is eaten; the pointer is not over the card there. (A
                 // drag that started on the card keeps going.) Its MouseArea
@@ -1040,7 +1040,13 @@ impl PointerHandler for App {
                     self.win_mut(w).unwrap().dirty = true;
                     self.pressed = None;
                 }
-                PointerEventKind::Motion { .. } => {
+                PointerEventKind::Motion { time } => {
+                    // The card's Flickable sees the move first, and past the
+                    // drag distance takes the pointer from the control pressed
+                    // in it (filterPointerEvent): its MouseArea is canceled.
+                    if w == WinRef::Card && cards::grab_move(self, y, time) {
+                        self.pressed = None;
+                    }
                     if let Some((WinRef::Card, 0x110, act)) = self.pressed {
                         if w == WinRef::Card {
                             cards::drag(self, act, x);
@@ -1058,7 +1064,7 @@ impl PointerHandler for App {
                     let shape = self.cursor_at(w, after);
                     self.set_cursor(shape);
                 }
-                PointerEventKind::Press { button, .. } => {
+                PointerEventKind::Press { button, time, .. } => {
                     // The card's own MouseArea and its controls take the left
                     // button only (DropdownWidget.qml:160): a right or middle
                     // press falls through to CardSurface's, under the card,
@@ -1076,6 +1082,12 @@ impl PointerHandler for App {
                             cards::close(self);
                             continue;
                         }
+                    }
+                    // The Flickable under a left press begins a drag, on its own
+                    // area or filtering a control's press (cards::grab).
+                    if w == WinRef::Card && button == BTN_LEFT {
+                        let on_control = matches!(self.hit_at(w, x, y), Some(Action::Card(_)));
+                        cards::grab(self, x, y, time, on_control);
                     }
                     self.pressed = self.hit_at(w, x, y).map(|a| (w, button, a));
                     if let (WinRef::Osd(k), Some(Action::Card(code))) = (w, self.hit_at(w, x, y)) {
@@ -1121,7 +1133,12 @@ impl PointerHandler for App {
                         }
                     }
                 }
-                PointerEventKind::Release { button, .. } => {
+                PointerEventKind::Release { button, time, .. } => {
+                    // The Flickable takes the release first: a flick, or back
+                    // onto a whole pixel.
+                    if w == WinRef::Card && button == BTN_LEFT {
+                        cards::grab_end(self, y, time);
+                    }
                     if let WinRef::Osd(k) = w {
                         if let Some(o) = self.osd_mut(k) {
                             o.st.pressed = None;
