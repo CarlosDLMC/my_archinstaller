@@ -49,7 +49,6 @@ pub static EPOCH: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
 struct Kept {
     output: WlOutput,
     kind: CardKind,
-    texts: crate::text::TextMemo,
     /// CardKeys' focused control when the card closed.
     focus: Option<u32>,
 }
@@ -57,13 +56,14 @@ struct Kept {
 thread_local! {
     /// CalendarPopup and CenterInfo's weather card are no Loaders: every bar
     /// has its own of each, made once and only hidden when it closes
-    /// (CenterInfo.qml:903-911). Their Texts keep what happened to them - a
-    /// month paged or an arrow hovered is gray from then on - and the
-    /// calendar's CardKeys keeps its focused arrow, which the next opening
-    /// by the mouse shows again: the window gives its focus back down the
-    /// focus scopes (QQuickWindow::focusInEvent). Kept by the bar's output:
-    /// a new output is a new bar, and a gone one's state goes at the next
-    /// closing.
+    /// (CenterInfo.qml:903-911). The calendar's CardKeys keeps its focused
+    /// arrow, which the next opening by the mouse shows again: the window
+    /// gives its focus back down the focus scopes (QQuickWindow::
+    /// focusInEvent). Their Texts start subpixel at every opening all the
+    /// same: hiding a layer-shell PanelWindow deletes its QQuickWindow
+    /// (quickshell 0.3.2, WlrLayershell::deleteOnInvisible), so every node
+    /// is new when it shows again. Kept by the bar's output: a new output is
+    /// a new bar, and a gone one's state goes at the next closing.
     static KEPT: std::cell::RefCell<Vec<Kept>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
@@ -828,13 +828,10 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
     });
     app.strips[strip].win.dirty = true;
     if matches!(kind, CardKind::Calendar | CardKind::Weather) {
-        // This bar's own (KEPT): Qt made its Texts' nodes the first time it
-        // was shown, so what changed since is gray (the palette load at
-        // startup came before any node).
+        // This bar's own (KEPT): its focus scope's last focused control.
         let output = &app.strips[strip].output;
         let kept = KEPT.with_borrow_mut(|v| v.iter().position(|k| k.kind == kind && k.output == *output).map(|i| v.swap_remove(i)));
         if let (Some(k), Some(card)) = (kept, app.card.as_mut()) {
-            card.texts = k.texts;
             // A keyboard opening focuses the first control (focusFirst).
             if !keyboard {
                 card.focus_code = k.focus;
@@ -875,7 +872,7 @@ pub fn close(app: &mut App) {
     card.meter_win = None;
     if matches!(card.kind, CardKind::Calendar | CardKind::Weather) {
         if let Some(s) = app.strips.get(card.strip) {
-            let kept = Kept { output: s.output.clone(), kind: card.kind, texts: std::mem::take(&mut card.texts), focus: card.focus_code };
+            let kept = Kept { output: s.output.clone(), kind: card.kind, focus: card.focus_code };
             KEPT.with_borrow_mut(|v| {
                 v.retain(|k| app.strips.iter().any(|s| s.output == k.output));
                 v.push(kept);
