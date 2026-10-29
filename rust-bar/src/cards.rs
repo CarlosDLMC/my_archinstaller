@@ -520,31 +520,10 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         h = 160f32.max((content_h.ceil() + 30.0).min(s.screen_height * 0.85));
     }
     // DropdownWidget.cardX: from the icon's centre on the screen.
-    let icon_w = icon.w / ui;
-    let icon_center = icon.x + icon.w / 2.0;
-    let mut stem_w = (icon_w + 16.0).floor().min(w - 60.0);
-    let mut card_x = match stem {
-        Stem::Right => icon_center - w + stem_w / 2.0 + 10.0,
-        Stem::Left => icon_center - stem_w / 2.0 - 10.0,
-        Stem::Center => icon_center - w / 2.0,
-    };
-    if kind == CardKind::Calendar {
-        // CalendarPopup: a fixed 60 px stem, cardX = anchorX (int) - 200.
-        stem_w = 60.0;
-        card_x = icon_center.trunc() - 200.0;
-    }
-    if kind == CardKind::Weather {
-        // The stem is the weather pill's width (int); centred on the pill.
-        stem_w = icon_w.trunc();
-        card_x = icon_center - w / 2.0;
-    }
+    let (icon_center, stem_w, card_x) = anchor(kind, icon, w, ui);
     let x = card_x.min(s.screen_width - w).max(0.0);
     let y = crate::bar::strip_height(s.screen_width) as f32 + 2.0;
-    let stem_cx = match stem {
-        Stem::Right => w - stem_w / 2.0 - 10.0,
-        Stem::Left => stem_w / 2.0 + 10.0,
-        Stem::Center => w / 2.0,
-    };
+    let stem_cx = stem_center(stem, w, stem_w);
     let output = s.output.clone();
     let (screen_w, screen_h) = (s.screen_width as u32, s.screen_height as u32);
     let today = crate::cal::today();
@@ -739,14 +718,9 @@ pub fn update_height(app: &mut App) {
                 close(app);
                 return;
             }
-            // cardX and the stem follow the pill; a strip about to redraw
-            // may move it, so look again once it has.
-            let strip = card.strip;
-            follow_weather_pill(app);
-            if app.strips.get(strip).map_or(false, |s| s.win.dirty) {
-                app.after(Duration::ZERO, follow_weather_pill);
-            }
-            let w = app.card.as_ref().unwrap().width;
+            // cardX and the stem follow the pill as the strip draws it
+            // (follow_strip).
+            let w = card.width;
             weather_height(&mut app.fonts, &app.svc, w)
         }
         _ => return,
@@ -759,23 +733,84 @@ pub fn update_height(app: &mut App) {
     card.win.dirty = true;
 }
 
-/// CenterInfo's weather card: cardX centres it on the weather pill and the
-/// stem is the pill's width (int), both bindings (CenterInfo.qml:638-647).
-fn follow_weather_pill(app: &mut App) {
-    let Some(card) = app.card.as_ref().filter(|c| c.kind == CardKind::Weather) else { return };
-    let Some(s) = app.strips.get(card.strip) else { return };
-    let Some(pill) = s.hits.iter().find(|h| h.action == Action::Weather) else { return };
-    let ui = crate::bar::ui_scale(s.screen_width);
-    let (center, stem_w, screen_w) = (pill.x + pill.w / 2.0, (pill.w / ui).trunc(), s.screen_width);
-    let card = app.card.as_mut().unwrap();
-    let left = (center - card.width / 2.0).min(screen_w - card.width).max(0.0).round();
-    if left != card.left || stem_w != card.stem_w {
-        card.icon_center = center;
-        card.left = left;
-        card.stem_w = stem_w;
-        card.notch_stale = true;
-        card.win.dirty = true;
+/// The strip widget a card hangs from (and ipc.rs opens it by).
+pub(crate) fn icon_action(kind: CardKind) -> Action {
+    match kind {
+        CardKind::Power => Action::Logo,
+        CardKind::Calendar => Action::Clock,
+        CardKind::Weather => Action::Weather,
+        CardKind::Audio => Action::Volume,
+        CardKind::Pult => Action::Pult,
+        CardKind::Vpn => Action::Vpn,
+        CardKind::Agent => Action::Agent,
+        CardKind::Wifi | CardKind::Network => Action::Wifi,
+        CardKind::Battery => Action::Battery,
     }
+}
+
+/// From the icon's hit on the strip: its centre on the screen, the stem's
+/// width and cardX. DropdownWidget: rawStemWidth (int) = the icon + 16, kept
+/// clear of the notch corners, cardX by stemAlignment; CalendarPopup: a
+/// fixed 60 px stem, cardX = anchorX (int) - 200; CenterInfo's weather card:
+/// the stem is the pill's width (int), the card centred on the pill
+/// (CenterInfo.qml:638-647).
+fn anchor(kind: CardKind, icon: &Hit, w: f32, ui: f32) -> (f32, f32, f32) {
+    let icon_w = icon.w / ui;
+    let center = icon.x + icon.w / 2.0;
+    match kind {
+        CardKind::Calendar => (center, 60.0, center.trunc() - 200.0),
+        CardKind::Weather => (center, icon_w.trunc(), center - w / 2.0),
+        _ => {
+            let stem_w = (icon_w + 16.0).floor().min(w - 60.0);
+            let x = match geometry(kind).2 {
+                Stem::Right => center - w + stem_w / 2.0 + 10.0,
+                Stem::Left => center - stem_w / 2.0 - 10.0,
+                Stem::Center => center - w / 2.0,
+            };
+            (center, stem_w, x)
+        }
+    }
+}
+
+/// x of the stem's centre inside the card.
+fn stem_center(stem: Stem, w: f32, stem_w: f32) -> f32 {
+    match stem {
+        Stem::Right => w - stem_w / 2.0 - 10.0,
+        Stem::Left => stem_w / 2.0 + 10.0,
+        Stem::Center => w / 2.0,
+    }
+}
+
+/// The card follows its icon. cardX, the stem's width and cardY are
+/// bindings on the strip's layout and the screen (DropdownWidget.qml cardX
+/// and rawStemWidth, CalendarPopup's anchorX, CenterInfo.qml:638-647,
+/// CardSurface.qml:26-30), and CardSurface keeps the card on the screen
+/// (CardSurface.qml:55-58): after each draw of the card's strip - a new
+/// weather reading, a volume of 100%, CPU digits moving the widgets left of
+/// them, a new mode of the output - the card takes its icon's new place.
+/// It redraws only when its place or its stem changed.
+pub fn follow_strip(app: &mut App) {
+    let Some(card) = app.card.as_ref() else { return };
+    let Some(s) = app.strips.get(card.strip) else { return };
+    let action = icon_action(card.kind);
+    let Some(icon) = s.hits.iter().find(|h| h.action == action) else { return };
+    let (w, stem) = (card.width, geometry(card.kind).2);
+    let (center, stem_w, card_x) = anchor(card.kind, icon, w, crate::bar::ui_scale(s.screen_width));
+    let left = card_x.min(s.screen_width - w).max(0.0).round();
+    let top = (crate::bar::strip_height(s.screen_width) as f32 + 2.0).round();
+    let card = app.card.as_mut().unwrap();
+    card.icon_center = center;
+    if (left, top, stem_w) == (card.left, card.top, card.stem_w) {
+        return;
+    }
+    if stem_w != card.stem_w {
+        // The notch is keyed by its stem's centre, not its width.
+        card.stem_w = stem_w;
+        card.stem_cx = stem_center(stem, w, stem_w);
+        card.notch_stale = true;
+    }
+    (card.left, card.top) = (left, top);
+    card.win.dirty = true;
 }
 
 /// Whether a point of the card's surface is on the card (CardSurface's card

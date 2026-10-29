@@ -462,6 +462,10 @@ impl App {
                 let (hits, animating) = bar::draw(&mut scene, &mut self.fonts, &self.theme, &self.svc, &ctx, &mut memo);
                 self.strips[i].hits = hits;
                 self.strips[i].texts = memo;
+                // The open card hangs from an icon of this strip: it follows it.
+                if self.card.as_ref().map_or(false, |c| c.strip == i) {
+                    cards::follow_strip(self);
+                }
                 animating
             }
             WinRef::Card => {
@@ -723,11 +727,21 @@ impl OutputHandler for App {
     fn update_output(&mut self, _: &Connection, _: &QueueHandle<Self>, output: wl_output::WlOutput) {
         let info = self.outputs.info(&output);
         let game_mode = self.svc.mango.game_mode;
-        if let Some(s) = self.strips.iter_mut().find(|s| s.output == output) {
+        if let Some(i) = self.strips.iter().position(|s| s.output == output) {
+            let s = &mut self.strips[i];
             if let Some(n) = info.as_ref().and_then(|i| i.name.clone()) {
                 s.name = n;
             }
             if let Some((w, h)) = info.as_ref().and_then(|i| i.logical_size) {
+                if (w as f32, h as f32) != (s.screen_width, s.screen_height) {
+                    // The card open on it: its height bindings read the
+                    // screen (the agent and network cards: 85% of it), so
+                    // update_height runs again; its place follows the strip's
+                    // next draw (cards::follow_strip).
+                    if let Some(c) = self.card.as_mut().filter(|c| c.strip == i) {
+                        c.win.dirty = true;
+                    }
+                }
                 s.screen_width = w as f32;
                 s.screen_height = h as f32;
                 // shell.qml: implicitHeight and exclusiveZone are bindings on
