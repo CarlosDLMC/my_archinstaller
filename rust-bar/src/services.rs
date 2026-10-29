@@ -507,12 +507,26 @@ fn set_clock(app: &mut App, t: String) {
     }
 }
 
-/// refreshTimezone(): the timezone file again; a new zone redraws the clock.
+/// refreshTimezone() / applyTimezoneText(): the timezone file again; a new
+/// zone redraws the clock (and the VPN card's ВРЕМЯ, which shows whether
+/// there is one).
 fn refresh_timezone(app: &mut App) {
-    let before = app.svc.timezone.clone();
-    read_cache_files(app);
-    if app.svc.timezone != before {
+    let tz = read_cache("timezone");
+    if tz != app.svc.timezone {
+        app.svc.timezone = tz;
         update_clock(app, true);
+        app.mark_all_dirty();
+    }
+}
+
+/// refreshWeather() / applyWeatherCityText(): the city file again; a new city
+/// fetches the weather (and redraws the VPN card's ПОГОДА).
+fn refresh_weather_city(app: &mut App) {
+    let city = read_cache("weather_city");
+    if city != app.svc.weather.city {
+        app.svc.weather.city = city;
+        request_weather(app);
+        app.mark_all_dirty();
     }
 }
 
@@ -524,23 +538,27 @@ fn cache_dir() -> String {
     format!("{}/.cache/quickshell", home())
 }
 
-fn read_cache_files(app: &mut App) {
-    app.svc.timezone = std::fs::read_to_string(format!("{}/timezone", cache_dir())).map(|t| t.trim().to_string()).unwrap_or_default();
-    app.svc.weather.city = std::fs::read_to_string(format!("{}/weather_city", cache_dir())).map(|t| t.trim().to_string()).unwrap_or_default();
+/// A file of ~/.cache/quickshell, trimmed; "" when it is absent.
+fn read_cache(name: &str) -> String {
+    std::fs::read_to_string(format!("{}/{name}", cache_dir())).map(|t| t.trim().to_string()).unwrap_or_default()
 }
 
-/// ~/.cache/quickshell changed: the timezone and weather city follow the VPN
-/// card's sync (CenterInfo's FileViews); a new city fetches the weather.
+/// ~/.cache/quickshell changed: CenterInfo's FileViews, each reading only its
+/// own file - the timezone and weather city follow the VPN card's sync, and a
+/// timezone event must not take a new city in before its own event compares
+/// it (that swallowed the fetch).
 fn cache_changed(app: &mut App, name: &str) {
     match name {
         "timezone" => refresh_timezone(app),
-        "weather_city" => {
-            let before = app.svc.weather.city.clone();
-            read_cache_files(app);
-            if app.svc.weather.city != before {
-                request_weather(app);
+        "weather_city" => refresh_weather_city(app),
+        // weatherCacheFile: weather-location.py writes it after every good
+        // reading, so a fetch the bar did not start (vpn-sync.sh, vpn-reset.sh)
+        // shows too; the bar's own fetch is parsed twice, as in QML.
+        "weather.json" => {
+            let t = read_cache("weather.json");
+            if !t.is_empty() {
+                apply_weather(app, &t);
             }
-            app.mark_all_dirty();
         }
         // SystemStats' prefFile: the switch, from the ПУЛЬТ card or anyone else.
         "bar-stats" => set_stats_shown(app, stats_pref()),
@@ -596,7 +614,8 @@ pub fn start(app: &mut App) {
         app.debounce("stats", Duration::from_millis(5000), stats_tick);
     }
 
-    read_cache_files(app);
+    app.svc.timezone = read_cache("timezone");
+    app.svc.weather.city = read_cache("weather_city");
     let _ = std::fs::create_dir_all(cache_dir());
     app.watch_dir(&cache_dir(), cache_changed);
     app.watch_dir(&format!("{}/.config/quickshell/bar", home()), palette_changed);
@@ -877,8 +896,11 @@ fn wifi_status(app: &mut App) {
 fn vpn_reset(app: &mut App) {
     let cmd = format!("{}/.config/quickshell/bar/scripts/vpn-reset.sh all --forget", home());
     app.spawn("vpn-reset", &["sh", "-c", &cmd], |app, _| {
+        // vpnResetProc ending: refreshTimezone(), refreshWeather() - a fetch
+        // only for a new city; the reset fetched home's weather itself, and
+        // the weather.json watch shows it.
         refresh_timezone(app);
-        request_weather(app);
+        refresh_weather_city(app);
     });
 }
 
