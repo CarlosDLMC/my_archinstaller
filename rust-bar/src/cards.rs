@@ -199,9 +199,15 @@ impl OpenCard {
     /// that is not pickable - the VPN tunnel in use - would show the focus
     /// ring in QML; here it stays with the scope.) The rows' lamps and
     /// texts start fresh; their backgrounds from transparent, as a new
-    /// delegate's, so hover and focus fade in on them.
+    /// delegate's, so hover and focus fade in on them. A press held on an
+    /// old row died with its delegate (its MouseArea's grab): the release
+    /// clicks nothing, not the row now in its place - the Wi-Fi scans
+    /// re-sort the list 1.4 s and 3.2 s after the card opens.
     fn list_replaced(&mut self, base: u32, count: usize) {
         let rows = base..base + 0x100;
+        if matches!(self.held, Some((Action::Card(c), _)) if rows.contains(&c)) {
+            self.held = None;
+        }
         if self.focus_code.map_or(false, |c| rows.contains(&c)) {
             let shown = self.focus == self.focus_seen && self.focus.and_then(|f| self.focus_codes.get(f)).map_or(false, |c| rows.contains(c));
             self.focus_code = Some(base).filter(|_| shown && count > 0);
