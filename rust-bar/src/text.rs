@@ -377,10 +377,15 @@ pub struct Fonts {
     /// Lines laid out lately (layout()), two generations of them.
     lines: HashMap<LineKey, (String, Line)>,
     lines_old: HashMap<LineKey, (String, Line)>,
+    /// Texts broken into lines lately (wrap_strings), two generations too.
+    wraps: HashMap<WrapKey, (String, Vec<String>)>,
+    wraps_old: HashMap<WrapKey, (String, Vec<String>)>,
 }
 
 /// A text's hash, font, size and letter spacing (bits).
 type LineKey = (u64, FontKey, u32, u32);
+/// The same plus the width (bits) and Text.Wrap (break anywhere).
+type WrapKey = (u64, FontKey, u32, u32, u32, bool);
 
 /// QFontEngineFT::loadFlags for a gray glyph cache with fontconfig's
 /// hintslight. RUST_BAR_FT_FLAGS overrides it (calibration only).
@@ -514,6 +519,8 @@ impl Fonts {
             emoji: None,
             lines: HashMap::new(),
             lines_old: HashMap::new(),
+            wraps: HashMap::new(),
+            wraps_old: HashMap::new(),
         }
     }
 
@@ -809,7 +816,35 @@ impl Fonts {
         self.wrap_strings(text, key, size, letter_spacing, max, true).iter().map(|l| self.layout(l, key, size, letter_spacing)).collect()
     }
 
+    /// A wrapped Text breaks its lines once (QQuickText lays out again only
+    /// on a change); breaking measures every candidate line, and a long
+    /// text without break opportunities (a token, base64, a long URL in the
+    /// clipboard's preview) has one candidate per character - hundreds of
+    /// strings, more than the line cache keeps, so every frame shaped most
+    /// of them again. The breaks are kept like the lines are: what a frame
+    /// asks for again is one lookup.
     pub fn wrap_strings(&mut self, text: &str, key: FontKey, size: f32, letter_spacing: f32, max: f32, anywhere: bool) -> Vec<String> {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        text.hash(&mut h);
+        let k = (h.finish(), key, size.to_bits(), letter_spacing.to_bits(), max.to_bits(), anywhere);
+        if let Some((t, out)) = self.wraps.get(&k) {
+            if t == text {
+                return out.clone();
+            }
+        }
+        let out = match self.wraps_old.remove(&k) {
+            Some((t, out)) if t == text => out,
+            _ => self.break_lines(text, key, size, letter_spacing, max, anywhere),
+        };
+        if self.wraps.len() >= 64 {
+            self.wraps_old = std::mem::take(&mut self.wraps);
+        }
+        self.wraps.insert(k, (text.to_string(), out.clone()));
+        out
+    }
+
+    fn break_lines(&mut self, text: &str, key: FontKey, size: f32, letter_spacing: f32, max: f32, anywhere: bool) -> Vec<String> {
         use unicode_linebreak::{linebreaks, BreakOpportunity};
         let mut out: Vec<String> = Vec::new();
         let mut cur = String::new();
