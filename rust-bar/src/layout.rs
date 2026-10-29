@@ -2,7 +2,7 @@
 //! order (layout next = alt-tab between the last two), the switcher OSD that
 //! shows on every change, and clicking a layout in it.
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::app::App;
 use crate::bar::{ac, Action, Hit};
@@ -92,6 +92,7 @@ pub fn switch_next(app: &mut App) {
     if !s.ready() || s.mru.len() < 2 {
         return;
     }
+    let from = s.selected_pos();
     if !s.session_active {
         s.session_active = true;
         s.session_pos = 1;
@@ -100,7 +101,7 @@ pub fn switch_next(app: &mut App) {
     }
     let target = s.mru[s.session_pos];
     activate(app, target);
-    show_osd(app);
+    show_osd(app, from);
     commit_restart(app);
 }
 
@@ -125,9 +126,10 @@ pub fn layout_changed(app: &mut App) {
     if idx == s.current && !s.session_active {
         return;
     }
+    let from = s.selected_pos();
     s.current = idx;
     if !s.session_active {
-        show_osd(app);
+        show_osd(app, from);
         commit_restart(app);
     }
     app.mark_all_dirty();
@@ -214,13 +216,40 @@ fn panel_size(app: &mut App) -> (f32, f32) {
     (body_w + m.panel_pad, body_h + m.panel_pad)
 }
 
-/// onShowOsd: the popup up, and hideTimer restarted.
-fn show_osd(app: &mut App) {
+/// onShowOsd: the popup up, and hideTimer restarted. `from` is the entry
+/// that was selected before the change that shows it.
+fn show_osd(app: &mut App, from: usize) {
     if app.svc.layout.switcher_items().is_empty() {
         return;
     }
+    let fresh = app.osd(OsdKind::Layout).is_none();
     map_osd(app);
+    if fresh {
+        seed_selection(app, from);
+    }
     hide_later(app);
+}
+
+/// A popup mapped anew shows the switch as it happens. QML's LayoutOsd is
+/// never destroyed (shell.qml:284-287): the selection moves while it is
+/// hidden, just before showOsd(), and the tile's and the lamp's Behaviors
+/// (LayoutOsd.qml:161-162, ConsoleLamp.qml:23,34) are still running while
+/// it fades in. They start here from the old selection, as draw_osd and
+/// cards::lamp would have left them.
+fn seed_selection(app: &mut App, from: usize) {
+    let now = Instant::now();
+    let t = &app.theme;
+    let (accent, key, glass) = (t.col_accent, t.col_plate.lighter(1.25), t.col_plate.darker(1.3));
+    let (to, n) = (app.svc.layout.selected_pos(), app.svc.layout.switcher_items().len());
+    let Some(o) = app.osd_mut(OsdKind::Layout) else { return };
+    for i in 0..n {
+        let id = i as u32;
+        for lit in [i == from, i == to] {
+            o.st.color(0x100 + id, if lit { accent } else { key }, 120, now);
+            o.st.number(0x3_0200 + id, if lit { 0.22 } else { 0.0 }, 160, now);
+            o.st.color(0x4_0200 + id, if lit { accent } else { glass }, 160, now);
+        }
+    }
 }
 
 /// windowVisible = shown = true: maps the popup, or brings back a fading one.
