@@ -185,9 +185,9 @@ pub struct Services {
     pub stats: Stats,
     pub clock: String,
     /// The minute the clock last showed (lastClockMinute), and the wall
-    /// clock at the last tick in ms (lastTickMs).
+    /// clock in ms and the monotonic one at the last tick (lastTickMs).
     clock_minute: Option<i32>,
-    last_tick_ms: u64,
+    last_tick: Option<(i64, Instant)>,
     pub timezone: String,
     pub dnd_enabled: bool,
     pub dnd_available: bool,
@@ -598,18 +598,26 @@ fn palette_changed(app: &mut App, name: &str) {
     }
 }
 
-/// CenterInfo's one-second tick. It also notices a resume: the timers run on
-/// the monotonic clock, which stops in suspend, so a wall-clock jump of over
-/// two minutes between ticks fetches the weather once the network has had ten
-/// seconds to come back (the hourly fetch could still be an hour away).
-fn tick_clock(app: &mut App) -> bool {
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
-    if app.svc.last_tick_ms > 0 && now.saturating_sub(app.svc.last_tick_ms) > 120_000 {
+fn wall_ms() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64)
+}
+
+/// CenterInfo's clock tick. QML ticks every second to catch the minute; this
+/// one comes on the minute (every_minute), and right after a resume. It also
+/// notices the resume: the timers run on the monotonic clock, which stops in
+/// suspend, so a wall clock that got over two minutes ahead of it since the
+/// last tick fetches the weather once the network has had ten seconds to come
+/// back (the hourly fetch could still be an hour away). After any jump the
+/// clock is redone even on the same minute of the hour - QML's minute check
+/// kept 23:10 up after a resume at 07:10 until 07:11.
+fn tick_clock(app: &mut App) {
+    let (now, mono) = (wall_ms(), Instant::now());
+    let jump = app.svc.last_tick.map_or(0, |(wall, at)| now - wall - mono.duration_since(at).as_millis() as i64);
+    if jump > 120_000 {
         app.debounce("weather-after-resume", Duration::from_secs(10), request_weather);
     }
-    app.svc.last_tick_ms = now;
-    update_clock(app, false);
-    true
+    app.svc.last_tick = Some((now, mono));
+    update_clock(app, jump.abs() > 1000);
 }
 
 pub fn start(app: &mut App) {
@@ -634,7 +642,14 @@ pub fn start(app: &mut App) {
     app.watch_dir(&cache_dir(), cache_changed);
     app.watch_dir(&format!("{}/.config/quickshell/bar", home()), palette_changed);
     update_clock(app, true);
-    app.every(Duration::from_millis(1000), tick_clock);
+    app.svc.last_tick = Some((wall_ms(), Instant::now()));
+    // One wakeup a minute, not sixty; the 1 s tick without a timerfd.
+    if !app.every_minute(tick_clock) {
+        app.every(Duration::from_millis(1000), |app| {
+            tick_clock(app);
+            true
+        });
+    }
 
     app.svc.dnd_available = true;
     dnd_connect(app);
