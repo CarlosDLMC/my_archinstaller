@@ -187,6 +187,8 @@ pub struct Wall {
     pub folder_index: usize,
     pub filter: String,
     cursor: usize,
+    /// When the search line's cursor last showed anew (it blinks from there).
+    blink_since: Option<Instant>,
     // The view: list.currentIndex, contentX and what reselect() keeps.
     index: usize,
     view_x: Option<Smoothed>,
@@ -727,6 +729,7 @@ pub fn key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Keysym, m
             f.replace_range(from..c, "");
             app.svc.wall.cursor = from;
             set_filter(app, f);
+            restart_blink(app);
         }
         _ => {
             if mods.ctrl {
@@ -738,9 +741,29 @@ pub fn key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Keysym, m
                 f.insert_str(c, s);
                 app.svc.wall.cursor = c + s.len();
                 set_filter(app, f);
+                restart_blink(app);
             }
         }
     }
+}
+
+/// A key the search field took: its cursor shows and blinks on from now.
+fn restart_blink(app: &mut App) {
+    app.svc.wall.blink_since = Some(Instant::now());
+    blink(app);
+}
+
+/// The search field keeps the focus all along, so its cursor blinks 500 /
+/// 500 ms (TextInput); it is redrawn for that only while the line shows.
+fn blink(app: &mut App) {
+    if !app.svc.wall.open || app.svc.wall.filter.is_empty() {
+        return;
+    }
+    if let Some(o) = app.osd_mut(OsdKind::Wallpaper) {
+        o.win.dirty = true;
+    }
+    let since = app.svc.wall.blink_since.get_or_insert_with(Instant::now).elapsed().as_millis() as u64;
+    app.debounce("wall-blink", Duration::from_millis(500 - since % 500), blink);
 }
 
 /// onFilterChanged: the first match is centred; clearing it goes back home.
@@ -1108,7 +1131,9 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, panel: (f32, f32, f32, f32), svc: &Servic
         let fy = ry + ac(row_h, fl.height());
         ui.text(&fl, fx, fy, t.col_white, TextStyle::Normal);
         let cx = ui.fonts.layout(&w.filter[..w.cursor.min(w.filter.len())], CONTENT, px(13.0), 0.0).adv;
-        ui.scene.fill(fx + cx, fy, 1.0, fl.height(), t.col_white);
+        if w.blink_since.map_or(true, |s| s.elapsed().as_millis() / 500 % 2 == 0) {
+            ui.scene.fill(fx + cx, fy, 1.0, fl.height(), t.col_white);
+        }
         ui.text(&cnt, fx + iw + sp, ry + ac(row_h, cnt.height()), t.col_grey, TextStyle::Normal);
     }
 
