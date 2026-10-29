@@ -72,6 +72,10 @@ pub struct OpenCard {
     focus_seen: Option<usize>,
     /// The keys moved the focus since the last draw: a list shows that row.
     focus_moved: bool,
+    /// Where they moved it from, and which way: a list is scrolled over the
+    /// rows on their way.
+    focus_from: Option<u32>,
+    focus_forward: bool,
     /// The Wi-Fi card's password view at the last draw.
     wifi_password: bool,
     width: f32,
@@ -162,10 +166,14 @@ impl OpenCard {
             None if forward => 0,
             None => n - 1,
         };
+        if !self.focus_moved {
+            self.focus_from = self.focus_code;
+        }
         self.focus = Some(i);
         self.focus_seen = self.focus;
         self.focus_code = Some(self.focus_codes[i]);
         self.focus_moved = true;
+        self.focus_forward = forward;
         self.win.dirty = true;
     }
 
@@ -480,6 +488,8 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         focus_code: None,
         focus_seen: None,
         focus_moved: false,
+        focus_from: None,
+        focus_forward: true,
         wifi_password: false,
         width: w,
         height: h,
@@ -1022,31 +1032,61 @@ impl Ui<'_, OpenCard> {
         let chain_start = self.focus_codes.len();
         let card = &mut *self.card;
         let f = card.flick(base, sig);
-        if f.sig != sig {
+        let replaced = f.sig != sig;
+        if replaced {
             f.sig = sig;
             f.jump(0.0);
             card.list_replaced(base, count);
         }
-        // The row the focus moved to: an index set by code counts the
-        // pickable rows from here; the keys name the row by its code.
-        let row = if card.focus != card.focus_seen {
-            card.focus.and_then(|p| p.checked_sub(chain_start)).and_then(|k| (0..count).filter(|i| pickable(*i)).nth(k))
+        // The rows the list is scrolled to, one after the other, first to
+        // last (positionViewAtIndex(n, ListView.Contain) each). An index set
+        // by code (a keyboard open) names its row, counting the pickable rows
+        // from here. The keys (CardKeys.step, ConsoleRow.stepInList and
+        // entryRow) pass every row on their way, pickable or not: in the list,
+        // the rows after the one they left; coming in, the rows from the end
+        // they enter at; going out, the rest of the list that way. A model
+        // replaced this frame came after the keys: it starts at the top.
+        let row_of = |c: Option<u32>| c.and_then(|c| c.checked_sub(base)).map(|i| i as usize).filter(|i| *i < count.min(0x100));
+        let pass = if replaced {
+            None
+        } else if card.focus != card.focus_seen {
+            card.focus.and_then(|p| p.checked_sub(chain_start)).and_then(|k| (0..count).filter(|i| pickable(*i)).nth(k)).map(|t| (t, t))
         } else if card.focus_moved {
-            card.focus_code.and_then(|c| c.checked_sub(base)).map(|i| i as usize).filter(|i| *i < count.min(0x100))
+            let fwd = card.focus_forward;
+            match (row_of(card.focus_from), row_of(card.focus_code)) {
+                (Some(s), Some(t)) if fwd && t > s => Some((s + 1, t)),
+                (Some(s), Some(t)) if !fwd && t < s => Some((s - 1, t)),
+                // Round the end of a card that is only this list.
+                (Some(_), Some(t)) => Some((t, t)),
+                (None, Some(t)) => Some((if fwd { 0 } else { count - 1 }, t)),
+                (Some(s), None) if fwd && s + 1 < count => Some((s + 1, count - 1)),
+                (Some(s), None) if !fwd && s > 0 => Some((s - 1, 0)),
+                _ => None,
+            }
         } else {
             None
         };
-        if let Some(i) = row {
+        if let Some((a, b)) = pass {
+            let max = (content_h - view_h).max(0.0);
             let f = card.flick(base, sig);
-            let (top, y0) = (i as f32 * pitch, f.y(now));
-            let mut p = y0;
-            if top + row_h >= p + view_h {
-                p = top + row_h - view_h;
+            let (mut p, mut i) = (f.y(now), a);
+            loop {
+                let top = i as f32 * pitch;
+                if top + row_h >= p + view_h {
+                    p = top + row_h - view_h;
+                }
+                if top < p {
+                    p = top;
+                }
+                p = p.min(max).max(0.0);
+                if i == b {
+                    break;
+                }
+                if a < b { i += 1 } else { i -= 1 }
             }
-            if top < p {
-                p = top;
-            }
-            f.jump(p.min((content_h - view_h).max(0.0)).max(0.0));
+            // cancelFlick() stops a glide, and fixupPosition() puts a place
+            // it left between two pixels on one (no velocity now: rounded).
+            f.jump(if p > 0.0 && p < max { p.round() } else { p });
         }
         let mut v = self.view_begin(base, x, y, w, view_h, content_h);
         v.pitch = pitch;
