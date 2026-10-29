@@ -45,7 +45,7 @@ done
 # overview was relaunched without its previous instance being killed, and when
 # qs was not running at all, pkill failed and the bar was never brought back.
 #
-# To restart the bar by hand: pkill -f 'qs -c bar'; qs -c bar &
+# To restart the bar: SUPER+CTRL+B (RestartBar.sh).
 
 # Wallust refresh (synchronous to ensure colors are ready)
 ${SCRIPTSDIR}/WallustSwww.sh

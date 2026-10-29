@@ -221,8 +221,8 @@ if selected dots; then
         test -f "$HOME/.config/mango/config.conf"
     check_outcome "dotfiles not deployed: ~/.config/hypr/hyprlock.conf is missing - no lock screen (install-scripts/dotfiles-main.sh)" \
         test -f "$HOME/.config/hypr/hyprlock.conf"
-    check_outcome "dotfiles not deployed: ~/.config/quickshell/bar/shell.qml is missing (install-scripts/dotfiles-main.sh)" \
-        test -f "$HOME/.config/quickshell/bar/shell.qml"
+    check_outcome "dotfiles not deployed: ~/.config/quickshell/bar/scripts/layouts.py (the bar's scripts) is missing (install-scripts/dotfiles-main.sh)" \
+        test -f "$HOME/.config/quickshell/bar/scripts/layouts.py"
     # Both names: GtkReload.sh switches between them after every wallpaper change.
     check_outcome "the Wallust GTK theme is missing from ~/.themes - GTK apps lose the wallpaper colours (dotfiles/copy.sh)" \
         test -f "$HOME/.themes/Wallust-A/gtk-3.0/gtk.css" -a -f "$HOME/.themes/Wallust-B/gtk-3.0/gtk.css"
@@ -362,9 +362,9 @@ if selected bluetooth; then
         sudo test -f /etc/sudoers.d/bluetooth-toggle
 fi
 
-if selected quickshell; then
-    check_outcome "quickshell is not installed (install-scripts/quickshell.sh)" \
-        pacman -Qi quickshell
+if selected bar; then
+    check_outcome "the bar is not installed: no rust-bar package (install-scripts/rust-bar.sh)" \
+        pacman -Qi rust-bar
 fi
 
 if selected portals; then
@@ -562,6 +562,7 @@ if [ ${#missing[@]} -ne 0 ]; then
             text-boot)        _hint=" (not a package - 'quiet'/'splash' could not be taken off the kernel command line; the text-boot log in Install-Logs/ says where, then re-run install-scripts/text-boot.sh)" ;;
             plymouth-splash)  _hint=" (not a package - 'splash' could not be put on the kernel command line; the plymouth log in Install-Logs/ says where to add it, then re-run install-scripts/plymouth.sh)" ;;
             plymouth-hook)    _hint=" (not a package - the plymouth hook could not go into every mkinitcpio config; the plymouth log in Install-Logs/ says which, then re-run install-scripts/plymouth.sh)" ;;
+            rust-bar-build)   _hint=" (not a package - the bar could not be built from rust-bar/, so an older rust-bar, if one is installed, is what runs; the rust-bar log in Install-Logs/ says why, then re-run install-scripts/rust-bar.sh)" ;;
             *)                _hint="" ;;
         esac
         echo "${WARNING}$pkg${RESET}$_hint"

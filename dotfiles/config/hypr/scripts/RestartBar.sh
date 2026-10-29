@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Restart the quickshell bar (SUPER+CTRL+B).
-# The bar runs as `qs -c bar`, so its process name is "qs", not "quickshell".
-# The pattern is anchored with ^ so it cannot match a shell whose command line
-# merely contains "qs -c bar". `;` and not `&&`, so a pkill that matches
-# nothing still starts the bar.
-pkill -f '^qs -c bar'
-sleep 0.5
+# Restart the bar (SUPER+CTRL+B).
+# mango starts it as plain `rust-bar` (startup.conf), so the whole command
+# line is matched (-x -f): not `rust-bar crt` or `rust-bar msg ...`, and not a
+# shell whose command line merely contains "rust-bar". A new bar exits at once
+# while the old one still answers on its socket, so wait for it to be gone.
+pkill -x -f '(/usr/bin/)?rust-bar'
+for _ in $(seq 1 20); do
+    pgrep -x -f '(/usr/bin/)?rust-bar' >/dev/null || break
+    sleep 0.1
+done
 mkdir -p "$HOME/.cache/quickshell"
-exec qs -c bar
+exec rust-bar

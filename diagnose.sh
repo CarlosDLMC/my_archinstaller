@@ -79,7 +79,7 @@ fi
 if [ -d ~/.config/quickshell ]; then
     printf "  ${OK} ~/.config/quickshell exists\n"
 else
-    problems=$((problems + 1)); printf "  ${ERROR} ~/.config/quickshell MISSING (custom bar not installed)\n"
+    problems=$((problems + 1)); printf "  ${ERROR} ~/.config/quickshell MISSING (the bar's scripts and wallust palette - dotfiles not copied)\n"
 fi
 
 if [ -d ~/.config/wallust ]; then
@@ -117,7 +117,7 @@ essential_packages=(
     # dunst, not mako: dunst is the notification daemon this setup runs.
     "dunst"
     "xdg-desktop-portal-wlr"
-    "quickshell"
+    "rust-bar"
     "foot"
     "wlsunset"
     "wlopm"
@@ -125,9 +125,15 @@ essential_packages=(
 )
 
 missing_packages=()
+build_bar=false
 for pkg in "${essential_packages[@]}"; do
     if pacman -Qi "$pkg" &>/dev/null; then
         printf "  ${OK} $pkg is installed\n"
+    elif [ "$pkg" = rust-bar ]; then
+        # Built from the repo's rust-bar/ crate: no repository and not the AUR
+        # has it, so `yay -S` below would fail for the whole list.
+        problems=$((problems + 1)); printf "  ${ERROR} rust-bar (the bar) is MISSING\n"
+        build_bar=true
     else
         problems=$((problems + 1)); printf "  ${ERROR} $pkg is MISSING\n"
         missing_packages+=("$pkg")
@@ -165,6 +171,10 @@ if [ ${#missing_packages[@]} -gt 0 ]; then
     problems=$((problems + 1)); printf "${ERROR} Missing packages found: ${missing_packages[*]}\n"
     printf "${INFO} To install missing packages, run:\n"
     printf "  yay -S ${missing_packages[*]}\n\n"
+fi
+if [ "$build_bar" = true ]; then
+    printf "${INFO} To build and install the bar from rust-bar/, run:\n"
+    printf "  $REPO_DIR/install-scripts/rust-bar.sh\n\n"
 fi
 
 if [ ! -f ~/.config/mango/config.conf ]; then

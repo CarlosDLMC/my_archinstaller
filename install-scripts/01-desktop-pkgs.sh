@@ -38,7 +38,7 @@ hypr_package=(
   # The outputs as JSON for the bar's capture dialogs (Monitors.qml): wlr-randr
   # replaces `hyprctl monitors` there.
   wlr-randr
-  # The polkit agent is the bar (PolkitState.qml); Polkit.sh starts this one
+  # The polkit agent is the bar (rust-bar's polkit.rs); Polkit.sh starts this one
   # only when the bar is not there to answer.
   hyprpolkitagent
   # The Qt Quick style mango/env.conf names (QT_QUICK_CONTROLS_STYLE

@@ -37,7 +37,7 @@ focused_opacity=1.0
 unfocused_opacity=1.0
 window_rule=focused_opacity:1.0,unfocused_opacity:1.0,app_id:.*
 CONF
-    qs -c bar ipc call gamemode set true >/dev/null 2>&1
+    rust-bar msg gamemode set true >/dev/null 2>&1
     awww kill 2>/dev/null
     pkill -x mpvpaper
     notify-send -t 1000 -e -u low -i "$notif" "Игровой режим:" "включён"
@@ -45,7 +45,7 @@ CONF
 fi
 
 rm -f "$state"
-qs -c bar ipc call gamemode set false >/dev/null 2>&1
+rust-bar msg gamemode set false >/dev/null 2>&1
 # The wallpaper comes back the way it starts at login: WallpaperStart.sh loops
 # the video picked last, or starts awww-daemon, which shows its last image by
 # itself (an effect image too). Starting awww here showed that cached still on
