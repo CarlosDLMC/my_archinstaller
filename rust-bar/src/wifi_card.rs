@@ -65,14 +65,36 @@ fn scan(app: &mut App) {
     });
 }
 
+/// savedProfilesProc (WifiWidget.qml:219-239): the saved Wi-Fi profiles'
+/// 802-11-wireless.ssid values, not their names. QML runs one nmcli per
+/// profile name; one nmcli for all of them by UUID gives the same set. A
+/// name with ':' or '\' comes out of `nmcli -t` escaped, and the name
+/// QML's `cut -d: -f1` makes of it finds no profile: those are left out
+/// here as well.
+pub fn load_saved(app: &mut App) {
+    app.spawn("wifi-saved", &["nmcli", "-t", "-f", "NAME,UUID,TYPE", "connection", "show"], |app, d| {
+        let uuids: Vec<&str> = d.stdout.lines().filter(|l| l.ends_with(":802-11-wireless") && !l.contains('\\')).filter_map(|l| l.split(':').nth(1)).collect();
+        if uuids.is_empty() {
+            app.svc.wifi_card.saved.clear();
+            return;
+        }
+        let mut argv = vec!["nmcli", "-g", "802-11-wireless.ssid", "connection", "show"];
+        for u in uuids {
+            argv.extend(["uuid", u]);
+        }
+        app.spawn("wifi-saved", &argv, |app, d| {
+            app.svc.wifi_card.saved = d.stdout.lines().map(str::trim).filter(|l| !l.is_empty()).map(String::from).collect();
+        });
+    });
+}
+
 /// onOpened: list from the cache now, rescan, read again at 1.4 s and 3.2 s,
 /// "scanning" until 3.4 s.
 pub fn opened(app: &mut App) {
     scan(app);
-    app.spawn("wifi-saved", &["sh", "-c", "nmcli -t -f NAME,TYPE connection show | grep ':802-11-wireless$' | cut -d: -f1 | while IFS= read -r n; do nmcli -g 802-11-wireless.ssid connection show \"$n\"; done"], |app, d| {
-        app.svc.wifi_card.saved = d.stdout.lines().map(str::trim).filter(|l| !l.is_empty()).map(String::from).collect();
-    });
-    app.exec_detached(&["nmcli", "device", "wifi", "rescan"]);
+    load_saved(app);
+    // wifiRescanProc, fire and forget: one at a time, as its Process.
+    app.spawn("wifi-rescan", &["nmcli", "device", "wifi", "rescan"], |_, _| {});
     app.debounce("wifi-rescan1", Duration::from_millis(1400), scan);
     app.debounce("wifi-rescan2", Duration::from_millis(3200), scan);
     app.svc.wifi_card.scanning = true;
