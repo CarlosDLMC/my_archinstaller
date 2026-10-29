@@ -750,6 +750,20 @@ impl Pw {
         id.and_then(|id| s.vols.get(&id)).map(Vol::audio).unwrap_or_default()
     }
 
+    /// The default sink's or source's id and volume, nothing copied.
+    pub fn default_audio(&self, sink: bool) -> Option<(u32, Audio)> {
+        let id = self.default_id(sink)?;
+        let s = self.state.borrow();
+        Some((id, s.vols.get(&id).map(Vol::audio).unwrap_or_default()))
+    }
+
+    /// A playback stream the audio card lists (its volume is known) whose
+    /// id `matches`, nothing copied.
+    pub fn stream_audio(&self, matches: impl Fn(u32) -> bool) -> Option<(u32, Audio)> {
+        let s = self.state.borrow();
+        s.nodes.values().map(|n| &n.0).filter(|n| n.is_playback_stream() && matches(n.id)).find_map(|n| s.vols.get(&n.id).map(Vol::audio).filter(|a| a.ready).map(|a| (n.id, a)))
+    }
+
     /// Every audio node with its volume, in the order they appeared (the
     /// order of Pipewire.nodes).
     pub fn nodes(&self) -> Vec<(NodeInfo, Audio)> {

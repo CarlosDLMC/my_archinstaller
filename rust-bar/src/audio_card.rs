@@ -53,22 +53,32 @@ pub fn lists(svc: &Services) -> Lists {
     let Some(pw) = svc.pw.as_ref() else {
         return Lists { sink: Default::default(), source: Default::default(), sinks: vec![], sources: vec![], streams: vec![] };
     };
-    let nodes = pw.nodes();
     let sink = pw.default_node(true);
     let source = pw.default_node(false);
-    let mut sinks: Vec<NodeInfo> = nodes.iter().filter(|n| n.0.is_sink()).map(|n| n.0.clone()).collect();
+    let (mut sinks, mut sources, mut streams) = (Vec::new(), Vec::new(), Vec::new());
+    // The three kinds are apart: each node moves into its list.
+    for (n, a) in pw.nodes() {
+        if n.is_sink() {
+            sinks.push(n);
+        } else if n.is_source() {
+            sources.push(n);
+        } else if n.is_playback_stream() && a.ready {
+            // Once its volume is known: QML's rows come 75 ms after the list
+            // changed (VolumeWidget.qml:208-217), by then with their level, and
+            // a row drawn before it filled its fader from 0 over 200 ms.
+            streams.push((n, a));
+        }
+    }
     if let Some(s) = &sink.1 {
         if !sinks.iter().any(|n| n.id == s.id) {
             sinks.insert(0, s.clone());
         }
     }
-    let mut sources: Vec<NodeInfo> = nodes.iter().filter(|n| n.0.is_source()).map(|n| n.0.clone()).collect();
     if let Some(s) = &source.1 {
         if !sources.iter().any(|n| n.id == s.id) {
             sources.insert(0, s.clone());
         }
     }
-    let streams = nodes.into_iter().filter(|n| n.0.is_playback_stream() && n.1.ready).collect();
     Lists { sink, source, sinks, sources, streams }
 }
 
@@ -545,15 +555,15 @@ pub fn slider_to(app: &mut App, code: u32, x: f32) {
 }
 
 /// The node a control acts on, as the lists are now: an app's control whose
-/// stream is gone acts on nothing (its QML delegate went with it).
+/// stream is gone acts on nothing (its QML delegate went with it). Looked up
+/// without copying the lists: a fader drag asks on every pointer motion.
 fn target_of(app: &App, code: u32) -> Option<(u32, Audio)> {
-    let l = lists(&app.svc);
-    let stream = |base: u32| l.streams.iter().find(|(n, _)| base + slot(n.id) == code).map(|(n, a)| (n.id, a.clone()));
+    let pw = app.svc.pw.as_ref()?;
     match code {
-        OUT_SLIDER | OUT_MUTE => l.sink.1.map(|n| (n.id, l.sink.0.clone())),
-        IN_SLIDER | IN_MUTE => l.source.1.map(|n| (n.id, l.source.0.clone())),
-        c if (STREAM_MUTE..STREAM_MUTE + SLOTS).contains(&c) => stream(STREAM_MUTE),
-        c if (STREAM_SLIDER..STREAM_SLIDER + SLOTS).contains(&c) => stream(STREAM_SLIDER),
+        OUT_SLIDER | OUT_MUTE => pw.default_audio(true),
+        IN_SLIDER | IN_MUTE => pw.default_audio(false),
+        c if (STREAM_MUTE..STREAM_MUTE + SLOTS).contains(&c) => pw.stream_audio(|id| STREAM_MUTE + slot(id) == c),
+        c if (STREAM_SLIDER..STREAM_SLIDER + SLOTS).contains(&c) => pw.stream_audio(|id| STREAM_SLIDER + slot(id) == c),
         _ => None,
     }
 }
