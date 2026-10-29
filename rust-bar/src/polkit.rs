@@ -26,6 +26,7 @@ use crate::text::FontKey;
 use crate::theme;
 
 const AGENT_PATH: &str = "/org/rustbar/PolkitAgent";
+const AUTHORITY: &str = "org.freedesktop.PolicyKit1";
 const HELPER_SOCKET: &str = "/run/polkit/agent-helper.socket";
 const FADE_MS: u64 = 160;
 const UI: f32 = 1.35;
@@ -67,6 +68,8 @@ pub struct Flow {
 pub struct Polkit {
     chan: Option<Channel>,
     pub registered: bool,
+    /// A registration sent after polkitd came back, until it is answered.
+    register_serial: Option<u32>,
     queue: VecDeque<Request>,
     pub flow: Option<Flow>,
     /// PolkitState.error / checking, and the password field.
@@ -111,13 +114,7 @@ pub fn start(app: &mut App) {
         return;
     }
     let Ok(mut ch) = Channel::get_private(BusType::System) else { return };
-    let Some(sid) = session_id() else { return };
-    let mut details: PropMap = HashMap::new();
-    details.insert("session-id".into(), Variant(Box::new(sid) as Box<dyn RefArg>));
-    let subject = ("unix-session".to_string(), details);
-    let locale = std::env::var("LANG").unwrap_or_else(|_| "en_US.UTF-8".into());
-    let Ok(msg) = Message::new_method_call("org.freedesktop.PolicyKit1", "/org/freedesktop/PolicyKit1/Authority", "org.freedesktop.PolicyKit1.Authority", "RegisterAuthenticationAgent") else { return };
-    let msg = msg.append3(subject, locale, AGENT_PATH);
+    let Some(msg) = register_msg() else { return };
     match ch.send_with_reply_and_block(msg, Duration::from_secs(5)) {
         Ok(_) => app.svc.polkit.registered = true,
         Err(e) => {
@@ -125,10 +122,68 @@ pub fn start(app: &mut App) {
             return;
         }
     }
+    // A restarted polkitd has forgotten its agents; libpolkit-agent registers
+    // again when the name has an owner again (on_notify_authority_owner).
+    if let Ok(m) = Message::new_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "AddMatch") {
+        let _ = ch.send(m.append1(format!("type='signal',sender='org.freedesktop.DBus',interface='org.freedesktop.DBus',member='NameOwnerChanged',arg0='{AUTHORITY}'")));
+        ch.flush();
+    }
     ch.set_watch_enabled(true);
     let fd = ch.watch().fd;
     app.svc.polkit.chan = Some(ch);
     app.watch_fd(fd, dbus_ready);
+}
+
+/// RegisterAuthenticationAgent for this session, in the locale polkitd
+/// translates its messages to - libpolkit-agent's: the first of LC_ALL,
+/// LC_MESSAGES and LANG that is set and not empty.
+fn register_msg() -> Option<Message> {
+    let sid = session_id()?;
+    let mut details: PropMap = HashMap::new();
+    details.insert("session-id".into(), Variant(Box::new(sid) as Box<dyn RefArg>));
+    let subject = ("unix-session".to_string(), details);
+    let locale = ["LC_ALL", "LC_MESSAGES", "LANG"].iter().find_map(|v| std::env::var(v).ok().filter(|l| !l.is_empty())).unwrap_or_else(|| "en_US.UTF-8".into());
+    let msg = Message::new_method_call(AUTHORITY, "/org/freedesktop/PolicyKit1/Authority", "org.freedesktop.PolicyKit1.Authority", "RegisterAuthenticationAgent").ok()?;
+    Some(msg.append3(subject, locale, AGENT_PATH))
+}
+
+/// polkitd left the bus or came back: back, it has no agents, so register
+/// again.
+fn owner_changed(app: &mut App, m: &Message) {
+    if m.member().as_deref() != Some("NameOwnerChanged") {
+        return;
+    }
+    let Ok((name, _, owner)) = m.read3::<&str, &str, &str>() else { return };
+    if name != AUTHORITY {
+        return;
+    }
+    let p = &mut app.svc.polkit;
+    if owner.is_empty() {
+        p.registered = false;
+        return;
+    }
+    if p.registered || p.register_serial.is_some() {
+        return;
+    }
+    let Some(msg) = register_msg() else { return };
+    if let Some(ch) = p.chan.as_ref() {
+        p.register_serial = ch.send(msg).ok();
+        ch.flush();
+    }
+}
+
+/// The answer to that registration.
+fn registered_again(app: &mut App, m: &Message) {
+    let p = &mut app.svc.polkit;
+    if p.register_serial.is_none() || m.get_reply_serial() != p.register_serial {
+        return;
+    }
+    p.register_serial = None;
+    if m.msg_type() == MessageType::Error {
+        eprintln!("rust-bar: polkit agent not registered again: {}", m.read1::<&str>().unwrap_or(""));
+    } else {
+        p.registered = true;
+    }
 }
 
 fn send(app: &mut App, msg: Message) {
@@ -148,8 +203,16 @@ fn dbus_ready(app: &mut App) {
         }
     }
     for m in calls {
-        if m.msg_type() != MessageType::MethodCall {
-            continue;
+        match m.msg_type() {
+            MessageType::MethodCall => {}
+            MessageType::Signal => {
+                owner_changed(app, &m);
+                continue;
+            }
+            _ => {
+                registered_again(app, &m);
+                continue;
+            }
         }
         let member = m.member().map(|s| s.to_string()).unwrap_or_default();
         match member.as_str() {
