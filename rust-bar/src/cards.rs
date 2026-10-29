@@ -2191,6 +2191,19 @@ pub fn grab_move(app: &mut App, y: f32, time: u32) -> bool {
     stole
 }
 
+/// The pointer left the card's surface while a drag went on (the surface
+/// lost it from under the button): the drag ends where it is, on a whole
+/// pixel, and the area around the card is the dismiss area again.
+pub fn grab_cancel(app: &mut App) {
+    let Some(c) = app.card.as_mut() else { return };
+    let now = Instant::now();
+    let Some(f) = c.flicks.iter_mut().find(|f| f.mouse.is_some()) else { return };
+    if let Some(to) = f.mouse.take().and_then(|m| m.core.fixup(f.y(now), f.max)) {
+        f.jump(to);
+        c.win.dirty = true;
+    }
+}
+
 /// The left button came up at `y` (handleReleaseEvent): released within
 /// 100 ms of its last move, the drag's velocity - its last samples' mean,
 /// halved pushing on at an end - flicks the content when the Flickable has

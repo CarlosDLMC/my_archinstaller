@@ -1051,6 +1051,9 @@ impl PointerHandler for App {
                         crate::osd::hover_changed(self, k, false);
                     }
                     self.end_finger_scroll();
+                    if w == WinRef::Card {
+                        cards::grab_cancel(self);
+                    }
                     if self.win_mut(w).is_none() {
                         continue;
                     }
