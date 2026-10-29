@@ -354,8 +354,8 @@ fn read_mem(s: &mut Stats) {
         }
     }
     if total > 0 {
-        // JS toFixed(2)
-        s.mem_usage = format!("{:.2}G", (total - avail) as f64 / 1024.0 / 1024.0);
+        // JS toFixed(2): an exact tie goes up, where {:.2} picks the even digit.
+        s.mem_usage = format!("{}G", to_fixed((total - avail) as f64 / 1024.0 / 1024.0, 2));
     }
 }
 
