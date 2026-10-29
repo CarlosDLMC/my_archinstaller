@@ -61,6 +61,8 @@ pub struct Stats {
     pub cpu_temp: i64,
     pub mem_usage: String,
     pub shown: bool,
+    /// The `shown` whose onShownChanged has run (stats_shown_changed).
+    applied: bool,
     last_idle: u64,
     last_total: u64,
     temp_path: Option<String>,
@@ -415,18 +417,52 @@ fn stats_pref() -> bool {
     std::fs::read_to_string(format!("{}/.cache/quickshell/bar-stats", home())).map_or(true, |t| t.trim() != "off")
 }
 
-fn refresh_stats(app: &mut App) -> bool {
-    if app.svc.stats.shown {
-        let s = &mut app.svc.stats;
-        let before = (s.cpu_usage, s.cpu_temp, s.mem_usage.clone());
-        read_cpu(s);
-        read_mem(s);
-        read_temp(s);
-        if before != (s.cpu_usage, s.cpu_temp, s.mem_usage.clone()) {
-            app.mark_all_dirty();
-        }
+/// SystemStats.refresh(): one reading of all three.
+fn refresh_stats(app: &mut App) {
+    let s = &mut app.svc.stats;
+    let before = (s.cpu_usage, s.cpu_temp, s.mem_usage.clone());
+    read_cpu(s);
+    read_mem(s);
+    read_temp(s);
+    if before != (s.cpu_usage, s.cpu_temp, s.mem_usage.clone()) {
+        app.mark_all_dirty();
     }
-    true
+}
+
+/// The 5 s Timer, `running: root.shown`.
+fn stats_tick(app: &mut App) {
+    if app.svc.stats.shown {
+        refresh_stats(app);
+        app.debounce("stats", Duration::from_millis(5000), stats_tick);
+    }
+}
+
+/// SystemStats.setShown(on): the ПУЛЬТ switch.
+pub fn set_stats_shown(app: &mut App, on: bool) {
+    app.svc.stats.shown = on;
+    stats_shown_changed(app);
+}
+
+/// onShownChanged: shown, a reading at once and a real CPU one a second
+/// later (settleTimer), then the 5 s tick; hidden, nothing is sampled and the
+/// CPU baseline is dropped - kept, the first reading after showing them again
+/// was the average over the whole hidden time.
+fn stats_shown_changed(app: &mut App) {
+    let on = app.svc.stats.shown;
+    if on == app.svc.stats.applied {
+        return;
+    }
+    app.svc.stats.applied = on;
+    if on {
+        refresh_stats(app);
+        app.debounce("stats-settle", Duration::from_secs(1), refresh_stats);
+        app.debounce("stats", Duration::from_millis(5000), stats_tick);
+    } else {
+        app.cancel_timer("stats");
+        app.svc.stats.last_total = 0;
+        app.svc.stats.last_idle = 0;
+    }
+    app.mark_all_dirty();
 }
 
 // ---- clock ----
@@ -506,6 +542,8 @@ fn cache_changed(app: &mut App, name: &str) {
             }
             app.mark_all_dirty();
         }
+        // SystemStats' prefFile: the switch, from the ПУЛЬТ card or anyone else.
+        "bar-stats" => set_stats_shown(app, stats_pref()),
         _ => {}
     }
 }
@@ -549,10 +587,14 @@ pub fn start(app: &mut App) {
     app.svc.mango.game_mode = std::path::Path::new(&gm).exists();
 
     app.svc.stats.shown = stats_pref();
+    app.svc.stats.applied = app.svc.stats.shown;
     app.svc.stats.temp_path = find_temp_path();
     app.svc.stats.mem_usage = "0G".into();
+    // Component.onCompleted: a reading whatever the switch says.
     refresh_stats(app);
-    app.every(Duration::from_millis(5000), refresh_stats);
+    if app.svc.stats.shown {
+        app.debounce("stats", Duration::from_millis(5000), stats_tick);
+    }
 
     read_cache_files(app);
     let _ = std::fs::create_dir_all(cache_dir());
