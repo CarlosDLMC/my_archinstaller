@@ -46,6 +46,12 @@ pub fn connecting(app: &App) -> bool {
     app.is_running("wifi-connect")
 }
 
+/// What the networks card shows changed: it redraws, not the strips (the
+/// icon follows the status read and the connect's blink, app.rs).
+fn redraw(app: &mut App) {
+    app.mark_card_dirty(&[CardKind::Wifi]);
+}
+
 fn scan(app: &mut App) {
     app.spawn("wifi-scan", &["sh", "-c", "nmcli -t -f SSID,SIGNAL,SECURITY device wifi list --rescan no | grep -v '^:' | sort -t: -k2 -nr | head -30"], |app, d| {
         if d.stdout.trim().is_empty() {
@@ -61,7 +67,7 @@ fn scan(app: &mut App) {
             }
         }
         app.svc.wifi_card.networks = nets;
-        app.mark_all_dirty();
+        redraw(app);
     });
 }
 
@@ -100,7 +106,7 @@ pub fn opened(app: &mut App) {
     app.svc.wifi_card.scanning = true;
     app.debounce("wifi-settle", Duration::from_millis(3400), |app| {
         app.svc.wifi_card.scanning = false;
-        app.mark_all_dirty();
+        redraw(app);
     });
     cancel_password(app);
 }
@@ -112,7 +118,7 @@ fn cancel_password(app: &mut App) {
     w.selected_security.clear();
     clear_password(w);
     w.failed = false;
-    app.mark_all_dirty();
+    redraw(app);
 }
 
 fn clear_password(w: &mut WifiCard) {
@@ -130,7 +136,7 @@ fn run_connect(app: &mut App, argv: &[&str]) {
     app.svc.wifi_card.connect_out.clear();
     app.svc.wifi_card.strip = app.card.as_ref().map(|c| c.strip);
     app.spawn_stream("wifi-connect", argv, connect_line, Some(connect_line), Some(connect_done));
-    app.mark_all_dirty();
+    redraw(app);
 }
 
 /// The SplitParsers on stdout and stderr: `output += data`. nmcli says why a
@@ -160,7 +166,7 @@ fn connect_done(app: &mut App) {
         }
         cancel_password(app);
     }
-    app.mark_all_dirty();
+    redraw(app);
 }
 
 /// connectWatchdog (WifiWidget.qml:314-327): nmcli still connecting after 8 s

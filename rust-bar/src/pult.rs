@@ -63,6 +63,12 @@ pub fn start(app: &mut App) {
     }
 }
 
+/// What the ПУЛЬТ card shows changed: it redraws, not the strips (they show
+/// the stats switch only, which services.rs redraws them for).
+fn redraw(app: &mut App) {
+    app.mark_card_dirty(&[crate::cards::CardKind::Pult]);
+}
+
 pub fn refresh(app: &mut App) {
     app.svc.pult.has_adapter = has_bluetooth();
     if app.svc.pult.has_adapter {
@@ -78,11 +84,11 @@ pub fn refresh(app: &mut App) {
             app.svc.pult.current_profile = p.to_string();
             app.svc.pult.has_profiles = true;
             watch(app);
-            app.mark_all_dirty();
+            redraw(app);
         }
     });
     read_night(app);
-    app.mark_all_dirty();
+    redraw(app);
 }
 
 /// btPresenceProc (PultWidget.qml:28-32, 129-145): `ls -d
@@ -100,7 +106,7 @@ fn has_bluetooth() -> bool {
 fn bt_status(app: &mut App) {
     app.spawn("bt-status", &["bluetoothctl", "show"], |app, d| {
         app.svc.pult.bt_powered = d.stdout.contains("Powered: yes");
-        app.mark_all_dirty();
+        redraw(app);
     });
 }
 
@@ -119,7 +125,7 @@ fn bt_connected(app: &mut App) {
             p.bt_connected = false;
             p.bt_connected_device.clear();
         }
-        app.mark_all_dirty();
+        redraw(app);
     });
 }
 
@@ -159,7 +165,7 @@ fn parse_devices(out: &str) -> Vec<(String, String)> {
 fn bt_devices(app: &mut App) {
     app.spawn("bt-devices", &["bluetoothctl", "devices", "Paired"], |app, d| {
         set_list(app, false, parse_devices(&d.stdout));
-        app.mark_all_dirty();
+        redraw(app);
     });
 }
 
@@ -171,7 +177,7 @@ fn bt_found(app: &mut App) {
         let is_mac_name = |n: &str| n.len() == 17 && n.split('-').count() == 6 && n.chars().all(|c| c.is_ascii_hexdigit() || c == '-');
         let found = parse_devices(&d.stdout).into_iter().filter(|(m, n)| !paired.contains(&m) && !is_mac_name(n)).collect();
         set_list(app, true, found);
-        app.mark_all_dirty();
+        redraw(app);
     });
 }
 
@@ -184,7 +190,7 @@ fn set_bluetooth(app: &mut App, on: bool) {
         stop_scan(app);
         app.exec_detached(&["sh", "-c", "killall blueman-applet blueman-tray 2>/dev/null || true"]);
     }
-    app.mark_all_dirty();
+    redraw(app);
 }
 
 /// btPowerProc.running = true with powerOn = `on` (PultWidget.qml:312-326).
@@ -227,7 +233,7 @@ fn start_scan(app: &mut App) {
         bt_found(app);
     });
     app.debounce(FOUND_POLL, Duration::from_millis(1500), found_tick);
-    app.mark_all_dirty();
+    redraw(app);
 }
 
 /// Timer { interval: 1500; running: pult.scanning; repeat: true }
@@ -267,7 +273,7 @@ fn pair(app: &mut App, mac: &str) {
         bt_devices(app);
         bt_connected(app);
     });
-    app.mark_all_dirty();
+    redraw(app);
 }
 
 fn set_profile(app: &mut App, profile: &str) {
@@ -284,11 +290,11 @@ fn set_profile(app: &mut App, profile: &str) {
         app.spawn("profile-get", &argv, |app, d| {
             if let Some(p) = d.stdout.split('"').nth(1) {
                 app.svc.pult.current_profile = p.to_string();
-                app.mark_all_dirty();
+                redraw(app);
             }
         });
     });
-    app.mark_all_dirty();
+    redraw(app);
 }
 
 /// What NightLight.sh last wrote to its state file: "on" or not.
@@ -325,7 +331,7 @@ fn night_toggle(app: &mut App) {
     }
     app.spawn("night-toggle", &["bash", "-c", "$HOME/.config/hypr/scripts/NightLight.sh toggle"], |app, _| {
         app.svc.pult.night_on = night_file_on();
-        app.mark_all_dirty();
+        redraw(app);
         if std::mem::take(&mut app.svc.pult.night_again) {
             night_toggle(app);
         }
@@ -350,7 +356,7 @@ fn set_keep_awake(app: &mut App, on: bool) {
     app.svc.pult.keep_awake = on;
     let _ = std::fs::write(keep_awake_path(), if on { "on\n" } else { "off\n" });
     inhibit(app, on);
-    app.mark_all_dirty();
+    redraw(app);
 }
 
 /// SystemStats.setShown: the strip's CPU/RAM readouts. `shown = on` runs
@@ -364,7 +370,7 @@ fn set_stats_shown(app: &mut App, on: bool) {
         let _ = std::fs::create_dir_all(dir);
     }
     let _ = std::fs::write(&path, if on { "on\n" } else { "off\n" });
-    app.mark_all_dirty();
+    redraw(app);
 }
 
 /// The card opened: fresh readings, the D-Bus watchers on while it stays open.
@@ -408,7 +414,7 @@ fn watch(app: &mut App) {
             app.spawn("profile-get", &argv, |app, d| {
                 if let Some(p) = d.stdout.split('"').nth(1) {
                     app.svc.pult.current_profile = p.to_string();
-                    app.mark_all_dirty();
+                    redraw(app);
                 }
             });
         });

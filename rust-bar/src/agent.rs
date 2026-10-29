@@ -59,11 +59,13 @@ fn now_s() -> f64 {
 /// AgentUsage.apply(): the collector's JSON.
 fn apply(app: &mut App, text: &str) {
     let Ok(j) = serde_json::from_str::<Value>(text.trim()) else { return };
-    if j.get("installed").and_then(Value::as_bool) == Some(true) {
+    // The strip shows the widget once it is installed; the readings are the
+    // card's.
+    if j.get("installed").and_then(Value::as_bool) == Some(true) && !app.svc.agent_installed {
         app.svc.agent_installed = true;
+        app.mark_strips_dirty();
     }
     if j.get("checkOnly").and_then(Value::as_bool) == Some(true) {
-        app.mark_all_dirty();
         return;
     }
     let u = &mut app.svc.agent;
@@ -118,7 +120,7 @@ fn apply(app: &mut App, text: &str) {
     if let Some(c) = app.card.as_mut().filter(|c| c.kind == CardKind::Agent) {
         c.texts.forget_parts(&remade);
     }
-    app.mark_all_dirty();
+    app.mark_card_dirty(&[CardKind::Agent]);
 }
 
 pub fn run(app: &mut App, mode: &str) {

@@ -85,9 +85,10 @@ fn on_conn(app: &mut App, c: UnixStream) {
 fn call(app: &mut App, target: &str, function: &str, args: &[&str]) -> Result<(), String> {
     match (target, function) {
         ("gamemode", "set") => {
+            // shell.qml binds only exclusiveZone to game mode: nothing drawn
+            // changes, so nothing is drawn again.
             app.svc.mango.game_mode = args.first().map_or(false, |a| *a == "true");
             app.update_exclusive_zones();
-            app.mark_all_dirty();
             Ok(())
         }
         ("cards", "toggle") => {

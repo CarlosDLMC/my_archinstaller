@@ -119,10 +119,12 @@ fn commit_restart(app: &mut App) {
         // A new mru is a new model: the Repeater makes new delegates, and
         // their Texts start out subpixel again.
         s.texts.forget_parts(&[0xE1, 0xE2]);
+        // The order and the selection are the popup's alone (LayoutState.qml:
+        // 117-125; nothing on the strip binds them).
         if let Some(o) = app.osd_mut(OsdKind::Layout) {
             o.st.texts.forget_parts(&[0xE1, 0xE2]);
+            o.win.dirty = true;
         }
-        app.mark_all_dirty();
     });
 }
 
@@ -139,11 +141,12 @@ pub fn layout_changed(app: &mut App) {
     }
     let from = s.selected_pos();
     s.current = idx;
+    // The popup redraws as it shows (a switch session shows its own
+    // position, not `current`); services::on_layout redraws the strips.
     if !s.session_active {
         show_osd(app, from);
         commit_restart(app);
     }
-    app.mark_all_dirty();
 }
 
 /// selectPos(): a click on a layout in the OSD.

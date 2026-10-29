@@ -49,7 +49,7 @@ pub fn opened(app: &mut App) {
         if !list.is_empty() {
             app.svc.vpn_card.configs = list;
         }
-        app.mark_all_dirty();
+        redraw(app);
     });
 }
 
@@ -162,13 +162,13 @@ pub fn activate(app: &mut App, code: u32) {
         TIME => {
             app.svc.vpn_card.time_floor = Some(Instant::now());
             let cmd = if !app.svc.timezone.is_empty() { format!("{}/vpn-reset.sh time", scripts()) } else { format!("{}/vpn-sync.sh \"$1\" time", scripts()) };
-            app.spawn("vpn-time", &["sh", "-c", &cmd, "sh", &active], |app, _| app.mark_all_dirty());
+            app.spawn("vpn-time", &["sh", "-c", &cmd, "sh", &active], |app, _| redraw(app));
             spin_redraw(app);
         }
         WEATHER => {
             app.svc.vpn_card.weather_floor = Some(Instant::now());
             let cmd = if !app.svc.weather.city.is_empty() { format!("{}/vpn-reset.sh weather", scripts()) } else { format!("{}/vpn-sync.sh \"$1\" weather", scripts()) };
-            app.spawn("vpn-weather", &["sh", "-c", &cmd, "sh", &active], |app, _| app.mark_all_dirty());
+            app.spawn("vpn-weather", &["sh", "-c", &cmd, "sh", &active], |app, _| redraw(app));
             spin_redraw(app);
         }
         c if (ROW..ROW + 0x100).contains(&c) => {
@@ -204,7 +204,8 @@ fn tunnel(app: &mut App, to: Option<String>) {
             // strip's icon goes grey now; the check below finds "" == "".
             if !app.svc.vpn.is_empty() {
                 app.svc.vpn.clear();
-                app.mark_all_dirty();
+                app.mark_strips_dirty();
+                redraw(app);
             }
             tunnel_done(app);
         }),
@@ -231,8 +232,14 @@ fn tunnel_done(app: &mut App) {
 
 /// The floor ends without an event: redraw when it does.
 fn spin_redraw(app: &mut App) {
-    app.after(FLOOR + Duration::from_millis(10), |app| app.mark_all_dirty());
-    app.mark_all_dirty();
+    app.after(FLOOR + Duration::from_millis(10), redraw);
+    redraw(app);
+}
+
+/// What the VPN card shows changed (its configs, the sync keys' spinners):
+/// it redraws, not the strips (the shield follows svc.vpn).
+fn redraw(app: &mut App) {
+    app.mark_card_dirty(&[crate::cards::CardKind::Vpn]);
 }
 
 pub fn unused(_: Color, _: Hit, _: Action) {}

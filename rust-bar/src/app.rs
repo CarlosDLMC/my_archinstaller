@@ -296,11 +296,32 @@ impl App {
         }
     }
 
+    /// Every strip and the open card: what all of them show changed (the
+    /// palette). A redraw of the card re-renders its full-screen surface and
+    /// makes mango recomposite and re-blur the screen: data goes only to the
+    /// windows that show it (mark_strips_dirty, mark_card_dirty).
     pub fn mark_all_dirty(&mut self) {
+        self.mark_strips_dirty();
+        if let Some(c) = &mut self.card {
+            c.win.dirty = true;
+        }
+    }
+
+    /// The strips, for what they show (bar.rs: mango's tags and title, the
+    /// layout, the stats, the clock, the bell, the weather pill, the volume,
+    /// the battery, the Wi-Fi and VPN icons and which widgets there are). A
+    /// card is a window of its own (CardSurface.qml): Qt repaints it only for
+    /// what it binds.
+    pub fn mark_strips_dirty(&mut self) {
         for s in &mut self.strips {
             s.win.dirty = true;
         }
-        if let Some(c) = &mut self.card {
+    }
+
+    /// The open card, when it is one of `kinds`: the cards that show what
+    /// changed.
+    pub fn mark_card_dirty(&mut self, kinds: &[cards::CardKind]) {
+        if let Some(c) = self.card.as_mut().filter(|c| kinds.contains(&c.kind)) {
             c.win.dirty = true;
         }
     }
@@ -391,12 +412,14 @@ impl App {
     }
 
     pub fn redraw_dirty(&mut self) {
-        // The Wi-Fi icon blinks while a connection attempt runs.
+        // The Wi-Fi icon blinks while a connection attempt runs, and the
+        // networks card shows ПОДКЛЮЧЕНИЕ.
         let connecting = crate::wifi_card::connecting(self);
         if connecting != self.svc.wifi_connecting {
             self.svc.wifi_connecting = connecting;
             self.svc.wifi.pulse.set_running(connecting, Instant::now(), 450);
-            self.mark_all_dirty();
+            self.mark_strips_dirty();
+            self.mark_card_dirty(&[cards::CardKind::Wifi]);
         }
         if self.card.as_ref().and_then(|c| c.meter_win.as_ref()).map_or(false, |m| m.dirty && !m.frame_pending && m.gpu.is_some()) {
             self.draw_meter();

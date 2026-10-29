@@ -123,7 +123,9 @@ fn probe(app: &mut App) {
     b.helper = crate::services::is_executable(HELPER);
     b.present = !b.paths.is_empty();
     refresh(app, true);
-    app.mark_all_dirty();
+    // `present` shows or hides the strip's widget; the card shows the packs.
+    app.mark_strips_dirty();
+    app.mark_card_dirty(&[crate::cards::CardKind::Battery]);
 }
 
 /// The kernel's power_supply uevents: add/remove probes again, anything
@@ -288,8 +290,11 @@ pub fn refresh(app: &mut App, with_limits: bool) {
             c.texts.forget_parts(&PACK_TEXTS);
         }
     }
-    if card_open || before != (app.svc.battery.level, app.svc.battery.charge_state.clone()) {
-        app.mark_all_dirty();
+    if before != (app.svc.battery.level, app.svc.battery.charge_state.clone()) {
+        app.mark_strips_dirty();
+    }
+    if card_open {
+        app.mark_card_dirty(&[crate::cards::CardKind::Battery]);
     }
 }
 
@@ -300,12 +305,13 @@ fn set_limit(app: &mut App, percent: i64) {
     }
     app.svc.battery.pending_limit = percent;
     let p = percent.to_string();
+    // The limit is the card's (refresh() redraws the strips for a new state).
     app.spawn("battery-limit", &["sudo", "-n", HELPER, "set", &p], |app, _| {
         refresh(app, true);
         app.svc.battery.pending_limit = 0;
-        app.mark_all_dirty();
+        app.mark_card_dirty(&[crate::cards::CardKind::Battery]);
     });
-    app.mark_all_dirty();
+    app.mark_card_dirty(&[crate::cards::CardKind::Battery]);
 }
 
 // ---- the card ----
