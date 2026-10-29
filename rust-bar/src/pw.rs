@@ -6,7 +6,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use pipewire as pw;
 use pw::device::{Device, DeviceListener};
@@ -228,6 +228,8 @@ struct State {
     /// Nodes or defaults came or went.
     topo: bool,
     changed: bool,
+    /// The daemon went away (PwCore::onError).
+    fatal: bool,
 }
 
 /// PwNode::shouldUseDevice: the node's volume lives on its card's route.
@@ -375,6 +377,7 @@ struct Conn {
     peak: Option<Peak>,
     _reg_listener: pw::registry::Listener,
     registry: Rc<pw::registry::RegistryRc>,
+    _core_listener: pw::core::Listener,
     core: pw::core::CoreRc,
 }
 
@@ -386,6 +389,10 @@ pub struct Pw {
     /// moved since: dispatch() says so until the strip has it.
     strip: RefCell<(Audio, Option<NodeInfo>)>,
     strip_moved: Cell<bool>,
+    /// PwConnection's reconnect: tried again until the daemon answers.
+    retry: pw::loop_::TimerSource<'static>,
+    retry_due: Rc<Cell<bool>>,
+    connected_at: Cell<Instant>,
     context: pw::context::ContextRc,
     mainloop: pw::main_loop::MainLoopRc,
 }
@@ -402,23 +409,45 @@ impl Pw {
         pw::init();
         let mainloop = pw::main_loop::MainLoopRc::new(None).ok()?;
         let context = pw::context::ContextRc::new(&mainloop, None).ok()?;
+        // A loop's sources borrow it; the bar's one PipeWire loop lives as
+        // long as the process, so a leaked handle lends the timer a 'static one.
+        let lp: &'static pw::main_loop::MainLoopRc = Box::leak(Box::new(mainloop.clone()));
+        let retry_due = Rc::new(Cell::new(false));
+        let due = retry_due.clone();
+        let retry = lp.loop_().add_timer(move |_| due.set(true));
         let pw = Pw {
             conn: RefCell::new(None),
             state: Rc::new(RefCell::new(State::default())),
             peak_value: Rc::new(Cell::new(0.0)),
             strip: RefCell::new(Default::default()),
             strip_moved: Cell::new(false),
+            retry,
+            retry_due,
+            connected_at: Cell::new(Instant::now()),
             context,
             mainloop,
         };
+        // Like quickshell, a daemon that is not there at start is not waited for.
         pw.connect().then_some(pw)
     }
 
-    /// PwCore::start: the core and the registry.
+    /// PwCore::start: the core, its error event, the registry.
     fn connect(&self) -> bool {
         let Ok(core) = self.context.connect_rc(None) else { return false };
         let Ok(registry) = core.get_registry_rc() else { return false };
         let registry = Rc::new(registry);
+        let st_err = self.state.clone();
+        let core_listener = core
+            .add_listener_local()
+            .error(move |id, _, res, _| {
+                // PwCore::onError: fatal, but for the harmless ENOENTs seen
+                // on device removal. The connection's own errors (a daemon
+                // restart) come on the core.
+                if id == pw::core::PW_ID_CORE && res != -libc::ENOENT {
+                    st_err.borrow_mut().fatal = true;
+                }
+            })
+            .register();
         let st = self.state.clone();
         let reg = Rc::downgrade(&registry);
         let st_rm = self.state.clone();
@@ -514,11 +543,13 @@ impl Pw {
                 }
             })
             .register();
-        *self.conn.borrow_mut() = Some(Conn { peak: None, _reg_listener: reg_listener, registry, core });
+        *self.conn.borrow_mut() = Some(Conn { peak: None, _reg_listener: reg_listener, registry, _core_listener: core_listener, core });
+        self.connected_at.set(Instant::now());
         true
     }
 
-    /// All the connection made goes, in order.
+    /// PwConnection::onFatalError: all the connection made goes, the
+    /// defaults and the lists with it.
     fn teardown(&self) {
         {
             let mut s = self.state.borrow_mut();
@@ -530,6 +561,7 @@ impl Pw {
             s.vols.clear();
             s.default_sink.clear();
             s.default_source.clear();
+            s.fatal = false;
             s.changed = true;
         }
         self.peak_value.set(0.0);
@@ -546,6 +578,19 @@ impl Pw {
     /// changed: the strip's sink, or anything while the audio card is open.
     pub fn dispatch(&self) -> bool {
         self.mainloop.loop_().iterate(Duration::ZERO);
+        let fatal = std::mem::take(&mut self.state.borrow_mut().fatal);
+        if fatal {
+            self.teardown();
+            // PwConnection::beginReconnect: at once (a restarted daemon's
+            // socket is there) - unless this connection died young.
+            let young = self.connected_at.get().elapsed() < Duration::from_secs(1);
+            if young || !self.connect() {
+                self.retry.update_timer(Some(Duration::from_secs(1)), None);
+            }
+        }
+        if self.retry_due.take() && self.conn.borrow().is_none() && !self.connect() {
+            self.retry.update_timer(Some(Duration::from_secs(1)), None);
+        }
         let topo = {
             let mut guard = self.state.borrow_mut();
             // PwDevice::polled: routes the last enumeration did not list are gone.
