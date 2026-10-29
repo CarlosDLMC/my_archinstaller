@@ -20,7 +20,7 @@ use smithay_client_toolkit::{
     registry_handlers,
     seat::{
         keyboard::{KeyEvent, KeyboardData, KeyboardHandler, Keymap, Keysym, Modifiers},
-        pointer::{cursor_shape::CursorShapeManager, PointerEvent, PointerEventKind, PointerHandler},
+        pointer::{cursor_shape::CursorShapeManager, AxisScroll, PointerEvent, PointerEventKind, PointerHandler},
         Capability, SeatHandler, SeatState,
     },
     shell::{
@@ -31,7 +31,7 @@ use smithay_client_toolkit::{
 };
 use wayland_client::{
     globals::{registry_queue_init, GlobalList},
-    protocol::{wl_keyboard::{self, WlKeyboard}, wl_output, wl_pointer::WlPointer, wl_seat::WlSeat, wl_surface},
+    protocol::{wl_keyboard::{self, WlKeyboard}, wl_output, wl_pointer::{self, WlPointer}, wl_seat::WlSeat, wl_surface},
     Connection, Dispatch, Proxy, QueueHandle,
 };
 
@@ -1017,9 +1017,34 @@ impl PointerHandler for App {
                         cards::press(self, a, x, button);
                     }
                 }
-                PointerEventKind::Axis { vertical, .. } => {
-                    // Qt's angleDelta: 120 per notch, positive away from the user.
-                    let delta = if vertical.discrete != 0 { -(vertical.discrete as f32) * 120.0 } else { -(vertical.absolute as f32) * 8.0 };
+                PointerEventKind::Axis { horizontal, vertical, source, .. } => {
+                    // Qt's angleDelta (QtWayland's FrameData::angleDelta), positive
+                    // away from the user: 120 a notch, else a continuous axis'
+                    // value times -12, rounded. A finger's scroll over a
+                    // Flickable - a card's body or list, the clipboard's list -
+                    // is a 1:1 drag in Qt instead (pixelDelta in ScrollUpdate
+                    // phases), which the port does not do: there it keeps the
+                    // x8 it had.
+                    let drag = source == Some(wl_pointer::AxisSource::Finger)
+                        && match w {
+                            WinRef::Card => self.card.as_ref().map_or(false, |c| c.kind != cards::CardKind::Calendar),
+                            WinRef::Osd(k) => k == crate::osd::OsdKind::Clipboard,
+                            _ => false,
+                        };
+                    let notches = vertical.discrete != 0 || horizontal.discrete != 0;
+                    let angle = |a: &AxisScroll| {
+                        if notches {
+                            -(a.discrete as f32) * 120.0
+                        } else if drag {
+                            -(a.absolute as f32) * 8.0
+                        } else {
+                            (-(a.absolute as f32) * 12.0 + 0.5).floor()
+                        }
+                    };
+                    // WallpaperOsd's two WheelHandlers take angleDelta.x when y
+                    // is 0 (WallpaperOsd.qml:295,496), the only ones that do.
+                    let dy = angle(&vertical);
+                    let delta = if dy == 0.0 && w == WinRef::Osd(crate::osd::OsdKind::Wallpaper) { angle(&horizontal) } else { dy };
                     if delta != 0.0 {
                         match w {
                             WinRef::Card => cards::wheel(self, delta),
