@@ -55,6 +55,8 @@ pub struct Clip {
     /// towards it: (from, to, start).
     pub scroll: f32,
     glide: Option<(f32, f32, Instant)>,
+    /// A finger's scroll that began over the list (cards::PixelDrag).
+    drag: Option<crate::cards::PixelDrag>,
     /// Decoded thumbnail files (id -> path), the queue, the one decoding.
     thumbs: HashMap<String, String>,
     pending: VecDeque<String>,
@@ -590,6 +592,36 @@ pub fn wheel(app: &mut App, delta: f32) {
     // Where fixup() leaves it when the glide ends.
     c.scroll = fixup(to, step, max);
     changed(app);
+}
+
+/// A finger's scroll (app.rs makes the phases as QtWayland does): the
+/// ListView takes it by QQuickFlickable's pixel path - contentY follows the
+/// deltas since ScrollBegin 1:1, StopAtBounds, and ScrollEnd puts it on a
+/// whole pixel - while the pointer is over it, as the wheel.
+pub fn finger_scroll(app: &mut App, s: crate::cards::Scroll) {
+    use crate::cards::{PixelDrag, Scroll};
+    let over = app.osd(OsdKind::Clipboard).and_then(|o| o.st.pointer).map_or(false, |(x, y)| {
+        let (lx, ly, lw, lh) = list_rect();
+        x >= lx && x < lx + lw && y >= ly && y < ly + lh
+    });
+    let now = Instant::now();
+    let c = &mut app.svc.clip;
+    let (cur, max, gliding) = (c.scroll_at(now), max_scroll(c.filtered().len()), c.glide_at(now).is_some());
+    let to = match s {
+        Scroll::Begin => {
+            c.drag = over.then(|| PixelDrag::begin(cur));
+            None
+        }
+        Scroll::End => c.drag.take().and_then(|d| d.end(cur, max)),
+        Scroll::Update { dx, dy, .. } if over => c.drag.as_mut().and_then(|d| d.update(dx, dy, cur, max, gliding).0),
+        Scroll::Update { .. } => None,
+    };
+    if let Some(to) = to {
+        // The move stops a glide (clearTimeline).
+        c.glide = None;
+        c.scroll = to;
+        changed(app);
+    }
 }
 
 pub fn click(app: &mut App, action: Action) {

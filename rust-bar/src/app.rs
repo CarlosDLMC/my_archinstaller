@@ -175,6 +175,9 @@ pub struct App {
     cursor: Option<Shape>,
     /// The widget a button went down on: a click is a release on the same one.
     pressed: Option<(WinRef, u32, Action)>,
+    /// A finger's scroll begun (QtWayland's mScrollBeginSent), with the
+    /// rounding error its pixel deltas carry (mScrollDeltaRemainder).
+    finger: Option<(f64, f64)>,
     pub instance: wgpu::Instance,
     pub gpu: Option<Gpu>,
     pub fonts: Fonts,
@@ -253,6 +256,7 @@ impl App {
             enter_serial: 0,
             cursor: None,
             pressed: None,
+            finger: None,
             instance: Gpu::new_instance(),
             gpu: None,
             fonts: Fonts::new(),
@@ -676,6 +680,43 @@ impl App {
             cards::key(self, event.keysym, self.mods, event.utf8.as_deref());
         }
     }
+
+    /// A finger's scroll frame over a card or the clipboard list, made into
+    /// QWheelEvents as QtWayland does (flushScrollEvent): a frame whose
+    /// angleDelta is not null is a ScrollUpdate - a ScrollBegin first, for
+    /// the first one - whose pixelDelta is the frame's value rounded, the
+    /// error carried to the next frame (pixelDeltaAndError); axis_stop ends
+    /// it (ScrollEnd).
+    fn finger_scroll(&mut self, w: WinRef, h: &AxisScroll, v: &AxisScroll, angle: (f32, f32)) {
+        use crate::cards::Scroll;
+        let send = |app: &mut App, s: Scroll| match w {
+            WinRef::Card => cards::finger_scroll(app, s),
+            _ => crate::clip::finger_scroll(app, s),
+        };
+        if angle != (0.0, 0.0) {
+            if self.finger.is_none() {
+                self.finger = Some((0.0, 0.0));
+                send(self, Scroll::Begin);
+            }
+            let Some(rest) = self.finger.as_mut() else { return };
+            // qRound of the value and the error so far, as QPointF::toPoint.
+            let (px, py) = ((h.absolute + rest.0 + 0.5).floor(), (v.absolute + rest.1 + 0.5).floor());
+            *rest = (rest.0 + h.absolute - px, rest.1 + v.absolute - py);
+            send(self, Scroll::Update { dx: px as f32, dy: py as f32, angle: angle.1 });
+        }
+        if h.stop || v.stop {
+            self.end_finger_scroll();
+        }
+    }
+
+    /// ScrollEnd, wherever the pointer is by then (QtWayland sends it to the
+    /// scroll's target): the Flickables that took the scroll come to rest.
+    fn end_finger_scroll(&mut self) {
+        if self.finger.take().is_some() {
+            cards::finger_scroll(self, crate::cards::Scroll::End);
+            crate::clip::finger_scroll(self, crate::cards::Scroll::End);
+        }
+    }
 }
 
 fn bind_viewporter(globals: &GlobalList, qh: &QueueHandle<App>) -> Option<WpViewporter> {
@@ -924,6 +965,7 @@ impl PointerHandler for App {
                                 self.set_cursor(Shape::Default);
                             }
                         }
+                        PointerEventKind::Axis { horizontal, vertical, .. } if horizontal.stop || vertical.stop => self.end_finger_scroll(),
                         _ => {}
                     }
                     continue;
@@ -990,6 +1032,7 @@ impl PointerHandler for App {
                     if let WinRef::Osd(k) = w {
                         crate::osd::hover_changed(self, k, false);
                     }
+                    self.end_finger_scroll();
                     if self.win_mut(w).is_none() {
                         continue;
                     }
@@ -1048,31 +1091,23 @@ impl PointerHandler for App {
                 PointerEventKind::Axis { horizontal, vertical, source, .. } => {
                     // Qt's angleDelta (QtWayland's FrameData::angleDelta), positive
                     // away from the user: 120 a notch, else a continuous axis'
-                    // value times -12, rounded. A finger's scroll over a
-                    // Flickable - a card's body or list, the clipboard's list -
-                    // is a 1:1 drag in Qt instead (pixelDelta in ScrollUpdate
-                    // phases), which the port does not do: there it keeps the
-                    // x8 it had.
-                    let drag = source == Some(wl_pointer::AxisSource::Finger)
-                        && match w {
-                            WinRef::Card => self.card.as_ref().map_or(false, |c| c.kind != cards::CardKind::Calendar),
-                            WinRef::Osd(k) => k == crate::osd::OsdKind::Clipboard,
-                            _ => false,
-                        };
+                    // value times -12, rounded.
                     let notches = vertical.discrete != 0 || horizontal.discrete != 0;
-                    let angle = |a: &AxisScroll| {
-                        if notches {
-                            -(a.discrete as f32) * 120.0
-                        } else if drag {
-                            -(a.absolute as f32) * 8.0
-                        } else {
-                            (-(a.absolute as f32) * 12.0 + 0.5).floor()
-                        }
-                    };
+                    let angle = |a: &AxisScroll| if notches { -(a.discrete as f32) * 120.0 } else { (-(a.absolute as f32) * 12.0 + 0.5).floor() };
+                    let (dx, dy) = (angle(&horizontal), angle(&vertical));
+                    // A finger's scroll on a touchpad is a pixelDelta in
+                    // ScrollBegin / ScrollUpdate / ScrollEnd phases, which a
+                    // Flickable - a card's, the clipboard's list - follows 1:1.
+                    if source == Some(wl_pointer::AxisSource::Finger) && matches!(w, WinRef::Card | WinRef::Osd(crate::osd::OsdKind::Clipboard)) {
+                        self.finger_scroll(w, &horizontal, &vertical, (dx, dy));
+                        continue;
+                    }
+                    if horizontal.stop || vertical.stop {
+                        self.end_finger_scroll();
+                    }
                     // WallpaperOsd's two WheelHandlers take angleDelta.x when y
                     // is 0 (WallpaperOsd.qml:295,496), the only ones that do.
-                    let dy = angle(&vertical);
-                    let delta = if dy == 0.0 && w == WinRef::Osd(crate::osd::OsdKind::Wallpaper) { angle(&horizontal) } else { dy };
+                    let delta = if dy == 0.0 && w == WinRef::Osd(crate::osd::OsdKind::Wallpaper) { dx } else { dy };
                     if delta != 0.0 {
                         match w {
                             WinRef::Card => cards::wheel(self, delta),

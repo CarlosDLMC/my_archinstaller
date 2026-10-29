@@ -208,7 +208,7 @@ impl OpenCard {
         let i = match self.flicks.iter().position(|f| f.id == id) {
             Some(i) => i,
             None => {
-                self.flicks.push(Flick { id, glide: Animated::new(0.0, 300, Easing::OutExpo), rest: 0.0, max: 0.0, content: 0.0, height: 0.0, sig, rect: None });
+                self.flicks.push(Flick { id, glide: Animated::new(0.0, 300, Easing::OutExpo), rest: 0.0, max: 0.0, content: 0.0, height: 0.0, sig, rect: None, drag: None });
                 self.flicks.len() - 1
             }
         };
@@ -273,6 +273,92 @@ struct Flick {
     sig: u64,
     /// The viewport in the card's coordinates, if the last draw showed it.
     rect: Option<[f32; 4]>,
+    /// A finger's scroll that began over it (QQuickFlickable's pixel path).
+    drag: Option<PixelDrag>,
+}
+
+/// QtWayland's phases of a finger's scroll on a touchpad, as QWheelEvents
+/// (QWaylandInputDevice::Pointer::flushScrollEvent).
+#[derive(Clone, Copy, PartialEq)]
+pub enum Scroll {
+    /// ScrollBegin, before the first frame.
+    Begin,
+    /// ScrollUpdate: the frame's pixelDelta (contentY up for dy > 0) and its
+    /// angleDelta.y, for what reads the angle.
+    Update { dx: f32, dy: f32, angle: f32 },
+    /// ScrollEnd, at axis_stop.
+    End,
+}
+
+/// QQuickFlickable::wheelEvent's pixel path, for a finger's scroll: a
+/// Flickable under the pointer at ScrollBegin follows the deltas summed
+/// since then 1:1 (QQuickFlickablePrivate::drag, StopAtBounds) - once the
+/// motion so far is mostly vertical, or it already moves - and ScrollEnd
+/// puts it back on a whole pixel (returnToBounds). Wayland sends no
+/// ScrollMomentum: there is no flick after it. Positions are contentY.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct PixelDrag {
+    /// vData.pressPos (contentY when the scroll began), the deltas summed
+    /// (accumulatedWheelPixelDelta), dragStartOffset and previousDragDelta.
+    press: f32,
+    acc: (f32, f32),
+    offset: f32,
+    prev: f32,
+    /// vMoved (and dragging), stealGrab, and the way it last went.
+    moved: bool,
+    steal: bool,
+    down: bool,
+}
+
+impl PixelDrag {
+    /// maybeBeginDrag at ScrollBegin: contentY now; a glide still running
+    /// goes on until the drag moves the content.
+    pub(crate) fn begin(y: f32) -> PixelDrag {
+        PixelDrag { press: y, ..Default::default() }
+    }
+
+    /// One ScrollUpdate on a Flickable at contentY `cur` with ends 0 and
+    /// `max` (`gliding`: the wheel's glide runs, it is moving): where contentY
+    /// goes, and whether the Flickable takes the event - between its ends
+    /// only, else it goes on to what is under it. The first update only
+    /// arms stealGrab and the second sets dragStartOffset to the sum so far,
+    /// so the content does not jump: it moves from the third on.
+    pub(crate) fn update(&mut self, dx: f32, dy: f32, cur: f32, max: f32, gliding: bool) -> (Option<f32>, bool) {
+        self.acc = (self.acc.0 + dx, self.acc.1 + dy);
+        if dy != 0.0 {
+            self.down = dy > 0.0;
+        }
+        let a = self.acc.1;
+        // Not yet mostly vertical: it waits for more, and the event goes on.
+        if !(self.moved || gliding || a.abs() > (self.acc.0 * 2.0).abs()) {
+            return (None, false);
+        }
+        let between = |y: f32| y > 0.0 && y < max.floor();
+        if !self.moved {
+            self.offset = a;
+        }
+        let (mut to, mut reject) = (self.press + a - self.offset, false);
+        if to >= max {
+            to = max;
+            reject = self.press == max && cur == max && a > 0.0;
+        }
+        if to <= 0.0 {
+            to = 0.0;
+            reject |= self.press == 0.0 && cur == 0.0 && a < 0.0;
+        }
+        let go = !reject && self.steal && a != self.prev;
+        self.moved |= go;
+        self.prev = a;
+        self.steal = true;
+        let y = if go { to } else { cur };
+        (Some(to).filter(|_| go && to != cur), between(y))
+    }
+
+    /// ScrollEnd's returnToBounds: a contentY between two pixels goes onto
+    /// one (fixup, against the motion past a quarter).
+    pub(crate) fn end(&self, y: f32, max: f32) -> Option<f32> {
+        (y > 0.0 && y < max && y.fract() != 0.0).then(|| pixel(y, self.down))
+    }
 }
 
 impl Flick {
@@ -1798,43 +1884,101 @@ fn calendar_step(app: &mut App, delta: i32) {
     }
 }
 
-/// A wheel turn over the card (QML angleDelta: +120 per notch away from you).
-pub fn wheel(app: &mut App, angle_delta_y: f32) {
-    let Some(c) = app.card.as_mut() else { return };
-    if c.kind == CardKind::Audio {
-        // A VolumeSlider under the pointer takes it first: 5% a notch
-        // (VolumeSlider.qml:129-133). Every fader spans the same x, so the
-        // hit under the pointer (the top one, as app.rs hit_at finds it)
-        // says which; one scrolled out of view has no hit there.
-        let over = c.pointer.and_then(|(px, py)| c.hits.iter().rev().find(|h| h.contains(px, py))).and_then(|h| match h.action {
-            Action::Card(code) if crate::audio_card::is_slider(code) => Some(code),
-            _ => None,
-        });
-        if let Some(code) = over {
-            crate::audio_card::slider_step(app, code, angle_delta_y > 0.0);
-            return;
-        }
-    }
-    // Then the Flickable under the pointer, a ListView before the card's
-    // own; one at its end that way lets the wheel go on to what is under it.
-    // The card's margins and stem are no Flickable: nothing scrolls there.
-    let now = Instant::now();
+/// A VolumeSlider under the pointer takes the wheel first: 5% an event, by
+/// the angle's sign (VolumeSlider.qml:129-133). Every fader spans the same
+/// x, so the hit under the pointer (the top one, as app.rs hit_at finds it)
+/// says which; one scrolled out of view has no hit there.
+fn slider_wheel(app: &mut App, angle_delta_y: f32) -> bool {
+    let Some(c) = app.card.as_ref().filter(|c| c.kind == CardKind::Audio) else { return false };
+    let over = c.pointer.and_then(|(px, py)| c.hits.iter().rev().find(|h| h.contains(px, py))).and_then(|h| match h.action {
+        Action::Card(code) if crate::audio_card::is_slider(code) => Some(code),
+        _ => None,
+    });
+    let Some(code) = over else { return false };
+    crate::audio_card::slider_step(app, code, angle_delta_y > 0.0);
+    true
+}
+
+/// The card's Flickables under the pointer, a ListView before the card's
+/// own body: the order the wheel visits them in. The card's margins and
+/// stem are no Flickable.
+fn flicks_under(c: &OpenCard) -> Vec<usize> {
     let at = c.pointer.map(|(px, py)| (px - c.left, py - c.top));
     let under = |f: &Flick| match (f.rect, at) {
         (Some(r), Some((x, y))) => x >= r[0] && x < r[0] + r[2] && y >= r[1] && y < r[1] + r[3],
         _ => false,
     };
-    for body in [false, true] {
-        if let Some(i) = c.flicks.iter().position(|f| (f.id == BODY) == body && under(f)) {
-            if c.flicks[i].wheel(angle_delta_y, now) {
-                c.win.dirty = true;
-                return;
-            }
-        }
-    }
-    if c.kind != CardKind::Calendar {
+    [false, true].iter().filter_map(|&body| c.flicks.iter().position(|f| (f.id == BODY) == body && under(f))).collect()
+}
+
+/// A wheel turn over the card (QML angleDelta: +120 per notch away from you).
+pub fn wheel(app: &mut App, angle_delta_y: f32) {
+    if slider_wheel(app, angle_delta_y) {
         return;
     }
+    let Some(c) = app.card.as_mut() else { return };
+    // Then the Flickable under the pointer; one at its end that way lets
+    // the wheel go on to what is under it.
+    let now = Instant::now();
+    for i in flicks_under(c) {
+        if c.flicks[i].wheel(angle_delta_y, now) {
+            c.win.dirty = true;
+            return;
+        }
+    }
+    calendar_wheel(app, angle_delta_y);
+}
+
+/// A finger's scroll over the card (app.rs makes the phases as QtWayland
+/// does). Each update goes where the QWheelEvent goes: an enabled fader
+/// takes it by its angle, else the Flickables under the pointer by the
+/// pixel path (PixelDrag), the inner one first - one at an end lets it go
+/// on - and what none took reaches the calendar's handler, by its angle.
+pub fn finger_scroll(app: &mut App, s: Scroll) {
+    let now = Instant::now();
+    match s {
+        Scroll::Begin => {
+            let Some(c) = app.card.as_mut() else { return };
+            for i in flicks_under(c) {
+                let y = c.flicks[i].y(now);
+                c.flicks[i].drag = Some(PixelDrag::begin(y));
+            }
+        }
+        Scroll::End => {
+            let Some(c) = app.card.as_mut() else { return };
+            for f in c.flicks.iter_mut() {
+                if let Some(to) = f.drag.take().and_then(|d| d.end(f.y(now), f.max)) {
+                    f.jump(to);
+                    c.win.dirty = true;
+                }
+            }
+        }
+        Scroll::Update { dx, dy, angle } => {
+            if angle != 0.0 && slider_wheel(app, angle) {
+                return;
+            }
+            let Some(c) = app.card.as_mut() else { return };
+            for i in flicks_under(c) {
+                let f = &mut c.flicks[i];
+                let (cur, max, gliding) = (f.y(now), f.max, f.glide.running(now));
+                let Some(d) = f.drag.as_mut() else { continue };
+                let (to, taken) = d.update(dx, dy, cur, max, gliding);
+                if let Some(to) = to {
+                    f.jump(to);
+                    c.win.dirty = true;
+                }
+                if taken {
+                    return;
+                }
+            }
+            calendar_wheel(app, angle);
+        }
+    }
+}
+
+/// CalendarPopup's wheel: a month a notch's angle, summed (CalendarPopup.qml:72-86).
+fn calendar_wheel(app: &mut App, angle_delta_y: f32) {
+    let Some(c) = app.card.as_mut().filter(|c| c.kind == CardKind::Calendar) else { return };
     c.wheel_acc += angle_delta_y;
     let mut steps = 0;
     while c.wheel_acc >= 120.0 {
