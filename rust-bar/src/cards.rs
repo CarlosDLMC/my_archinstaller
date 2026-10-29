@@ -182,19 +182,30 @@ impl OpenCard {
     }
 
     /// A ListView's model was replaced by different data: Qt makes its rows
-    /// anew. A focused row's focus goes to the card's scope, and the rows'
-    /// colours and texts start fresh (no fade from the old row at that place;
-    /// subpixel text). Its rows are the codes base .. base + 0x100.
-    fn list_replaced(&mut self, base: u32) {
+    /// anew (the codes base .. base + 0x100, `count` of them now). A row
+    /// that had the focus hands it to the ListView, a FocusScope, and the
+    /// new model's currentIndex 0 takes it (QQuickItemView::setModel ->
+    /// connectModel -> updateCurrent: setFocus): the new first row has it,
+    /// scrolled to the top - checked against Qt 6.12. A focus left on a row
+    /// that was no longer shown stays with the card's scope. (A first row
+    /// that is not pickable - the VPN tunnel in use - would show the focus
+    /// ring in QML; here it stays with the scope.) The rows' lamps and
+    /// texts start fresh; their backgrounds from transparent, as a new
+    /// delegate's, so hover and focus fade in on them.
+    fn list_replaced(&mut self, base: u32, count: usize) {
         let rows = base..base + 0x100;
         if self.focus_code.map_or(false, |c| rows.contains(&c)) {
-            self.focus_code = None;
+            let shown = self.focus == self.focus_seen && self.focus.and_then(|f| self.focus_codes.get(f)).map_or(false, |c| rows.contains(c));
+            self.focus_code = Some(base).filter(|_| shown && count > 0);
             self.focus = None;
             self.focus_seen = None;
         }
         // ConsoleRow's background (0x5_0000), ConsoleLamp's dot (0x4_0000) and halo (0x3_0000).
         let row_key = |k: u32, kinds: &[u32]| kinds.contains(&(k >> 16)) && rows.contains(&(k & 0xFFFF));
         self.colors.retain(|k, _| !row_key(*k, &[4, 5]));
+        for code in rows.clone().take(count) {
+            self.colors.insert(0x5_0000 + code, Animated::new(Color::TRANSPARENT, 110, Easing::Linear));
+        }
         self.numbers.retain(|k, _| !row_key(*k, &[3]));
         // ConsoleRow's texts (text_of parts 0xC1-0xC4): the list cards have no other rows.
         self.texts.forget_parts(&[0xC1, 0xC2, 0xC3, 0xC4]);
@@ -1014,7 +1025,7 @@ impl Ui<'_, OpenCard> {
         if f.sig != sig {
             f.sig = sig;
             f.jump(0.0);
-            card.list_replaced(base);
+            card.list_replaced(base, count);
         }
         // The row the focus moved to: an index set by code counts the
         // pickable rows from here; the keys name the row by its code.
