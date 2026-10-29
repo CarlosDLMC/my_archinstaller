@@ -523,9 +523,9 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
 const METER_TIMER: &str = "audio-meter";
 
 /// The timers a card runs while it is open (QML: Timer { running: cardOpen }),
-/// stopped when it closes: the meter's, and the agent card's minute tick
-/// (AgentUsage.qml:149-154), which agent.rs starts under "agent-stats".
-const CARD_TIMERS: [&str; 2] = [METER_TIMER, "agent-stats"];
+/// stopped when it closes: the meter's, and the agent card's tick
+/// (AgentPanel.qml nowTick, AgentUsage.qml:149-154), agent.rs's "agent-tick".
+const CARD_TIMERS: [&str; 2] = [METER_TIMER, "agent-tick"];
 
 fn meter_timer(app: &mut App) {
     if crate::audio_card::meter_tick(app) {
