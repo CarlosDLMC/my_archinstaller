@@ -9,7 +9,7 @@ use std::time::Instant;
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle};
 use smithay_client_toolkit::{
     compositor::{CompositorHandler, CompositorState},
-    delegate_compositor, delegate_keyboard, delegate_layer, delegate_output, delegate_pointer, delegate_registry, delegate_seat,
+    delegate_compositor, delegate_layer, delegate_output, delegate_pointer, delegate_registry, delegate_seat,
     delegate_shm,
     output::{OutputHandler, OutputState},
     reexports::calloop::{EventLoop, LoopHandle, RegistrationToken},
@@ -19,7 +19,7 @@ use smithay_client_toolkit::{
     registry::{ProvidesRegistryState, RegistryState},
     registry_handlers,
     seat::{
-        keyboard::{KeyEvent, KeyboardHandler, Keysym, Modifiers},
+        keyboard::{KeyEvent, KeyboardData, KeyboardHandler, Keysym, Modifiers},
         pointer::{cursor_shape::CursorShapeManager, PointerEvent, PointerEventKind, PointerHandler},
         Capability, SeatHandler, SeatState,
     },
@@ -31,7 +31,7 @@ use smithay_client_toolkit::{
 };
 use wayland_client::{
     globals::{registry_queue_init, GlobalList},
-    protocol::{wl_keyboard::WlKeyboard, wl_output, wl_pointer::WlPointer, wl_seat::WlSeat, wl_surface},
+    protocol::{wl_keyboard::{self, WlKeyboard}, wl_output, wl_pointer::WlPointer, wl_seat::WlSeat, wl_surface},
     Connection, Dispatch, Proxy, QueueHandle,
 };
 
@@ -160,6 +160,8 @@ pub struct App {
     kbd_focus: Option<WinRef>,
     shift: bool,
     mods: Mods,
+    /// Qt's event.isAutoRepeat: true while a held key's repeat is dispatched.
+    pub key_repeat: bool,
     hand: bool,
     /// The widget a button went down on: a click is a release on the same one.
     pressed: Option<(WinRef, u32, Action)>,
@@ -246,6 +248,7 @@ impl App {
             kbd_focus: None,
             shift: false,
             mods: Mods::default(),
+            key_repeat: false,
             svc: Services::default(),
             running: HashMap::new(),
             timers: HashMap::new(),
@@ -596,6 +599,21 @@ impl App {
             WinRef::Crt(_) | WinRef::Reveal(_) => None,
         }
     }
+
+    /// A key press, or a repeat of a held one (key_repeat): Keys.onPressed of
+    /// the overlay holding the keyboard, else of the open card.
+    fn key(&mut self, event: KeyEvent) {
+        if let Some(WinRef::Osd(k)) = self.kbd_focus {
+            if self.osd(k).is_some() {
+                // Qt's nativeScanCode is the XKB keycode: evdev + 8.
+                crate::osd::key(self, k, event.keysym, event.raw_code + 8, self.mods, event.utf8.as_deref());
+                return;
+            }
+        }
+        if self.card.is_some() {
+            cards::key(self, event.keysym, event.utf8.as_deref());
+        }
+    }
 }
 
 fn bind_viewporter(globals: &GlobalList, qh: &QueueHandle<App>) -> Option<WpViewporter> {
@@ -721,7 +739,16 @@ impl SeatHandler for App {
             }
         }
         if cap == Capability::Keyboard && self.keyboard.is_none() {
-            self.keyboard = self.seats.get_keyboard(qh, &seat, None).ok();
+            // QtWayland repeats a held key itself, at the compositor's
+            // repeat_info (mango: 50 a second after 300 ms), and the QML key
+            // handlers take every repeat as a press: sctk's repeat timer
+            // feeds them through the same path.
+            let repeat = Box::new(|app: &mut App, _: &WlKeyboard, event: KeyEvent| {
+                app.key_repeat = true;
+                app.key(event);
+                app.key_repeat = false;
+            });
+            self.keyboard = self.seats.get_keyboard_with_repeat(qh, &seat, None, self.handle.clone(), repeat).ok();
         }
     }
     fn remove_capability(&mut self, _: &Connection, _: &QueueHandle<Self>, _: WlSeat, cap: Capability) {
@@ -750,16 +777,7 @@ impl KeyboardHandler for App {
         self.kbd_focus = None;
     }
     fn press_key(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlKeyboard, _: u32, event: KeyEvent) {
-        if let Some(WinRef::Osd(k)) = self.kbd_focus {
-            if self.osd(k).is_some() {
-                // Qt's nativeScanCode is the XKB keycode: evdev + 8.
-                crate::osd::key(self, k, event.keysym, event.raw_code + 8, self.mods, event.utf8.as_deref());
-                return;
-            }
-        }
-        if self.card.is_some() {
-            cards::key(self, event.keysym, event.utf8.as_deref());
-        }
+        self.key(event);
     }
     fn release_key(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlKeyboard, _: u32, _: KeyEvent) {}
     fn update_modifiers(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlKeyboard, _: u32, m: Modifiers, _: u32) {
@@ -944,13 +962,26 @@ impl ProvidesRegistryState for App {
     registry_handlers![OutputState, SeatState];
 }
 
+/// delegate_keyboard!, except for one event. sctk 0.19 drops every press of a
+/// repeating key while the compositor has repeat turned off (repeat_rate 0:
+/// its key handler returns before press_key), where QtWayland just does not
+/// repeat. Off becomes a delay of 24 days, so the presses come through.
+impl Dispatch<WlKeyboard, KeyboardData<App>> for App {
+    fn event(app: &mut App, kbd: &WlKeyboard, event: wl_keyboard::Event, data: &KeyboardData<App>, conn: &Connection, qh: &QueueHandle<App>) {
+        let event = match event {
+            wl_keyboard::Event::RepeatInfo { rate: 0, .. } => wl_keyboard::Event::RepeatInfo { rate: 1, delay: i32::MAX },
+            e => e,
+        };
+        <SeatState as Dispatch<WlKeyboard, KeyboardData<App>, App>>::event(app, kbd, event, data, conn, qh)
+    }
+}
+
 delegate_compositor!(App);
 smithay_client_toolkit::delegate_subcompositor!(App);
 delegate_output!(App);
 delegate_layer!(App);
 delegate_seat!(App);
 delegate_pointer!(App);
-delegate_keyboard!(App);
 delegate_shm!(App);
 delegate_registry!(App);
 
