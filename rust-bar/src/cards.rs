@@ -573,9 +573,6 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
             app.card.as_mut().unwrap().texts = m;
         }
     }
-    if kind == CardKind::Audio {
-        app.debounce(METER_TIMER, Duration::from_millis(33), meter_timer);
-    }
     if kind == CardKind::Pult {
         crate::pult::opened(app);
     }
@@ -592,26 +589,15 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
     }
 }
 
-/// LevelMeter's Timer (interval 33, running while the meter shows): one
-/// timer, by name, so a card closed and opened again (toggle() on another
-/// bar does both at once) does not leave a second one ticking.
-const METER_TIMER: &str = "audio-meter";
-
-/// The timers a card runs while it is open (QML: Timer { running: cardOpen }),
-/// stopped when it closes: the meter's, and the agent card's tick
-/// (AgentPanel.qml nowTick, AgentUsage.qml:149-154), agent.rs's "agent-tick".
-const CARD_TIMERS: [&str; 2] = [METER_TIMER, "agent-tick"];
-
-fn meter_timer(app: &mut App) {
-    if crate::audio_card::meter_tick(app) {
-        app.debounce(METER_TIMER, Duration::from_millis(33), meter_timer);
-    }
-}
+/// The agent card's tick (AgentPanel.qml nowTick, AgentUsage.qml:149-154),
+/// agent.rs's TICK: QML's Timers run while the card is open (running:
+/// cardOpen) and stop when it closes. The mic meter's Timer is audio_card's
+/// one clock (start_meter, after the card's first draw), which ends at its
+/// first tick without the audio card.
+const AGENT_TICK: &str = "agent-tick";
 
 pub fn close(app: &mut App) {
-    for t in CARD_TIMERS {
-        app.cancel_timer(t);
-    }
+    app.cancel_timer(AGENT_TICK);
     if app.card.as_ref().map(|c| c.kind) == Some(CardKind::Pult) {
         crate::pult::closed(app);
     }
