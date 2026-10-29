@@ -364,11 +364,14 @@ fn signal_icon(s: i64) -> &'static str {
     }
 }
 
-/// popupWidth in networks mode: fits the longest SSID.
+/// popupWidth in networks mode: fits the longest SSID. (QML's
+/// ssidMetrics.width is TextMetrics.width, the ink bounding box's width;
+/// until text.rs measures that, the advance here is up to a few px wider.)
 pub fn card_width(fonts: &mut crate::text::Fonts, svc: &Services) -> f32 {
     let mut longest = svc.wifi.ssid.clone();
+    // longestSsid compares JS .length: UTF-16 units.
     for n in &svc.wifi_card.networks {
-        if n.0.chars().count() > longest.chars().count() {
+        if n.0.encode_utf16().count() > longest.encode_utf16().count() {
             longest = n.0.clone();
         }
     }
