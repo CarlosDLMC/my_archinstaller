@@ -14,6 +14,7 @@ use dbus::arg::{PropMap, RefArg, Variant};
 use dbus::channel::{BusType, Channel};
 use dbus::message::{Message, MessageType};
 use smithay_client_toolkit::reexports::calloop::RegistrationToken;
+use smithay_client_toolkit::seat::keyboard::Keysym;
 
 use crate::app::App;
 use crate::bar::{ac, Action, Hit};
@@ -76,6 +77,12 @@ pub struct Polkit {
     pub error: String,
     pub checking: bool,
     pub field: String,
+    /// The field's TextInput: the cursor and the selection's ends (byte
+    /// indices into `field`, equal when nothing is selected) and how far its
+    /// line is scrolled left (m_cursor, m_selstart, m_selend, hscroll).
+    cursor: usize,
+    sel: (usize, usize),
+    hscroll: f32,
     /// When the cursor's blink last restarted (focus, a key).
     blink_since: Option<std::time::Instant>,
 }
@@ -276,7 +283,7 @@ fn activate(app: &mut App) {
         p.flow = Some(Flow { req, user, session: None, response_required: false, input_prompt: String::new(), response_visible: false, supplementary: String::new(), supplementary_is_error: false, cancelled: false });
         p.error.clear();
         p.checking = false;
-        p.field.clear();
+        clear_field(p);
         setup_session(app);
         // A helper that cannot be reached ends the request at once (and may
         // have started the next one, which showed itself).
@@ -477,7 +484,7 @@ fn completed(app: &mut App, gained: bool) {
 /// finishAuthenticationRequest(): the dialog goes, the next one comes.
 fn finish(app: &mut App) {
     app.svc.polkit.flow = None;
-    app.svc.polkit.field.clear();
+    clear_field(&mut app.svc.polkit);
     // PolkitState.onFlowChanged.
     app.svc.polkit.error.clear();
     app.svc.polkit.checking = false;
@@ -523,6 +530,7 @@ fn cancel_from_agent(app: &mut App, cookie: &str) {
 fn submit(app: &mut App) {
     let text = std::mem::take(&mut app.svc.polkit.field);
     let p = &mut app.svc.polkit;
+    clear_field(p);
     let Some(f) = p.flow.as_mut() else { return };
     if !f.response_required {
         return;
@@ -641,7 +649,7 @@ fn show_osd(app: &mut App) {
 /// onShownChanged empties the field on both windows and the new one takes
 /// the focus (PolkitOsd.qml:54-64).
 pub(crate) fn refocus(app: &mut App) {
-    app.svc.polkit.field.clear();
+    clear_field(&mut app.svc.polkit);
     show_osd(app);
 }
 
@@ -770,13 +778,19 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
         let pl = ui.fonts.layout(ph_text, CONTENT, m.body, 0.0);
         ui.text(&pl, fx, y + ac(m.field_h, pl.height()), t.col_grey, TextStyle::Normal);
     }
-    let shown: String = if f.response_visible { p.field.clone() } else { "\u{2022}".repeat(p.field.chars().count()) };
+    let shown = shown_text(&p.field, f.response_visible);
     let fl = ui.fonts.layout(&shown, FIELD, m.body, 0.0);
     let fy = y + (m.field_h - fl.height()) / 2.0;
-    // TextInput.autoScroll: a line longer than the field slides left so the
-    // cursor at its end stays in view - ensureVisible's hscroll = cursorX -
-    // width, the cursor just past the box, inside the wider clip.
-    let shift = (fl.adv - fw).max(0.0);
+    let cur = x_at(ui.fonts, p, f.response_visible, p.cursor);
+    // TextInput.autoScroll: the line slides only as far as it must to keep
+    // the cursor in view (updateHorizontalScroll, kept by the keys); typing
+    // at the end leaves the cursor just past the box, inside the wider clip.
+    let shift = crate::wifi_card::scroll(p.hscroll, cur, fl.adv, fw);
+    if p.sel.0 < p.sel.1 {
+        // The selection, in selectionColor (PolkitOsd.qml:179), under the text.
+        let (s0, s1) = (x_at(ui.fonts, p, f.response_visible, p.sel.0), x_at(ui.fonts, p, f.response_visible, p.sel.1));
+        ui.scene.fill(fx + s0 - shift, fy, s1 - s0, fl.height(), t.col_grey);
+    }
     if !shown.is_empty() {
         ui.text(&fl, fx - shift, fy, t.col_white, TextStyle::Normal);
     }
@@ -784,10 +798,11 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
         // 1 px, the text colour, 500 ms on / 500 ms off.
         let on = p.blink_since.map_or(true, |s| s.elapsed().as_millis() / 500 % 2 == 0);
         if on {
-            ui.scene.fill(fx + fl.adv - shift, fy, 1.0, fl.height(), t.col_white);
+            ui.scene.fill(fx + cur - shift, fy, 1.0, fl.height(), t.col_white);
         }
     }
     ui.scene.restore();
+    let field_y = y;
     y += m.field_h + m.gap;
 
     let (n, is_err) = note(p);
@@ -818,11 +833,17 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
         kx += ll.width;
     }
     ui.hits.push(Hit { x: x0, y: y0, w, h, action: Action::Hover(0) });
+    // QQuickTextInput's I-beam over the TextInput - the plate less gap on
+    // each side, its full height (PolkitOsd.qml:163-166) - while it takes
+    // input: a disabled one shows none.
+    if enabled {
+        ui.hits.push(Hit { x: fx, y: field_y, w: fw, h: m.field_h, action: Action::Hover(crate::bar::TEXT_FIELD) });
+    }
 }
 
-/// The field's keys: Enter submits, Esc cancels, Backspace, and text.
-pub fn key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Keysym, utf8: Option<&str>) {
-    use smithay_client_toolkit::seat::keyboard::Keysym;
+/// The field's keys: Enter submits, Esc cancels (its Keys handlers), the
+/// rest is the TextInput's (edit).
+pub fn key(app: &mut App, sym: Keysym, mods: crate::app::Mods, utf8: Option<&str>) {
     match sym {
         Keysym::Return | Keysym::KP_Enter => submit(app),
         Keysym::Escape => cancel(app),
@@ -833,13 +854,247 @@ pub fn key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Keysym, u
             if !enabled(&app.svc.polkit) {
                 return;
             }
-            if sym == Keysym::BackSpace {
-                app.svc.polkit.field.pop();
-            } else if let Some(s) = utf8.filter(|s| !s.is_empty() && !s.chars().any(char::is_control)) {
-                app.svc.polkit.field.push_str(s);
+            // QKeySequence::Paste: Ctrl+V, Shift+Insert, the Paste key.
+            let paste_key = (matches!(sym, Keysym::v | Keysym::V) && mods.ctrl && !mods.shift && !mods.alt) || (sym == Keysym::Insert && mods.shift && !mods.ctrl && !mods.alt) || sym == Keysym::XF86_Paste;
+            if paste_key {
+                paste(app);
+            } else {
+                let visible = app.svc.polkit.flow.as_ref().map_or(false, |f| f.response_visible);
+                edit(&mut app.svc.polkit, sym, mods, utf8, visible);
+                rescroll(app);
             }
             restart_blink(app);
             redraw(app);
         }
     }
+}
+
+/// field.text = "": empty, the cursor at its start, nothing selected.
+fn clear_field(p: &mut Polkit) {
+    p.field.clear();
+    p.cursor = 0;
+    p.sel = (0, 0);
+    p.hscroll = 0.0;
+}
+
+/// What the field shows: its text, or in Password echo a dot for each
+/// UTF-16 unit of it (QQuickTextInput masks every unit).
+fn shown_text(text: &str, visible: bool) -> String {
+    if visible { text.to_string() } else { "\u{2022}".repeat(text.encode_utf16().count()) }
+}
+
+/// The x of byte `at` of the field on its shown line (QTextLine::cursorToX).
+fn x_at(fonts: &mut crate::text::Fonts, p: &Polkit, visible: bool, at: usize) -> f32 {
+    let before = p.field.get(..at).unwrap_or(&p.field);
+    fonts.layout(&shown_text(before, visible), FIELD, met().body, 0.0).adv
+}
+
+/// The TextInput's width: the card less its padding and the field's margins.
+fn field_width() -> f32 {
+    let m = met();
+    m.card_w - 2.0 * m.pad - 2.0 * m.gap
+}
+
+/// After an edit or a move: updateHorizontalScroll from where the line was.
+fn rescroll(app: &mut App) {
+    let p = &app.svc.polkit;
+    let visible = p.flow.as_ref().map_or(false, |f| f.response_visible);
+    let adv = app.fonts.layout(&shown_text(&p.field, visible), FIELD, met().body, 0.0).adv;
+    let cur = x_at(&mut app.fonts, p, visible, p.cursor);
+    app.svc.polkit.hscroll = crate::wifi_card::scroll(p.hscroll, cur, adv, field_width());
+}
+
+/// QQuickTextInputPrivate::processKeyEvent for the field, with the platform
+/// theme's KB_X11 key sequences: SelectAll Ctrl+A, DeleteCompleteLine Ctrl+U
+/// and DeleteEndOfLine Ctrl+K, DeleteStartOfWord / DeleteEndOfWord with Ctrl,
+/// the moves (Shift extends the selection; Ctrl by word - in Password echo
+/// to the start or end, as QTextLayout finds no word in the dots), and the
+/// text QInputControl::isAcceptableInput takes - none typed with Ctrl or
+/// Ctrl+Shift - over the selection. Copy and Cut give nothing out of a
+/// Password field; Cut, undo and the mouse are not ported.
+fn edit(p: &mut Polkit, sym: Keysym, mods: crate::app::Mods, utf8: Option<&str>, visible: bool) {
+    // NumLock off, the keypad's keys reach Qt as Key_Left .. Key_Delete.
+    let sym = match sym {
+        Keysym::KP_Left => Keysym::Left,
+        Keysym::KP_Right => Keysym::Right,
+        Keysym::KP_Home => Keysym::Home,
+        Keysym::KP_End => Keysym::End,
+        Keysym::KP_Delete => Keysym::Delete,
+        s => s,
+    };
+    let (ctrl, shift, alt) = (mods.ctrl, mods.shift, mods.alt);
+    let len = p.field.len();
+    let word_back = |p: &Polkit| if visible { word_left(&p.field, p.cursor) } else { 0 };
+    let word_fwd = |p: &Polkit| if visible { word_right(&p.field, p.cursor) } else { len };
+    match sym {
+        Keysym::a | Keysym::A if ctrl && !shift && !alt => select_all(p),
+        Keysym::u | Keysym::U if ctrl && !shift && !alt => {
+            select_all(p);
+            remove_selected(p);
+        }
+        Keysym::k | Keysym::K if ctrl && !shift && !alt => {
+            p.sel = (p.cursor, len);
+            remove_selected(p);
+        }
+        Keysym::Home if !ctrl && !alt => move_cursor(p, 0, shift),
+        Keysym::End if !ctrl && !alt => move_cursor(p, len, shift),
+        Keysym::Left | Keysym::Right if !alt => {
+            let back = sym == Keysym::Left;
+            let to = if ctrl {
+                if back { word_back(p) } else { word_fwd(p) }
+            } else if !shift && p.sel.0 < p.sel.1 {
+                // A plain move from a selection lands on its edge.
+                if back { p.sel.0 } else { p.sel.1 }
+            } else if back {
+                prev_char(&p.field, p.cursor)
+            } else {
+                next_char(&p.field, p.cursor)
+            };
+            move_cursor(p, to, shift);
+        }
+        // Shift+Delete is Cut, which a Password field refuses (and which
+        // would copy first): it deletes nothing.
+        Keysym::Delete if shift || alt => {}
+        Keysym::Delete => {
+            if ctrl {
+                let to = word_fwd(p);
+                move_cursor(p, to, true);
+            } else if p.sel.0 >= p.sel.1 {
+                p.sel = (p.cursor, next_char(&p.field, p.cursor));
+            }
+            remove_selected(p);
+        }
+        Keysym::BackSpace => {
+            if ctrl {
+                let to = word_back(p);
+                move_cursor(p, to, true);
+            } else if p.sel.0 >= p.sel.1 {
+                p.sel = (prev_char(&p.field, p.cursor), p.cursor);
+            }
+            remove_selected(p);
+        }
+        _ => {
+            if let Some(s) = utf8.filter(|s| !s.is_empty() && !s.chars().any(char::is_control) && !(ctrl && !alt)) {
+                insert(p, s);
+            }
+        }
+    }
+}
+
+/// selectAll(): the whole text, the cursor at its end.
+fn select_all(p: &mut Polkit) {
+    p.sel = (0, p.field.len());
+    p.cursor = p.field.len();
+}
+
+/// moveCursor(pos, mark): with `mark` the selection runs from its anchor -
+/// the end the cursor is not at, else the cursor - to pos; without, it goes.
+fn move_cursor(p: &mut Polkit, pos: usize, mark: bool) {
+    let (s, e) = p.sel;
+    if mark {
+        let anchor = if e > s && p.cursor == s { e } else if e > s && p.cursor == e { s } else { p.cursor };
+        p.sel = (anchor.min(pos), anchor.max(pos));
+    } else {
+        p.sel = (0, 0);
+    }
+    p.cursor = pos;
+}
+
+/// removeSelectedText(): the selection goes and the cursor keeps its place
+/// in what is left.
+fn remove_selected(p: &mut Polkit) {
+    let (s, e) = p.sel;
+    if s < e && e <= p.field.len() {
+        p.field.replace_range(s..e, "");
+        if p.cursor > s {
+            p.cursor -= p.cursor.min(e) - s;
+        }
+    }
+    p.sel = (0, 0);
+}
+
+/// TextInput.maxLength, in UTF-16 units.
+const MAX_LENGTH: usize = 32767;
+
+/// insert(): over the selection, at the cursor, cut at maxLength.
+fn insert(p: &mut Polkit, s: &str) {
+    remove_selected(p);
+    let mut room = MAX_LENGTH.saturating_sub(p.field.encode_utf16().count());
+    let text: String = s.chars().take_while(|c| room.checked_sub(c.len_utf16()).map(|r| room = r).is_some()).collect();
+    p.field.insert_str(p.cursor, &text);
+    p.cursor += text.len();
+}
+
+/// QQuickTextInput::paste(): the clipboard's text over the selection, read
+/// through the compositor's data-control by wl-paste, as the Wi-Fi field does.
+fn paste(app: &mut App) {
+    app.spawn("polkit-paste", &["wl-paste", "--no-newline", "--type", "text"], |app, d| {
+        let p = &app.svc.polkit;
+        if !enabled(p) || (d.stdout.is_empty() && p.sel.0 >= p.sel.1) {
+            return;
+        }
+        insert(&mut app.svc.polkit, &d.stdout);
+        rescroll(app);
+        redraw(app);
+    });
+}
+
+fn prev_char(s: &str, i: usize) -> usize {
+    s.get(..i).and_then(|b| b.char_indices().last()).map_or(0, |(p, _)| p)
+}
+
+fn next_char(s: &str, i: usize) -> usize {
+    s.get(i..).and_then(|r| r.chars().next()).map_or(s.len().min(i), |c| i + c.len_utf8())
+}
+
+/// QTextEngine::atWordSeparator.
+fn separator(c: char) -> bool {
+    ".,?!@#$:;-<>[](){}=/+%&^*'\"`~|\\".contains(c)
+}
+
+/// A word's start (QCharAttributes::wordStart): a letter or digit after
+/// something that is not one.
+fn word_start(chars: &[char], k: usize) -> bool {
+    let word = |c: char| c.is_alphanumeric() || c == '_';
+    chars.get(k).map_or(false, |&c| word(c)) && (k == 0 || !word(chars[k - 1]))
+}
+
+/// QTextLayout::previousCursorPosition(SkipWords) over the text: a byte index.
+fn word_left(s: &str, i: usize) -> usize {
+    let (bytes, chars): (Vec<usize>, Vec<char>) = s.char_indices().unzip();
+    let mut k = bytes.iter().position(|&b| b >= i).unwrap_or(chars.len());
+    while k > 0 && chars[k - 1].is_whitespace() {
+        k -= 1;
+    }
+    if k > 0 && separator(chars[k - 1]) {
+        k -= 1;
+        while k > 0 && separator(chars[k - 1]) {
+            k -= 1;
+        }
+    } else {
+        while k > 0 && !word_start(&chars, k) && !separator(chars[k - 1]) {
+            k -= 1;
+        }
+    }
+    bytes.get(k).copied().unwrap_or(s.len())
+}
+
+/// QTextLayout::nextCursorPosition(SkipWords) over the text: a byte index.
+fn word_right(s: &str, i: usize) -> usize {
+    let (bytes, chars): (Vec<usize>, Vec<char>) = s.char_indices().unzip();
+    let n = chars.len();
+    let mut k = bytes.iter().position(|&b| b >= i).unwrap_or(n);
+    if k < n && separator(chars[k]) {
+        while k < n && separator(chars[k]) {
+            k += 1;
+        }
+    } else {
+        while k < n && !chars[k].is_whitespace() && !separator(chars[k]) {
+            k += 1;
+        }
+    }
+    while k < n && chars[k].is_whitespace() {
+        k += 1;
+    }
+    bytes.get(k).copied().unwrap_or(s.len())
 }

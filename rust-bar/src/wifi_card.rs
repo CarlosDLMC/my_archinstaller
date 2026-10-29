@@ -260,7 +260,7 @@ fn field_text(fonts: &mut crate::text::Fonts, w: &WifiCard) -> (crate::text::Lin
 /// QQuickTextInputPrivate::updateHorizontalScroll (autoScroll): the text
 /// moves only as far as it must to keep the cursor in a field `width` wide;
 /// typing past the end leaves the cursor just outside the clip, as in Qt.
-fn scroll(prev: f32, cx: f32, text_w: f32, width: f32) -> f32 {
+pub(crate) fn scroll(prev: f32, cx: f32, text_w: f32, width: f32) -> f32 {
     let used = text_w.max(cx);
     if used <= width {
         0.0
