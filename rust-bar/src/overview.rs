@@ -138,6 +138,8 @@ pub struct Overview {
     pointer: Option<(u8, f32, f32)>,
     dropped: HashMap<(u8, i64), Dropped>,
     drop_serial: u32,
+    /// What the overview last took from mango's monitor list (monitor_sig).
+    mon_sig: Option<u64>,
 }
 
 fn shot_dir() -> String {
@@ -167,9 +169,10 @@ pub fn open(app: &mut App) {
     }
     // A tile's Image asks for `<id>.ppm?shotGeneration` as soon as it exists:
     // once a run has finished, the last open's pictures are up at once and
-    // this open's replace them when overview-shots.sh is done. Icons first,
-    // so they do not wait behind the pictures on the decode thread.
-    load_icons(app);
+    // this open's replace them when overview-shots.sh is done. Icons first
+    // (monitors_changed loads them), so they do not wait behind the pictures
+    // on the decode thread.
+    monitors_changed(app);
     if app.svc.overview.shot_gen > 0 {
         load_shots(app);
     }
@@ -187,6 +190,7 @@ pub fn close(app: &mut App) {
     o.drop_ws = None;
     o.pointer = None;
     o.dropped.clear();
+    o.mon_sig = None;
     if let Some((_, Some(t), _)) = o.watch.take() {
         app.unwatch(t);
     }
@@ -228,6 +232,39 @@ fn rehover(app: &mut App) {
         }
         app.svc.overview.hovered = hov;
     }
+}
+
+/// What the overview takes from mango's monitor list: each monitor's name,
+/// box and scale (the panel, the window space) and its shown tags (the frame,
+/// the group, which workspaces are laid out afresh).
+fn monitor_sig(monitors: &[Monitor]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    for m in monitors {
+        (&m.name, m.x.to_bits(), m.y.to_bits(), m.width.to_bits(), m.height.to_bits(), m.scale.to_bits(), &m.active_tags).hash(&mut h);
+    }
+    h.finish()
+}
+
+/// Mango.monitor's bindings re-evaluate in QML on every monitor snapshot; the
+/// open overview follows them here (services.rs on_monitors calls this; so
+/// does open(), for its first look). mango pushes the window list just
+/// before the monitors after each arrange (ipc.c handle_print_status), on
+/// another socket: a snapshot read in a later loop turn than the windows was
+/// never drawn, and the frame stayed on the last workspace. A snapshot that
+/// changes nothing the overview shows draws nothing.
+pub fn monitors_changed(app: &mut App) {
+    if !app.svc.overview.open {
+        return;
+    }
+    let sig = monitor_sig(&app.svc.mango.monitors);
+    if app.svc.overview.mon_sig.replace(sig) == Some(sig) {
+        return;
+    }
+    // A retile changes tiles' sizes (their icons) and what is under the pointer.
+    load_icons(app);
+    rehover(app);
+    redraw(app);
 }
 
 /// MangoData: `watch all-clients` on mango's socket while open.
