@@ -34,9 +34,15 @@ fi
 
 # The bar draws with Vulkan. graphics.sh (and nvidia.sh, which runs before this
 # one) installed a driver for every GPU it recognised; a virtual machine gets
-# none, so Mesa's software Vulkan (lavapipe) stands in there.
-if ! ls /usr/share/vulkan/icd.d/*.json /etc/vulkan/icd.d/*.json 2>/dev/null | grep -qv 'lvp_icd'; then
-  echo "${NOTE} No Vulkan driver for this GPU - installing Mesa's software Vulkan for the bar." | tee -a "$LOG"
+# none, so Mesa's software Vulkan (lavapipe) stands in there. Any virtual
+# machine, not only one without a driver file: a base install that brought
+# vulkan-intel or vulkan-radeon along leaves their files here with no device
+# behind them, and the bar then finds no adapter and exits at its first frame.
+# A real or virtual GPU still wins - the bar takes the CPU adapter only when
+# there is no other.
+if systemd-detect-virt --vm --quiet \
+   || ! ls /usr/share/vulkan/icd.d/*.json /etc/vulkan/icd.d/*.json 2>/dev/null | grep -qv 'lvp_icd'; then
+  echo "${NOTE} No Vulkan driver for this GPU (or a virtual machine) - installing Mesa's software Vulkan for the bar." | tee -a "$LOG"
   install_package vulkan-swrast "$LOG"
 fi
 
