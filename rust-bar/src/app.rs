@@ -710,6 +710,7 @@ impl App {
         use crate::cards::Scroll;
         let send = |app: &mut App, s: Scroll| match w {
             WinRef::Card => cards::finger_scroll(app, s),
+            WinRef::Osd(crate::osd::OsdKind::Wallpaper) => crate::wallpaper::finger_scroll(app, s),
             _ => crate::clip::finger_scroll(app, s),
         };
         if angle != (0.0, 0.0) {
@@ -721,7 +722,7 @@ impl App {
             // qRound of the value and the error so far, as QPointF::toPoint.
             let (px, py) = ((h.absolute + rest.0 + 0.5).floor(), (v.absolute + rest.1 + 0.5).floor());
             *rest = (rest.0 + h.absolute - px, rest.1 + v.absolute - py);
-            send(self, Scroll::Update { dx: px as f32, dy: py as f32, angle: angle.1, time });
+            send(self, Scroll::Update { dx: px as f32, dy: py as f32, angle, time });
         }
         if h.stop || v.stop {
             self.end_finger_scroll();
@@ -734,6 +735,7 @@ impl App {
         if self.finger.take().is_some() {
             cards::finger_scroll(self, crate::cards::Scroll::End);
             crate::clip::finger_scroll(self, crate::cards::Scroll::End);
+            crate::wallpaper::finger_scroll(self, crate::cards::Scroll::End);
         }
     }
 }
@@ -1131,25 +1133,31 @@ impl PointerHandler for App {
                     let (dx, dy) = (angle(&horizontal), angle(&vertical));
                     // A finger's scroll on a touchpad is a pixelDelta in
                     // ScrollBegin / ScrollUpdate / ScrollEnd phases, which a
-                    // Flickable - a card's, the clipboard's list - follows 1:1.
-                    if source == Some(wl_pointer::AxisSource::Finger) && matches!(w, WinRef::Card | WinRef::Osd(crate::osd::OsdKind::Clipboard)) {
+                    // Flickable - a card's, the clipboard's list - follows 1:1,
+                    // and which the carousel's WheelHandler stays active through.
+                    if source == Some(wl_pointer::AxisSource::Finger) && matches!(w, WinRef::Card | WinRef::Osd(crate::osd::OsdKind::Clipboard | crate::osd::OsdKind::Wallpaper)) {
                         self.finger_scroll(w, &horizontal, &vertical, (dx, dy), time);
                         continue;
                     }
                     if horizontal.stop || vertical.stop {
                         self.end_finger_scroll();
                     }
-                    // WallpaperOsd's two WheelHandlers take angleDelta.x when y
-                    // is 0 (WallpaperOsd.qml:295,496), the only ones that do.
-                    let delta = if dy == 0.0 && w == WinRef::Osd(crate::osd::OsdKind::Wallpaper) { dx } else { dy };
-                    if delta != 0.0 {
+                    // The carousel's WheelHandler reads both axes; QtWayland
+                    // sends no event for a frame whose angleDelta is null.
+                    if w == WinRef::Osd(crate::osd::OsdKind::Wallpaper) {
+                        if (dx, dy) != (0.0, 0.0) {
+                            crate::wallpaper::wheel(self, dx, dy);
+                        }
+                        continue;
+                    }
+                    if dy != 0.0 {
                         match w {
-                            WinRef::Card => cards::wheel(self, delta, time),
-                            WinRef::Osd(k) => crate::osd::wheel(self, k, delta, time),
+                            WinRef::Card => cards::wheel(self, dy, time),
+                            WinRef::Osd(k) => crate::osd::wheel(self, k, dy, time),
                             WinRef::Crt(_) | WinRef::Reveal(_) => {}
                             WinRef::Strip(i) => {
                                 if let Some(act) = self.hit_at(w, x, y) {
-                                    bar::wheel(self, i, act, delta);
+                                    bar::wheel(self, i, act, dy);
                                 }
                             }
                         }

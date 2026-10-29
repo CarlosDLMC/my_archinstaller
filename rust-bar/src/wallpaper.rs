@@ -221,6 +221,7 @@ pub struct Wall {
     /// jump() that follows animates them from there.
     reset_pre: Option<i64>,
     wheel_acc: f32,
+    wheel_active: WheelActive,
     tab_scroll: f32,
     textures: HashMap<String, Tex>,
     loading: HashMap<String, Cancel>,
@@ -452,9 +453,10 @@ pub fn open(app: &mut App) {
         w.model = None;
         w.list_index = -1;
         w.reset_pre = None;
-        // The handler's wheel sum and the tabs' scroll belong to the
-        // Loader's content.
+        // The handler's wheel sum and state and the tabs' scroll belong to
+        // the Loader's content.
         w.wheel_acc = 0.0;
+        w.wheel_active = WheelActive::default();
         w.tab_scroll = 0.0;
     }
     w.filter.clear();
@@ -507,6 +509,7 @@ pub(crate) fn refocus(app: &mut App) {
     w.list_index = -1;
     w.reset_pre = None;
     w.wheel_acc = 0.0;
+    w.wheel_active = WheelActive::default();
     w.tab_scroll = 0.0;
     w.filter.clear();
     w.cursor = 0;
@@ -1114,21 +1117,81 @@ fn set_filter(app: &mut App, f: String) {
     }
 }
 
-/// The wheel over the carousel. Only the ListView's WheelHandler takes it
-/// (WallpaperOsd.qml:292-299), over the strip's own height, the tab row
-/// included. The tabs' one (:493-499) never runs on mango: it keeps
-/// WheelHandler's default acceptedDevices, Mouse, and QtWayland gives every
-/// pointer event its touchpad device whenever the compositor has pointer
-/// gestures and no mouse device is registered (QWaylandInputDevice::
-/// seat_capabilities, QPointingDevice::primaryPointingDevice), so
-/// wantsPointerEvent turns it down and the wheel goes on to the ListView's.
-pub fn wheel(app: &mut App, delta: f32) {
+/// QQuickWheelHandler's `active` (Qt 6.12, qquickwheelhandler.cpp): an
+/// event it takes makes it active; after a NoScrollPhase one (a notch, a
+/// continuous frame) the deactivation timer ends it activeTimeout (100 ms)
+/// later, a ScrollEnd ends it at once, and a finger's ScrollBegin/Update
+/// leave the timer as it is.
+#[derive(Clone, Copy, Default)]
+struct WheelActive {
+    on: bool,
+    until: Option<Instant>,
+}
+
+const WHEEL_ACTIVE_MS: u64 = 100;
+
+#[derive(Clone, Copy, PartialEq)]
+enum Phase {
+    NoScroll,
+    Begin,
+    Update,
+    End,
+}
+
+/// A wheel notch or a continuous scroll frame over the carousel: its
+/// angleDelta (x, y), NoScrollPhase.
+pub fn wheel(app: &mut App, ax: f32, ay: f32) {
+    handler(app, (ax, ay), 0.0, Phase::NoScroll);
+}
+
+/// A finger's scroll over the carousel, in QtWayland's phases (App::
+/// finger_scroll): ScrollBegin's deltas are null, an update has the frame's
+/// angleDelta and pixelDelta.
+pub fn finger_scroll(app: &mut App, s: crate::cards::Scroll) {
+    use crate::cards::Scroll;
+    match s {
+        Scroll::Begin { .. } => handler(app, (0.0, 0.0), 0.0, Phase::Begin),
+        Scroll::Update { dy, angle, .. } => handler(app, angle, dy, Phase::Update),
+        Scroll::End => handler(app, (0.0, 0.0), 0.0, Phase::End),
+    }
+}
+
+/// The ListView's WheelHandler (WallpaperOsd.qml:292-299), the carousel's
+/// only one, over the strip's own height, the tab row included. The tabs'
+/// one (:493-499) never runs on mango: it keeps WheelHandler's default
+/// acceptedDevices, Mouse, and QtWayland gives every pointer event its
+/// touchpad device whenever the compositor has pointer gestures and no
+/// mouse device is registered (QWaylandInputDevice::seat_capabilities,
+/// QPointingDevice::primaryPointingDevice), so wantsPointerEvent turns it
+/// down and the wheel goes on to the ListView's. Its orientation is
+/// WheelHandler's default, Qt.Vertical: while it is not active it turns
+/// down an event with no y delta, angle or pixel (wantsPointerEvent), so
+/// onWheel's angleDelta.x (:295) counts only in a horizontal swipe that a
+/// vertical frame woke, or within 100 ms of a vertical notch. (A continuous
+/// frame's pixelDelta is not followed: below 1/24 of a unit, where its
+/// angle rounds to 0, its pixel rarely is not.)
+fn handler(app: &mut App, (ax, ay): (f32, f32), py: f32, phase: Phase) {
     let Some((_, y)) = app.osd(OsdKind::Wallpaper).and_then(|o| o.st.pointer) else { return };
     let (sw, sh) = screen_of(app);
     let g = geo(sw, sh);
+    // parentContains: the ListView's own box, the screen's width.
     if y < g.list_y || y >= g.list_y + g.list_h {
         return;
     }
+    let now = Instant::now();
+    let w = &mut app.svc.wall;
+    let was = w.wheel_active;
+    let active = was.on && was.until.map_or(true, |t| now < t);
+    if !active && ay == 0.0 && py == 0.0 {
+        return;
+    }
+    w.wheel_active = match phase {
+        Phase::End => WheelActive::default(),
+        Phase::NoScroll => WheelActive { on: true, until: Some(now + Duration::from_millis(WHEEL_ACTIVE_MS)) },
+        Phase::Begin | Phase::Update => WheelActive { on: true, until: if active { was.until } else { None } },
+    };
+    // onWheel: angleDelta.y, or .x when y is 0.
+    let delta = if ay != 0.0 { ay } else { ax };
     app.svc.wall.wheel_acc += delta;
     while app.svc.wall.wheel_acc >= 120.0 {
         app.svc.wall.wheel_acc -= 120.0;

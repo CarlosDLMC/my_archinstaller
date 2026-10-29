@@ -299,8 +299,8 @@ pub enum Scroll {
     /// ScrollBegin, before the first frame, with that frame's time.
     Begin { time: u32 },
     /// ScrollUpdate: the frame's pixelDelta (contentY up for dy > 0), its
-    /// angleDelta.y, for what reads the angle, and its time.
-    Update { dx: f32, dy: f32, angle: f32, time: u32 },
+    /// angleDelta (x, y), for what reads the angle, and its time.
+    Update { dx: f32, dy: f32, angle: (f32, f32), time: u32 },
     /// ScrollEnd, at axis_stop.
     End,
 }
@@ -2124,7 +2124,7 @@ pub fn finger_scroll(app: &mut App, s: Scroll) {
                 }
             }
         }
-        Scroll::Update { dx, dy, angle, time } => {
+        Scroll::Update { dx, dy, angle: (_, angle), time } => {
             if angle != 0.0 && slider_wheel(app, angle) {
                 return;
             }

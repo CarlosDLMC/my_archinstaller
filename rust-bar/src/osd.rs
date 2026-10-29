@@ -564,9 +564,6 @@ pub fn wheel(app: &mut App, kind: OsdKind, delta: f32, time: u32) {
     if kind == OsdKind::Clipboard {
         crate::clip::wheel(app, delta, time);
     }
-    if kind == OsdKind::Wallpaper {
-        crate::wallpaper::wheel(app, delta);
-    }
 }
 
 /// Pointer motion over a control (MouseArea.onEntered).
