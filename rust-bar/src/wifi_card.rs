@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use crate::app::App;
 use crate::bar::{ac, Action, Hit};
-use crate::cards::{plate, Ui};
+use crate::cards::{plate, CardKind, Ui};
 use crate::color::Color;
 use crate::gpu::TextStyle;
 use crate::services::{split_terse, Services};
@@ -26,6 +26,10 @@ pub struct WifiCard {
     pub input_since: Option<Instant>,
     /// wifiConnectProc.output: its stdout and stderr lines as they come.
     connect_out: String,
+    /// The bar whose card started the connect (or disconnect) that runs or
+    /// ran last: every bar has its own WifiWidget and wifiConnectProc
+    /// (shell.qml), so only that bar's widget is `connecting`.
+    pub strip: Option<usize>,
 }
 
 pub const DISCONNECT: u32 = 1;
@@ -92,6 +96,7 @@ fn run_connect(app: &mut App, argv: &[&str]) {
         return;
     }
     app.svc.wifi_card.connect_out.clear();
+    app.svc.wifi_card.strip = app.card.as_ref().map(|c| c.strip);
     app.spawn_stream("wifi-connect", argv, connect_line, Some(connect_line), Some(connect_done));
     app.mark_all_dirty();
 }
@@ -104,18 +109,23 @@ fn connect_line(app: &mut App, data: &str) {
 
 /// onRunningChanged, not running: the watchdog stops and the status is read
 /// again; a failure on a secured network brings up the password view, a
-/// success closes the card.
+/// success closes the card - the widget's own (`dropdownOpen = false`):
+/// either view, on the bar the connect came from, not a card of another
+/// widget or bar opened since.
 fn connect_done(app: &mut App) {
     app.cancel_timer("wifi-watchdog");
     crate::services::wifi_refresh(app);
     let out = std::mem::take(&mut app.svc.wifi_card.connect_out).to_lowercase();
     let failed = out.contains("error") || out.contains("secrets were required") || out.contains("no suitable connection") || out.contains("failed");
+    let own = app.card.as_ref().map_or(false, |c| matches!(c.kind, CardKind::Wifi | CardKind::Network) && Some(c.strip) == app.svc.wifi_card.strip);
     let w = &mut app.svc.wifi_card;
     if failed && !w.selected_ssid.is_empty() && !w.selected_security.is_empty() && !w.password_mode {
         w.failed = true;
         enter_password(app);
     } else if !failed && !app.svc.wifi_card.selected_ssid.is_empty() {
-        crate::cards::close(app);
+        if own {
+            crate::cards::close(app);
+        }
         cancel_password(app);
     }
     app.mark_all_dirty();
@@ -137,8 +147,10 @@ fn watchdog(app: &mut App) {
 fn enter_password(app: &mut App) {
     app.svc.wifi_card.password_mode = true;
     app.svc.wifi_card.input_since = Some(Instant::now());
-    if let Some(c) = app.card.as_mut() {
-        // forceActiveFocus on the field: the first control in password mode.
+    // forceActiveFocus on the field, the first control in password mode - a
+    // field only the Wi-Fi card has (passwordMode is the widget's state; any
+    // other card open by now keeps its focus).
+    if let Some(c) = app.card.as_mut().filter(|c| c.kind == CardKind::Wifi) {
         c.focus = Some(0);
         c.win.dirty = true;
     }
@@ -240,6 +252,8 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, busy: bool) {
     let m = metrics(ui.fonts, svc);
     let (x0, cw) = (8.0, w - 16.0);
     let mut y = 12.0 + 8.0;
+    // `connecting` is this bar's widget's: its own connect runs.
+    let busy = busy && wc.strip == Some(ui.card.strip);
 
     // The link: lamp, caption, name, scan spinner, disconnect.
     let tint = if busy { t.col_alert } else { t.col_accent };
@@ -356,7 +370,11 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, busy: bool) {
 pub fn activate(app: &mut App, code: u32) {
     match code {
         DISCONNECT => {
-            app.spawn("wifi-disconnect", &["sh", "-c", "nmcli -t -f DEVICE,TYPE,STATE device | awk -F: '$2 == \"wifi\" && $3 == \"connected\" { print $1 }' | while IFS= read -r d; do nmcli device disconnect \"$d\"; done"], |app, _| crate::services::wifi_refresh(app));
+            // Through wifiConnectProc, as WifiWidget.qml:515-523 runs it: the
+            // widget is `connecting` while it runs (ПОДКЛЮЧЕНИЕ, the icon
+            // blinks), it is skipped while a connect runs, and the same exit
+            // handler follows.
+            run_connect(app, &["sh", "-c", "nmcli -t -f DEVICE,TYPE,STATE device | awk -F: '$2 == \"wifi\" && $3 == \"connected\" { print $1 }' | while IFS= read -r d; do nmcli device disconnect \"$d\"; done"]);
         }
         INPUT => {
             if let Some(c) = app.card.as_mut() {
