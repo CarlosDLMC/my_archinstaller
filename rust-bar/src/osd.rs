@@ -575,6 +575,15 @@ pub fn hovered(app: &mut App, kind: OsdKind, action: Option<Action>) {
     }
 }
 
+/// The pointer moved to a new spot over an overlay. mango also sends a
+/// motion where the pointer entered when a surface maps under it; that one
+/// does not come here.
+pub fn moved(app: &mut App, kind: OsdKind) {
+    if kind == OsdKind::Layout {
+        crate::layout::osd_moved(app);
+    }
+}
+
 pub fn hover_changed(app: &mut App, kind: OsdKind, inside: bool) {
     match kind {
         OsdKind::Layout => crate::layout::osd_hover(app, inside),

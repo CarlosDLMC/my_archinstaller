@@ -32,6 +32,10 @@ pub struct LayoutState {
     session_pos: usize,
     /// The OSD's hovered entry, -1 = none.
     hovered: Option<usize>,
+    /// The pointer is over the popup only because the popup mapped under it
+    /// (mango sends the enter, and a motion at the same spot): until it moves
+    /// it neither holds the popup nor previews an entry (osd_moved).
+    resting: bool,
 }
 
 impl LayoutState {
@@ -282,19 +286,35 @@ fn hide_osd(app: &mut App) {
     osd::hide(app, OsdKind::Layout);
 }
 
-/// MouseArea.onEntered / onExited over the panel.
+/// MouseArea.onEntered / onExited over the panel - with one difference from
+/// QML. LayoutOsd.qml also holds the popup when it maps under a pointer
+/// that is just resting there (mango sends the enter), so SUPER+SPACE with
+/// the mouse in the middle of the screen left it up, the MRU commit
+/// suspended, until the hand went back to the mouse. Here the enter only
+/// marks the pointer resting; a real move over the popup holds it.
 pub fn osd_hover(app: &mut App, inside: bool) {
     if inside {
-        // Freeze: no auto-hide and no MRU commit while pointed at; a popup
-        // that was fading comes back (LayoutOsd.qml:233-240). A later
-        // switch restarts both, and then it hides under the pointer too.
-        map_osd(app);
-        app.cancel_timer("layout-osd-hide");
-        app.cancel_timer("layout-commit");
-    } else {
+        app.svc.layout.resting = true;
+    } else if !std::mem::take(&mut app.svc.layout.resting) {
         app.svc.layout.hovered = None;
         release(app);
         hide_later(app);
+    }
+}
+
+/// The pointer moved over the popup: now it points at it. Freeze: no
+/// auto-hide and no MRU commit while pointed at; a popup that was fading
+/// comes back (LayoutOsd.qml:233-240). A later switch restarts both, and
+/// then it hides under the pointer too.
+pub fn osd_moved(app: &mut App) {
+    if !std::mem::take(&mut app.svc.layout.resting) {
+        return;
+    }
+    map_osd(app);
+    app.cancel_timer("layout-osd-hide");
+    app.cancel_timer("layout-commit");
+    if let Some(o) = app.osd_mut(OsdKind::Layout) {
+        o.win.dirty = true;
     }
 }
 
@@ -327,7 +347,7 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
     let (rx, ry) = (bx + m.plate_pad, plate_y + m.plate_pad);
 
     // posAt(): the hovered entry, anywhere over the panel.
-    let hovered = ui.card.pointer().filter(|&(x, y)| x >= px0 && x < px0 + pw && y >= py0 && y < py0 + ph).map(|(x, _)| {
+    let hovered = ui.card.pointer().filter(|&(x, y)| !s.resting && x >= px0 && x < px0 + pw && y >= py0 && y < py0 + ph).map(|(x, _)| {
         let i = ((x - rx) / (m.name_w + m.row_sp)).floor();
         i.clamp(0.0, (n - 1.0).max(0.0)) as usize
     });

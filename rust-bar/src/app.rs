@@ -1076,8 +1076,12 @@ impl PointerHandler for App {
                             cards::drag(self, act, x);
                         }
                     }
-                    let before = self.pointer_of(w).and_then(|(px, py)| self.hit_at(w, px, py));
+                    let prev = self.pointer_of(w);
+                    let before = prev.and_then(|(px, py)| self.hit_at(w, px, py));
                     self.set_pointer(w, Some((x, y)));
+                    if let (WinRef::Osd(k), true) = (w, prev != Some((x, y))) {
+                        crate::osd::moved(self, k);
+                    }
                     let after = self.hit_at(w, x, y);
                     if before != after {
                         self.win_mut(w).unwrap().dirty = true;
