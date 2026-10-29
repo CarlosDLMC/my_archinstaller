@@ -493,14 +493,10 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, scanning: bool) {
                 let font = FONT_SIZE - 6.0;
                 let label = if scanning { "СТОП" } else { "ПОИСК" };
                 let bw = ui.console_button_width(font, "\u{f0349}", label, 58.0);
-                ui.console_button_sized(SEARCH, x0 + cw - bw, y, bw, font, if scanning { "" } else { "\u{f0349}" }, t.col_grey, label, false);
-                if scanning {
-                    // ConsoleButton.busy: the spinner takes the icon's place.
-                    let face = (font + 2.0) + 6.0 + ui.fonts.layout(label, theme::bar_font(true), font, 0.0).width;
-                    let fx = x0 + cw - bw + ac(bw, face);
-                    let s = font - 2.0;
-                    spinner(ui, fx + ((font + 2.0 - s) / 2.0).round(), y + ac(h, s) - 1.0, s, t.col_white);
-                }
+                // busy: pult.scanning (PultWidget.qml:465-474) - the spinner
+                // takes the glyph's place in its box and the caption stays
+                // beside it; the key stays enabled.
+                ui.console_button_ex(SEARCH, x0 + cw - bw, y, bw, font, "\u{f0349}", t.col_grey, label, false, scanning, true);
             }
             3 | 6 => {
                 plate(ui, x0, y, cw, h);
