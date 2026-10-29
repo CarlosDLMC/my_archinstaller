@@ -403,17 +403,20 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, busy: bool, top: f32) {
                     let name_h = ui.fonts.layout("a", theme::bar_font(false), LABEL - 1.0, 0.0).height();
                     let rh = name_h + 12.0;
                     let hover = ui.hovered(ix, cy, iw, rh);
-                    let mut name = m.model.trim_start_matches("claude-").to_string();
-                    if name.len() > 9 && name[name.len() - 9..].starts_with('-') && name[name.len() - 8..].chars().all(|c| c.is_ascii_digit()) {
-                        name.truncate(name.len() - 9);
-                    }
+                    // .replace(/^claude-/, "").replace(/-\d{8}$/, "") (AgentPanel.qml:396-397),
+                    // on char boundaries: the id comes from the transcripts on disk.
+                    let base = m.model.strip_prefix("claude-").unwrap_or(&m.model);
+                    let name = match base.rsplit_once('-') {
+                        Some((head, tail)) if tail.len() == 8 && tail.bytes().all(|b| b.is_ascii_digit()) => head,
+                        _ => base,
+                    };
                     let detail = format!("ввод {} · вывод {} · кэш {}", compact(m.input), compact(m.output), compact(m.cache_read));
                     let total = ui.fonts.layout(&compact(m.tokens), theme::bar_font(true), LABEL - 1.0, 0.0);
                     ui.text(&total, ix + iw - total.width, cy, t.col_white, TextStyle::Normal);
-                    let shown = if hover { detail } else { name };
+                    let shown: &str = if hover { &detail } else { name };
                     let key = theme::bar_font(false);
-                    let full = ui.fonts.layout(&shown, key, LABEL - 1.0, 0.0);
-                    let line = ui.fonts.elide_right(&full, &shown, key, iw - total.width - 8.0, 0.0);
+                    let full = ui.fonts.layout(shown, key, LABEL - 1.0, 0.0);
+                    let line = ui.fonts.elide_right(&full, shown, key, iw - total.width - 8.0, 0.0);
                     ui.text(&line, ix, cy, if hover { t.col_grey } else { t.col_white }, TextStyle::Normal);
                     let n = 10.max((iw / 10.0).round() as i32);
                     gauge(ui, 64 + i as u32, ix, cy + rh - 8.0, iw, 8.0, n, ((if max > 0.0 { m.tokens / max } else { 0.0 }).clamp(0.0, 1.0) * 100.0) as f32, t.col_accent);
