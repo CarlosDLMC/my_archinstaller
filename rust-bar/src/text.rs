@@ -363,7 +363,9 @@ pub struct Fonts {
     pub faces: Vec<Face>,
     by_key: HashMap<FontKey, u16>,
     by_file: HashMap<(String, u32), u16>,
-    fallback: HashMap<(FontKey, char), u16>,
+    /// fontconfig's pick for a character the family lacks, by family:
+    /// bold and plain resolve to the same file, so they share it.
+    fallback: HashMap<(&'static str, char), u16>,
     glyphs: HashMap<(u16, GlyphId, bool), Option<DfGlyph>>,
     native: HashMap<(u16, GlyphId, i64, u8, u8), Option<NativeGlyph>>,
     library: ft::FT_Library,
@@ -553,12 +555,14 @@ impl Fonts {
         if self.faces[primary as usize].font.charmap().map(ch) != 0 || ch.is_control() {
             return primary;
         }
-        if let Some(&i) = self.fallback.get(&(key, ch)) {
+        if let Some(&i) = self.fallback.get(&(key.family, ch)) {
             return i;
         }
+        // An fc-match process (about 6 ms, on this thread): once per family
+        // and character.
         let pat = format!("{}:charset={:x}", key.family, ch as u32);
         let i = fc_match(&pat).and_then(|(f, idx)| self.load_file(&f, idx)).unwrap_or(primary);
-        self.fallback.insert((key, ch), i);
+        self.fallback.insert((key.family, ch), i);
         i
     }
 
