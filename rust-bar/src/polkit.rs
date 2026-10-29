@@ -452,6 +452,9 @@ fn completed(app: &mut App, gained: bool) {
 fn finish(app: &mut App) {
     app.svc.polkit.flow = None;
     app.svc.polkit.field.clear();
+    // PolkitState.onFlowChanged.
+    app.svc.polkit.error.clear();
+    app.svc.polkit.checking = false;
     osd::hide(app, OsdKind::Polkit);
     if !app.svc.polkit.queue.is_empty() {
         activate(app);
@@ -536,19 +539,37 @@ fn met() -> M {
 const CONTENT: FontKey = FontKey { family: theme::FONT_CONTENT, bold: false, plain: false };
 const FIELD: FontKey = FontKey { family: theme::FONT_CONTENT, bold: false, plain: true };
 
+/// What the dialog shows of the flow. Once PolkitState.flow is null - the
+/// card fading out after its request ended - QML's bindings read "" and
+/// false: no message, no action id, the field disabled with «Пароль».
+struct View<'a> {
+    message: &'a str,
+    action_id: &'a str,
+    prompt: &'a str,
+    response_required: bool,
+    response_visible: bool,
+}
+
+fn view(p: &Polkit) -> View<'_> {
+    match p.flow.as_ref() {
+        Some(f) => View { message: &f.req.message, action_id: &f.req.action_id, prompt: &f.input_prompt, response_required: f.response_required, response_visible: f.response_visible },
+        None => View { message: "", action_id: "", prompt: "", response_required: false, response_visible: false },
+    }
+}
+
 /// The Column's blocks: (height, what).
 fn blocks(fonts: &mut crate::text::Fonts, svc: &Services) -> Vec<f32> {
     let m = met();
     let p = &svc.polkit;
-    let Some(f) = p.flow.as_ref() else { return Vec::new() };
+    let f = view(p);
     let cw = m.card_w - 2.0 * m.pad;
     let cap = fonts.layout("ТРЕБУЕТСЯ ПАРОЛЬ", theme::bar_font(true), m.title, 1.0);
     let mut v = vec![cap.height().max(10.0)];
     let iw = cw - 2.0 * m.gap;
-    let msg: f32 = fonts.wrap(&f.req.message, CONTENT, m.body, 0.0, iw).iter().map(|l| l.height()).sum();
+    let msg: f32 = fonts.wrap(f.message, CONTENT, m.body, 0.0, iw).iter().map(|l| l.height()).sum();
     let mut plate = msg;
-    if !f.req.action_id.is_empty() {
-        plate += (m.gap * 0.5).round() + fonts.layout(&f.req.action_id, CONTENT, m.small, 0.0).height();
+    if !f.action_id.is_empty() {
+        plate += (m.gap * 0.5).round() + fonts.layout(f.action_id, CONTENT, m.small, 0.0).height();
     }
     v.push(plate + 2.0 * m.gap);
     v.push(m.field_h);
@@ -561,11 +582,13 @@ fn blocks(fonts: &mut crate::text::Fonts, svc: &Services) -> Vec<f32> {
 }
 
 fn note(p: &Polkit) -> (String, bool) {
-    let Some(f) = p.flow.as_ref() else { return (String::new(), false) };
     if !p.error.is_empty() {
         return (p.error.clone(), true);
     }
-    (f.supplementary.clone(), f.supplementary_is_error)
+    match p.flow.as_ref() {
+        Some(f) => (f.supplementary.clone(), f.supplementary_is_error),
+        None => (String::new(), false),
+    }
 }
 
 fn keycaps_h(fonts: &mut crate::text::Fonts, size: f32) -> f32 {
@@ -592,6 +615,9 @@ fn map_osd(app: &mut App) {
     let m = met();
     let h = card_h(&mut app.fonts, &app.svc);
     osd::show(app, OpenParams { kind: OsdKind::Polkit, size: (m.card_w as u32, h.ceil() as u32), panel: (0.0, 0.0, m.card_w, h), dim: Some(Color::qt_rgba(0.0, 0.0, 0.0, 0.45)), keyboard: true, namespace: "quickshell", fade_ms: FADE_MS, min_scale: 0.96, fade_easing: crate::anim::Easing::OutCubic, pos: Some((ac(sw, m.card_w) as i32, ac(sh, h) as i32)), fill: false, output: None });
+    // A dialog still up (the next queued request follows the last at once)
+    // keeps its old size in osd::show: the card's height is this request's.
+    reshow(app);
 }
 
 /// The card's height follows its texts (the error line comes and goes).
@@ -601,15 +627,16 @@ fn reshow(app: &mut App) {
     }
     let m = met();
     let h = card_h(&mut app.fonts, &app.svc);
-    let Some((_, _, sh)) = osd::focused_output(app) else { return };
-    let o = app.osd_mut(OsdKind::Polkit).unwrap();
+    let Some(o) = app.osd_mut(OsdKind::Polkit) else { return };
     if (o.panel.3 - h).abs() >= 0.5 {
         use smithay_client_toolkit::shell::WaylandSurface;
         o.panel.3 = h;
         o.win.height = h.ceil() as u32;
         o.win.layer.set_size(m.card_w as u32, h.ceil() as u32);
-        let x = ac(o.screen.0, m.card_w) as i32;
-        o.win.layer.set_margin(ac(sh, h) as i32, 0, 0, x);
+        // anchors.centerIn on the dialog's own screen (not the focused one,
+        // which may have changed since it opened).
+        let (sw, sh) = o.screen;
+        o.win.layer.set_margin(ac(sh, h) as i32, 0, 0, ac(sw, m.card_w) as i32);
         o.win.layer.commit();
     }
 }
@@ -644,9 +671,19 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
     let m = met();
     let t = ui.theme;
     let p = &svc.polkit;
-    let (x0, y0, w, h) = panel;
+    let (x0, mut y0, w, mut h) = panel;
+    if p.flow.is_none() {
+        // Fading out after its request: the card is QML's without a flow,
+        // smaller, still centred (anchors.centerIn) - the surface keeps its
+        // size until it goes.
+        let ch = card_h(ui.fonts, svc);
+        if ch < h {
+            y0 += ac(h, ch);
+            h = ch;
+        }
+    }
     ui.scene.rect(x0, y0, w, h, t.col_bg, m.radius, 0.0, Color::TRANSPARENT, true);
-    let Some(f) = p.flow.as_ref() else { return };
+    let f = view(p);
     let (cx, cw) = (x0 + m.pad, w - 2.0 * m.pad);
     let mut y = y0 + m.pad;
 
@@ -658,9 +695,9 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
 
     // The plate: polkit's message and the action id.
     let iw = cw - 2.0 * m.gap;
-    let lines = ui.fonts.wrap(&f.req.message, CONTENT, m.body, 0.0, iw);
+    let lines = ui.fonts.wrap(f.message, CONTENT, m.body, 0.0, iw);
     let mut ph: f32 = lines.iter().map(|l| l.height()).sum();
-    let action = (!f.req.action_id.is_empty()).then(|| ui.fonts.elide_middle(&f.req.action_id, CONTENT, m.small, 0.0, iw));
+    let action = (!f.action_id.is_empty()).then(|| ui.fonts.elide_middle(f.action_id, CONTENT, m.small, 0.0, iw));
     if let Some(a) = &action {
         ph += (m.gap * 0.5).round() + a.height();
     }
@@ -683,7 +720,7 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
     ui.scene.save();
     ui.scene.clip_rect(fx, y, fw, m.field_h);
     if p.field.is_empty() {
-        let prompt = f.input_prompt.trim_end().trim_end_matches(':').trim_end().to_string();
+        let prompt = f.prompt.trim_end().trim_end_matches(':').trim_end().to_string();
         let ph_text = if p.checking {
             "Проверка…".to_string()
         } else if prompt.is_empty() || prompt.eq_ignore_ascii_case("password") {
