@@ -2,10 +2,11 @@
 //! [args...]` sends one line to $XDG_RUNTIME_DIR/rust-bar.sock - the same
 //! targets and functions as the QML bar's IpcHandlers (qs -c bar ipc call).
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::os::fd::{AsRawFd, IntoRawFd};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
+use std::time::{Duration, Instant};
 
 use crate::app::App;
 
@@ -48,11 +49,30 @@ pub fn listen(app: &mut App) {
     }
 }
 
-fn on_conn(app: &mut App, c: UnixStream) {
+/// The request line. The event loop waits while it is read, so the wait is
+/// bounded - 200 ms in all and 4 KiB - for a client that connects and sends
+/// nothing, trickles bytes or never ends its line.
+fn read_request(c: &UnixStream) -> String {
+    let deadline = Instant::now() + Duration::from_millis(200);
     let _ = c.set_nonblocking(false);
-    let _ = c.set_read_timeout(Some(std::time::Duration::from_millis(200)));
-    let mut line = String::new();
-    let _ = BufReader::new(&c).read_line(&mut line);
+    let mut buf = Vec::new();
+    let mut chunk = [0u8; 512];
+    while buf.len() < 4096 && !buf.contains(&b'\n') {
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() || c.set_read_timeout(Some(left)).is_err() {
+            break;
+        }
+        match (&*c).read(&mut chunk) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => buf.extend_from_slice(&chunk[..n]),
+        }
+    }
+    let end = buf.iter().position(|&b| b == b'\n').unwrap_or(buf.len());
+    String::from_utf8_lossy(&buf[..end]).into_owned()
+}
+
+fn on_conn(app: &mut App, c: UnixStream) {
+    let line = read_request(&c);
     let words: Vec<&str> = line.split_whitespace().collect();
     let reply = if words.len() >= 2 { call(app, words[0], words[1], &words[2..]) } else { Err("usage: <target> <function> [args]".into()) };
     let mut c = c;
