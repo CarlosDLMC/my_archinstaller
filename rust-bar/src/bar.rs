@@ -378,12 +378,14 @@ fn volume_text(svc: &Services) -> String {
         "\u{f0581}"
     } else {
         let s = info.as_ref().map(|i| format!("{} {} {}", i.name, i.description, i.nick).to_lowercase()).unwrap_or_default();
+        // VolumeWidget.audioSink's order (VolumeWidget.qml:43-49): hdmi
+        // before bluetooth, for a sink whose name has both.
         if s.contains("headphone") || s.contains("headset") {
             "\u{f02cb}"
-        } else if s.contains("bluez") || s.contains("bluetooth") {
-            "\u{f00b0}"
         } else if s.contains("hdmi") || s.contains("displayport") {
             "\u{f0841}"
+        } else if s.contains("bluez") || s.contains("bluetooth") {
+            "\u{f00b0}"
         } else {
             "\u{f057e}"
         }
