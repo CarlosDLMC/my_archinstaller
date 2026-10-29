@@ -790,7 +790,9 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
         let fg = if sel { t.col_bg } else { t.col_grey };
         let ib = m.row_h - 10.0;
         let (ix, iy) = (lx + 8.0, ry + ac(m.row_h, ib));
-        match c.thumb_tex.get(&e.id).filter(|_| e.image.is_some()) {
+        // close() empties `thumbs`: thumbFor() is "" for every row at once,
+        // so the glyphs stand in for the pictures while the card fades out.
+        match c.thumb_tex.get(&e.id).filter(|_| e.image.is_some() && c.open) {
             Some(&tex) => {
                 ui.scene.save();
                 ui.scene.clip_rect(ix, iy, ib, ib);
@@ -822,7 +824,8 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
             let l = ui.fonts.layout(if c.loading { "Чтение истории…" } else { "Ничего не найдено" }, CONTENT, m.row, 0.0);
             ui.text(&l, px0 + ac(pw, l.width), y + ac(bh, l.height()), t.col_grey, TextStyle::Normal);
         }
-        Some(e) if e.image.is_some() => match c.preview_tex.as_ref().filter(|(id, _)| *id == e.id) {
+        // The preview's source empties with the rows' (see above).
+        Some(e) if e.image.is_some() => match c.preview_tex.as_ref().filter(|(id, _)| *id == e.id && c.open) {
             Some((_, tex)) => draw_image(ui, *tex, px0 + 10.0, y + 10.0, pw - 20.0, bh - 20.0, false),
             None => {
                 let g = ui.fonts.layout("\u{f02e9}", CONTENT, px(48.0), 0.0);
