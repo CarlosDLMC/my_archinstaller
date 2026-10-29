@@ -33,6 +33,9 @@ pub struct Pult {
     /// power chain with the last click's state, one more night-light toggle.
     bt_power_again: Option<bool>,
     night_again: bool,
+    /// Each list's models so far (paired, found): part of the value its
+    /// ListView compares (set_list, draw).
+    models: [u64; 2],
 }
 
 const PROFILES: [&str; 3] = ["performance", "balanced", "power-saver"];
@@ -124,7 +127,10 @@ fn bt_connected(app: &mut App) {
 /// ListView, which makes the rows anew (setModel compares the values): their
 /// texts start fresh (subpixel) - this list's only, so each list has its own
 /// text parts (the framework's list_replaced forgets ConsoleRow's 0xC1-0xC4,
-/// card-wide, which these rows do not use).
+/// card-wide, which these rows do not use). The model count goes into the
+/// value list_begin compares: a found list emptied by a new search (its
+/// plate hidden, so no frame shows the empty model) and then filled with the
+/// same devices is still a new model, back at the top with fresh rows.
 fn set_list(app: &mut App, found: bool, list: Vec<(String, String)>) {
     let p = &mut app.svc.pult;
     let (old, texts) = if found { (&mut p.found, FOUND_TEXTS) } else { (&mut p.bt_devices, PAIRED_TEXTS) };
@@ -132,6 +138,7 @@ fn set_list(app: &mut App, found: bool, list: Vec<(String, String)>) {
         return;
     }
     *old = list;
+    p.models[found as usize] = p.models[found as usize].wrapping_add(1);
     if let Some(c) = app.card.as_mut().filter(|c| c.kind == crate::cards::CardKind::Pult) {
         c.texts.forget_parts(&[texts + 1, texts + 3, texts + 4]);
     }
@@ -640,7 +647,8 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, scanning: bool) {
                 // A list has 0x100 codes: a 257th found device would be the
                 // РАЗГОН key (PROFILE), a 257th paired one a found row.
                 let count = list.len().min(0x100);
-                let lv = ui.list_begin(base, x0 + 4.0, y + 4.0, cw - 8.0, count.min(6), count, m.row_h, 2.0, crate::cards::model_sig(list), |_| true);
+                let sig = crate::cards::model_sig(list).wrapping_add(p.models[(kind == 6) as usize]);
+                let lv = ui.list_begin(base, x0 + 4.0, y + 4.0, cw - 8.0, count.min(6), count, m.row_h, 2.0, sig, |_| true);
                 for (i, (mac, name)) in list.iter().enumerate().take(count) {
                     let ry = lv.row_y(i);
                     if kind == 3 {
