@@ -163,6 +163,9 @@ pub struct PlacedGlyph {
     pub face: u16,
     pub gid: GlyphId,
     pub x: f32,
+    /// Its advance, letter spacing left out (a mark's is 0, give or take
+    /// the 64th the GPOS delta's rounding leaves).
+    pub adv: f32,
     /// Synthetic bold: FreeType's embolden, which Qt applies to a bold
     /// request on a regular face unless the face is fixed-pitch.
     pub bold: bool,
@@ -381,10 +384,14 @@ pub struct Fonts {
     /// Texts broken into lines lately (wrap_strings), two generations too.
     wraps: HashMap<WrapKey, (String, Vec<String>)>,
     wraps_old: HashMap<WrapKey, (String, Vec<String>)>,
+    /// Ink widths measured lately (bounding_width).
+    bounds: HashMap<BoundKey, (String, f32)>,
 }
 
 /// A text's hash, font, size and letter spacing (bits).
 type LineKey = (u64, FontKey, u32, u32);
+/// A text's hash, font and size (bits).
+type BoundKey = (u64, FontKey, u32);
 /// The same plus the width (bits) and Text.Wrap (break anywhere).
 type WrapKey = (u64, FontKey, u32, u32, u32, bool);
 
@@ -417,6 +424,68 @@ fn is_emoji_presentation(c: char) -> bool {
         (0x1F93C, 0x1F945), (0x1F947, 0x1F9FF), (0x1FA70, 0x1FAFF),
     ];
     R.iter().any(|&(a, b)| u >= a && u <= b)
+}
+
+/// Emoji joiners, variation selectors, skin tones and tags: they stay with
+/// the character before them.
+fn is_emoji_joiner(ch: char) -> bool {
+    matches!(ch, '\u{200d}' | '\u{fe0e}' | '\u{fe0f}' | '\u{1f3fb}'..='\u{1f3ff}' | '\u{e0020}'..='\u{e007f}')
+}
+
+/// Qt's emoji segmentation: emoji presentation (or VS16) goes to the emoji font.
+fn starts_emoji(ch: char, next: Option<char>) -> bool {
+    (is_emoji_presentation(ch) && next != Some('\u{fe0e}')) || next == Some('\u{fe0f}')
+}
+
+/// QTextEngine::itemize for one line of plain text: the pieces Qt shapes
+/// and measures one by one. QUnicodeTools::initScripts gives a Common or
+/// Inherited character (digits, spaces, punctuation, marks) the script of
+/// the one before it - leading ones that of the first after them - and a
+/// new script starts a new item, unless the character is a '.'; the emoji
+/// segmenter makes the emoji sequences (what layout() draws with the emoji
+/// font) items of their own. Not modelled, as no SSID has them: tabs and
+/// objects (items of their own), a mark of another script than its base.
+fn items(text: &str) -> Vec<&str> {
+    let chars: Vec<(usize, char)> = text.char_indices().take_while(|c| c.1 != '\n').collect();
+    // Each character's own script; None for Common, Inherited and Unknown.
+    let mut buf = rustybuzz::UnicodeBuffer::new();
+    let strong: Vec<Option<rustybuzz::Script>> = chars
+        .iter()
+        .map(|&(_, c)| {
+            buf.clear();
+            buf.add(c, 0);
+            buf.guess_segment_properties();
+            Some(buf.script()).filter(|s| *s != rustybuzz::script::UNKNOWN)
+        })
+        .collect();
+    let mut script = vec![None; chars.len()];
+    let (mut start, mut cur) = (0, None);
+    for (k, s) in strong.iter().enumerate() {
+        match (*s, cur) {
+            (Some(s), Some(c)) if s != c => {
+                script[start..k].fill(cur);
+                (start, cur) = (k, Some(s));
+            }
+            (Some(s), None) => cur = Some(s),
+            _ => {}
+        }
+    }
+    script[start..].fill(cur);
+    let mut emoji = vec![false; chars.len()];
+    for k in 0..chars.len() {
+        emoji[k] = if k > 0 && is_emoji_joiner(chars[k].1) { emoji[k - 1] } else { starts_emoji(chars[k].1, chars.get(k + 1).map(|c| c.1)) };
+    }
+    let line_end = chars.last().map_or(0, |&(i, c)| i + c.len_utf8());
+    let mut out = Vec::new();
+    let mut start = 0;
+    for k in 1..=chars.len() {
+        if k < chars.len() && (chars[k].1 == '.' || (emoji[k] == emoji[start] && (emoji[k] || script[k] == script[start]))) {
+            continue;
+        }
+        out.push(&text[chars[start].0..chars.get(k).map_or(line_end, |c| c.0)]);
+        start = k;
+    }
+    out
 }
 
 /// FT_Outline_Decompose into line segments; curves flattened finely enough
@@ -522,6 +591,7 @@ impl Fonts {
             lines_old: HashMap::new(),
             wraps: HashMap::new(),
             wraps_old: HashMap::new(),
+            bounds: HashMap::new(),
         }
     }
 
@@ -611,10 +681,8 @@ impl Fonts {
         let mut runs: Vec<(u16, String)> = Vec::new();
         let chars: Vec<char> = text.chars().take_while(|c| *c != '\n').collect();
         for (i, &ch) in chars.iter().enumerate() {
-            let joiner = matches!(ch, '\u{200d}' | '\u{fe0e}' | '\u{fe0f}' | '\u{1f3fb}'..='\u{1f3ff}' | '\u{e0020}'..='\u{e007f}');
-            let next = chars.get(i + 1).copied();
-            // Qt's emoji segmentation: emoji presentation (or VS16) goes to the emoji font.
-            let emoji = (is_emoji_presentation(ch) && next != Some('\u{fe0e}')) || next == Some('\u{fe0f}');
+            let joiner = is_emoji_joiner(ch);
+            let emoji = starts_emoji(ch, chars.get(i + 1).copied());
             let fi = match runs.last() {
                 Some((f, _)) if joiner => *f,
                 _ if emoji => self.emoji_face().unwrap_or_else(|| self.face_with(key, ch)),
@@ -650,8 +718,8 @@ impl Fonts {
                 let xoff = pos.x_offset as f64 * scale;
                 let bold = key.bold && !face.fixed_pitch;
                 let is_color = face.color;
-                line.glyphs.push(PlacedGlyph { face: fi, gid, x: (x26 as f64 / 64.0 + xoff) as f32, bold, color: is_color });
                 let adv26 = if is_color { self.color_advance26(fi, gid, size) } else { adv26 };
+                line.glyphs.push(PlacedGlyph { face: fi, gid, x: (x26 as f64 / 64.0 + xoff) as f32, adv: adv26 as f32 / 64.0, bold, color: is_color });
                 x26 += adv26 + spacing26;
             }
         }
@@ -957,6 +1025,95 @@ impl Fonts {
                 return 0.0;
             }
             (*(*fc).glyph).metrics.width as f32 / 64.0
+        }
+    }
+
+    /// QFontMetricsF::boundingRect(text).width() - TextMetrics.width - for a
+    /// line of text: its glyphs' ink, put together as Qt 6.12 does. In an
+    /// item (see items()), each font's run of glyphs is QFontEngineFT::
+    /// boundingBox: from the leftmost box's left edge to the right edge the
+    /// furthest goes, each box placed at the next whole pixel (a space's
+    /// empty box counts, a mark's does not); QFontEngineMulti takes the last
+    /// run's width after the advances of the runs before it; QTextEngine::
+    /// boundingBox the widest item, each from where it starts. A colour run
+    /// is measured in its strike's pixels and scaled at the end, its advances
+    /// a second time (scaledBitmapMetrics), as in Qt. This arithmetic, done
+    /// in C with FreeType, gave Qt 6.12's TextMetrics.width on 35 strings
+    /// (Latin, Cyrillic, mixed, marks, spaces, emoji) and on synthetic bold.
+    pub fn bounding_width(&mut self, text: &str, key: FontKey, size: f32) -> f32 {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        text.hash(&mut h);
+        let k = (h.finish(), key, size.to_bits());
+        if let Some((t, w)) = self.bounds.get(&k) {
+            if t == text {
+                return *w;
+            }
+        }
+        // QFixed::fromReal: a 64th.
+        let fixed = |v: f32| (v * 64.0).round() / 64.0;
+        let (mut width, mut xoff) = (0f32, 0f32);
+        for item in items(text) {
+            let line = self.layout(item, key, size, 0.0);
+            let (mut item_w, mut item_xoff, mut pen, mut i) = (0f32, 0f32, 0f32, 0);
+            while let Some(&first) = line.glyphs.get(i) {
+                let start = pen;
+                let (mut x0, mut x1) = (100_000f32, 0f32);
+                while let Some(&g) = line.glyphs.get(i).filter(|g| g.face == first.face) {
+                    if g.adv.abs() > 1.0 / 64.0 {
+                        let (left, w) = self.glyph_box(g, size);
+                        let x = g.x - start + left;
+                        x0 = x0.min(x);
+                        x1 = x1.max(x.ceil() + w);
+                    }
+                    pen += g.adv;
+                    i += 1;
+                }
+                let f = if first.color { self.strike_scale(first.face, size) } else { 1.0 };
+                item_w = item_xoff + fixed((x1 - x0) * f);
+                item_xoff += fixed((pen - start) * f);
+            }
+            width = width.max(item_w + xoff);
+            xoff += item_xoff;
+        }
+        if self.bounds.len() >= 64 {
+            self.bounds.clear();
+        }
+        self.bounds.insert(k, (text.to_string(), width));
+        width
+    }
+
+    /// A glyph's box as QFontEngineFT::loadGlyph measures it (fetchMetricsOnly):
+    /// its left edge and width in whole pixels. An outline glyph hinted light,
+    /// as the bar's fontconfig asks, without the embedded bitmaps, widened by
+    /// FT_GlyphSlot_Embolden for synthetic bold; a colour glyph in its strike.
+    fn glyph_box(&mut self, g: PlacedGlyph, size: f32) -> (f32, f32) {
+        let Some(fc) = self.ft_face(g.face) else { return (0.0, 0.0) };
+        unsafe {
+            let (bx, mut w) = if g.color {
+                if (*fc).num_fixed_sizes > 0 {
+                    ft::FT_Select_Size(fc, 0);
+                }
+                if ft::FT_Load_Glyph(fc, g.gid as u32, ft::FT_LOAD_COLOR as i32) != 0 {
+                    return (0.0, 0.0);
+                }
+                let m = &(*(*fc).glyph).metrics;
+                (m.horiBearingX, m.width)
+            } else {
+                let s = (size * 64.0).round() as ft::FT_F26Dot6;
+                ft::FT_Set_Char_Size(fc, s, s, 72, 72);
+                let flags = ft::FT_LOAD_DEFAULT | ft::FT_LOAD_TARGET_LIGHT;
+                if ft::FT_Load_Glyph(fc, g.gid as u32, flags | ft::FT_LOAD_NO_BITMAP) != 0 && ft::FT_Load_Glyph(fc, g.gid as u32, flags) != 0 {
+                    return (0.0, 0.0);
+                }
+                let m = &(*(*fc).glyph).metrics;
+                (m.horiBearingX, m.width)
+            };
+            if g.bold && !g.color {
+                w += ft::FT_MulFix((*fc).units_per_EM as ft::FT_Long, (*(*fc).size).metrics.y_scale) / 24;
+            }
+            let (left, right) = (bx & !63, (bx + w + 63) & !63);
+            ((left >> 6) as f32, ((right - left) >> 6) as f32)
         }
     }
 
