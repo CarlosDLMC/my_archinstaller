@@ -11,6 +11,7 @@ use dbus::message::{Message, MessageType};
 use serde_json::Value;
 
 use crate::app::App;
+use crate::cards::CardKind;
 
 #[derive(Clone, Debug, Default)]
 pub struct Tag {
@@ -164,7 +165,6 @@ pub struct Wifi {
     pub connected: bool,
     pub ssid: String,
     pub signal: i64,
-    pub connecting: bool,
     pub pulse: crate::anim::Pulse,
     /// Asked for again while a status read ran: one more when it ends.
     again: bool,
@@ -309,8 +309,10 @@ fn on_monitors(app: &mut App, line: &str) {
     if app.svc.mango.focused().map(|m| &m.name) != screen.as_ref() {
         crate::osd::follow_focus(app);
     }
+    // Tags and the title: the strips' (WorkspaceBar, WindowInfo); no card
+    // shows them.
     if !same {
-        app.mark_all_dirty();
+        app.mark_strips_dirty();
     }
 }
 
@@ -320,7 +322,8 @@ fn on_layout(app: &mut App, line: &str) {
         if l != app.svc.mango.keyboard_layout {
             app.svc.mango.keyboard_layout = l.into();
             crate::layout::layout_changed(app);
-            app.mark_all_dirty();
+            // KeyboardLayoutWidget's label; the popup is layout.rs's.
+            app.mark_strips_dirty();
         }
     }
 }
@@ -456,8 +459,9 @@ fn refresh_stats(app: &mut App) {
     read_cpu(s);
     read_mem(s);
     read_temp(s);
+    // CpuWidget / MemoryWidget: no card shows the readings.
     if before != (s.cpu_usage, s.cpu_temp, s.mem_usage.clone()) {
-        app.mark_all_dirty();
+        app.mark_strips_dirty();
     }
 }
 
@@ -500,7 +504,9 @@ fn stats_shown_changed(app: &mut App) {
         app.svc.stats.last_total = 0;
         app.svc.stats.last_idle = 0;
     }
-    app.mark_all_dirty();
+    // The strip's widgets come or go; ПУЛЬТ shows the switch.
+    app.mark_strips_dirty();
+    app.mark_card_dirty(&[CardKind::Pult]);
 }
 
 // ---- clock ----
@@ -546,7 +552,8 @@ fn update_clock(app: &mut App, force: bool) {
 fn set_clock(app: &mut App, t: String) {
     if t != app.svc.clock {
         app.svc.clock = t;
-        app.mark_all_dirty();
+        // The clock pill; the calendar shows the day it opened on.
+        app.mark_strips_dirty();
     }
 }
 
@@ -557,8 +564,9 @@ fn refresh_timezone(app: &mut App) {
     let tz = read_cache("timezone");
     if tz != app.svc.timezone {
         app.svc.timezone = tz;
+        // The clock pill through update_clock; the VPN card's ВРЕМЯ key.
         update_clock(app, true);
-        app.mark_all_dirty();
+        app.mark_card_dirty(&[CardKind::Vpn]);
     }
 }
 
@@ -569,7 +577,8 @@ fn refresh_weather_city(app: &mut App) {
     if city != app.svc.weather.city {
         app.svc.weather.city = city;
         request_weather(app);
-        app.mark_all_dirty();
+        // The VPN card's ПОГОДА key; the strip waits for the reading.
+        app.mark_card_dirty(&[CardKind::Vpn]);
     }
 }
 
@@ -620,7 +629,7 @@ fn home_cache_changed(app: &mut App, name: &str) {
     let on = std::fs::read_to_string(format!("{}/.cache/.nightlight_state", home())).map_or(false, |t| t.trim() == "on");
     if on != app.svc.pult.night_on {
         app.svc.pult.night_on = on;
-        app.mark_all_dirty();
+        app.mark_card_dirty(&[CardKind::Pult]);
     }
 }
 
@@ -724,8 +733,14 @@ pub fn start(app: &mut App) {
         app.watch_fd(fd, |app| {
             let changed = app.svc.pw.as_ref().map_or(false, |p| p.dispatch());
             if changed {
-                app.svc.audio = app.svc.pw.as_ref().unwrap().sink();
-                app.mark_all_dirty();
+                // dispatch(): the strip's sink moved, or anything did while
+                // the audio card is open. The strips show the sink only.
+                let sink = app.svc.pw.as_ref().unwrap().sink();
+                if sink != app.svc.audio {
+                    app.svc.audio = sink;
+                    app.mark_strips_dirty();
+                }
+                app.mark_card_dirty(&[CardKind::Audio]);
             }
         });
     }
@@ -822,7 +837,8 @@ fn dnd_apply(app: &mut App, paused: Option<bool>) {
     if (en, av) != (app.svc.dnd_enabled, app.svc.dnd_available) {
         app.svc.dnd_enabled = en;
         app.svc.dnd_available = av;
-        app.mark_all_dirty();
+        // The bell; no card shows it.
+        app.mark_strips_dirty();
     }
 }
 
@@ -890,7 +906,7 @@ pub fn dnd_toggle(app: &mut App) {
         // confirms or clears it.
         if !d.ok && app.svc.dnd_available {
             app.svc.dnd_available = false;
-            app.mark_all_dirty();
+            app.mark_strips_dirty();
         }
         dnd_poll(app);
     });
@@ -901,13 +917,19 @@ pub fn dnd_toggle(app: &mut App) {
 fn apply_weather(app: &mut App, out: &str) -> bool {
     let Ok(v) = serde_json::from_str::<Value>(out.trim()) else { return false };
     let w = &mut app.svc.weather;
+    let text = w.text.clone();
     w.text = v.get("text").and_then(Value::as_str).unwrap_or("").into();
     w.alt = v.get("alt").and_then(Value::as_str).unwrap_or("").into();
     w.alt_display = v.get("alt_display").and_then(Value::as_str).filter(|s| !s.is_empty()).unwrap_or(&w.alt).to_string();
     if let Some(tip) = v.get("tooltip").and_then(Value::as_str) {
         parse_tooltip(w, tip);
     }
-    app.mark_all_dirty();
+    // The pill shows the text alone (a new one moves the weather card with
+    // it, cards::follow_strip); the card shows all of the reading.
+    if app.svc.weather.text != text {
+        app.mark_strips_dirty();
+    }
+    app.mark_card_dirty(&[CardKind::Weather]);
     v.get("stale").and_then(Value::as_bool) != Some(true)
 }
 
@@ -993,8 +1015,10 @@ fn wifi_status(app: &mut App) {
                 w.signal = parts[2].parse().unwrap_or(0);
             }
         }
+        // The strip's icon; the networks card's link and width.
         if before != (w.connected, w.ssid.clone()) {
-            app.mark_all_dirty();
+            app.mark_strips_dirty();
+            app.mark_card_dirty(&[CardKind::Wifi]);
         }
         if std::mem::take(&mut app.svc.wifi.again) {
             wifi_status(app);
@@ -1065,6 +1089,8 @@ fn vpn_poll(app: &mut App) {
     }
     if active != app.svc.vpn {
         app.svc.vpn = active;
-        app.mark_all_dirty();
+        // The strip's shield; the VPN card's tunnel, keys and list.
+        app.mark_strips_dirty();
+        app.mark_card_dirty(&[CardKind::Vpn]);
     }
 }

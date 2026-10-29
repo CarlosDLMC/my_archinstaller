@@ -89,10 +89,6 @@ impl Color {
         (if h == 36000.0 { 0.0 } else { h / 36000.0 }, q16(s), l)
     }
 
-    pub fn lightness(&self) -> f32 {
-        self.hsl().2
-    }
-
     /// Qt.hsla(h, s, l, a). A hue of -1 (achromatic) gives a grey.
     pub fn hsla(h: f32, s: f32, l: f32, a: f32) -> Color {
         let s = q16(s.clamp(0.0, 1.0));

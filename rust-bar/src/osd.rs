@@ -198,7 +198,8 @@ pub fn focused_output(app: &App) -> Option<(WlOutput, f32, f32)> {
 /// The layout popups all run the same fade, so the focused screen's simply
 /// shows it as it stands (LayoutOsd.qml:60-63). A dialog (`shown: ready &&
 /// <open> && onFocusedMonitor`, PowerOsd.qml:21-29, ShotOsd.qml:15-24,
-/// RecordOsd.qml:17-26) fades in on the new screen and takes the keyboard
+/// RecordOsd.qml:17-26, ClipboardOsd.qml:33-45, PolkitOsd.qml:20-29,
+/// WallpaperOsd.qml:26-35) fades in on the new screen and takes the keyboard
 /// while the old screen's lets go; here the old surface goes at once.
 pub fn follow_focus(app: &mut App) {
     let Some((out, _, _)) = focused_output(app) else { return };
@@ -226,6 +227,19 @@ pub fn follow_focus(app: &mut App) {
         match kind {
             OsdKind::Power => crate::power::show_osd(app),
             _ => crate::capture::show(app, kind),
+        }
+    }
+    // The picker, the polkit dialog and the carousel build their content in
+    // the new screen's window (a Loader, or the field emptied as it moves):
+    // each module shows its new window as QML's comes up.
+    for kind in [OsdKind::Clipboard, OsdKind::Polkit, OsdKind::Wallpaper] {
+        if app.osd(kind).map_or(false, |o| o.shown && o.output != out) {
+            drop_now(app, kind);
+            match kind {
+                OsdKind::Clipboard => crate::clip::refocus(app),
+                OsdKind::Polkit => crate::polkit::refocus(app),
+                _ => crate::wallpaper::refocus(app),
+            }
         }
     }
 }
@@ -509,10 +523,7 @@ pub fn key(app: &mut App, kind: OsdKind, sym: smithay_client_toolkit::seat::keyb
         OsdKind::Layout => {}
         OsdKind::Power => crate::power::key(app, sym, scan, shift),
         OsdKind::Shot | OsdKind::Record => crate::capture::key(app, kind, sym, scan),
-        // QInputControl::isAcceptableInput, as clip.rs's search applies it:
-        // what Ctrl or Ctrl+Shift types is no text for the field (Ctrl+1 puts
-        // no "1" in it); AltGr's (Ctrl+Alt) is.
-        OsdKind::Polkit => crate::polkit::key(app, sym, utf8.filter(|_| !(mods.ctrl && !mods.alt))),
+        OsdKind::Polkit => crate::polkit::key(app, sym, mods, utf8),
         OsdKind::Clipboard => crate::clip::key(app, sym, mods, utf8),
         OsdKind::Wallpaper => crate::wallpaper::key(app, sym, mods, utf8),
         OsdKind::Overview(_) => crate::overview::key(app, sym),

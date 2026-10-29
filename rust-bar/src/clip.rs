@@ -55,6 +55,8 @@ pub struct Clip {
     /// towards it: (from, to, start).
     pub scroll: f32,
     glide: Option<(f32, f32, Instant)>,
+    /// A finger's scroll that began over the list (cards::PixelDrag).
+    drag: Option<crate::cards::PixelDrag>,
     /// Decoded thumbnail files (id -> path), the queue, the one decoding.
     thumbs: HashMap<String, String>,
     pending: VecDeque<String>,
@@ -228,6 +230,26 @@ fn show(app: &mut App) {
             o.fade.snap(1.0);
         }
     }
+}
+
+/// The focused monitor changed while the picker is up (osd::follow_focus,
+/// after the old screen's window went): ClipboardOsd is a window per screen,
+/// shown on the focused one (ClipboardOsd.qml:33-45), and the new screen's
+/// builds its Loader content - the card pops in, a new ListView starts at
+/// its top and shows the selected entry (onCurrentIndexChanged:
+/// positionViewAtIndex(currentIndex, ListView.Contain)), and the new field
+/// takes the focus with its cursor blinking anew. ClipboardState's filter
+/// and selection stay. (QML's new field is empty while that filter still
+/// applies to the list; the port keeps showing the filter in effect.)
+pub(crate) fn refocus(app: &mut App) {
+    show(app);
+    let c = &mut app.svc.clip;
+    c.select_all = false;
+    c.scroll = 0.0;
+    c.glide = None;
+    c.blink_since = Some(Instant::now());
+    blink(app);
+    position_view(app);
 }
 
 /// The model was replaced: ListView makes every delegate anew.
@@ -572,6 +594,36 @@ pub fn wheel(app: &mut App, delta: f32) {
     changed(app);
 }
 
+/// A finger's scroll (app.rs makes the phases as QtWayland does): the
+/// ListView takes it by QQuickFlickable's pixel path - contentY follows the
+/// deltas since ScrollBegin 1:1, StopAtBounds, and ScrollEnd puts it on a
+/// whole pixel - while the pointer is over it, as the wheel.
+pub fn finger_scroll(app: &mut App, s: crate::cards::Scroll) {
+    use crate::cards::{PixelDrag, Scroll};
+    let over = app.osd(OsdKind::Clipboard).and_then(|o| o.st.pointer).map_or(false, |(x, y)| {
+        let (lx, ly, lw, lh) = list_rect();
+        x >= lx && x < lx + lw && y >= ly && y < ly + lh
+    });
+    let now = Instant::now();
+    let c = &mut app.svc.clip;
+    let (cur, max, gliding) = (c.scroll_at(now), max_scroll(c.filtered().len()), c.glide_at(now).is_some());
+    let to = match s {
+        Scroll::Begin => {
+            c.drag = over.then(|| PixelDrag::begin(cur));
+            None
+        }
+        Scroll::End => c.drag.take().and_then(|d| d.end(cur, max)),
+        Scroll::Update { dx, dy, .. } if over => c.drag.as_mut().and_then(|d| d.update(dx, dy, cur, max, gliding).0),
+        Scroll::Update { .. } => None,
+    };
+    if let Some(to) = to {
+        // The move stops a glide (clearTimeline).
+        c.glide = None;
+        c.scroll = to;
+        changed(app);
+    }
+}
+
 pub fn click(app: &mut App, action: Action) {
     if let Action::Card(code) = action {
         if code >= ROW_BASE {
@@ -776,6 +828,10 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
         ui.scene.fill(sx + cursor_x - shift, sy, 1.0, ih, t.col_white);
     }
     ui.scene.restore();
+    // QQuickTextInput's I-beam over the search TextInput: from the caption
+    // row's right + 20 to the count's left - 10, a line high, centred
+    // (ClipboardOsd.qml:199-206). A click there is the field's, not a row's.
+    ui.hits.push(Hit { x: sx, y: sy, w: sw, h: ih, action: Action::Hover(crate::bar::TEXT_FIELD) });
     y += head_h + px(10.0);
 
     // The list on its plate, the preview beside it.

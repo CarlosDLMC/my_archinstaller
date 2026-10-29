@@ -58,6 +58,25 @@ if systemd-detect-virt --vm --quiet \
   install_package vulkan-swrast "$LOG"
 fi
 
+# A driver file is not a device: Sandy Bridge and older Intel with
+# vulkan-intel, a GCN 1/2 card on radeon.ko, an NVIDIA card or module the
+# driver does not take. Only Vulkan can tell: `rust-bar gpu-check` asks it for
+# the adapter the bar would draw with (exit 1 when there is none). Then Mesa's
+# software Vulkan too, which the bar takes when there is no other adapter.
+# This only adds lavapipe and never fails the final check. Not right after
+# nvidia.sh in this run: its module loads with the reboot, and the NVIDIA
+# device is not there before it.
+gpu_check() {
+  command -v rust-bar >/dev/null 2>&1 || return 0
+  if [[ " ${INSTALL_SELECTED_OPTIONS:-} " == *" nvidia "* ]] && [ ! -d /sys/module/nvidia ]; then
+    return 0
+  fi
+  if ! timeout 30 rust-bar gpu-check >>"$LOG" 2>&1; then
+    echo "${NOTE} Vulkan has no GPU the bar can draw with - installing Mesa's software Vulkan for it." | tee -a "$LOG"
+    install_package vulkan-swrast "$LOG"
+  fi
+}
+
 # The version: the crate's own, then a hash of every file of the crate in a
 # fixed order, so the build is redone when any of them changed. pkgrel stays 1.
 CRATE_VER=$(sed -n 's/^version *= *"\(.*\)"/\1/p' "$CRATE/Cargo.toml" | head -n1)
@@ -66,6 +85,7 @@ WANT="${CRATE_VER:-0}.${HASH}-1"
 if [ "$HAVE" = "$WANT" ]; then
   echo "${INFO} ${MAGENTA}rust-bar${RESET} $HAVE is already built from this crate. Skipping..." | tee -a "$LOG"
   clear_package_failure "$FAIL"
+  gpu_check
   exit 0
 fi
 
@@ -115,6 +135,7 @@ rm -rf "$TMPD"
 if [ "$(pacman -Q "$PKG" 2>/dev/null | awk '{print $2}')" = "$WANT" ]; then
   echo "${OK} ${YELLOW}rust-bar${RESET} $WANT is installed." | tee -a "$LOG"
   clear_package_failure "$FAIL"
+  gpu_check
 else
   echo "${ERROR} rust-bar did not install - $LEFT. See $LOG." | tee -a "$LOG"
   record_package_failure "$FAIL"

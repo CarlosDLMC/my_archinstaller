@@ -46,6 +46,12 @@ pub fn connecting(app: &App) -> bool {
     app.is_running("wifi-connect")
 }
 
+/// What the networks card shows changed: it redraws, not the strips (the
+/// icon follows the status read and the connect's blink, app.rs).
+fn redraw(app: &mut App) {
+    app.mark_card_dirty(&[CardKind::Wifi]);
+}
+
 fn scan(app: &mut App) {
     app.spawn("wifi-scan", &["sh", "-c", "nmcli -t -f SSID,SIGNAL,SECURITY device wifi list --rescan no | grep -v '^:' | sort -t: -k2 -nr | head -30"], |app, d| {
         if d.stdout.trim().is_empty() {
@@ -61,7 +67,7 @@ fn scan(app: &mut App) {
             }
         }
         app.svc.wifi_card.networks = nets;
-        app.mark_all_dirty();
+        redraw(app);
     });
 }
 
@@ -100,7 +106,7 @@ pub fn opened(app: &mut App) {
     app.svc.wifi_card.scanning = true;
     app.debounce("wifi-settle", Duration::from_millis(3400), |app| {
         app.svc.wifi_card.scanning = false;
-        app.mark_all_dirty();
+        redraw(app);
     });
     cancel_password(app);
 }
@@ -112,7 +118,7 @@ fn cancel_password(app: &mut App) {
     w.selected_security.clear();
     clear_password(w);
     w.failed = false;
-    app.mark_all_dirty();
+    redraw(app);
 }
 
 fn clear_password(w: &mut WifiCard) {
@@ -130,7 +136,7 @@ fn run_connect(app: &mut App, argv: &[&str]) {
     app.svc.wifi_card.connect_out.clear();
     app.svc.wifi_card.strip = app.card.as_ref().map(|c| c.strip);
     app.spawn_stream("wifi-connect", argv, connect_line, Some(connect_line), Some(connect_done));
-    app.mark_all_dirty();
+    redraw(app);
 }
 
 /// The SplitParsers on stdout and stderr: `output += data`. nmcli says why a
@@ -160,7 +166,7 @@ fn connect_done(app: &mut App) {
         }
         cancel_password(app);
     }
-    app.mark_all_dirty();
+    redraw(app);
 }
 
 /// connectWatchdog (WifiWidget.qml:314-327): nmcli still connecting after 8 s
@@ -260,7 +266,7 @@ fn field_text(fonts: &mut crate::text::Fonts, w: &WifiCard) -> (crate::text::Lin
 /// QQuickTextInputPrivate::updateHorizontalScroll (autoScroll): the text
 /// moves only as far as it must to keep the cursor in a field `width` wide;
 /// typing past the end leaves the cursor just outside the clip, as in Qt.
-fn scroll(prev: f32, cx: f32, text_w: f32, width: f32) -> f32 {
+pub(crate) fn scroll(prev: f32, cx: f32, text_w: f32, width: f32) -> f32 {
     let used = text_w.max(cx);
     if used <= width {
         0.0
@@ -584,7 +590,7 @@ pub fn activate(app: &mut App, code: u32) {
 /// in at the cursor; Backspace, Delete, Left, Right, Home and End edit and
 /// move it; Ctrl+V and Shift+Insert paste. Returns true when the key was the
 /// field's - checked against Qt 6.12 offscreen.
-pub fn input_key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Keysym, utf8: Option<&str>) -> bool {
+pub fn input_key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Keysym, mods: crate::app::Mods, utf8: Option<&str>) -> bool {
     use smithay_client_toolkit::seat::keyboard::Keysym;
     let Some(card) = app.card.as_ref() else { return false };
     let focused = card.focus.and_then(|f| card.focus_codes.get(f).copied());
@@ -614,8 +620,10 @@ pub fn input_key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Key
         Keysym::Right | Keysym::KP_Right if at >= len => return false,
         _ => {}
     }
-    // Ctrl+V's text is U+0016 (Ctrl+Shift+V is no paste in Qt).
-    let paste_key = (utf8 == Some("\u{16}") && !shift) || (sym == Keysym::Insert && shift) || sym == Keysym::XF86_Paste;
+    // QKeySequence::Paste: Ctrl+V (not Ctrl+Shift+V), Shift+Insert, the
+    // Paste key. The key, not its text: Ctrl+М on the ru layout reaches here
+    // as Keysym::v (App::key's Latin fallback, eabd205) with "м" for text.
+    let paste_key = (matches!(sym, Keysym::v | Keysym::V) && mods.ctrl && !shift && !mods.alt) || (sym == Keysym::Insert && shift && !mods.ctrl) || sym == Keysym::XF86_Paste;
     let width = field_width(app);
     let prev = shown_scroll(app, width);
     let w = &mut app.svc.wifi_card;
@@ -636,8 +644,10 @@ pub fn input_key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Key
         Keysym::Home | Keysym::KP_Home => w.cursor = 0,
         Keysym::End | Keysym::KP_End => w.cursor = len,
         _ if paste_key => paste(app),
+        // QInputControl::isAcceptableInput: what Ctrl or Ctrl+Shift types is
+        // no text for the field (Ctrl+М's "м" on ru); AltGr's (Ctrl+Alt) is.
         _ => match utf8 {
-            Some(s) if !s.is_empty() && !s.chars().any(char::is_control) => insert(w, s),
+            Some(s) if !s.is_empty() && !s.chars().any(char::is_control) && !(mods.ctrl && !mods.alt) => insert(w, s),
             _ => return false,
         },
     }

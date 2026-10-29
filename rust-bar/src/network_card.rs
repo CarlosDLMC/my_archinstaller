@@ -202,6 +202,12 @@ fn is_open(app: &App) -> bool {
     app.card.as_ref().map(|c| c.kind) == Some(crate::cards::CardKind::Network)
 }
 
+/// What NetworkPanel shows changed: the details card redraws, not the
+/// strips (WifiWidget's icon reads the status read alone).
+fn redraw(app: &mut App) {
+    app.mark_card_dirty(&[crate::cards::CardKind::Network]);
+}
+
 // ---- the processes ----
 
 /// A new NetworkPanel: QML makes one with every opening, in the card's
@@ -267,7 +273,7 @@ fn apply_status(app: &mut App, out: &str) {
     }
     n.last_sample = Some(now);
     n.info = next;
-    app.mark_all_dirty();
+    redraw(app);
 }
 
 /// refresh(): the status, connectivity / radio / active profile.
@@ -290,7 +296,7 @@ fn refresh(app: &mut App) {
                 _ => {}
             }
         }
-        app.mark_all_dirty();
+        redraw(app);
     });
 }
 
@@ -303,9 +309,9 @@ fn run(app: &mut App, what: &str, cmd: &str) {
     app.spawn("net-action", &["sh", "-c", cmd], |app, _| {
         app.svc.net.busy.clear();
         refresh(app);
-        app.mark_all_dirty();
+        redraw(app);
     });
-    app.mark_all_dirty();
+    redraw(app);
 }
 
 fn set_dns(app: &mut App, servers: &str) {
@@ -343,7 +349,7 @@ fn speed_out(app: &mut App, data: &str) {
         "up" => n.speed_up = n.speed_up.max(v),
         _ => {}
     }
-    app.mark_all_dirty();
+    redraw(app);
 }
 
 fn speed_err(app: &mut App, data: &str) {
@@ -355,7 +361,7 @@ fn speed_err(app: &mut App, data: &str) {
     if !line.is_empty() {
         let l = line.strip_prefix("error:").map_or(line, |r| r.trim_start());
         n.speed_error = l.into();
-        app.mark_all_dirty();
+        redraw(app);
     }
 }
 
@@ -381,7 +387,7 @@ fn speed_exit(app: &mut App) {
         }
         _ => {}
     }
-    app.mark_all_dirty();
+    redraw(app);
 }
 
 fn start_speed_test(app: &mut App) {
@@ -400,7 +406,7 @@ fn start_speed_test(app: &mut App) {
         app.svc.net.speed_pending = false;
         launch_speed_phase(app, "down");
     }
-    app.mark_all_dirty();
+    redraw(app);
 }
 
 fn stop_speed_test(app: &mut App) {
@@ -413,7 +419,7 @@ fn stop_speed_test(app: &mut App) {
     let n = &mut app.svc.net;
     n.speed_phase = "";
     n.speed_now = 0.0;
-    app.mark_all_dirty();
+    redraw(app);
 }
 
 fn show_qr(app: &mut App) {
@@ -428,7 +434,7 @@ fn show_qr(app: &mut App) {
             if let Some(e) = line.strip_prefix("error\t") {
                 n.qr_error = e.into();
                 n.qr_rows.clear();
-                app.mark_all_dirty();
+                redraw(app);
                 return;
             }
             if line.starts_with("meta\t") {
@@ -442,9 +448,9 @@ fn show_qr(app: &mut App) {
             }
         }
         n.qr_rows = rows;
-        app.mark_all_dirty();
+        redraw(app);
     });
-    app.mark_all_dirty();
+    redraw(app);
 }
 
 pub fn activate(app: &mut App, code: u32) {
@@ -456,7 +462,7 @@ pub fn activate(app: &mut App, code: u32) {
         QR => {
             if app.svc.net.view == View::Qr {
                 app.svc.net.view = View::Info;
-                app.mark_all_dirty();
+                redraw(app);
             } else {
                 show_qr(app);
             }
@@ -468,7 +474,7 @@ pub fn activate(app: &mut App, code: u32) {
             } else {
                 app.svc.net.view = View::Speed;
             }
-            app.mark_all_dirty();
+            redraw(app);
         }
         PORTAL => app.exec_detached(&["xdg-open", "http://ping.archlinux.org/nm-check.txt"]),
         START => start_speed_test(app),

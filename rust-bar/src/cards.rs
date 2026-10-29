@@ -19,7 +19,7 @@ use smithay_client_toolkit::{
 };
 
 use crate::anim::{Animated, Easing};
-use crate::app::{App, Win, WinRef};
+use crate::app::{App, Win};
 use crate::bar::{ac, Action, Hit};
 use crate::color::Color;
 use crate::gpu::{Gpu, Scene, TextStyle};
@@ -208,7 +208,7 @@ impl OpenCard {
         let i = match self.flicks.iter().position(|f| f.id == id) {
             Some(i) => i,
             None => {
-                self.flicks.push(Flick { id, glide: Animated::new(0.0, 300, Easing::OutExpo), rest: 0.0, max: 0.0, content: 0.0, height: 0.0, sig, rect: None });
+                self.flicks.push(Flick { id, glide: Animated::new(0.0, 300, Easing::OutExpo), flicking: false, rest: 0.0, max: 0.0, content: 0.0, height: 0.0, sig, rect: None, drag: None, mouse: None });
                 self.flicks.len() - 1
             }
         };
@@ -260,8 +260,10 @@ const BODY: u32 = 0;
 struct Flick {
     /// BODY, or a ListView's first row code.
     id: u32,
-    /// The wheel's glide (300 ms OutExpo) towards its target.
+    /// The wheel's glide (300 ms OutExpo) towards its target, or a flick's
+    /// deceleration (`flicking`).
     glide: Animated<f32>,
+    flicking: bool,
     /// Where contentY comes to rest when no glide runs.
     rest: f32,
     /// contentHeight - height at the last draw.
@@ -273,7 +275,164 @@ struct Flick {
     sig: u64,
     /// The viewport in the card's coordinates, if the last draw showed it.
     rect: Option<[f32; 4]>,
+    /// A finger's scroll that began over it (QQuickFlickable's pixel path).
+    drag: Option<PixelDrag>,
+    /// A left-button drag that began over it.
+    mouse: Option<MouseDrag>,
 }
+
+/// QtWayland's phases of a finger's scroll on a touchpad, as QWheelEvents
+/// (QWaylandInputDevice::Pointer::flushScrollEvent).
+#[derive(Clone, Copy, PartialEq)]
+pub enum Scroll {
+    /// ScrollBegin, before the first frame.
+    Begin,
+    /// ScrollUpdate: the frame's pixelDelta (contentY up for dy > 0) and its
+    /// angleDelta.y, for what reads the angle.
+    Update { dx: f32, dy: f32, angle: f32 },
+    /// ScrollEnd, at axis_stop.
+    End,
+}
+
+/// QQuickFlickablePrivate::drag() on the y axis, shared by a drag of the
+/// mouse and a finger's scroll: contentY follows `a`, the motion since the
+/// press in contentY's terms, 1:1 from where it was then, less the motion
+/// at which the drag took over (dragStartOffset), StopAtBounds. It moves
+/// only once it holds the grab (stealGrab): from the update after the one
+/// that took it.
+#[derive(Clone, Copy, Default)]
+struct Drag {
+    /// vData.pressPos (contentY at the press), dragStartOffset,
+    /// previousDragDelta, vMoved (and dragging), stealGrab, the way it went.
+    press: f32,
+    offset: f32,
+    prev: f32,
+    moved: bool,
+    steal: bool,
+    down: bool,
+}
+
+impl Drag {
+    fn begin(y: f32) -> Drag {
+        Drag { press: y, ..Default::default() }
+    }
+
+    /// One move to `a` at contentY `cur` between 0 and `max`: `over` is
+    /// overThreshold, `late` the 200 ms after the press past which a slow
+    /// drag counts too, `wheel` a finger's scroll (it holds the grab from
+    /// its first update: stealY = scrollingPhase). Where contentY goes, if
+    /// it moves, and whether it was refused (pushing on at an end).
+    fn update(&mut self, a: f32, over: bool, late: bool, wheel: bool, cur: f32, max: f32) -> (Option<f32>, bool) {
+        let mut reject = false;
+        let mut to = None;
+        if over || late {
+            if !self.moved {
+                self.offset = a;
+            }
+            let mut y = self.press + a - self.offset;
+            if y >= max {
+                y = max;
+                reject = self.press == max && cur == max && a > 0.0;
+            }
+            if y <= 0.0 {
+                y = 0.0;
+                reject |= self.press == 0.0 && cur == 0.0 && a < 0.0;
+            }
+            if !reject && self.steal && a != self.prev {
+                self.moved = true;
+                if y != cur {
+                    self.down = y > cur;
+                    to = Some(y);
+                }
+            }
+        }
+        self.prev = a;
+        self.steal |= wheel || (over && !reject);
+        (to, reject)
+    }
+
+    /// returnToBounds / fixupY: a contentY between two pixels goes onto one
+    /// (against the motion past a quarter).
+    fn fixup(&self, y: f32, max: f32) -> Option<f32> {
+        (y > 0.0 && y < max && y.fract() != 0.0).then(|| pixel(y, self.down))
+    }
+}
+
+/// QQuickFlickable::wheelEvent's pixel path, for a finger's scroll: a
+/// Flickable under the pointer at ScrollBegin follows the deltas summed
+/// since then 1:1 (Drag) - once the motion so far is mostly vertical, or it
+/// already moves - and ScrollEnd puts it back on a whole pixel
+/// (returnToBounds). Wayland sends no ScrollMomentum: there is no flick
+/// after it. Positions are contentY.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct PixelDrag {
+    core: Drag,
+    /// accumulatedWheelPixelDelta.
+    acc: (f32, f32),
+}
+
+impl PixelDrag {
+    /// maybeBeginDrag at ScrollBegin: contentY now; a glide still running
+    /// goes on until the drag moves the content.
+    pub(crate) fn begin(y: f32) -> PixelDrag {
+        PixelDrag { core: Drag::begin(y), acc: (0.0, 0.0) }
+    }
+
+    /// One ScrollUpdate on a Flickable at contentY `cur` with ends 0 and
+    /// `max` (`gliding`: the wheel's glide runs, it is moving): where contentY
+    /// goes, and whether the Flickable takes the event - between its ends
+    /// only, else it goes on to what is under it. The first update only
+    /// arms stealGrab and the second sets dragStartOffset to the sum so far,
+    /// so the content does not jump: it moves from the third on.
+    pub(crate) fn update(&mut self, dx: f32, dy: f32, cur: f32, max: f32, gliding: bool) -> (Option<f32>, bool) {
+        self.acc = (self.acc.0 + dx, self.acc.1 + dy);
+        let a = self.acc.1;
+        // Not yet mostly vertical: it waits for more, and the event goes on.
+        if !(self.core.moved || gliding || a.abs() > (self.acc.0 * 2.0).abs()) {
+            return (None, false);
+        }
+        let (to, _) = self.core.update(a, true, false, true, cur, max);
+        let y = to.unwrap_or(cur);
+        (to, y > 0.0 && y < max.floor())
+    }
+
+    /// ScrollEnd's returnToBounds.
+    pub(crate) fn end(&self, y: f32, max: f32) -> Option<f32> {
+        self.core.fixup(y, max)
+    }
+}
+
+/// A left-button drag over a Flickable: QQuickFlickablePrivate's
+/// handlePressEvent / handleMoveEvent / handleReleaseEvent, on its own
+/// area or filtering the press of a control in it (filterPointerEvent).
+#[derive(Clone, Copy)]
+struct MouseDrag {
+    core: Drag,
+    /// The press: the pointer's y on the surface and its time (ms).
+    press_y: f32,
+    press_time: u32,
+    /// The pointer's last y and time, its velocity as QEventPoint estimates
+    /// it for a device without the Velocity capability, and the Flickable's
+    /// last three samples of it (velocityBuffer, QML_FLICK_SAMPLEBUFFER).
+    last: (f32, u32),
+    velocity: f32,
+    samples: [f32; 3],
+    count: usize,
+    /// isMoving() at the press: a flick it stopped still counts.
+    moving: bool,
+    /// The Flickable has the pointer: pressed on its own area, or taken
+    /// from the control pressed in it.
+    grabbed: bool,
+}
+
+/// QStyleHints::startDragDistance, FlickStartDistance, maximumFlickVelocity
+/// and flickDeceleration as Qt 6.12 has them here (qt6ct: 10, 15, 2500,
+/// 1500 - asked of Qt), and _q_MinimumFlickVelocity.
+const DRAG_DISTANCE: f32 = 10.0;
+const FLICK_DISTANCE: f32 = 15.0;
+const MAX_FLICK_VELOCITY: f32 = 2500.0;
+const FLICK_DECELERATION: f32 = 1500.0;
+const MIN_FLICK_VELOCITY: f32 = 75.0;
 
 impl Flick {
     /// contentY now.
@@ -285,6 +444,56 @@ impl Flick {
     fn jump(&mut self, y: f32) {
         self.glide.snap(y);
         self.rest = y;
+        self.flicking = false;
+    }
+
+    /// The wheel's glide from contentY `from` to `to`: 3/4 of fixupDuration
+    /// (300 ms), OutExpo.
+    fn glide_to(&mut self, from: f32, to: f32, now: Instant) {
+        self.glide = Animated::new(from, 300, Easing::OutExpo);
+        self.glide.set(to, now);
+        self.flicking = false;
+    }
+
+    /// yflick() with AutoFlickDirection: content and view differ by a pixel.
+    fn yflick(&self) -> bool {
+        (self.content - self.height).abs().floor() != 0.0
+    }
+
+    /// QQuickFlickablePrivate::flickY on a release at `v` (contentY/s, cut
+    /// at maximumFlickVelocity): contentY decelerates at flickDeceleration,
+    /// adjusted to stop on a whole pixel, and harder still to stop at the
+    /// end it would pass (QQuickTimeLine::accel with maxDistance) - a
+    /// constant deceleration, so OutQuad over its time. At that end
+    /// already: fixup only.
+    fn flick(&mut self, v: f32, down: bool, now: Instant) {
+        let cur = self.y(now);
+        let room = if v > 0.0 { self.max - cur } else { cur };
+        if room <= 0.0 {
+            if let Some(to) = (Drag { down, ..Default::default() }).fixup(cur, self.max) {
+                self.jump(to);
+            }
+            return;
+        }
+        let v = v.clamp(-MAX_FLICK_VELOCITY, MAX_FLICK_VELOCITY);
+        let target = (cur + v.signum() * v * v / (2.0 * FLICK_DECELERATION)).round();
+        let dist = (target - cur).abs();
+        if dist == 0.0 {
+            return;
+        }
+        let (mut accel, mut to) = (v * v / (2.0 * dist), target);
+        if v * v / (2.0 * room) > accel {
+            accel = v * v / (2.0 * room);
+            to = cur + v.signum() * room;
+        }
+        let ms = (1000.0 * v.abs() / accel) as u64;
+        if ms == 0 {
+            return;
+        }
+        self.glide = Animated::new(cur, ms, Easing::OutQuad);
+        self.glide.set(to, now);
+        self.rest = to;
+        self.flicking = true;
     }
 
     /// QQuickFlickable::wheelEvent (Qt 6.12, wheelDeceleration 15000 > 14999):
@@ -299,8 +508,7 @@ impl Flick {
             return false;
         }
         let to = (y + step).clamp(0.0, self.max);
-        self.glide.snap(y);
-        self.glide.set(to, now);
+        self.glide_to(y, to, now);
         // fixup() when the glide ends: between the bounds, contentY goes to a
         // whole pixel. A glide started mid-glide ends off the pixel grid.
         self.rest = if to <= 0.0 || to >= self.max { to } else { pixel(to, step > 0.0) };
@@ -337,8 +545,7 @@ impl Flick {
         let y = self.glide.get(now);
         if y <= 0.0 || self.max <= 0.0 || y >= self.max {
             let to = if y <= 0.0 || self.max <= 0.0 { 0.0 } else { self.max };
-            self.glide.snap(y);
-            self.glide.set(to, now);
+            self.glide_to(y, to, now);
             self.rest = to;
         } else if y.fract() != 0.0 {
             let down = self.glide.target() > y;
@@ -520,31 +727,10 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         h = 160f32.max((content_h.ceil() + 30.0).min(s.screen_height * 0.85));
     }
     // DropdownWidget.cardX: from the icon's centre on the screen.
-    let icon_w = icon.w / ui;
-    let icon_center = icon.x + icon.w / 2.0;
-    let mut stem_w = (icon_w + 16.0).floor().min(w - 60.0);
-    let mut card_x = match stem {
-        Stem::Right => icon_center - w + stem_w / 2.0 + 10.0,
-        Stem::Left => icon_center - stem_w / 2.0 - 10.0,
-        Stem::Center => icon_center - w / 2.0,
-    };
-    if kind == CardKind::Calendar {
-        // CalendarPopup: a fixed 60 px stem, cardX = anchorX (int) - 200.
-        stem_w = 60.0;
-        card_x = icon_center.trunc() - 200.0;
-    }
-    if kind == CardKind::Weather {
-        // The stem is the weather pill's width (int); centred on the pill.
-        stem_w = icon_w.trunc();
-        card_x = icon_center - w / 2.0;
-    }
+    let (icon_center, stem_w, card_x) = anchor(kind, icon, w, ui);
     let x = card_x.min(s.screen_width - w).max(0.0);
     let y = crate::bar::strip_height(s.screen_width) as f32 + 2.0;
-    let stem_cx = match stem {
-        Stem::Right => w - stem_w / 2.0 - 10.0,
-        Stem::Left => stem_w / 2.0 + 10.0,
-        Stem::Center => w / 2.0,
-    };
+    let stem_cx = stem_center(stem, w, stem_w);
     let output = s.output.clone();
     let (screen_w, screen_h) = (s.screen_width as u32, s.screen_height as u32);
     let today = crate::cal::today();
@@ -629,15 +815,13 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
     }
 }
 
-/// The agent card's tick (AgentPanel.qml nowTick, AgentUsage.qml:149-154),
-/// agent.rs's TICK: QML's Timers run while the card is open (running:
-/// cardOpen) and stop when it closes. The mic meter's Timer is audio_card's
-/// one clock (start_meter, after the card's first draw), which ends at its
-/// first tick without the audio card.
-const AGENT_TICK: &str = "agent-tick";
-
 pub fn close(app: &mut App) {
-    app.cancel_timer(AGENT_TICK);
+    // The agent card's tick (AgentPanel.qml nowTick, AgentUsage.qml:149-154):
+    // QML's Timers run while the card is open (running: cardOpen) and stop
+    // when it closes. The mic meter's Timer is audio_card's one clock
+    // (start_meter, after the card's first draw), which ends at its first
+    // tick without the audio card.
+    app.cancel_timer(crate::agent::TICK);
     if app.card.as_ref().map(|c| c.kind) == Some(CardKind::Pult) {
         crate::pult::closed(app);
     }
@@ -739,14 +923,9 @@ pub fn update_height(app: &mut App) {
                 close(app);
                 return;
             }
-            // cardX and the stem follow the pill; a strip about to redraw
-            // may move it, so look again once it has.
-            let strip = card.strip;
-            follow_weather_pill(app);
-            if app.strips.get(strip).map_or(false, |s| s.win.dirty) {
-                app.after(Duration::ZERO, follow_weather_pill);
-            }
-            let w = app.card.as_ref().unwrap().width;
+            // cardX and the stem follow the pill as the strip draws it
+            // (follow_strip).
+            let w = card.width;
             weather_height(&mut app.fonts, &app.svc, w)
         }
         _ => return,
@@ -759,23 +938,84 @@ pub fn update_height(app: &mut App) {
     card.win.dirty = true;
 }
 
-/// CenterInfo's weather card: cardX centres it on the weather pill and the
-/// stem is the pill's width (int), both bindings (CenterInfo.qml:638-647).
-fn follow_weather_pill(app: &mut App) {
-    let Some(card) = app.card.as_ref().filter(|c| c.kind == CardKind::Weather) else { return };
-    let Some(s) = app.strips.get(card.strip) else { return };
-    let Some(pill) = s.hits.iter().find(|h| h.action == Action::Weather) else { return };
-    let ui = crate::bar::ui_scale(s.screen_width);
-    let (center, stem_w, screen_w) = (pill.x + pill.w / 2.0, (pill.w / ui).trunc(), s.screen_width);
-    let card = app.card.as_mut().unwrap();
-    let left = (center - card.width / 2.0).min(screen_w - card.width).max(0.0).round();
-    if left != card.left || stem_w != card.stem_w {
-        card.icon_center = center;
-        card.left = left;
-        card.stem_w = stem_w;
-        card.notch_stale = true;
-        card.win.dirty = true;
+/// The strip widget a card hangs from (and ipc.rs opens it by).
+pub(crate) fn icon_action(kind: CardKind) -> Action {
+    match kind {
+        CardKind::Power => Action::Logo,
+        CardKind::Calendar => Action::Clock,
+        CardKind::Weather => Action::Weather,
+        CardKind::Audio => Action::Volume,
+        CardKind::Pult => Action::Pult,
+        CardKind::Vpn => Action::Vpn,
+        CardKind::Agent => Action::Agent,
+        CardKind::Wifi | CardKind::Network => Action::Wifi,
+        CardKind::Battery => Action::Battery,
     }
+}
+
+/// From the icon's hit on the strip: its centre on the screen, the stem's
+/// width and cardX. DropdownWidget: rawStemWidth (int) = the icon + 16, kept
+/// clear of the notch corners, cardX by stemAlignment; CalendarPopup: a
+/// fixed 60 px stem, cardX = anchorX (int) - 200; CenterInfo's weather card:
+/// the stem is the pill's width (int), the card centred on the pill
+/// (CenterInfo.qml:638-647).
+fn anchor(kind: CardKind, icon: &Hit, w: f32, ui: f32) -> (f32, f32, f32) {
+    let icon_w = icon.w / ui;
+    let center = icon.x + icon.w / 2.0;
+    match kind {
+        CardKind::Calendar => (center, 60.0, center.trunc() - 200.0),
+        CardKind::Weather => (center, icon_w.trunc(), center - w / 2.0),
+        _ => {
+            let stem_w = (icon_w + 16.0).floor().min(w - 60.0);
+            let x = match geometry(kind).2 {
+                Stem::Right => center - w + stem_w / 2.0 + 10.0,
+                Stem::Left => center - stem_w / 2.0 - 10.0,
+                Stem::Center => center - w / 2.0,
+            };
+            (center, stem_w, x)
+        }
+    }
+}
+
+/// x of the stem's centre inside the card.
+fn stem_center(stem: Stem, w: f32, stem_w: f32) -> f32 {
+    match stem {
+        Stem::Right => w - stem_w / 2.0 - 10.0,
+        Stem::Left => stem_w / 2.0 + 10.0,
+        Stem::Center => w / 2.0,
+    }
+}
+
+/// The card follows its icon. cardX, the stem's width and cardY are
+/// bindings on the strip's layout and the screen (DropdownWidget.qml cardX
+/// and rawStemWidth, CalendarPopup's anchorX, CenterInfo.qml:638-647,
+/// CardSurface.qml:26-30), and CardSurface keeps the card on the screen
+/// (CardSurface.qml:55-58): after each draw of the card's strip - a new
+/// weather reading, a volume of 100%, CPU digits moving the widgets left of
+/// them, a new mode of the output - the card takes its icon's new place.
+/// It redraws only when its place or its stem changed.
+pub fn follow_strip(app: &mut App) {
+    let Some(card) = app.card.as_ref() else { return };
+    let Some(s) = app.strips.get(card.strip) else { return };
+    let action = icon_action(card.kind);
+    let Some(icon) = s.hits.iter().find(|h| h.action == action) else { return };
+    let (w, stem) = (card.width, geometry(card.kind).2);
+    let (center, stem_w, card_x) = anchor(card.kind, icon, w, crate::bar::ui_scale(s.screen_width));
+    let left = card_x.min(s.screen_width - w).max(0.0).round();
+    let top = (crate::bar::strip_height(s.screen_width) as f32 + 2.0).round();
+    let card = app.card.as_mut().unwrap();
+    card.icon_center = center;
+    if (left, top, stem_w) == (card.left, card.top, card.stem_w) {
+        return;
+    }
+    if stem_w != card.stem_w {
+        // The notch is keyed by its stem's centre, not its width.
+        card.stem_w = stem_w;
+        card.stem_cx = stem_center(stem, w, stem_w);
+        card.notch_stale = true;
+    }
+    (card.left, card.top) = (left, top);
+    card.win.dirty = true;
 }
 
 /// Whether a point of the card's surface is on the card (CardSurface's card
@@ -1763,43 +2003,106 @@ fn calendar_step(app: &mut App, delta: i32) {
     }
 }
 
-/// A wheel turn over the card (QML angleDelta: +120 per notch away from you).
-pub fn wheel(app: &mut App, angle_delta_y: f32) {
-    let Some(c) = app.card.as_mut() else { return };
-    if c.kind == CardKind::Audio {
-        // A VolumeSlider under the pointer takes it first: 5% a notch
-        // (VolumeSlider.qml:129-133). Every fader spans the same x, so the
-        // hit under the pointer (the top one, as app.rs hit_at finds it)
-        // says which; one scrolled out of view has no hit there.
-        let over = c.pointer.and_then(|(px, py)| c.hits.iter().rev().find(|h| h.contains(px, py))).and_then(|h| match h.action {
-            Action::Card(code) if crate::audio_card::is_slider(code) => Some(code),
-            _ => None,
-        });
-        if let Some(code) = over {
-            crate::audio_card::slider_step(app, code, angle_delta_y > 0.0);
-            return;
-        }
-    }
-    // Then the Flickable under the pointer, a ListView before the card's
-    // own; one at its end that way lets the wheel go on to what is under it.
-    // The card's margins and stem are no Flickable: nothing scrolls there.
-    let now = Instant::now();
-    let at = c.pointer.map(|(px, py)| (px - c.left, py - c.top));
+/// A VolumeSlider under the pointer takes the wheel first: 5% an event, by
+/// the angle's sign (VolumeSlider.qml:129-133). Every fader spans the same
+/// x, so the hit under the pointer (the top one, as app.rs hit_at finds it)
+/// says which; one scrolled out of view has no hit there.
+fn slider_wheel(app: &mut App, angle_delta_y: f32) -> bool {
+    let Some(c) = app.card.as_ref().filter(|c| c.kind == CardKind::Audio) else { return false };
+    let over = c.pointer.and_then(|(px, py)| c.hits.iter().rev().find(|h| h.contains(px, py))).and_then(|h| match h.action {
+        Action::Card(code) if crate::audio_card::is_slider(code) => Some(code),
+        _ => None,
+    });
+    let Some(code) = over else { return false };
+    crate::audio_card::slider_step(app, code, angle_delta_y > 0.0);
+    true
+}
+
+/// The card's Flickables under the pointer, a ListView before the card's
+/// own body: the order the wheel visits them in. The card's margins and
+/// stem are no Flickable.
+fn flicks_under(c: &OpenCard) -> Vec<usize> {
+    flicks_at(c, c.pointer)
+}
+
+/// The same under a point of the card's surface.
+fn flicks_at(c: &OpenCard, p: Option<(f32, f32)>) -> Vec<usize> {
+    let at = p.map(|(px, py)| (px - c.left, py - c.top));
     let under = |f: &Flick| match (f.rect, at) {
         (Some(r), Some((x, y))) => x >= r[0] && x < r[0] + r[2] && y >= r[1] && y < r[1] + r[3],
         _ => false,
     };
-    for body in [false, true] {
-        if let Some(i) = c.flicks.iter().position(|f| (f.id == BODY) == body && under(f)) {
-            if c.flicks[i].wheel(angle_delta_y, now) {
-                c.win.dirty = true;
-                return;
-            }
-        }
-    }
-    if c.kind != CardKind::Calendar {
+    [false, true].iter().filter_map(|&body| c.flicks.iter().position(|f| (f.id == BODY) == body && under(f))).collect()
+}
+
+/// A wheel turn over the card (QML angleDelta: +120 per notch away from you).
+pub fn wheel(app: &mut App, angle_delta_y: f32) {
+    if slider_wheel(app, angle_delta_y) {
         return;
     }
+    let Some(c) = app.card.as_mut() else { return };
+    // Then the Flickable under the pointer; one at its end that way lets
+    // the wheel go on to what is under it.
+    let now = Instant::now();
+    for i in flicks_under(c) {
+        if c.flicks[i].wheel(angle_delta_y, now) {
+            c.win.dirty = true;
+            return;
+        }
+    }
+    calendar_wheel(app, angle_delta_y);
+}
+
+/// A finger's scroll over the card (app.rs makes the phases as QtWayland
+/// does). Each update goes where the QWheelEvent goes: an enabled fader
+/// takes it by its angle, else the Flickables under the pointer by the
+/// pixel path (PixelDrag), the inner one first - one at an end lets it go
+/// on - and what none took reaches the calendar's handler, by its angle.
+pub fn finger_scroll(app: &mut App, s: Scroll) {
+    let now = Instant::now();
+    match s {
+        Scroll::Begin => {
+            let Some(c) = app.card.as_mut() else { return };
+            for i in flicks_under(c) {
+                let y = c.flicks[i].y(now);
+                c.flicks[i].drag = Some(PixelDrag::begin(y));
+            }
+        }
+        Scroll::End => {
+            let Some(c) = app.card.as_mut() else { return };
+            for f in c.flicks.iter_mut() {
+                if let Some(to) = f.drag.take().and_then(|d| d.end(f.y(now), f.max)) {
+                    f.jump(to);
+                    c.win.dirty = true;
+                }
+            }
+        }
+        Scroll::Update { dx, dy, angle } => {
+            if angle != 0.0 && slider_wheel(app, angle) {
+                return;
+            }
+            let Some(c) = app.card.as_mut() else { return };
+            for i in flicks_under(c) {
+                let f = &mut c.flicks[i];
+                let (cur, max, gliding) = (f.y(now), f.max, f.glide.running(now));
+                let Some(d) = f.drag.as_mut() else { continue };
+                let (to, taken) = d.update(dx, dy, cur, max, gliding);
+                if let Some(to) = to {
+                    f.jump(to);
+                    c.win.dirty = true;
+                }
+                if taken {
+                    return;
+                }
+            }
+            calendar_wheel(app, angle);
+        }
+    }
+}
+
+/// CalendarPopup's wheel: a month a notch's angle, summed (CalendarPopup.qml:72-86).
+fn calendar_wheel(app: &mut App, angle_delta_y: f32) {
+    let Some(c) = app.card.as_mut().filter(|c| c.kind == CardKind::Calendar) else { return };
     c.wheel_acc += angle_delta_y;
     let mut steps = 0;
     while c.wheel_acc >= 120.0 {
@@ -1816,6 +2119,118 @@ pub fn wheel(app: &mut App, angle_delta_y: f32) {
 }
 
 // ---- input ----
+
+/// A left press at (x, y) on the card's surface, at `time` (ms);
+/// `on_control` when a control there takes the press, which its Flickable
+/// filters (filterPointerEvent) - else the press is the Flickable's own.
+/// handlePressEvent: the innermost Flickable under it begins a drag; a
+/// flick it had running stops there (maybeBeginDrag's resetTimeline - the
+/// wheel's glide, a fixup, runs on).
+pub fn grab(app: &mut App, x: f32, y: f32, time: u32, on_control: bool) {
+    let Some(c) = app.card.as_mut() else { return };
+    c.flicks.iter_mut().for_each(|f| f.mouse = None);
+    let Some(&i) = flicks_at(c, Some((x, y))).first() else { return };
+    let now = Instant::now();
+    let f = &mut c.flicks[i];
+    let moving = f.glide.running(now);
+    if moving && f.flicking {
+        let at = f.y(now);
+        f.jump(at);
+    }
+    f.mouse = Some(MouseDrag { core: Drag::begin(f.y(now)), press_y: y, press_time: time, last: (y, time), velocity: 0.0, samples: [0.0; 3], count: 0, moving, grabbed: !on_control });
+}
+
+/// Whether a left-button drag over one of the card's Flickables goes on:
+/// the pointer is the Flickable's wherever it goes, not the area around
+/// the card's.
+pub fn grabbing(app: &App) -> bool {
+    app.card.as_ref().map_or(false, |c| c.flicks.iter().any(|f| f.mouse.is_some()))
+}
+
+/// The pointer moved to `y` with the left button down (handleMoveEvent):
+/// past startDragDistance - at once while the content moves - the
+/// Flickable takes the pointer and the content follows it from the next
+/// move (Drag). True when it took the pointer from the control it was
+/// pressed on at this move: the control's MouseArea is canceled, and its
+/// release clicks nothing.
+pub fn grab_move(app: &mut App, y: f32, time: u32) -> bool {
+    let Some(c) = app.card.as_mut() else { return false };
+    let now = Instant::now();
+    let Some(f) = c.flicks.iter_mut().find(|f| f.mouse.is_some()) else { return false };
+    if !f.yflick() {
+        return false;
+    }
+    let (cur, max, gliding) = (f.y(now), f.max, f.glide.running(now));
+    let Some(m) = f.mouse.as_mut() else { return false };
+    // QEventPoint's velocity: the move over its time, a 0.7 Kalman gain on
+    // the estimate so far.
+    let dt = time.wrapping_sub(m.last.1);
+    if dt > 0 && dt < 1 << 31 {
+        m.velocity = (y - m.last.0) / (dt as f32 / 1000.0) * 0.7 + m.velocity * 0.3;
+    }
+    m.last = (y, time);
+    let dy = y - m.press_y;
+    let over = dy.abs() > DRAG_DISTANCE || m.moving || gliding;
+    let late = time.wrapping_sub(m.press_time) > 200;
+    let had = m.core.steal;
+    // contentY goes against the pointer.
+    let (to, reject) = m.core.update(-dy, over, late, false, cur, max);
+    if !reject {
+        m.samples[m.count % 3] = m.velocity.clamp(-MAX_FLICK_VELOCITY, MAX_FLICK_VELOCITY);
+        m.count += 1;
+    }
+    let stole = !had && m.core.steal && !m.grabbed;
+    m.grabbed |= m.core.steal;
+    if let Some(to) = to {
+        f.jump(to);
+        c.win.dirty = true;
+    }
+    if stole {
+        c.held = None;
+    }
+    stole
+}
+
+/// The pointer left the card's surface while a drag went on (the surface
+/// lost it from under the button): the drag ends where it is, on a whole
+/// pixel, and the area around the card is the dismiss area again.
+pub fn grab_cancel(app: &mut App) {
+    let Some(c) = app.card.as_mut() else { return };
+    let now = Instant::now();
+    let Some(f) = c.flicks.iter_mut().find(|f| f.mouse.is_some()) else { return };
+    if let Some(to) = f.mouse.take().and_then(|m| m.core.fixup(f.y(now), f.max)) {
+        f.jump(to);
+        c.win.dirty = true;
+    }
+}
+
+/// The left button came up at `y` (handleReleaseEvent): released within
+/// 100 ms of its last move, the drag's velocity - its last samples' mean,
+/// halved pushing on at an end - flicks the content when the Flickable has
+/// the pointer, it is over _q_MinimumFlickVelocity and the pointer went
+/// past FlickStartDistance; otherwise the content goes onto a whole pixel.
+pub fn grab_end(app: &mut App, y: f32, time: u32) {
+    let Some(c) = app.card.as_mut() else { return };
+    let now = Instant::now();
+    let Some(f) = c.flicks.iter_mut().find(|f| f.mouse.is_some()) else { return };
+    let Some(m) = f.mouse.take() else { return };
+    let (cur, max) = (f.y(now), f.max);
+    let n = m.count.min(3);
+    let mean = if n == 0 { 0.0 } else { m.samples[..n].iter().sum::<f32>() / n as f32 };
+    // contentY's velocity: against the pointer's.
+    let mut v = if time.wrapping_sub(m.last.1) < 100 { -mean } else { 0.0 };
+    if (cur <= 0.0 && v < 0.0) || (cur >= max.floor() && v > 0.0) {
+        v /= 2.0;
+    }
+    if m.grabbed && f.yflick() && v.abs() > MIN_FLICK_VELOCITY && (y - m.press_y).abs() > FLICK_DISTANCE {
+        f.flick(v, v > 0.0, now);
+    } else if let Some(to) = m.core.fixup(cur, max) {
+        f.jump(to);
+    } else {
+        return;
+    }
+    c.win.dirty = true;
+}
 
 /// A button went down on a card control: a slider jumps to the pointer.
 pub fn press(app: &mut App, action: Action, x: f32, button: u32) {
@@ -1919,8 +2334,8 @@ fn power_pick(app: &mut App, i: u32, keyboard: bool) {
 }
 
 /// CardKeys: Esc closes, Tab/arrows walk the focus chain, Return/Enter/Space press.
-pub fn key(app: &mut App, sym: Keysym, utf8: Option<&str>) {
-    if app.card.as_ref().map(|c| c.kind) == Some(CardKind::Wifi) && crate::wifi_card::input_key(app, sym, utf8) {
+pub fn key(app: &mut App, sym: Keysym, mods: crate::app::Mods, utf8: Option<&str>) {
+    if app.card.as_ref().map(|c| c.kind) == Some(CardKind::Wifi) && crate::wifi_card::input_key(app, sym, mods, utf8) {
         return;
     }
     let Some(card) = app.card.as_mut() else { return };
@@ -1949,8 +2364,4 @@ pub fn key(app: &mut App, sym: Keysym, utf8: Option<&str>) {
         }
         _ => {}
     }
-}
-
-pub fn focused(app: &App) -> Option<WinRef> {
-    app.card.as_ref().map(|_| WinRef::Card)
 }

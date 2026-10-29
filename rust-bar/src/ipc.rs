@@ -85,9 +85,10 @@ fn on_conn(app: &mut App, c: UnixStream) {
 fn call(app: &mut App, target: &str, function: &str, args: &[&str]) -> Result<(), String> {
     match (target, function) {
         ("gamemode", "set") => {
+            // shell.qml binds only exclusiveZone to game mode: nothing drawn
+            // changes, so nothing is drawn again.
             app.svc.mango.game_mode = args.first().map_or(false, |a| *a == "true");
             app.update_exclusive_zones();
-            app.mark_all_dirty();
             Ok(())
         }
         ("cards", "toggle") => {
@@ -151,21 +152,21 @@ fn call(app: &mut App, target: &str, function: &str, args: &[&str]) -> Result<()
 /// BarCards.qml: SUPER+CTRL+<letter> opens a card on the focused monitor's
 /// strip with its first control focused; the same shortcut closes it.
 fn cards_toggle(app: &mut App, card: &str) {
-    use crate::bar::Action;
     use crate::cards::CardKind;
-    let (kind, action) = match card {
-        "power" => (CardKind::Power, Action::Logo),
-        "calendar" => (CardKind::Calendar, Action::Clock),
-        "weather" => (CardKind::Weather, Action::Weather),
-        "audio" => (CardKind::Audio, Action::Volume),
+    let kind = match card {
+        "power" => CardKind::Power,
+        "calendar" => CardKind::Calendar,
+        "weather" => CardKind::Weather,
+        "audio" => CardKind::Audio,
         // Bluetooth and the power profile live in the ПУЛЬТ card; both shortcuts open it.
-        "bluetooth" | "profile" => (CardKind::Pult, Action::Pult),
-        "vpn" => (CardKind::Vpn, Action::Vpn),
-        "agent" => (CardKind::Agent, Action::Agent),
-        "network" => (CardKind::Wifi, Action::Wifi),
-        "battery" => (CardKind::Battery, Action::Battery),
+        "bluetooth" | "profile" => CardKind::Pult,
+        "vpn" => CardKind::Vpn,
+        "agent" => CardKind::Agent,
+        "network" => CardKind::Wifi,
+        "battery" => CardKind::Battery,
         _ => return,
     };
+    let action = crate::cards::icon_action(kind);
     // Each bar takes the request only when it names its screen (shell.qml:51-55):
     // with no strip on the focused monitor (no snapshot yet, an unknown name)
     // nothing opens.

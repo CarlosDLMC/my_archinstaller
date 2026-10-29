@@ -38,7 +38,7 @@ use wayland_client::{
 use crate::bar::{self, Action, Hit};
 use crate::cards::{self, OpenCard};
 use crate::gpu::{Gpu, Scene};
-use crate::services::{Mango, Services};
+use crate::services::Services;
 use crate::text::Fonts;
 use crate::theme::Theme;
 
@@ -140,9 +140,8 @@ pub enum WinRef {
     Reveal(usize),
 }
 
-/// Output of a finished helper process, routed back by its tag.
+/// Output of a finished helper process.
 pub struct ProcDone {
-    pub tag: String,
     pub stdout: String,
     pub ok: bool,
 }
@@ -175,6 +174,9 @@ pub struct App {
     cursor: Option<Shape>,
     /// The widget a button went down on: a click is a release on the same one.
     pressed: Option<(WinRef, u32, Action)>,
+    /// A finger's scroll begun (QtWayland's mScrollBeginSent), with the
+    /// rounding error its pixel deltas carry (mScrollDeltaRemainder).
+    finger: Option<(f64, f64)>,
     pub instance: wgpu::Instance,
     pub gpu: Option<Gpu>,
     pub fonts: Fonts,
@@ -193,9 +195,6 @@ pub struct App {
     pub exit: bool,
     /// When the bar started: Theme.qml's palette load lands just after it.
     pub(crate) started: Instant,
-    /// The weather card's Texts, kept between openings (CenterInfo's card is
-    /// not a Loader: once shown, its Texts live as long as the bar).
-    pub(crate) weather_texts: Option<crate::text::TextMemo>,
     /// Results of work done off the main thread, run back on the event loop.
     pub(crate) bg_tx: smithay_client_toolkit::reexports::calloop::channel::Sender<Box<dyn FnOnce(&mut App) + Send>>,
     /// The one decode thread's queue (runtime.rs, background()).
@@ -253,6 +252,7 @@ impl App {
             enter_serial: 0,
             cursor: None,
             pressed: None,
+            finger: None,
             instance: Gpu::new_instance(),
             gpu: None,
             fonts: Fonts::new(),
@@ -273,7 +273,6 @@ impl App {
             timers: HashMap::new(),
             exit: false,
             started: Instant::now(),
-            weather_texts: None,
         };
         if crt_mode {
             crate::crt::start(&mut app);
@@ -292,11 +291,32 @@ impl App {
         }
     }
 
+    /// Every strip and the open card: what all of them show changed (the
+    /// palette). A redraw of the card re-renders its full-screen surface and
+    /// makes mango recomposite and re-blur the screen: data goes only to the
+    /// windows that show it (mark_strips_dirty, mark_card_dirty).
     pub fn mark_all_dirty(&mut self) {
+        self.mark_strips_dirty();
+        if let Some(c) = &mut self.card {
+            c.win.dirty = true;
+        }
+    }
+
+    /// The strips, for what they show (bar.rs: mango's tags and title, the
+    /// layout, the stats, the clock, the bell, the weather pill, the volume,
+    /// the battery, the Wi-Fi and VPN icons and which widgets there are). A
+    /// card is a window of its own (CardSurface.qml): Qt repaints it only for
+    /// what it binds.
+    pub fn mark_strips_dirty(&mut self) {
         for s in &mut self.strips {
             s.win.dirty = true;
         }
-        if let Some(c) = &mut self.card {
+    }
+
+    /// The open card, when it is one of `kinds`: the cards that show what
+    /// changed.
+    pub fn mark_card_dirty(&mut self, kinds: &[cards::CardKind]) {
+        if let Some(c) = self.card.as_mut().filter(|c| kinds.contains(&c.kind)) {
             c.win.dirty = true;
         }
     }
@@ -387,12 +407,14 @@ impl App {
     }
 
     pub fn redraw_dirty(&mut self) {
-        // The Wi-Fi icon blinks while a connection attempt runs.
+        // The Wi-Fi icon blinks while a connection attempt runs, and the
+        // networks card shows ПОДКЛЮЧЕНИЕ.
         let connecting = crate::wifi_card::connecting(self);
         if connecting != self.svc.wifi_connecting {
             self.svc.wifi_connecting = connecting;
             self.svc.wifi.pulse.set_running(connecting, Instant::now(), 450);
-            self.mark_all_dirty();
+            self.mark_strips_dirty();
+            self.mark_card_dirty(&[cards::CardKind::Wifi]);
         }
         if self.card.as_ref().and_then(|c| c.meter_win.as_ref()).map_or(false, |m| m.dirty && !m.frame_pending && m.gpu.is_some()) {
             self.draw_meter();
@@ -462,6 +484,10 @@ impl App {
                 let (hits, animating) = bar::draw(&mut scene, &mut self.fonts, &self.theme, &self.svc, &ctx, &mut memo);
                 self.strips[i].hits = hits;
                 self.strips[i].texts = memo;
+                // The open card hangs from an icon of this strip: it follows it.
+                if self.card.as_ref().map_or(false, |c| c.strip == i) {
+                    cards::follow_strip(self);
+                }
                 animating
             }
             WinRef::Card => {
@@ -669,7 +695,44 @@ impl App {
             }
         }
         if self.card.is_some() {
-            cards::key(self, event.keysym, event.utf8.as_deref());
+            cards::key(self, event.keysym, self.mods, event.utf8.as_deref());
+        }
+    }
+
+    /// A finger's scroll frame over a card or the clipboard list, made into
+    /// QWheelEvents as QtWayland does (flushScrollEvent): a frame whose
+    /// angleDelta is not null is a ScrollUpdate - a ScrollBegin first, for
+    /// the first one - whose pixelDelta is the frame's value rounded, the
+    /// error carried to the next frame (pixelDeltaAndError); axis_stop ends
+    /// it (ScrollEnd).
+    fn finger_scroll(&mut self, w: WinRef, h: &AxisScroll, v: &AxisScroll, angle: (f32, f32)) {
+        use crate::cards::Scroll;
+        let send = |app: &mut App, s: Scroll| match w {
+            WinRef::Card => cards::finger_scroll(app, s),
+            _ => crate::clip::finger_scroll(app, s),
+        };
+        if angle != (0.0, 0.0) {
+            if self.finger.is_none() {
+                self.finger = Some((0.0, 0.0));
+                send(self, Scroll::Begin);
+            }
+            let Some(rest) = self.finger.as_mut() else { return };
+            // qRound of the value and the error so far, as QPointF::toPoint.
+            let (px, py) = ((h.absolute + rest.0 + 0.5).floor(), (v.absolute + rest.1 + 0.5).floor());
+            *rest = (rest.0 + h.absolute - px, rest.1 + v.absolute - py);
+            send(self, Scroll::Update { dx: px as f32, dy: py as f32, angle: angle.1 });
+        }
+        if h.stop || v.stop {
+            self.end_finger_scroll();
+        }
+    }
+
+    /// ScrollEnd, wherever the pointer is by then (QtWayland sends it to the
+    /// scroll's target): the Flickables that took the scroll come to rest.
+    fn end_finger_scroll(&mut self) {
+        if self.finger.take().is_some() {
+            cards::finger_scroll(self, crate::cards::Scroll::End);
+            crate::clip::finger_scroll(self, crate::cards::Scroll::End);
         }
     }
 }
@@ -723,11 +786,21 @@ impl OutputHandler for App {
     fn update_output(&mut self, _: &Connection, _: &QueueHandle<Self>, output: wl_output::WlOutput) {
         let info = self.outputs.info(&output);
         let game_mode = self.svc.mango.game_mode;
-        if let Some(s) = self.strips.iter_mut().find(|s| s.output == output) {
+        if let Some(i) = self.strips.iter().position(|s| s.output == output) {
+            let s = &mut self.strips[i];
             if let Some(n) = info.as_ref().and_then(|i| i.name.clone()) {
                 s.name = n;
             }
             if let Some((w, h)) = info.as_ref().and_then(|i| i.logical_size) {
+                if (w as f32, h as f32) != (s.screen_width, s.screen_height) {
+                    // The card open on it: its height bindings read the
+                    // screen (the agent and network cards: 85% of it), so
+                    // update_height runs again; its place follows the strip's
+                    // next draw (cards::follow_strip).
+                    if let Some(c) = self.card.as_mut().filter(|c| c.strip == i) {
+                        c.win.dirty = true;
+                    }
+                }
                 s.screen_width = w as f32;
                 s.screen_height = h as f32;
                 // shell.qml: implicitHeight and exclusiveZone are bindings on
@@ -888,7 +961,7 @@ impl KeyboardHandler for App {
 impl PointerHandler for App {
     fn pointer_frame(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlPointer, events: &[PointerEvent]) {
         for e in events {
-            if self.card.as_ref().map_or(false, |c| c.win.layer.wl_surface() == &e.surface) && self.pressed.is_none() {
+            if self.card.as_ref().map_or(false, |c| c.win.layer.wl_surface() == &e.surface) && self.pressed.is_none() && !cards::grabbing(self) {
                 // CardSurface: around the card, a press dismisses it and the
                 // wheel is eaten; the pointer is not over the card there. (A
                 // drag that started on the card keeps going.) Its MouseArea
@@ -910,6 +983,7 @@ impl PointerHandler for App {
                                 self.set_cursor(Shape::Default);
                             }
                         }
+                        PointerEventKind::Axis { horizontal, vertical, .. } if horizontal.stop || vertical.stop => self.end_finger_scroll(),
                         _ => {}
                     }
                     continue;
@@ -976,6 +1050,10 @@ impl PointerHandler for App {
                     if let WinRef::Osd(k) = w {
                         crate::osd::hover_changed(self, k, false);
                     }
+                    self.end_finger_scroll();
+                    if w == WinRef::Card {
+                        cards::grab_cancel(self);
+                    }
                     if self.win_mut(w).is_none() {
                         continue;
                     }
@@ -983,7 +1061,13 @@ impl PointerHandler for App {
                     self.win_mut(w).unwrap().dirty = true;
                     self.pressed = None;
                 }
-                PointerEventKind::Motion { .. } => {
+                PointerEventKind::Motion { time } => {
+                    // The card's Flickable sees the move first, and past the
+                    // drag distance takes the pointer from the control pressed
+                    // in it (filterPointerEvent): its MouseArea is canceled.
+                    if w == WinRef::Card && cards::grab_move(self, y, time) {
+                        self.pressed = None;
+                    }
                     if let Some((WinRef::Card, 0x110, act)) = self.pressed {
                         if w == WinRef::Card {
                             cards::drag(self, act, x);
@@ -1001,7 +1085,7 @@ impl PointerHandler for App {
                     let shape = self.cursor_at(w, after);
                     self.set_cursor(shape);
                 }
-                PointerEventKind::Press { button, .. } => {
+                PointerEventKind::Press { button, time, .. } => {
                     // The card's own MouseArea and its controls take the left
                     // button only (DropdownWidget.qml:160): a right or middle
                     // press falls through to CardSurface's, under the card,
@@ -1020,6 +1104,12 @@ impl PointerHandler for App {
                             continue;
                         }
                     }
+                    // The Flickable under a left press begins a drag, on its own
+                    // area or filtering a control's press (cards::grab).
+                    if w == WinRef::Card && button == BTN_LEFT {
+                        let on_control = matches!(self.hit_at(w, x, y), Some(Action::Card(_)));
+                        cards::grab(self, x, y, time, on_control);
+                    }
                     self.pressed = self.hit_at(w, x, y).map(|a| (w, button, a));
                     if let (WinRef::Osd(k), Some(Action::Card(code))) = (w, self.hit_at(w, x, y)) {
                         if let Some(o) = self.osd_mut(k) {
@@ -1034,31 +1124,23 @@ impl PointerHandler for App {
                 PointerEventKind::Axis { horizontal, vertical, source, .. } => {
                     // Qt's angleDelta (QtWayland's FrameData::angleDelta), positive
                     // away from the user: 120 a notch, else a continuous axis'
-                    // value times -12, rounded. A finger's scroll over a
-                    // Flickable - a card's body or list, the clipboard's list -
-                    // is a 1:1 drag in Qt instead (pixelDelta in ScrollUpdate
-                    // phases), which the port does not do: there it keeps the
-                    // x8 it had.
-                    let drag = source == Some(wl_pointer::AxisSource::Finger)
-                        && match w {
-                            WinRef::Card => self.card.as_ref().map_or(false, |c| c.kind != cards::CardKind::Calendar),
-                            WinRef::Osd(k) => k == crate::osd::OsdKind::Clipboard,
-                            _ => false,
-                        };
+                    // value times -12, rounded.
                     let notches = vertical.discrete != 0 || horizontal.discrete != 0;
-                    let angle = |a: &AxisScroll| {
-                        if notches {
-                            -(a.discrete as f32) * 120.0
-                        } else if drag {
-                            -(a.absolute as f32) * 8.0
-                        } else {
-                            (-(a.absolute as f32) * 12.0 + 0.5).floor()
-                        }
-                    };
+                    let angle = |a: &AxisScroll| if notches { -(a.discrete as f32) * 120.0 } else { (-(a.absolute as f32) * 12.0 + 0.5).floor() };
+                    let (dx, dy) = (angle(&horizontal), angle(&vertical));
+                    // A finger's scroll on a touchpad is a pixelDelta in
+                    // ScrollBegin / ScrollUpdate / ScrollEnd phases, which a
+                    // Flickable - a card's, the clipboard's list - follows 1:1.
+                    if source == Some(wl_pointer::AxisSource::Finger) && matches!(w, WinRef::Card | WinRef::Osd(crate::osd::OsdKind::Clipboard)) {
+                        self.finger_scroll(w, &horizontal, &vertical, (dx, dy));
+                        continue;
+                    }
+                    if horizontal.stop || vertical.stop {
+                        self.end_finger_scroll();
+                    }
                     // WallpaperOsd's two WheelHandlers take angleDelta.x when y
                     // is 0 (WallpaperOsd.qml:295,496), the only ones that do.
-                    let dy = angle(&vertical);
-                    let delta = if dy == 0.0 && w == WinRef::Osd(crate::osd::OsdKind::Wallpaper) { angle(&horizontal) } else { dy };
+                    let delta = if dy == 0.0 && w == WinRef::Osd(crate::osd::OsdKind::Wallpaper) { dx } else { dy };
                     if delta != 0.0 {
                         match w {
                             WinRef::Card => cards::wheel(self, delta),
@@ -1072,7 +1154,12 @@ impl PointerHandler for App {
                         }
                     }
                 }
-                PointerEventKind::Release { button, .. } => {
+                PointerEventKind::Release { button, time, .. } => {
+                    // The Flickable takes the release first: a flick, or back
+                    // onto a whole pixel.
+                    if w == WinRef::Card && button == BTN_LEFT {
+                        cards::grab_end(self, y, time);
+                    }
                     if let WinRef::Osd(k) = w {
                         if let Some(o) = self.osd_mut(k) {
                             o.st.pressed = None;
@@ -1091,7 +1178,6 @@ impl PointerHandler for App {
                         }
                     }
                 }
-                _ => {}
             }
         }
     }
@@ -1231,7 +1317,3 @@ delegate_seat!(App);
 delegate_pointer!(App);
 delegate_shm!(App);
 delegate_registry!(App);
-
-pub fn mango_of(app: &App) -> &Mango {
-    &app.svc.mango
-}

@@ -18,8 +18,6 @@ use crate::color::Color;
 use crate::gpu::{Gpu, Scene};
 
 pub struct CrtWin {
-    pub output: WlOutput,
-    pub name: String,
     pub win: Win,
     /// The frame as decoded (RGBA, premultiplied), until it is on the GPU.
     frame: Option<(u32, u32, Vec<u8>)>,
@@ -50,7 +48,7 @@ pub fn create(app: &mut App, output: WlOutput) {
     layer.set_keyboard_interactivity(KeyboardInteractivity::Exclusive);
     layer.commit();
     let frame = load(&name);
-    app.crts.push(CrtWin { output, name, win: Win::new(layer, 0, 0), frame, tex: None, start: None, done: false });
+    app.crts.push(CrtWin { win: Win::new(layer, 0, 0), frame, tex: None, start: None, done: false });
 }
 
 /// Starts the 30 s safety timer: if the machine has not gone down by then,

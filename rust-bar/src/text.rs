@@ -18,7 +18,6 @@ use std::collections::HashMap;
 use std::process::Command;
 
 use freetype_sys as ft;
-use swash::scale::ScaleContext;
 use swash::{FontRef, GlyphId};
 
 /// QT_DISTANCEFIELD_DEFAULT_BASEFONTSIZE: the size every field is made at.
@@ -373,7 +372,6 @@ pub struct Fonts {
     glyphs: HashMap<(u16, GlyphId, bool), Option<DfGlyph>>,
     native: HashMap<(u16, GlyphId, i64, u8, u8), Option<NativeGlyph>>,
     library: ft::FT_Library,
-    scale: ScaleContext,
     pub atlas: Atlas,
     pub color_atlas: Atlas,
     colors: HashMap<(u16, GlyphId, i64), Option<ColorGlyph>>,
@@ -582,7 +580,6 @@ impl Fonts {
                 unsafe { ft::FT_Init_FreeType(&mut lib) };
                 lib
             },
-            scale: ScaleContext::new(),
             atlas: Atlas::gray(),
             color_atlas: Atlas::colour(),
             colors: HashMap::new(),
@@ -880,11 +877,6 @@ impl Fonts {
         self.wrap_strings(text, key, size, letter_spacing, max, false).iter().map(|l| self.layout(l, key, size, letter_spacing)).collect()
     }
 
-    /// Text.Wrap: the same, but a piece wider than the line breaks anywhere.
-    pub fn wrap_anywhere(&mut self, text: &str, key: FontKey, size: f32, letter_spacing: f32, max: f32) -> Vec<Line> {
-        self.wrap_strings(text, key, size, letter_spacing, max, true).iter().map(|l| self.layout(l, key, size, letter_spacing)).collect()
-    }
-
     /// A wrapped Text breaks its lines once (QQuickText lays out again only
     /// on a change); breaking measures every candidate line, and a long
     /// text without break opportunities (a token, base64, a long URL in the
@@ -1150,12 +1142,8 @@ impl Fonts {
 
     /// A glyph rasterised by FreeType the way QFontEngineFT does it for an
     /// 8-bit (gray) glyph cache: light hinting target, outline translated by
-    /// the subpixel position, rendered in normal mode.
-    pub fn native_glyph(&mut self, face: u16, gid: GlyphId, size: f32, quarter: u8) -> Option<NativeGlyph> {
-        self.native_glyph_hinted(face, gid, size, quarter, 0)
-    }
-
-    /// The same with Font.hintingPreference: 0 default (light), 1 full
+    /// the subpixel position, rendered in normal mode - with
+    /// Font.hintingPreference: 0 default (light), 1 full
     /// (FT_LOAD_TARGET_NORMAL), 2 none (FT_LOAD_NO_HINTING).
     pub fn native_glyph_hinted(&mut self, face: u16, gid: GlyphId, size: f32, quarter: u8, hint: u8) -> Option<NativeGlyph> {
         let size26 = (size * 64.0).round() as i64;
@@ -1361,4 +1349,57 @@ impl Fonts {
         self.atlas.pending.push((ax, ay, w, h, bits));
         Some(DfGlyph { ax, ay, w, h, x0: x0 as f32, y0: y0 as f32 })
     }
+}
+
+/// QTextEngine::atWordSeparator.
+fn word_separator(c: char) -> bool {
+    ".,?!@#$:;-<>[](){}=/+%&^*'\"`~|\\".contains(c)
+}
+
+/// A word's start (QCharAttributes::wordStart): a letter or digit after
+/// something that is not one.
+fn word_start(chars: &[char], k: usize) -> bool {
+    let word = |c: char| c.is_alphanumeric() || c == '_';
+    chars.get(k).map_or(false, |&c| word(c)) && (k == 0 || !word(chars[k - 1]))
+}
+
+/// QTextLayout::previousCursorPosition(SkipWords) over a TextInput's text
+/// (Normal echo), from byte `i`: a byte index.
+pub(crate) fn word_left(s: &str, i: usize) -> usize {
+    let (bytes, chars): (Vec<usize>, Vec<char>) = s.char_indices().unzip();
+    let mut k = bytes.iter().position(|&b| b >= i).unwrap_or(chars.len());
+    while k > 0 && chars[k - 1].is_whitespace() {
+        k -= 1;
+    }
+    if k > 0 && word_separator(chars[k - 1]) {
+        k -= 1;
+        while k > 0 && word_separator(chars[k - 1]) {
+            k -= 1;
+        }
+    } else {
+        while k > 0 && !word_start(&chars, k) && !word_separator(chars[k - 1]) {
+            k -= 1;
+        }
+    }
+    bytes.get(k).copied().unwrap_or(s.len())
+}
+
+/// QTextLayout::nextCursorPosition(SkipWords), the same way.
+pub(crate) fn word_right(s: &str, i: usize) -> usize {
+    let (bytes, chars): (Vec<usize>, Vec<char>) = s.char_indices().unzip();
+    let n = chars.len();
+    let mut k = bytes.iter().position(|&b| b >= i).unwrap_or(n);
+    if k < n && word_separator(chars[k]) {
+        while k < n && word_separator(chars[k]) {
+            k += 1;
+        }
+    } else {
+        while k < n && !chars[k].is_whitespace() && !word_separator(chars[k]) {
+            k += 1;
+        }
+    }
+    while k < n && chars[k].is_whitespace() {
+        k += 1;
+    }
+    bytes.get(k).copied().unwrap_or(s.len())
 }

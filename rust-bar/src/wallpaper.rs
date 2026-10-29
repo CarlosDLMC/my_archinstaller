@@ -181,7 +181,6 @@ enum Pending {
 
 /// One screen's reveal window.
 pub struct RevealWin {
-    pub output: WlOutput,
     pub win: Win,
     tex: Option<Tex>,
     reported: bool,
@@ -202,6 +201,8 @@ pub struct Wall {
     pub folder_index: usize,
     pub filter: String,
     cursor: usize,
+    /// Ctrl+A's selection of the whole search line.
+    select_all: bool,
     /// When the search line's cursor last showed anew (it blinks from there).
     blink_since: Option<Instant>,
     // The view: list.currentIndex, contentX and what reselect() keeps.
@@ -459,6 +460,7 @@ pub fn open(app: &mut App) {
     }
     w.filter.clear();
     w.cursor = 0;
+    w.select_all = false;
     sync_model(app);
     let w = &mut app.svc.wall;
     w.picked_id.clear();
@@ -472,7 +474,7 @@ pub fn open(app: &mut App) {
     let w = &mut app.svc.wall;
     w.open = true;
     w.pending = Pending::Current;
-    osd::show(app, OpenParams { kind: OsdKind::Wallpaper, size: (0, 0), panel: (0.0, 0.0, 0.0, 0.0), dim: None, keyboard: true, namespace: "quickshell:wallpaper", fade_ms: FADE_MS, min_scale: 1.0, fade_easing: Easing::Linear, pos: None, fill: true, output: None });
+    show_osd(app);
     // A new ListView takes its first model; reopen() reselects either way.
     // quickshell sizes a layer surface's window only at the compositor's
     // first configure, so the new ListView is 0x0 when it is made and has
@@ -483,6 +485,41 @@ pub fn open(app: &mut App) {
     }
     reselect(app);
     refresh(app);
+}
+
+/// The carousel's window on the focused screen (or its fade turned back).
+fn show_osd(app: &mut App) {
+    osd::show(app, OpenParams { kind: OsdKind::Wallpaper, size: (0, 0), panel: (0.0, 0.0, 0.0, 0.0), dim: None, keyboard: true, namespace: "quickshell:wallpaper", fade_ms: FADE_MS, min_scale: 1.0, fade_easing: Easing::Linear, pos: None, fill: true, output: None });
+}
+
+/// The focused monitor changed while the carousel is up (osd::follow_focus,
+/// after the old screen's window went): QML has a WallpaperOsd per screen,
+/// shown on the focused one (WallpaperOsd.qml:26-35), and the new screen's
+/// builds its Loader content - a new ListView and handlers, the tabs at
+/// contentX 0 - whose Component.onCompleted runs reopen(): the search line
+/// emptied, the current wallpaper centred (WallpaperOsd.qml:134-143). The
+/// folder and `navigated` are WallpaperState's and stay. (reopen()'s
+/// `search.text = ""` changes nothing on a new, empty field, so QML's strip
+/// stays filtered under an empty line; the port clears the search, as
+/// reopen() means to.)
+pub(crate) fn refocus(app: &mut App) {
+    let w = &mut app.svc.wall;
+    w.model = None;
+    w.list_index = -1;
+    w.reset_pre = None;
+    w.wheel_acc = 0.0;
+    w.tab_acc = 0.0;
+    w.tab_scroll = 0.0;
+    w.filter.clear();
+    w.cursor = 0;
+    w.select_all = false;
+    w.pending = Pending::Current;
+    show_osd(app);
+    // As open(): the new ListView's first model makes no delegate to animate.
+    if sync_model(app) {
+        app.svc.wall.reset_pre = None;
+    }
+    reselect(app);
 }
 
 pub fn close(app: &mut App) {
@@ -847,6 +884,7 @@ fn set_folder(app: &mut App, i: usize) {
     if !w.filter.is_empty() {
         w.filter.clear();
         w.cursor = 0;
+        w.select_all = false;
         w.pending = Pending::Current;
         reset = sync_model(app);
     }
@@ -939,29 +977,102 @@ pub fn key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Keysym, m
         Keysym::Next | Keysym::KP_Next => go_to(app, app.svc.wall.index as i64 + 5),
         Keysym::Return | Keysym::KP_Enter => pick(app),
         Keysym::r | Keysym::R if mods.ctrl => random(app),
-        Keysym::BackSpace => {
-            let mut f = app.svc.wall.filter.clone();
-            let c = app.svc.wall.cursor.min(f.len());
-            let from = f[..c].char_indices().last().map_or(0, |(p, _)| p);
-            f.replace_range(from..c, "");
-            app.svc.wall.cursor = from;
-            set_filter(app, f);
-            restart_blink(app);
-        }
-        _ => {
-            if mods.ctrl {
-                return;
-            }
-            if let Some(s) = utf8.filter(|s| !s.is_empty() && !s.chars().any(char::is_control)) {
-                let mut f = app.svc.wall.filter.clone();
-                let c = app.svc.wall.cursor.min(f.len());
-                f.insert_str(c, s);
-                app.svc.wall.cursor = c + s.len();
-                set_filter(app, f);
-                restart_blink(app);
-            }
-        }
+        _ => search_key(app, sym, mods, utf8),
     }
+}
+
+/// The keys handleKey leaves to the search TextInput, as
+/// QQuickTextInputPrivate::processKeyEvent takes them with the KB_X11 key
+/// sequences: text, Backspace and Delete - by word with Ctrl
+/// (DeleteStartOfWord / DeleteEndOfWord) -, SelectAll Ctrl+A,
+/// DeleteCompleteLine Ctrl+U, DeleteEndOfLine Ctrl+K, Paste, Copy and Cut.
+/// handleKey takes every move, so the cursor stays at the end and Ctrl+A's
+/// is the only selection; what acts on it does as Qt's moveCursor would
+/// (Ctrl+Backspace on it keeps the last word). Its highlight is the
+/// palette's colour, which the port does not know (nor does clip.rs).
+/// Undo and redo are not ported.
+fn search_key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Keysym, mods: Mods, utf8: Option<&str>) {
+    use smithay_client_toolkit::seat::keyboard::Keysym;
+    let w = &app.svc.wall;
+    let (f, c, all) = (w.filter.clone(), w.cursor.min(w.filter.len()), w.select_all);
+    let only_ctrl = mods.ctrl && !mods.shift && !mods.alt;
+    let plain = !mods.ctrl && !mods.shift && !mods.alt;
+    // QQuickTextInput::copy(): the selection onto the clipboard.
+    let copy = |app: &App| {
+        if all {
+            app.exec_detached(&["wl-copy", "--", &f]);
+        }
+    };
+    let prev = f[..c].char_indices().last().map_or(0, |(p, _)| p);
+    let next = f[c..].chars().next().map_or(c, |ch| c + ch.len_utf8());
+    // The bytes that go, and the text that takes their place.
+    let (range, text) = match sym {
+        Keysym::a | Keysym::A if only_ctrl => {
+            app.svc.wall.select_all = !f.is_empty();
+            app.svc.wall.cursor = f.len();
+            return restart_blink(app);
+        }
+        Keysym::v | Keysym::V if only_ctrl => return paste(app),
+        Keysym::Insert if mods.shift && !mods.ctrl && !mods.alt => return paste(app),
+        Keysym::XF86_Paste => return paste(app),
+        Keysym::c | Keysym::C | Keysym::Insert if only_ctrl => return copy(app),
+        // Cut: copy(), then del() - the selection, else nothing at the end.
+        Keysym::x | Keysym::X if only_ctrl => {
+            copy(app);
+            if all { (0..f.len(), "") } else { (c..c, "") }
+        }
+        Keysym::Delete | Keysym::KP_Delete if mods.shift && !mods.ctrl && !mods.alt => {
+            copy(app);
+            if all { (0..f.len(), "") } else { (c..next, "") }
+        }
+        Keysym::u | Keysym::U if only_ctrl => (0..f.len(), ""),
+        Keysym::k | Keysym::K if only_ctrl => (c..f.len(), ""),
+        // deleteStartOfWord / deleteEndOfWord: the cursor moves a word,
+        // marking from the selection's far end - Ctrl+A's start.
+        Keysym::BackSpace if mods.ctrl => {
+            let to = crate::text::word_left(&f, c);
+            if all { (0..to, "") } else { (to..c, "") }
+        }
+        Keysym::Delete | Keysym::KP_Delete if only_ctrl => {
+            let to = crate::text::word_right(&f, c);
+            if all { (0..f.len(), "") } else { (c..to, "") }
+        }
+        Keysym::BackSpace => if all { (0..f.len(), "") } else { (prev..c, "") },
+        Keysym::Delete | Keysym::KP_Delete if plain => if all { (0..f.len(), "") } else { (c..next, "") },
+        // Text, unless typed with Ctrl or Ctrl+Shift (QInputControl::
+        // isAcceptableInput; AltGr's Ctrl+Alt is text): over the selection.
+        _ => match utf8.filter(|s| !s.is_empty() && !s.chars().any(char::is_control) && !(mods.ctrl && !mods.alt)) {
+            Some(s) => (if all { 0..f.len() } else { c..c }, s),
+            None => return,
+        },
+    };
+    edit_search(app, range, text);
+}
+
+/// An edit of the search line: `range` replaced by `text`, the cursor after
+/// it, the selection gone; the filter follows (onTextChanged).
+fn edit_search(app: &mut App, range: std::ops::Range<usize>, text: &str) {
+    let mut f = app.svc.wall.filter.clone();
+    let (a, b) = (range.start.min(f.len()), range.end.min(f.len()));
+    f.replace_range(a..b.max(a), text);
+    app.svc.wall.cursor = a + text.len();
+    app.svc.wall.select_all = false;
+    set_filter(app, f);
+    restart_blink(app);
+}
+
+/// QQuickTextInput::paste(): the clipboard's text over the selection, read
+/// through the compositor's data-control by wl-paste, as the Wi-Fi field does.
+fn paste(app: &mut App) {
+    app.spawn("wall-paste", &["wl-paste", "--no-newline", "--type", "text"], |app, d| {
+        let w = &app.svc.wall;
+        if !w.open || (d.stdout.is_empty() && !w.select_all) {
+            return;
+        }
+        let c = w.cursor.min(w.filter.len());
+        let range = if w.select_all { 0..w.filter.len() } else { c..c };
+        edit_search(app, range, &d.stdout);
+    });
 }
 
 /// A key the search field took: its cursor shows and blinks on from now.
@@ -995,6 +1106,7 @@ fn set_filter(app: &mut App, f: String) {
     if f.is_empty() {
         w.cursor = 0;
     }
+    w.select_all = false;
     w.pending = if f.is_empty() { Pending::Current } else { Pending::First };
     w.filter = f;
     if sync_model(app) {
@@ -1357,6 +1469,11 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, panel: (f32, f32, f32, f32), svc: &Servic
         if w.blink_since.map_or(true, |s| s.elapsed().as_millis() / 500 % 2 == 0) {
             ui.scene.fill(fx + cx, fy, 1.0, fl.height(), t.col_white);
         }
+        // QQuickTextInput's I-beam over the TextInput (WallpaperOsd.qml:588-591),
+        // which takes a click there instead of the dim behind it. (At opacity
+        // 0, with nothing typed, QML's would do both over the tabs' middle;
+        // the port leaves the tabs theirs.)
+        ui.hits.push(crate::bar::Hit { x: fx, y: fy, w: iw, h: fl.height(), action: Action::Hover(crate::bar::TEXT_FIELD) });
         ui.text_of(0, SEARCH_COUNT, &cnt, fx + iw + sp, ry + ac(row_h, cnt.height()), t.col_grey);
     }
 
@@ -1499,7 +1616,7 @@ fn start_reveal(app: &mut App, it: Item) {
         }
         layer.commit();
         let i = app.reveals.len();
-        app.reveals.push(RevealWin { output, win: Win::new(layer, sw as u32, sh as u32), tex: None, reported: false });
+        app.reveals.push(RevealWin { win: Win::new(layer, sw as u32, sh as u32), tex: None, reported: false });
         let path = path_of(&it.src);
         let (w, h) = (sw as u32, sh as u32);
         let cancel = cancel.clone();
