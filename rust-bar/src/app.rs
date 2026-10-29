@@ -38,7 +38,7 @@ use wayland_client::{
 use crate::bar::{self, Action, Hit};
 use crate::cards::{self, OpenCard};
 use crate::gpu::{Gpu, Scene};
-use crate::services::{Mango, Services};
+use crate::services::Services;
 use crate::text::Fonts;
 use crate::theme::Theme;
 
@@ -140,9 +140,8 @@ pub enum WinRef {
     Reveal(usize),
 }
 
-/// Output of a finished helper process, routed back by its tag.
+/// Output of a finished helper process.
 pub struct ProcDone {
-    pub tag: String,
     pub stdout: String,
     pub ok: bool,
 }
@@ -196,9 +195,6 @@ pub struct App {
     pub exit: bool,
     /// When the bar started: Theme.qml's palette load lands just after it.
     pub(crate) started: Instant,
-    /// The weather card's Texts, kept between openings (CenterInfo's card is
-    /// not a Loader: once shown, its Texts live as long as the bar).
-    pub(crate) weather_texts: Option<crate::text::TextMemo>,
     /// Results of work done off the main thread, run back on the event loop.
     pub(crate) bg_tx: smithay_client_toolkit::reexports::calloop::channel::Sender<Box<dyn FnOnce(&mut App) + Send>>,
     /// The one decode thread's queue (runtime.rs, background()).
@@ -277,7 +273,6 @@ impl App {
             timers: HashMap::new(),
             exit: false,
             started: Instant::now(),
-            weather_texts: None,
         };
         if crt_mode {
             crate::crt::start(&mut app);
@@ -1180,7 +1175,6 @@ impl PointerHandler for App {
                         }
                     }
                 }
-                _ => {}
             }
         }
     }
@@ -1320,7 +1314,3 @@ delegate_seat!(App);
 delegate_pointer!(App);
 delegate_shm!(App);
 delegate_registry!(App);
-
-pub fn mango_of(app: &App) -> &Mango {
-    &app.svc.mango
-}

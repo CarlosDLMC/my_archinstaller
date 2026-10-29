@@ -165,7 +165,6 @@ pub struct Wifi {
     pub connected: bool,
     pub ssid: String,
     pub signal: i64,
-    pub connecting: bool,
     pub pulse: crate::anim::Pulse,
     /// Asked for again while a status read ran: one more when it ends.
     again: bool,

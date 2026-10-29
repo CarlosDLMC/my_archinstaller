@@ -19,7 +19,7 @@ use smithay_client_toolkit::{
 };
 
 use crate::anim::{Animated, Easing};
-use crate::app::{App, Win, WinRef};
+use crate::app::{App, Win};
 use crate::bar::{ac, Action, Hit};
 use crate::color::Color;
 use crate::gpu::{Gpu, Scene, TextStyle};
@@ -2351,8 +2351,4 @@ pub fn key(app: &mut App, sym: Keysym, mods: crate::app::Mods, utf8: Option<&str
         }
         _ => {}
     }
-}
-
-pub fn focused(app: &App) -> Option<WinRef> {
-    app.card.as_ref().map(|_| WinRef::Card)
 }

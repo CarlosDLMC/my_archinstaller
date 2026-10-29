@@ -309,7 +309,7 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
             ui.card.tint_alert = false;
             let colx = ix + m.btn_w + 10.0;
             let colw = iw - m.btn_w - 10.0;
-            let col_y = cy + ac(row, (m.name_h + 2.0 + 20.0));
+            let col_y = cy + ac(row, m.name_h + 2.0 + 20.0);
             let pl = ui.fonts.layout(&format!("{}%", (a.volume * 100.0).round() as i64), theme::bar_font(true), HEADER + 1.0, 0.0);
             ui.text_of(STREAM_SLIDER + i, 0xA1, &pl, colx + colw - pl.width, col_y, t.col_white);
             let name = stream_label(n);
@@ -630,6 +630,3 @@ pub fn slider_step(app: &mut App, code: u32, up: bool) {
     }
 }
 
-pub fn now() -> Instant {
-    Instant::now()
-}

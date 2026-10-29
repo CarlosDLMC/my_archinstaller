@@ -181,7 +181,6 @@ enum Pending {
 
 /// One screen's reveal window.
 pub struct RevealWin {
-    pub output: WlOutput,
     pub win: Win,
     tex: Option<Tex>,
     reported: bool,
@@ -1617,7 +1616,7 @@ fn start_reveal(app: &mut App, it: Item) {
         }
         layer.commit();
         let i = app.reveals.len();
-        app.reveals.push(RevealWin { output, win: Win::new(layer, sw as u32, sh as u32), tex: None, reported: false });
+        app.reveals.push(RevealWin { win: Win::new(layer, sw as u32, sh as u32), tex: None, reported: false });
         let path = path_of(&it.src);
         let (w, h) = (sw as u32, sh as u32);
         let cancel = cancel.clone();

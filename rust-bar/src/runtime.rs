@@ -1,7 +1,7 @@
 //! The bar's runtime helpers on App: child processes (QML's Process /
 //! execDetached), timers (Timer), and fd/socket sources for the event loop.
 
-use std::io::{Read, Write};
+use std::io::Read;
 use std::os::fd::AsRawFd;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::os::unix::process::CommandExt;
@@ -49,7 +49,7 @@ impl App {
             });
         }
         let Ok(mut child) = cmd.spawn() else {
-            done(self, ProcDone { tag: tag.into(), stdout: String::new(), ok: false });
+            done(self, ProcDone { stdout: String::new(), ok: false });
             return;
         };
         let stdout = child.stdout.take().unwrap();
@@ -70,7 +70,7 @@ impl App {
                         let ok = child.take().and_then(|mut c| c.wait().ok()).map_or(false, |s| s.success());
                         app.running.remove(&tag);
                         let stdout = String::from_utf8_lossy(&buf).into_owned();
-                        done(app, ProcDone { tag: tag.clone(), stdout, ok });
+                        done(app, ProcDone { stdout, ok });
                         return Ok(PostAction::Remove);
                     }
                     Ok(n) => buf.extend_from_slice(&chunk[..n]),
@@ -394,10 +394,6 @@ fn arm_minute(fd: std::os::fd::RawFd) -> bool {
     unsafe { libc::clock_gettime(libc::CLOCK_REALTIME, &mut now) };
     let at = libc::itimerspec { it_interval: libc::timespec { tv_sec: 60, tv_nsec: 0 }, it_value: libc::timespec { tv_sec: (now.tv_sec / 60 + 1) * 60, tv_nsec: 0 } };
     unsafe { libc::timerfd_settime(fd, libc::TFD_TIMER_ABSTIME | libc::TFD_TIMER_CANCEL_ON_SET, &at, std::ptr::null_mut()) == 0 }
-}
-
-pub fn write_line(mut s: &UnixStream, line: &str) {
-    let _ = s.write_all(line.as_bytes());
 }
 
 /// The thread every background() job runs on, in order - one, as Qt's

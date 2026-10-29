@@ -338,36 +338,6 @@ impl Scene {
         }
     }
 
-    /// Outlined text goes down Qt's native path: FreeType coverage at the
-    /// device size, pen x floored with the fraction rendered in quarters, the
-    /// baseline rounded, and the outline made from the four neighbours.
-    fn text_native_outline(&mut self, fonts: &mut Fonts, line: &Line, x: f32, baseline: f32, color: Color, style_color: Color) {
-        let scale = self.xf.scale();
-        let size = line.size * scale;
-        for g in &line.glyphs {
-            let (dx, dy) = self.xf.apply(x + g.x, baseline);
-            let quarter = Fonts::subpixel_quarter(dx);
-            let Some(ng) = fonts.native_glyph(g.face, g.gid, size, quarter) else { continue };
-            if ng.w == 0 {
-                continue;
-            }
-            let px = dx.floor() + ng.left as f32 - 1.0;
-            let py = dy.round() - ng.top as f32 - 1.0;
-            let mut i = Inst {
-                rect: [px, py, (ng.w + 2) as f32, (ng.h + 2) as f32],
-                xf0: [1.0, 0.0, 0.0],
-                xf1: [0.0, 1.0, 0.0],
-                clip: self.clip,
-                sclip: self.sclip,
-                ..Default::default()
-            };
-            i.uv = [(ng.ax - 1) as f32, (ng.ay - 1) as f32, (ng.ax + ng.w + 1) as f32, (ng.ay + ng.h + 1) as f32];
-            i.color = color.premul(self.opacity);
-            i.color2 = style_color.premul(self.opacity);
-            self.push(Pipe::NativeOutline, i);
-        }
-    }
-
     /// Native glyphs: full hinting snaps the pen to whole pixels, otherwise
     /// it is placed in quarters (QFontEngineFT's subpixel positions).
     fn text_native(&mut self, fonts: &mut Fonts, line: &Line, x: f32, baseline: f32, color: Color, hint: u8) {
@@ -456,12 +426,9 @@ impl Scene {
 
 pub struct Image {
     pub bind: wgpu::BindGroup,
-    pub width: u32,
-    pub height: u32,
 }
 
 pub struct Gpu {
-    pub instance: wgpu::Instance,
     pub adapter: wgpu::Adapter,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -594,7 +561,6 @@ impl Gpu {
             ..Default::default()
         });
         let mut gpu = Gpu {
-            instance,
             adapter,
             device,
             queue,
@@ -762,7 +728,7 @@ impl Gpu {
             layout: &self.layout1,
             entries: &[wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&view) }],
         });
-        let img = Image { bind, width, height };
+        let img = Image { bind };
         if let Some(i) = self.images.iter().skip(1).position(|s| s.is_none()).map(|i| i + 1) {
             self.images[i] = Some(img);
             i as u32

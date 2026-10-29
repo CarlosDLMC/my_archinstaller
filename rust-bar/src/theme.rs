@@ -13,10 +13,6 @@ pub fn bar_font(bold: bool) -> FontKey {
     FontKey { family: FONT, bold, plain: false }
 }
 
-pub fn content_font(bold: bool) -> FontKey {
-    FontKey { family: FONT_CONTENT, bold, plain: false }
-}
-
 #[derive(Clone, Debug)]
 pub struct Theme {
     pub pal_bg: Color,

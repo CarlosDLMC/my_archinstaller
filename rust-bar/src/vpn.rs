@@ -4,9 +4,8 @@
 use std::time::{Duration, Instant};
 
 use crate::app::App;
-use crate::bar::{ac, Action, Hit};
+use crate::bar::ac;
 use crate::cards::{plate, Ui};
-use crate::color::Color;
 use crate::gpu::TextStyle;
 use crate::services::{self, Services};
 use crate::theme::{self, FONT_SIZE};
@@ -242,4 +241,3 @@ fn redraw(app: &mut App) {
     app.mark_card_dirty(&[crate::cards::CardKind::Vpn]);
 }
 
-pub fn unused(_: Color, _: Hit, _: Action) {}
