@@ -1050,8 +1050,9 @@ impl Fonts {
                 return *w;
             }
         }
-        // QFixed::fromReal: a 64th.
-        let fixed = |v: f32| (v * 64.0).round() / 64.0;
+        // QFixed::fromReal: cut to a 64th (an int cast - Qt 6.12 measures
+        // "📶 Hello World" at 20 px as 3.3125 + 119, not 3.328125 + 119).
+        let fixed = |v: f32| (v * 64.0).trunc() / 64.0;
         let (mut width, mut xoff) = (0f32, 0f32);
         for item in items(text) {
             let line = self.layout(item, key, size, 0.0);
