@@ -1083,15 +1083,17 @@ pub fn key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Keysym) {
     use smithay_client_toolkit::seat::keyboard::Keysym;
     match sym {
         Keysym::Escape | Keysym::Return => close(app),
-        Keysym::Left | Keysym::Right | Keysym::Up | Keysym::Down => {
+        // Qt's xkb table gives the keypad's arrows (Num Lock off) the arrow
+        // keys' codes (qxkbcommon.cpp:107-110), so Overview.qml:72 takes them.
+        Keysym::Left | Keysym::Right | Keysym::Up | Keysym::Down | Keysym::KP_Left | Keysym::KP_Right | Keysym::KP_Up | Keysym::KP_Down => {
             let n = ROWS * COLS;
             let cur = app.svc.mango.focused().and_then(|m| m.active_tags.first().copied()).unwrap_or(1);
             let grp = (cur - 1) / n;
             let (lo, hi) = (grp * n + 1, grp * n + n);
             let target = match sym {
-                Keysym::Left => if cur - 1 < lo { hi } else { cur - 1 },
-                Keysym::Right => if cur + 1 > hi { lo } else { cur + 1 },
-                Keysym::Up => if cur - COLS < lo { cur - COLS + n } else { cur - COLS },
+                Keysym::Left | Keysym::KP_Left => if cur - 1 < lo { hi } else { cur - 1 },
+                Keysym::Right | Keysym::KP_Right => if cur + 1 > hi { lo } else { cur + 1 },
+                Keysym::Up | Keysym::KP_Up => if cur - COLS < lo { cur - COLS + n } else { cur - COLS },
                 _ => if cur + COLS > hi { cur + COLS - n } else { cur + COLS },
             };
             services::mango_dispatch(app, &format!("view,{target},0"));
