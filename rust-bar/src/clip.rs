@@ -500,6 +500,20 @@ pub fn click(app: &mut App, action: Action) {
 /// handleKey(), then the search line (TextInput).
 pub fn key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Keysym, mods: Mods, utf8: Option<&str>) {
     use smithay_client_toolkit::seat::keyboard::Keysym;
+    // NumLock off, the keypad's keys reach Qt as Key_Up .. Key_Delete (with
+    // KeypadModifier, which handleKey and TextInput's key matching ignore).
+    let sym = match sym {
+        Keysym::KP_Up => Keysym::Up,
+        Keysym::KP_Down => Keysym::Down,
+        Keysym::KP_Prior => Keysym::Prior,
+        Keysym::KP_Next => Keysym::Next,
+        Keysym::KP_Left => Keysym::Left,
+        Keysym::KP_Right => Keysym::Right,
+        Keysym::KP_Home => Keysym::Home,
+        Keysym::KP_End => Keysym::End,
+        Keysym::KP_Delete => Keysym::Delete,
+        s => s,
+    };
     match sym {
         Keysym::Escape => return close(app),
         Keysym::Down => return move_sel(app, 1),
@@ -566,13 +580,16 @@ fn edit_line(c: &mut Clip, sym: smithay_client_toolkit::seat::keyboard::Keysym, 
             let to = if mods.ctrl { word_right(&c.filter, c.cursor) } else { next(&c.filter, c.cursor) };
             c.filter.replace_range(c.cursor..to, "");
         }
+        // With Ctrl+A's selection a plain arrow lands on that side of it
+        // (QQuickTextInputPrivate::processKeyEvent: moveCursor(selectionStart()
+        // / selectionEnd())); Ctrl+arrow moves a word from the cursor.
         Keysym::Left => {
+            c.cursor = if mods.ctrl { word_left(&c.filter, c.cursor) } else if c.select_all { 0 } else { prev(&c.filter, c.cursor) };
             c.select_all = false;
-            c.cursor = if mods.ctrl { word_left(&c.filter, c.cursor) } else { prev(&c.filter, c.cursor) };
         }
         Keysym::Right => {
+            c.cursor = if mods.ctrl { word_right(&c.filter, c.cursor) } else if c.select_all { c.filter.len() } else { next(&c.filter, c.cursor) };
             c.select_all = false;
-            c.cursor = if mods.ctrl { word_right(&c.filter, c.cursor) } else { next(&c.filter, c.cursor) };
         }
         Keysym::Home => {
             c.select_all = false;
