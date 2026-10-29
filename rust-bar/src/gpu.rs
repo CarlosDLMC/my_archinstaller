@@ -490,23 +490,43 @@ fn bytes<T>(v: &[T]) -> &[u8] {
     unsafe { std::slice::from_raw_parts(v.as_ptr() as *const u8, std::mem::size_of_val(v)) }
 }
 
+/// The adapter the bar draws with: Vulkan (the instance's only backend), the
+/// low-power GPU.
+fn adapter_options<'a, 'b>(compatible: Option<&'a wgpu::Surface<'b>>) -> wgpu::RequestAdapterOptions<'a, 'b> {
+    wgpu::RequestAdapterOptions { power_preference: wgpu::PowerPreference::LowPower, compatible_surface: compatible, force_fallback_adapter: false }
+}
+
+/// The device on it: dual-source blending is the subpixel text's.
+fn device_descriptor(adapter: &wgpu::Adapter) -> wgpu::DeviceDescriptor<'static> {
+    wgpu::DeviceDescriptor {
+        label: None,
+        required_features: wgpu::Features::DUAL_SOURCE_BLENDING,
+        required_limits: wgpu::Limits::downlevel_defaults().using_resolution(adapter.limits()),
+        // Small allocation blocks: the bar's buffers are tiny.
+        memory_hints: wgpu::MemoryHints::MemoryUsage,
+        trace: wgpu::Trace::Off,
+    }
+}
+
+/// `rust-bar gpu-check`: what Gpu::new needs, asked without panicking - an
+/// adapter as the bar requests it, with dual-source blending, and a device
+/// on it. A driver file is no device (Sandy Bridge with vulkan-intel, GCN 1/2
+/// on radeon.ko, an NVIDIA card NVK does not drive): install-scripts/rust-bar.sh
+/// adds Mesa's software Vulkan when this finds none. The adapter's name if so.
+pub fn usable() -> Option<String> {
+    let instance = Gpu::new_instance();
+    let adapter = pollster::block_on(instance.request_adapter(&adapter_options(None))).ok()?;
+    if !adapter.features().contains(wgpu::Features::DUAL_SOURCE_BLENDING) {
+        return None;
+    }
+    pollster::block_on(adapter.request_device(&device_descriptor(&adapter))).ok()?;
+    Some(adapter.get_info().name)
+}
+
 impl Gpu {
     pub fn new(compatible: Option<&wgpu::Surface<'_>>, instance: wgpu::Instance) -> Gpu {
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::LowPower,
-            compatible_surface: compatible,
-            force_fallback_adapter: false,
-        }))
-        .expect("no Vulkan adapter");
-        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-            label: None,
-            required_features: wgpu::Features::DUAL_SOURCE_BLENDING,
-            required_limits: wgpu::Limits::downlevel_defaults().using_resolution(adapter.limits()),
-            // Small allocation blocks: the bar's buffers are tiny.
-            memory_hints: wgpu::MemoryHints::MemoryUsage,
-            trace: wgpu::Trace::Off,
-        }))
-        .expect("no device");
+        let adapter = pollster::block_on(instance.request_adapter(&adapter_options(compatible))).expect("no Vulkan adapter");
+        let (device, queue) = pollster::block_on(adapter.request_device(&device_descriptor(&adapter))).expect("no device");
         let common = include_str!("common.wgsl");
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("bar"),
