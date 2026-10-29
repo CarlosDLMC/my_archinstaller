@@ -48,8 +48,9 @@ pub struct Usage {
     clock_texts: String,
 }
 
-/// The open card's 30 s timer (AgentPanel's nowTick + AgentUsage's stats Timer).
-const TICK: &str = "agent-tick";
+/// The open card's 30 s timer (AgentPanel's nowTick + AgentUsage's stats
+/// Timer); cards::close stops it by this name.
+pub(crate) const TICK: &str = "agent-tick";
 
 fn now_s() -> f64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map_or(0.0, |d| d.as_secs_f64())

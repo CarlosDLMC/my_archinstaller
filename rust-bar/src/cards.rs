@@ -815,15 +815,13 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
     }
 }
 
-/// The agent card's tick (AgentPanel.qml nowTick, AgentUsage.qml:149-154),
-/// agent.rs's TICK: QML's Timers run while the card is open (running:
-/// cardOpen) and stop when it closes. The mic meter's Timer is audio_card's
-/// one clock (start_meter, after the card's first draw), which ends at its
-/// first tick without the audio card.
-const AGENT_TICK: &str = "agent-tick";
-
 pub fn close(app: &mut App) {
-    app.cancel_timer(AGENT_TICK);
+    // The agent card's tick (AgentPanel.qml nowTick, AgentUsage.qml:149-154):
+    // QML's Timers run while the card is open (running: cardOpen) and stop
+    // when it closes. The mic meter's Timer is audio_card's one clock
+    // (start_meter, after the card's first draw), which ends at its first
+    // tick without the audio card.
+    app.cancel_timer(crate::agent::TICK);
     if app.card.as_ref().map(|c| c.kind) == Some(CardKind::Pult) {
         crate::pult::closed(app);
     }
