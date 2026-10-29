@@ -128,15 +128,19 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, busy: (bool, bool)) {
 
     // The configs, a flag after each.
     if !svc.vpn_card.configs.is_empty() {
-        let n = svc.vpn_card.configs.len().min(8);
+        let configs = &svc.vpn_card.configs;
+        let n = configs.len().min(8);
         let h = n as f32 * (m.row + 2.0) - 2.0 + 8.0;
         plate(ui, x0, y, cw, h);
-        let mut ry = y + 4.0;
-        for (i, name) in svc.vpn_card.configs.iter().take(8).enumerate() {
+        // vpnListView: 8 rows in view, the rest scrolled to; the tunnel in
+        // use is lit and not pickable.
+        let pickable = |i: usize| configs.get(i).map_or(false, |c| *c != svc.vpn);
+        let list = ui.list_begin(ROW, x0 + 4.0, y + 4.0, cw - 8.0, n, configs.len(), m.row, 2.0, crate::cards::model_sig(configs), pickable);
+        for (i, name) in configs.iter().enumerate() {
             let lit = *name == svc.vpn;
-            crate::cards::console_row(ui, ROW + i as u32, x0 + 4.0, ry, cw - 8.0, m.row, "", name, lit, !lit, None, Some(flag(name)).filter(|f| !f.is_empty()));
-            ry += m.row + 2.0;
+            crate::cards::console_row(ui, ROW + i as u32, x0 + 4.0, list.row_y(i), cw - 8.0, m.row, "", name, lit, !lit, None, Some(flag(name)).filter(|f| !f.is_empty()));
         }
+        ui.view_end(list);
     }
 }
 

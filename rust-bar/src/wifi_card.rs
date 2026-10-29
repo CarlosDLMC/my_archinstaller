@@ -301,8 +301,11 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, busy: bool) {
     let rows = list_rows(svc);
     let h = rows as f32 * (m.row + 2.0) - 2.0 + 8.0;
     plate(ui, x0, y, cw, h);
-    let mut ry = y + 4.0;
-    for (i, (ssid, signal, security)) in wc.networks.iter().take(8).enumerate() {
+    // networkListView: 8 rows in view, the rest (up to 30) scrolled to.
+    let sig = crate::cards::model_sig(&wc.networks);
+    let list = ui.list_begin(ROW, x0 + 4.0, y + 4.0, cw - 8.0, rows, wc.networks.len(), m.row, 2.0, sig, |_| true);
+    for (i, (ssid, signal, security)) in wc.networks.iter().enumerate() {
+        let ry = list.row_y(i);
         let is_connecting = busy && *ssid == wc.selected_ssid;
         let lit = *ssid == svc.wifi.ssid || is_connecting;
         let tint = if is_connecting { t.col_alert } else { t.col_accent };
@@ -321,8 +324,8 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, busy: bool) {
             Some(("подключение…", t.col_alert)).filter(|_| is_connecting),
             if security.is_empty() { None } else { Some(("\u{f033e}", t.col_grey)) },
         );
-        ry += m.row + 2.0;
     }
+    ui.view_end(list);
 }
 
 pub fn activate(app: &mut App, code: u32) {
