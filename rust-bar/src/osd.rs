@@ -509,7 +509,10 @@ pub fn key(app: &mut App, kind: OsdKind, sym: smithay_client_toolkit::seat::keyb
         OsdKind::Layout => {}
         OsdKind::Power => crate::power::key(app, sym, scan, shift),
         OsdKind::Shot | OsdKind::Record => crate::capture::key(app, kind, sym, scan),
-        OsdKind::Polkit => crate::polkit::key(app, sym, utf8),
+        // QInputControl::isAcceptableInput, as clip.rs's search applies it:
+        // what Ctrl or Ctrl+Shift types is no text for the field (Ctrl+1 puts
+        // no "1" in it); AltGr's (Ctrl+Alt) is.
+        OsdKind::Polkit => crate::polkit::key(app, sym, utf8.filter(|_| !(mods.ctrl && !mods.alt))),
         OsdKind::Clipboard => crate::clip::key(app, sym, mods, utf8),
         OsdKind::Wallpaper => crate::wallpaper::key(app, sym, mods, utf8),
         OsdKind::Overview(_) => crate::overview::key(app, sym),
