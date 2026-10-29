@@ -122,10 +122,14 @@ pub struct Overview {
     shot_gen: u32,
     /// Each window's picture and the shot generation it is from.
     previews: HashMap<i64, (Tex, u32)>,
-    icons: HashMap<(String, u32), Option<Tex>>,
+    /// Icon textures by icon name, then size (None: no icon to be had).
+    icons: HashMap<String, HashMap<u32, Option<Tex>>>,
     icon_loading: HashSet<(String, u32)>,
     desktop: Option<HashMap<String, String>>,
-    icon_paths: HashMap<String, Option<String>>,
+    /// App id -> icon name (DesktopEntries.heuristicLookup), for drawing.
+    names: HashMap<String, String>,
+    /// Where an icon was found, by name and size.
+    icon_paths: HashMap<(String, u32), Option<String>>,
     hovered: Option<(u8, i64)>,
     press: Option<Press>,
     drop_ws: Option<(u8, i64)>,
@@ -187,7 +191,7 @@ pub fn close(app: &mut App) {
         app.unwatch(t);
     }
     app.osds.retain(|o| !matches!(o.kind, OsdKind::Overview(_)));
-    let ids: Vec<u32> = app.svc.overview.previews.drain().map(|(_, (t, _))| t.id).chain(app.svc.overview.icons.drain().filter_map(|(_, t)| t.map(|t| t.id))).collect();
+    let ids: Vec<u32> = app.svc.overview.previews.drain().map(|(_, (t, _))| t.id).chain(app.svc.overview.icons.drain().flat_map(|(_, by)| by.into_values().flatten().map(|t| t.id))).collect();
     app.svc.overview.icon_loading.clear();
     if let Some(gpu) = app.gpu.as_mut() {
         for id in ids {
@@ -363,13 +367,16 @@ fn decode(file: std::fs::File) -> Option<(u32, u32, Vec<u8>)> {
 
 // ---- icons: DesktopEntries.heuristicLookup + Quickshell.iconPath ----
 
-/// Desktop entries by id (and lowercase id) and by StartupWMClass: their Icon.
+/// Desktop entries by id (and lowercase id) and by StartupWMClass: their
+/// Icon, empty when they have none. As quickshell's DesktopEntryManager: the
+/// data dirs in priority order, an id seen before is skipped, a later entry
+/// with the same lowercase id takes that key over.
 fn desktop_index() -> HashMap<String, String> {
     let mut dirs = vec![std::env::var("XDG_DATA_HOME").unwrap_or_else(|_| format!("{}/.local/share", services::home()))];
     dirs.extend(std::env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/local/share:/usr/share".into()).split(':').map(String::from));
     let mut by_id: HashMap<String, String> = HashMap::new();
     let mut by_class: HashMap<String, String> = HashMap::new();
-    for d in dirs.iter().rev() {
+    for d in &dirs {
         let root = format!("{d}/applications");
         let mut stack = vec![root.clone()];
         while let Some(dir) = stack.pop() {
@@ -383,6 +390,9 @@ fn desktop_index() -> HashMap<String, String> {
                 let ps = p.to_string_lossy().into_owned();
                 let Some(rel) = ps.strip_prefix(&format!("{root}/")).and_then(|r| r.strip_suffix(".desktop")) else { continue };
                 let id = rel.replace('/', "-");
+                if by_id.contains_key(&id) {
+                    continue;
+                }
                 let Ok(text) = std::fs::read_to_string(&p) else { continue };
                 let mut in_entry = false;
                 let (mut icon, mut class) = (String::new(), String::new());
@@ -401,15 +411,12 @@ fn desktop_index() -> HashMap<String, String> {
                         class = v.trim().into();
                     }
                 }
-                if icon.is_empty() {
-                    continue;
-                }
-                by_id.insert(id.clone(), icon.clone());
-                by_id.entry(format!("lc:{}", id.to_lowercase())).or_insert(icon.clone());
+                by_id.insert(format!("lc:{}", id.to_lowercase()), icon.clone());
                 if !class.is_empty() {
                     by_class.entry(format!("wm:{class}")).or_insert(icon.clone());
-                    by_class.entry(format!("wmlc:{}", class.to_lowercase())).or_insert(icon);
+                    by_class.entry(format!("wmlc:{}", class.to_lowercase())).or_insert(icon.clone());
                 }
+                by_id.insert(id, icon);
             }
         }
     }
@@ -417,10 +424,9 @@ fn desktop_index() -> HashMap<String, String> {
     by_id
 }
 
+/// The icon name for an app id: its desktop entry's Icon, else the app id
+/// (Quickshell.iconPath(entry?.icon ?? appid, ...)).
 fn icon_name(idx: &HashMap<String, String>, appid: &str) -> String {
-    if appid.is_empty() {
-        return "application-x-executable".into();
-    }
     for k in [appid.to_string(), format!("lc:{}", appid.to_lowercase()), format!("wm:{appid}"), format!("wmlc:{}", appid.to_lowercase())] {
         if let Some(i) = idx.get(&k) {
             return i.clone();
@@ -466,6 +472,9 @@ fn icon_base_dirs() -> Vec<String> {
 /// QIcon::fromTheme(name): the first theme that has it - scalable first,
 /// else the closest PNG at or above the size; /usr/share/pixmaps last.
 fn find_icon(name: &str, size: u32) -> Option<String> {
+    if name.is_empty() {
+        return None;
+    }
     if name.starts_with('/') {
         return std::path::Path::new(name).exists().then(|| name.to_string());
     }
@@ -517,47 +526,57 @@ fn render_icon(path: &str, size: u32) -> Option<(u32, u32, Vec<u8>)> {
     Some((size, size, crate::gpu::premultiply(img.into_raw())))
 }
 
-/// The icons the open overview needs, rendered off the main thread.
+/// The icons the open overview needs, looked up and rendered off the main
+/// thread.
 fn load_icons(app: &mut App) {
-    if app.svc.overview.desktop.is_none() {
-        app.svc.overview.desktop = Some(desktop_index());
-    }
     let mut jobs = Vec::new();
     let monitors = app.svc.mango.monitors.clone();
     for m in &monitors {
         let g = geo(m);
         for (c, _) in visible(&app.svc.overview, m, &g) {
+            let o = &mut app.svc.overview;
+            if !o.names.contains_key(&c.appid) {
+                let name = icon_name(o.desktop.get_or_insert_with(desktop_index), &c.appid);
+                o.names.insert(c.appid.clone(), name);
+            }
+            let Some(name) = o.names.get(&c.appid).cloned() else { continue };
             let size = icon_size(&c, m, &g).round() as u32;
-            let name = icon_name(app.svc.overview.desktop.as_ref().unwrap(), &c.appid);
-            let key = (name.clone(), size);
-            if app.svc.overview.icons.contains_key(&key) || app.svc.overview.icon_loading.contains(&key) {
+            if o.icons.get(&name).map_or(false, |by| by.contains_key(&size)) || !o.icon_loading.insert((name.clone(), size)) {
                 continue;
             }
-            let path = match app.svc.overview.icon_paths.get(&name) {
-                Some(p) => p.clone(),
-                None => {
-                    let p = find_icon(&name, size).or_else(|| find_icon("application-x-executable", size)).or_else(|| find_icon("image-missing", size));
-                    app.svc.overview.icon_paths.insert(name.clone(), p.clone());
-                    p
-                }
-            };
-            app.svc.overview.icon_loading.insert(key.clone());
-            jobs.push((key, path));
+            let known = o.icon_paths.get(&(name.clone(), size)).cloned();
+            jobs.push((name, size, known));
         }
     }
-    for (key, path) in jobs {
-        app.background(move || (key.clone(), path.and_then(|p| render_icon(&p, key.1))), |app, (key, img)| {
-            app.svc.overview.icon_loading.remove(&key);
-            if !app.svc.overview.open {
-                return;
-            }
-            let tex = match (img, app.gpu.as_mut()) {
-                (Some((w, h, rgba)), Some(gpu)) => Some(Tex { id: gpu.add_image(w, h, rgba, false) }),
-                _ => None,
-            };
-            app.svc.overview.icons.insert(key, tex);
-            redraw(app);
-        });
+    for (name, size, known) in jobs {
+        app.background(
+            move || {
+                // Quickshell.iconPath(name, "image-missing"): QIcon::fromTheme(name), else the fallback's.
+                let path = known.unwrap_or_else(|| find_icon(&name, size).or_else(|| find_icon("image-missing", size)));
+                let img = path.as_deref().and_then(|p| render_icon(p, size));
+                (name, size, path, img)
+            },
+            |app, (name, size, path, img)| {
+                let o = &mut app.svc.overview;
+                o.icon_loading.remove(&(name.clone(), size));
+                o.icon_paths.insert((name.clone(), size), path);
+                if !o.open {
+                    return;
+                }
+                let tex = match (img, app.gpu.as_mut()) {
+                    (Some((w, h, rgba)), Some(gpu)) => Some(Tex { id: gpu.add_image(w, h, rgba, false) }),
+                    _ => None,
+                };
+                // A job queued before a quick close and reopen can land after
+                // the reopen's own: the first texture is freed, not dropped.
+                if let Some(Some(old)) = app.svc.overview.icons.entry(name).or_default().insert(size, tex) {
+                    if let Some(gpu) = app.gpu.as_mut() {
+                        gpu.drop_image(old.id);
+                    }
+                }
+                redraw(app);
+            },
+        );
     }
 }
 
@@ -762,9 +781,15 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, screen: u8, panel: (f32, f32, f32, f32), 
         let hovered = o.hovered == Some((screen, c.id));
         let wash = if pressed { wa(0.22) } else if hovered { wa(0.12) } else { wa(0.0) };
         ui.scene.rect(x, y, w, h, wash, 0.0, 1.0, Color { a: 0.3, ..t.col_grey }, false);
+        // The icon at its size; until that is rendered, the closest one there
+        // is (QML's new tile loads its icon synchronously, nothing blinks).
         let s = icon_size(c, m, &g);
-        let name = o.desktop.as_ref().map(|d| icon_name(d, &c.appid)).unwrap_or_default();
-        if let Some(Some(tex)) = o.icons.get(&(name, s.round() as u32)) {
+        let want = s.round() as u32;
+        let tex = o.names.get(&c.appid).and_then(|n| o.icons.get(n)).and_then(|by| match by.get(&want) {
+            Some(t) => *t,
+            None => by.iter().filter_map(|(k, t)| t.map(|t| (k.abs_diff(want), t))).min_by_key(|e| e.0).map(|e| e.1),
+        });
+        if let Some(tex) = tex {
             ui.scene.image(tex.id, x + ac(w, s), y + ac(h, s), s, s, [0.0, 0.0, 1.0, 1.0]);
         }
         ui.scene.restore();
