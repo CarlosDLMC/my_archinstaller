@@ -44,6 +44,11 @@ impl Color {
             return Some(Color::TRANSPARENT);
         }
         let h = s.strip_prefix('#')?;
+        // Hex digits only, as QColor::fromString wants: the slices below
+        // count bytes, and a sign is no digit to it either.
+        if !h.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return None;
+        }
         let v = |i: usize, n: usize| u32::from_str_radix(&h[i..i + n], 16).ok();
         let c8 = |x: u32| x as f32 / 255.0;
         match h.len() {
