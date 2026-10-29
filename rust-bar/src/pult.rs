@@ -637,8 +637,11 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, scanning: bool) {
                 plate(ui, x0, y, cw, h);
                 let (list, base) = if kind == 3 { (&p.bt_devices, PAIRED_ROW) } else { (&p.found, FOUND_ROW) };
                 // deviceList / foundList: 6 rows in view, the rest scrolled to.
-                let lv = ui.list_begin(base, x0 + 4.0, y + 4.0, cw - 8.0, list.len().min(6), list.len(), m.row_h, 2.0, crate::cards::model_sig(list), |_| true);
-                for (i, (mac, name)) in list.iter().enumerate() {
+                // A list has 0x100 codes: a 257th found device would be the
+                // РАЗГОН key (PROFILE), a 257th paired one a found row.
+                let count = list.len().min(0x100);
+                let lv = ui.list_begin(base, x0 + 4.0, y + 4.0, cw - 8.0, count.min(6), count, m.row_h, 2.0, crate::cards::model_sig(list), |_| true);
+                for (i, (mac, name)) in list.iter().enumerate().take(count) {
                     let ry = lv.row_y(i);
                     if kind == 3 {
                         let connected = *name == p.bt_connected_device;
