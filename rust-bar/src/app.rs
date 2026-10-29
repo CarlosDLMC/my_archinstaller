@@ -706,7 +706,7 @@ impl App {
     /// the first one - whose pixelDelta is the frame's value rounded, the
     /// error carried to the next frame (pixelDeltaAndError); axis_stop ends
     /// it (ScrollEnd).
-    fn finger_scroll(&mut self, w: WinRef, h: &AxisScroll, v: &AxisScroll, angle: (f32, f32)) {
+    fn finger_scroll(&mut self, w: WinRef, h: &AxisScroll, v: &AxisScroll, angle: (f32, f32), time: u32) {
         use crate::cards::Scroll;
         let send = |app: &mut App, s: Scroll| match w {
             WinRef::Card => cards::finger_scroll(app, s),
@@ -715,13 +715,13 @@ impl App {
         if angle != (0.0, 0.0) {
             if self.finger.is_none() {
                 self.finger = Some((0.0, 0.0));
-                send(self, Scroll::Begin);
+                send(self, Scroll::Begin { time });
             }
             let Some(rest) = self.finger.as_mut() else { return };
             // qRound of the value and the error so far, as QPointF::toPoint.
             let (px, py) = ((h.absolute + rest.0 + 0.5).floor(), (v.absolute + rest.1 + 0.5).floor());
             *rest = (rest.0 + h.absolute - px, rest.1 + v.absolute - py);
-            send(self, Scroll::Update { dx: px as f32, dy: py as f32, angle: angle.1 });
+            send(self, Scroll::Update { dx: px as f32, dy: py as f32, angle: angle.1, time });
         }
         if h.stop || v.stop {
             self.end_finger_scroll();
@@ -1133,7 +1133,7 @@ impl PointerHandler for App {
                     // ScrollBegin / ScrollUpdate / ScrollEnd phases, which a
                     // Flickable - a card's, the clipboard's list - follows 1:1.
                     if source == Some(wl_pointer::AxisSource::Finger) && matches!(w, WinRef::Card | WinRef::Osd(crate::osd::OsdKind::Clipboard)) {
-                        self.finger_scroll(w, &horizontal, &vertical, (dx, dy));
+                        self.finger_scroll(w, &horizontal, &vertical, (dx, dy), time);
                         continue;
                     }
                     if horizontal.stop || vertical.stop {

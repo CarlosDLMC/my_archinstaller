@@ -616,12 +616,26 @@ pub fn finger_scroll(app: &mut App, s: crate::cards::Scroll) {
     let c = &mut app.svc.clip;
     let (cur, max, gliding) = (c.scroll_at(now), max_scroll(c.filtered().len()), c.glide_at(now).is_some());
     let to = match s {
-        Scroll::Begin => {
+        Scroll::Begin { time } => {
             c.drag = over.then(|| PixelDrag::begin(cur));
+            // ScrollBegin leaves lastPosTime at its own time (cards::finger_scroll).
+            if over {
+                c.wheel_time = Some(time);
+            }
             None
         }
-        Scroll::End => c.drag.take().and_then(|d| d.end(cur, max)),
-        Scroll::Update { dx, dy, .. } if over => c.drag.as_mut().and_then(|d| d.update(dx, dy, cur, max, gliding).0),
+        Scroll::End => {
+            // ScrollEnd: lastPosTime = -1.
+            if c.drag.is_some() {
+                c.wheel_time = None;
+            }
+            c.drag.take().and_then(|d| d.end(cur, max))
+        }
+        // The first update, at ScrollBegin's time, fails lastPosTime's test.
+        Scroll::Update { dx, dy, time, .. } if over => match crate::cards::wheel_time(&mut c.wheel_time, time) {
+            true => c.drag.as_mut().and_then(|d| d.update(dx, dy, cur, max, gliding).0),
+            false => None,
+        },
         Scroll::Update { .. } => None,
     };
     if let Some(to) = to {

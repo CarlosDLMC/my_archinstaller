@@ -296,11 +296,11 @@ struct Flick {
 /// (QWaylandInputDevice::Pointer::flushScrollEvent).
 #[derive(Clone, Copy, PartialEq)]
 pub enum Scroll {
-    /// ScrollBegin, before the first frame.
-    Begin,
-    /// ScrollUpdate: the frame's pixelDelta (contentY up for dy > 0) and its
-    /// angleDelta.y, for what reads the angle.
-    Update { dx: f32, dy: f32, angle: f32 },
+    /// ScrollBegin, before the first frame, with that frame's time.
+    Begin { time: u32 },
+    /// ScrollUpdate: the frame's pixelDelta (contentY up for dy > 0), its
+    /// angleDelta.y, for what reads the angle, and its time.
+    Update { dx: f32, dy: f32, angle: f32, time: u32 },
     /// ScrollEnd, at axis_stop.
     End,
 }
@@ -392,9 +392,10 @@ impl PixelDrag {
     /// One ScrollUpdate on a Flickable at contentY `cur` with ends 0 and
     /// `max` (`gliding`: the wheel's glide runs, it is moving): where contentY
     /// goes, and whether the Flickable takes the event - between its ends
-    /// only, else it goes on to what is under it. The first update only
-    /// arms stealGrab and the second sets dragStartOffset to the sum so far,
-    /// so the content does not jump: it moves from the third on.
+    /// only, else it goes on to what is under it. The first update it gets
+    /// (the scroll's second: lastPosTime drops the first) only arms
+    /// stealGrab and the next sets dragStartOffset to the sum so far, so the
+    /// content does not jump: it moves from the one after.
     pub(crate) fn update(&mut self, dx: f32, dy: f32, cur: f32, max: f32, gliding: bool) -> (Option<f32>, bool) {
         self.acc = (self.acc.0 + dx, self.acc.1 + dy);
         let a = self.acc.1;
@@ -2101,23 +2102,29 @@ pub fn wheel(app: &mut App, angle_delta_y: f32, time: u32) {
 pub fn finger_scroll(app: &mut App, s: Scroll) {
     let now = Instant::now();
     match s {
-        Scroll::Begin => {
+        Scroll::Begin { time } => {
             let Some(c) = app.card.as_mut() else { return };
             for i in flicks_under(c) {
                 let y = c.flicks[i].y(now);
                 c.flicks[i].drag = Some(PixelDrag::begin(y));
+                // ScrollBegin sets lastPosTime to -1, then (its angle path
+                // moving nothing) to its own time: the frame's.
+                c.flicks[i].wheel_time = Some(time);
             }
         }
         Scroll::End => {
             let Some(c) = app.card.as_mut() else { return };
             for f in c.flicks.iter_mut() {
-                if let Some(to) = f.drag.take().and_then(|d| d.end(f.y(now), f.max)) {
+                let Some(d) = f.drag.take() else { continue };
+                // ScrollEnd: lastPosTime = -1.
+                f.wheel_time = None;
+                if let Some(to) = d.end(f.y(now), f.max) {
                     f.jump(to);
                     c.win.dirty = true;
                 }
             }
         }
-        Scroll::Update { dx, dy, angle } => {
+        Scroll::Update { dx, dy, angle, time } => {
             if angle != 0.0 && slider_wheel(app, angle) {
                 return;
             }
@@ -2126,6 +2133,13 @@ pub fn finger_scroll(app: &mut App, s: Scroll) {
                 let f = &mut c.flicks[i];
                 let (cur, max, gliding) = (f.y(now), f.max, f.glide.running(now));
                 let Some(d) = f.drag.as_mut() else { continue };
+                // QtWayland stamps ScrollBegin and the first ScrollUpdate with
+                // the same time, so that update fails wheelEvent's lastPosTime
+                // test in every Flickable under the pointer: it moves nothing
+                // and goes on (wheel_time).
+                if !wheel_time(&mut f.wheel_time, time) {
+                    continue;
+                }
                 let (to, taken) = d.update(dx, dy, cur, max, gliding);
                 if let Some(to) = to {
                     f.jump(to);
