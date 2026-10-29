@@ -13,7 +13,7 @@ use smithay_client_toolkit::{
 };
 use wayland_client::protocol::wl_output::WlOutput;
 
-use crate::anim::{ease, Animated, Easing};
+use crate::anim::{ease, Easing};
 use crate::app::{App, Mods, Win};
 use crate::bar::{ac, Action};
 use crate::cards::Ui;
@@ -58,6 +58,98 @@ struct Tex {
     h: u32,
 }
 
+/// QSmoothedAnimation, which ListView moves its highlight with: velocity
+/// 400 px/s (highlightMoveVelocity) and highlightMoveDuration, the shorter
+/// wins (qquicksmoothedanimation.cpp, recalc() and easeFollow(), reversingMode
+/// Eased). It speeds up, then slows down onto the target, and a new target
+/// mid-move keeps the speed it has instead of starting from rest. Checked
+/// against a real ListView's contentX: two quick Rights and a Right-Left
+/// reversal land on every sample to 0.01 px.
+#[derive(Clone, Copy, Debug)]
+struct Smoothed {
+    /// This leg: from where, to where, since when, and towards smaller values.
+    from: f64,
+    to: f64,
+    start: Option<Instant>,
+    invert: bool,
+    /// Its distance s and start velocity vi; acceleration a until tp (where
+    /// it has velocity vp and distance sp), then braking at a until tf.
+    s: f64,
+    vi: f64,
+    a: f64,
+    tp: f64,
+    vp: f64,
+    sp: f64,
+    tf: f64,
+}
+
+impl Smoothed {
+    const VELOCITY: f64 = 400.0;
+
+    /// At rest at `v` (also jump(): highlightMoveDuration 0 is a jump).
+    fn new(v: f32) -> Smoothed {
+        let v = v as f64;
+        Smoothed { from: v, to: v, start: None, invert: false, s: 0.0, vi: 0.0, a: 0.0, tp: 0.0, vp: 0.0, sp: 0.0, tf: 0.0 }
+    }
+
+    /// easeFollow(): distance covered and velocity, t seconds into the leg.
+    fn leg(&self, t: f64) -> (f64, f64) {
+        if t < self.tp {
+            (0.5 * self.a * t * t + self.vi * t, self.vi + t * self.a)
+        } else if t < self.tf {
+            let u = t - self.tp;
+            (self.sp - 0.5 * self.a * u * u + self.vp * u, self.vp - u * self.a)
+        } else {
+            (self.s, 0.0)
+        }
+    }
+
+    /// The value now, and the velocity along the leg's direction.
+    fn state(&self, now: Instant) -> (f64, f64) {
+        let Some(start) = self.start else { return (self.to, 0.0) };
+        let (d, v) = self.leg(now.saturating_duration_since(start).as_secs_f64());
+        (if self.invert { self.from - d } else { self.from + d }, v)
+    }
+
+    fn get(&self, now: Instant) -> f32 {
+        self.state(now).0 as f32
+    }
+
+    fn target(&self) -> f32 {
+        self.to as f32
+    }
+
+    fn running(&self, now: Instant) -> bool {
+        self.start.map_or(false, |s| now.saturating_duration_since(s).as_secs_f64() < self.tf)
+    }
+
+    /// restart() with a new target: init() and recalc().
+    fn set(&mut self, to: f32, now: Instant) {
+        let to = to as f64;
+        if to == self.to {
+            return;
+        }
+        let (from, v) = self.state(now);
+        self.to = to;
+        if to == from {
+            self.start = None;
+            return;
+        }
+        // Turning back: the speed it has now points the other way.
+        let reversed = v != 0.0 && (!self.invert == (from - to > 0.0));
+        let vi = if reversed { -v } else { v };
+        let invert = to < from;
+        let s = (to - from).abs();
+        let tf = (s / Self::VELOCITY).min(MOVE_MS as f64 / 1000.0);
+        let (c1, c2, c3) = (0.25 * tf * tf, 0.5 * vi * tf - s, -0.25 * vi * vi);
+        let a = (-c2 + (c2 * c2 - 4.0 * c1 * c3).sqrt()) / (2.0 * c1);
+        let tp = 0.5 * tf - 0.5 * vi / a;
+        let vp = a * tp + vi;
+        let sp = 0.5 * a * tp * tp + vi * tp;
+        *self = Smoothed { from, to, start: Some(now), invert, s, vi, a, tp, vp, sp, tf };
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 enum Pending {
     #[default]
@@ -91,7 +183,7 @@ pub struct Wall {
     cursor: usize,
     // The view: list.currentIndex, contentX and what reselect() keeps.
     index: usize,
-    view_x: Option<Animated<f32>>,
+    view_x: Option<Smoothed>,
     pending: Pending,
     centred_id: String,
     wheel_acc: f32,
@@ -400,9 +492,7 @@ fn jump(app: &mut App, i: usize) {
     let g = geo(sw, sh);
     let w = &mut app.svc.wall;
     w.index = i;
-    let mut a = Animated::new(content_x(&g, i), MOVE_MS, Easing::InOutQuad);
-    a.snap(content_x(&g, i));
-    w.view_x = Some(a);
+    w.view_x = Some(Smoothed::new(content_x(&g, i)));
     set_centred(app);
     if let Some(o) = app.osd_mut(OsdKind::Wallpaper) {
         o.st.reset_numbers();
@@ -417,7 +507,7 @@ fn set_centred(app: &mut App) {
     }
 }
 
-/// The highlight moves there in 220 ms.
+/// The highlight moves there in 220 ms (a SmoothedAnimation).
 fn move_to(app: &mut App, i: usize) {
     let (sw, sh) = screen_of(app);
     let g = geo(sw, sh);
@@ -427,11 +517,7 @@ fn move_to(app: &mut App, i: usize) {
     let now = Instant::now();
     match w.view_x.as_mut() {
         Some(a) => a.set(target, now),
-        None => {
-            let mut a = Animated::new(target, MOVE_MS, Easing::InOutQuad);
-            a.snap(target);
-            w.view_x = Some(a);
-        }
+        None => w.view_x = Some(Smoothed::new(target)),
     }
     set_centred(app);
     redraw(app);
