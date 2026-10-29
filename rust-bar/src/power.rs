@@ -375,6 +375,12 @@ fn show_osd(app: &mut App) {
 /// vertically, its letter spacing making every character exactly one cell.
 #[allow(clippy::too_many_arguments)]
 fn cell<S: UiState>(ui: &mut Ui<S>, g: &Grid, id: u32, x: f32, y: f32, text: &str, fg: Color, bg: Option<Color>, bold: bool) -> f32 {
+    cell_in(ui, g, 0xF0, id, x, y, text, fg, bg, bold)
+}
+
+/// A Cell whose Text is remembered under `part` (TextMemo).
+#[allow(clippy::too_many_arguments)]
+fn cell_in<S: UiState>(ui: &mut Ui<S>, g: &Grid, part: u64, id: u32, x: f32, y: f32, text: &str, fg: Color, bg: Option<Color>, bold: bool) -> f32 {
     let n = text.encode_utf16().count() as f32;
     let w = n * g.cw;
     if let Some(bg) = bg {
@@ -383,7 +389,7 @@ fn cell<S: UiState>(ui: &mut Ui<S>, g: &Grid, id: u32, x: f32, y: f32, text: &st
     let key = if bold { MONO_BOLD } else { MONO };
     let m_adv = ui.fonts.layout("M", MONO, g.px, 0.0).adv;
     let line = ui.fonts.layout(text, key, g.px, g.cw - m_adv);
-    ui.text_of(id, 0xF0, &line, x, y + ac(g.ch, line.height()), fg);
+    ui.text_of(id, part, &line, x, y + ac(g.ch, line.height()), fg);
     w
 }
 
@@ -512,13 +518,19 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
     let hy = y0 + 20.0 * ch;
     let mut hx = x0 + 3.0 * cw;
     hx += cell(ui, &g, 0x40, hx, hy, " ", INK, Some(BLACK), false);
+    // The hints are a Repeater whose model is a new array on every arm and
+    // disarm (PowerOsd.qml:335-340): its delegates are made anew, so their
+    // Texts start subpixel again. One TextMemo part per state, the other's
+    // forgotten.
+    let hp = if armed { 0xF3 } else { 0xF2 };
+    ui.card.texts().forget_parts(&[if armed { 0xF2 } else { 0xF3 }]);
     for (i, (k, d)) in hints.iter().enumerate() {
         let id = 0x50 + 3 * i as u32;
         if i > 0 {
-            hx += cell(ui, &g, id, hx, hy, "   ", INK, Some(BLACK), false);
+            hx += cell_in(ui, &g, hp, id, hx, hy, "   ", INK, Some(BLACK), false);
         }
-        hx += cell(ui, &g, id + 1, hx, hy, k, if armed { WHITE } else { INK }, Some(BLACK), true);
-        hx += cell(ui, &g, id + 2, hx, hy, &format!(" {d}"), if armed { INK } else { DIM }, Some(BLACK), false);
+        hx += cell_in(ui, &g, hp, id + 1, hx, hy, k, if armed { WHITE } else { INK }, Some(BLACK), true);
+        hx += cell_in(ui, &g, hp, id + 2, hx, hy, &format!(" {d}"), if armed { INK } else { DIM }, Some(BLACK), false);
     }
     cell(ui, &g, 0x41, hx, hy, " ", INK, Some(BLACK), false);
     let motto = " «КОСМОС НАШ» ";
