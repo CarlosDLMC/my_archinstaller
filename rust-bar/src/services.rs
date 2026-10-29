@@ -289,6 +289,7 @@ fn on_monitors(app: &mut App, line: &str) {
     let Ok(v) = serde_json::from_str::<Value>(line) else { return };
     let Some(mons) = parse_monitors(&v) else { return };
     let before = app.svc.mango.focused().and_then(|m| m.client_id);
+    let screen = app.svc.mango.focused().map(|m| m.name.clone());
     // mango sends 2-4 snapshots per action, and more for what no strip shows
     // (geometry, layout symbol, keymode, urgency). Mango.qml takes each one,
     // but a binding that comes out the same changes nothing on screen.
@@ -301,6 +302,12 @@ fn on_monitors(app: &mut App, line: &str) {
     let after = app.svc.mango.focused().and_then(|m| m.client_id);
     if before != after {
         crate::bar::close_all_popups(app);
+    }
+    // The overlays show on the focused monitor (`onFocusedMonitor`,
+    // PowerOsd.qml:21-29, ShotOsd.qml:15-24, RecordOsd.qml:17-26,
+    // LayoutOsd.qml:60-63): an open one moves with the focus.
+    if app.svc.mango.focused().map(|m| &m.name) != screen.as_ref() {
+        crate::osd::follow_focus(app);
     }
     if !same {
         app.mark_all_dirty();
