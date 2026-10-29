@@ -504,7 +504,13 @@ impl App {
         if m.place(at) {
             card.win.dirty = true;
         }
-        if !m.frame_pending {
+        // A new palette (the card redraws for it) or the node going: this
+        // surface paints the plate and segments too. Otherwise a card frame
+        // leaves it alone; meter_tick asks for a frame when the level moves.
+        if m.look != Some(crate::audio_card::meter_look(&self.theme, card.meter_node)) {
+            m.dirty = true;
+        }
+        if m.dirty && !m.frame_pending {
             self.draw_meter();
         }
     }
@@ -541,6 +547,7 @@ impl App {
         m.surface.frame(&self.qh, m.surface.clone());
         gpu.render(&mut self.fonts, &mut scene, &view, format, (w, h), [0.0, 0.0, 0.0, 0.0]);
         frame.present();
+        m.look = Some(crate::audio_card::meter_look(&self.theme, card.meter_node));
         m.dirty = false;
         m.frame_pending = true;
     }

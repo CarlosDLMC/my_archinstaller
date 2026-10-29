@@ -210,6 +210,10 @@ fn console_row(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32, icon: &st
 }
 
 pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
+    // The meter's place is this draw's: none if the ВХОД plate went away
+    // (its LevelMeter goes with it), or the meter surface stayed live there.
+    ui.card.meter_at = None;
+    ui.card.meter_node = false;
     let t = ui.theme;
     let l = lists(svc);
     let m = metrics(ui.fonts);
@@ -317,8 +321,18 @@ pub struct MeterWin {
     pub width: f32,
     /// The card leaves the segments to this surface.
     pub live: bool,
+    /// What its last frame was painted with besides the level (meter_look).
+    pub look: Option<MeterLook>,
     pub dirty: bool,
     pub frame_pending: bool,
+}
+
+/// The palette a meter frame paints (plate, accent, alert, white) and
+/// whether the meter had a node.
+pub type MeterLook = (Color, Color, Color, Color, bool);
+
+pub fn meter_look(t: &Theme, node: bool) -> MeterLook {
+    (t.col_plate, t.col_accent, t.col_alert, t.col_white, node)
 }
 
 impl MeterWin {
@@ -330,30 +344,42 @@ impl MeterWin {
             surface.set_input_region(Some(region.wl_region()));
         }
         surface.commit();
-        Some(MeterWin { surface, sub, gpu: None, pos: (i32::MIN, i32::MIN), frac: (0.0, 0.0), size: (0, 0), width: 0.0, live: false, dirty: true, frame_pending: false })
+        Some(MeterWin { surface, sub, gpu: None, pos: (i32::MIN, i32::MIN), frac: (0.0, 0.0), size: (0, 0), width: 0.0, live: false, look: None, dirty: true, frame_pending: false })
+    }
+
+    /// Puts the surface's corner at the whole pixel under (x, y) of the
+    /// card's surface; it takes effect with the card's next commit. True if
+    /// it moved.
+    pub fn move_to(&mut self, x: f32, y: f32) -> bool {
+        let pos = (x.floor() as i32, y.floor() as i32);
+        if self.pos == pos {
+            return false;
+        }
+        self.pos = pos;
+        self.sub.set_position(pos.0, pos.1);
+        true
     }
 
     /// Follows the card's last draw: the meter at (x, y), w wide on the card's
     /// surface, or out of view. True when the card must be drawn again (the
     /// segments move between the two surfaces, or the new place needs the
-    /// card's next commit).
+    /// card's next commit). Its own frame is redrawn only if it changes.
     pub fn place(&mut self, at: Option<(f32, f32, f32)>) -> bool {
         let Some((x, y, w)) = at else {
             let was = self.live;
             self.live = false;
-            self.dirty = true;
+            self.dirty |= was;
             return was;
         };
         let (ix, iy) = (x.floor(), y.floor());
         let frac = (x - ix, y - iy);
         let size = ((w + frac.0).ceil() as u32, (6.0 + frac.1).ceil() as u32);
-        let mut card = !self.live;
-        if self.pos != (ix as i32, iy as i32) {
-            self.pos = (ix as i32, iy as i32);
-            self.sub.set_position(self.pos.0, self.pos.1);
-            card = true;
+        let moved = self.move_to(x, y);
+        let card = !self.live || moved;
+        if (frac, size, w, true) != (self.frac, self.size, self.width, self.live) {
+            (self.frac, self.size, self.width, self.live) = (frac, size, w, true);
+            self.dirty = true;
         }
-        (self.frac, self.size, self.width, self.live, self.dirty) = (frac, size, w, true, true);
         card
     }
 }
@@ -399,7 +425,11 @@ fn level_meter(ui: &mut Ui, x: f32, y: f32, w: f32, has_node: bool) {
     let inside = y >= crate::cards::STEM_H + 8.0 && y + 6.0 <= ui.card.card_height() - 8.0;
     let (ox, oy) = ui.card.origin();
     ui.card.meter_at = inside.then_some((ox + x, oy + y, w));
-    if inside && ui.card.meter_win.as_ref().map_or(false, |m| m.live) {
+    if let Some(m) = ui.card.meter_win.as_mut().filter(|m| inside && m.live) {
+        // Moved now, so the card's commit that cuts the hole at the new place
+        // also brings the meter there - moved after it, the hole showed what
+        // is behind the card for a frame.
+        m.move_to(ox + x, oy + y);
         // The whole pixels MeterWin covers (see place()).
         let (hx, hy) = (x.floor(), y.floor());
         ui.scene.hole(hx, hy, (x + w).ceil() - hx, (y + 6.0).ceil() - hy);
