@@ -404,61 +404,108 @@ fn decode(file: std::fs::File) -> Option<(u32, u32, Vec<u8>)> {
 
 // ---- icons: DesktopEntries.heuristicLookup + Quickshell.iconPath ----
 
-/// Desktop entries by id (and lowercase id) and by StartupWMClass: their
-/// Icon, empty when they have none. As quickshell's DesktopEntryManager: the
-/// data dirs in priority order, an id seen before is skipped, a later entry
-/// with the same lowercase id takes that key over.
+/// XDG_DATA_HOME, then XDG_DATA_DIRS; an empty variable counts as unset, as
+/// in quickshell's desktopPaths() and Qt's QStandardPaths.
+fn data_dirs() -> Vec<String> {
+    let var = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
+    let mut dirs = vec![var("XDG_DATA_HOME").unwrap_or_else(|| format!("{}/.local/share", services::home()))];
+    dirs.extend(var("XDG_DATA_DIRS").unwrap_or_else(|| "/usr/local/share:/usr/share".into()).split(':').filter(|d| !d.is_empty()).map(String::from));
+    dirs
+}
+
+/// Desktop entries by id, lowercase id and StartupWMClass: their Icon, empty
+/// when they have none. As quickshell 0.3.2 builds them (desktopentry.cpp
+/// DesktopEntryScanner::run, onScanCompleted): the data dirs from the lowest
+/// priority up, each in QDir's order; a later entry takes over its id and its
+/// lowercase id, Hidden=true removes both, and an entry that is no
+/// Application or has no Name is left out without hiding anything.
 fn desktop_index() -> HashMap<String, String> {
-    let mut dirs = vec![std::env::var("XDG_DATA_HOME").unwrap_or_else(|_| format!("{}/.local/share", services::home()))];
-    dirs.extend(std::env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/local/share:/usr/share".into()).split(':').map(String::from));
-    let mut by_id: HashMap<String, String> = HashMap::new();
-    let mut by_class: HashMap<String, String> = HashMap::new();
-    for d in &dirs {
-        let root = format!("{d}/applications");
-        let mut stack = vec![root.clone()];
-        while let Some(dir) = stack.pop() {
-            let Ok(rd) = std::fs::read_dir(&dir) else { continue };
-            for e in rd.flatten() {
-                let p = e.path();
-                if p.is_dir() {
-                    stack.push(p.to_string_lossy().into_owned());
-                    continue;
+    // id -> (Icon, StartupWMClass); lowercase id -> Icon.
+    let mut by_id: HashMap<String, (String, String)> = HashMap::new();
+    let mut lower: HashMap<String, String> = HashMap::new();
+    for d in data_dirs().iter().rev() {
+        let mut files = Vec::new();
+        scan_entries(std::path::Path::new(&format!("{d}/applications")), "", 0, &mut files);
+        for (id, path) in files {
+            let Ok(text) = std::fs::read_to_string(&path) else { continue };
+            match parse_entry(&text) {
+                Some(None) => {
+                    lower.remove(&id.to_lowercase());
+                    by_id.remove(&id);
                 }
-                let ps = p.to_string_lossy().into_owned();
-                let Some(rel) = ps.strip_prefix(&format!("{root}/")).and_then(|r| r.strip_suffix(".desktop")) else { continue };
-                let id = rel.replace('/', "-");
-                if by_id.contains_key(&id) {
-                    continue;
+                Some(Some((icon, class))) => {
+                    lower.insert(id.to_lowercase(), icon.clone());
+                    by_id.insert(id, (icon, class));
                 }
-                let Ok(text) = std::fs::read_to_string(&p) else { continue };
-                let mut in_entry = false;
-                let (mut icon, mut class) = (String::new(), String::new());
-                for l in text.lines() {
-                    let l = l.trim();
-                    if l.starts_with('[') {
-                        in_entry = l == "[Desktop Entry]";
-                        continue;
-                    }
-                    if !in_entry {
-                        continue;
-                    }
-                    if let Some(v) = l.strip_prefix("Icon=") {
-                        icon = v.trim().into();
-                    } else if let Some(v) = l.strip_prefix("StartupWMClass=") {
-                        class = v.trim().into();
-                    }
-                }
-                by_id.insert(format!("lc:{}", id.to_lowercase()), icon.clone());
-                if !class.is_empty() {
-                    by_class.entry(format!("wm:{class}")).or_insert(icon.clone());
-                    by_class.entry(format!("wmlc:{}", class.to_lowercase())).or_insert(icon.clone());
-                }
-                by_id.insert(id, icon);
+                None => {}
             }
         }
     }
-    by_id.extend(by_class);
-    by_id
+    // heuristicLookup's StartupWMClass search runs over the entries in hash
+    // order (QHash there): the first match wins, exact before any case.
+    let mut idx: HashMap<String, String> = HashMap::new();
+    for (icon, class) in by_id.values().filter(|(_, c)| !c.is_empty()) {
+        idx.entry(format!("wm:{class}")).or_insert_with(|| icon.clone());
+        idx.entry(format!("wmlc:{}", class.to_lowercase())).or_insert_with(|| icon.clone());
+    }
+    idx.extend(lower.into_iter().map(|(k, icon)| (format!("lc:{k}"), icon)));
+    idx.extend(by_id.into_iter().map(|(id, (icon, _))| (id, icon)));
+    idx
+}
+
+/// DesktopEntryScanner::scanDirectory: QDir's listing (no dot files, by name
+/// with case ignored), a subdirectory's entries named `<dir>-<name>`.
+fn scan_entries(dir: &std::path::Path, prefix: &str, depth: u32, out: &mut Vec<(String, std::path::PathBuf)>) {
+    // A link loop would recurse without end (quickshell's stack overflows).
+    if depth > 16 {
+        return;
+    }
+    let Ok(rd) = std::fs::read_dir(dir) else { return };
+    let mut entries: Vec<(String, std::path::PathBuf)> = rd.flatten().map(|e| (e.file_name().to_string_lossy().into_owned(), e.path())).filter(|(n, _)| !n.starts_with('.')).collect();
+    entries.sort_by_cached_key(|(n, _)| n.to_lowercase());
+    for (name, path) in entries {
+        let named = |n: &str| if prefix.is_empty() { n.to_string() } else { format!("{prefix}-{n}") };
+        if path.is_dir() {
+            scan_entries(&path, &named(&name), depth + 1, out);
+        } else if let Some(base) = name.strip_suffix(".desktop").filter(|_| path.is_file()) {
+            out.push((named(base), path));
+        }
+    }
+}
+
+/// DesktopEntry::parseText, for the lookup: None for an entry quickshell
+/// leaves out (no Application, no Name), Some(None) for Hidden=true, else its
+/// Icon and StartupWMClass. Lines as quickshell takes them: split on '\n',
+/// `#` comments, `[group]` headers, key=value with nothing trimmed. A key's
+/// [locale] variant counts for the Name only (the Icon and StartupWMClass
+/// lines of the entries here have none).
+fn parse_entry(text: &str) -> Option<Option<(String, String)>> {
+    let mut in_entry = false;
+    let (mut app, mut named, mut hidden) = (false, false, false);
+    let (mut icon, mut class) = (String::new(), String::new());
+    for line in text.split('\n').filter(|l| !l.is_empty() && !l.starts_with('#')) {
+        if line.starts_with('[') && line.ends_with(']') {
+            in_entry = &line[1..line.len() - 1] == "Desktop Entry";
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=').filter(|_| in_entry) else { continue };
+        match key {
+            "Type" => app = value == "Application",
+            "Hidden" => hidden = value == "true",
+            "Icon" => icon = value.into(),
+            "StartupWMClass" => class = value.into(),
+            _ if key == "Name" || key.starts_with("Name[") => named |= !value.is_empty(),
+            _ => {}
+        }
+    }
+    // finishCategory keeps nothing of a group that is no Application, and
+    // onScanCompleted masks a hidden entry before it checks the Name.
+    match (app, hidden, named) {
+        (false, ..) => None,
+        (true, true, _) => Some(None),
+        (true, false, false) => None,
+        (true, false, true) => Some(Some((icon, class))),
+    }
 }
 
 /// The icon name for an app id: its desktop entry's Icon, else the app id
@@ -499,10 +546,11 @@ fn theme_chain() -> Vec<String> {
     out
 }
 
+/// Qt's icon theme paths: ~/.icons, then each data dir's icons
+/// (QGenericUnixTheme::xdgIconThemePaths over QStandardPaths).
 fn icon_base_dirs() -> Vec<String> {
-    let home = services::home();
-    let mut v = vec![format!("{home}/.icons"), std::env::var("XDG_DATA_HOME").map(|d| format!("{d}/icons")).unwrap_or_else(|_| format!("{home}/.local/share/icons"))];
-    v.extend(std::env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/local/share:/usr/share".into()).split(':').map(|d| format!("{d}/icons")));
+    let mut v = vec![format!("{}/.icons", services::home())];
+    v.extend(data_dirs().into_iter().map(|d| format!("{d}/icons")));
     v
 }
 
