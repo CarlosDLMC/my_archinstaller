@@ -361,7 +361,8 @@ impl Atlas {
 
 pub struct Fonts {
     pub faces: Vec<Face>,
-    by_key: HashMap<FontKey, u16>,
+    /// The family's own face: bold and plain map the same (regular) file.
+    by_family: HashMap<&'static str, u16>,
     by_file: HashMap<(String, u32), u16>,
     /// fontconfig's pick for a character the family lacks, by family:
     /// bold and plain resolve to the same file, so they share it.
@@ -502,7 +503,7 @@ impl Fonts {
     pub fn new() -> Fonts {
         Fonts {
             faces: vec![],
-            by_key: HashMap::new(),
+            by_family: HashMap::new(),
             by_file: HashMap::new(),
             fallback: HashMap::new(),
             glyphs: HashMap::new(),
@@ -541,7 +542,7 @@ impl Fonts {
     }
 
     pub fn face_for(&mut self, key: FontKey) -> u16 {
-        if let Some(&i) = self.by_key.get(&key) {
+        if let Some(&i) = self.by_family.get(key.family) {
             return i;
         }
         // The bar's Qt resolves bold to the family's regular file (the live bar
@@ -551,7 +552,7 @@ impl Fonts {
             .and_then(|(file, index)| self.load_file(&file, index))
             .or_else(|| self.load_file("/usr/share/fonts/TTF/DejaVuSans.ttf", 0))
             .expect("no usable font");
-        self.by_key.insert(key, i);
+        self.by_family.insert(key.family, i);
         i
     }
 
