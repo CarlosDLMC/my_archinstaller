@@ -1,6 +1,6 @@
-//! Theme.qml: the wallust palette and every role derived from it. The bar is
-//! monochrome on purpose - see the comments in Theme.qml for why each role is
-//! what it is; the arithmetic here is the same, through QColor's rounding.
+//! The wallust palette and every role derived from it. The bar is
+//! monochrome on purpose; the arithmetic follows QColor's, rounding
+//! included.
 
 use crate::color::Color;
 pub use crate::text::FontKey;
@@ -84,7 +84,7 @@ fn lift_to_contrast(c: Color, against: Color, target: f32) -> Color {
     Color::hsla(h, s, 0.95, c.a)
 }
 
-/// alertFrom(): the most colourful of wallust's hue slots, softened.
+/// The alert colour: the most colourful of wallust's hue slots, softened.
 fn alert_from(hues: &[Color]) -> Color {
     let mut best: Option<Color> = None;
     let mut best_chroma = -1.0f32;
@@ -159,7 +159,7 @@ impl Theme {
         self.col_logo = lift_to_contrast(self.pal_border, self.pal_bg, 3.0);
     }
 
-    /// applyPalette(): wallust-colors.json; anything missing keeps its fallback.
+    /// Applies wallust-colors.json; anything missing keeps its fallback.
     pub fn apply_json(&mut self, text: &str) -> bool {
         let Ok(j) = serde_json::from_str::<serde_json::Value>(text) else { return false };
         let get = |k: &str| j.get(k).and_then(|v| v.as_str()).and_then(Color::parse);

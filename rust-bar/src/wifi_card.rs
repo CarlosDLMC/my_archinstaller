@@ -1,6 +1,5 @@
-//! The Wi-Fi widget's network list (WifiWidget.qml, panelMode "networks"):
-//! the link, the scanned networks, password entry, connect/disconnect - the
-//! same nmcli calls and timings.
+//! The Wi-Fi widget's network list: the link, the scanned networks, password
+//! entry, connect/disconnect - nmcli calls with their timings.
 
 use std::time::{Duration, Instant};
 
@@ -28,11 +27,11 @@ pub struct WifiCard {
     pub failed: bool,
     /// When the password field took focus (the cursor blinks from there).
     pub input_since: Option<Instant>,
-    /// wifiConnectProc.output: its stdout and stderr lines as they come.
+    /// The connect's output: its stdout and stderr lines as they come.
     connect_out: String,
     /// The bar whose card started the connect (or disconnect) that runs or
-    /// ran last: every bar has its own WifiWidget and wifiConnectProc
-    /// (shell.qml), so only that bar's widget is `connecting`.
+    /// ran last: every bar has its own Wi-Fi widget and connect, so only that
+    /// bar's widget is `connecting`.
     pub strip: Option<usize>,
 }
 
@@ -71,12 +70,10 @@ fn scan(app: &mut App) {
     });
 }
 
-/// savedProfilesProc (WifiWidget.qml:219-239): the saved Wi-Fi profiles'
-/// 802-11-wireless.ssid values, not their names. QML runs one nmcli per
-/// profile name; one nmcli for all of them by UUID gives the same set. A
-/// name with ':' or '\' comes out of `nmcli -t` escaped, and the name
-/// QML's `cut -d: -f1` makes of it finds no profile: those are left out
-/// here as well.
+/// The saved Wi-Fi profiles' 802-11-wireless.ssid values, not their names:
+/// one nmcli for all of them, by UUID. A name with ':' or '\' comes out of
+/// `nmcli -t` escaped and would not split right: those profiles are left
+/// out.
 pub fn load_saved(app: &mut App) {
     app.spawn("wifi-saved", &["nmcli", "-t", "-f", "NAME,UUID,TYPE", "connection", "show"], |app, d| {
         let uuids: Vec<&str> = d.stdout.lines().filter(|l| l.ends_with(":802-11-wireless") && !l.contains('\\')).filter_map(|l| l.split(':').nth(1)).collect();
@@ -94,12 +91,12 @@ pub fn load_saved(app: &mut App) {
     });
 }
 
-/// onOpened: list from the cache now, rescan, read again at 1.4 s and 3.2 s,
+/// The card opened: list from the cache now, rescan, read again at 1.4 s and 3.2 s,
 /// "scanning" until 3.4 s.
 pub fn opened(app: &mut App) {
     scan(app);
     load_saved(app);
-    // wifiRescanProc, fire and forget: one at a time, as its Process.
+    // The rescan, fire and forget: one at a time.
     app.spawn("wifi-rescan", &["nmcli", "device", "wifi", "rescan"], |_, _| {});
     app.debounce("wifi-rescan1", Duration::from_millis(1400), scan);
     app.debounce("wifi-rescan2", Duration::from_millis(3200), scan);
@@ -127,8 +124,8 @@ fn clear_password(w: &mut WifiCard) {
     w.hscroll = 0.0;
 }
 
-/// wifiConnectProc (WifiWidget.qml:330-369). Process.running = true on a
-/// Process that runs already does nothing.
+/// The connect (or disconnect) command. While one runs already, a new one
+/// does nothing.
 fn run_connect(app: &mut App, argv: &[&str]) {
     if connecting(app) {
         return;
@@ -139,17 +136,16 @@ fn run_connect(app: &mut App, argv: &[&str]) {
     redraw(app);
 }
 
-/// The SplitParsers on stdout and stderr: `output += data`. nmcli says why a
+/// Each line of stdout and stderr is added to the output. nmcli says why a
 /// connect failed on stderr only.
 fn connect_line(app: &mut App, data: &str) {
     app.svc.wifi_card.connect_out.push_str(data);
 }
 
-/// onRunningChanged, not running: the watchdog stops and the status is read
-/// again; a failure on a secured network brings up the password view, a
-/// success closes the card - the widget's own (`dropdownOpen = false`):
-/// either view, on the bar the connect came from, not a card of another
-/// widget or bar opened since.
+/// The connect ended: the watchdog stops and the status is read again; a
+/// failure on a secured network brings up the password view, a success
+/// closes the card - the widget's own: either view, on the bar the connect
+/// came from, not a card of another widget or bar opened since.
 fn connect_done(app: &mut App) {
     app.cancel_timer("wifi-watchdog");
     crate::services::wifi_refresh(app);
@@ -169,8 +165,8 @@ fn connect_done(app: &mut App) {
     redraw(app);
 }
 
-/// connectWatchdog (WifiWidget.qml:314-327): nmcli still connecting after 8 s
-/// is stopped, and on a secured network the password view comes up.
+/// The connect watchdog: nmcli still connecting after 8 s is stopped, and on
+/// a secured network the password view comes up.
 fn watchdog(app: &mut App) {
     if connecting(app) {
         app.kill("wifi-connect");
@@ -185,7 +181,7 @@ fn watchdog(app: &mut App) {
 fn enter_password(app: &mut App) {
     app.svc.wifi_card.password_mode = true;
     // forceActiveFocus on the field, the first control in password mode - a
-    // field only the Wi-Fi card has (passwordMode is the widget's state; any
+    // field only the Wi-Fi card has (password_mode is the widget's state; any
     // other card open by now keeps its focus).
     if let Some(c) = app.card.as_mut().filter(|c| c.kind == CardKind::Wifi) {
         c.focus = Some(0);
@@ -226,8 +222,8 @@ fn try_connect(app: &mut App, ssid: &str, security: &str) {
         return;
     }
     run_connect(app, &["nmcli", "device", "wifi", "connect", ssid]);
-    // Only this connect is watched (connectWatchdog.restart() in tryConnect):
-    // connectWithPassword starts none.
+    // Only this connect is watched (the watchdog restarts here):
+    // connect_with_password starts none.
     app.debounce("wifi-watchdog", Duration::from_secs(8), watchdog);
 }
 
@@ -283,7 +279,7 @@ pub(crate) fn scroll(prev: f32, cx: f32, text_w: f32, width: f32) -> f32 {
     }
 }
 
-/// The field's width: popupWidth less the Loader's and the TextInput's margins.
+/// The field's width: the card's width less the card's and the TextInput's margins.
 fn field_width(app: &mut App) -> f32 {
     card_width(&mut app.fonts, &app.svc) - 32.0
 }
@@ -370,12 +366,12 @@ fn signal_icon(s: i64) -> &'static str {
     }
 }
 
-/// popupWidth in networks mode: fits the longest SSID (WifiWidget.qml:20-22,
-/// 79-91). ssidMetrics.width is TextMetrics.width: the ink's bounding box,
-/// not the advance - up to a few px narrower for a long SSID.
+/// The card's width in networks mode: fits the longest SSID, measured by
+/// its ink's bounding box (TextMetrics.width), not the advance - up to a few
+/// px narrower for a long SSID.
 pub fn card_width(fonts: &mut crate::text::Fonts, svc: &Services) -> f32 {
     let mut longest = svc.wifi.ssid.clone();
-    // longestSsid compares JS .length: UTF-16 units.
+    // The longest by length in UTF-16 units, as a JS string counts it.
     for n in &svc.wifi_card.networks {
         if n.0.encode_utf16().count() > longest.encode_utf16().count() {
             longest = n.0.clone();
@@ -527,7 +523,7 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, busy: bool) {
     let rows = list_rows(svc);
     let h = rows as f32 * (m.row + 2.0) - 2.0 + 8.0;
     plate(ui, x0, y, cw, h);
-    // networkListView: 8 rows in view, the rest (up to 30) scrolled to.
+    // The network list: 8 rows in view, the rest (up to 30) scrolled to.
     let sig = crate::cards::model_sig(&wc.networks);
     let list = ui.list_begin(ROW, x0 + 4.0, y + 4.0, cw - 8.0, rows, wc.networks.len(), m.row, 2.0, sig, |_| true);
     for (i, (ssid, signal, security)) in wc.networks.iter().enumerate() {
@@ -558,10 +554,9 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, busy: bool) {
 pub fn activate(app: &mut App, code: u32) {
     match code {
         DISCONNECT => {
-            // Through wifiConnectProc, as WifiWidget.qml:515-523 runs it: the
-            // widget is `connecting` while it runs (ПОДКЛЮЧЕНИЕ, the icon
-            // blinks), it is skipped while a connect runs, and the same exit
-            // handler follows.
+            // Through the connect command: the widget is `connecting` while
+            // it runs (ПОДКЛЮЧЕНИЕ, the icon blinks), it is skipped while a
+            // connect runs, and the same exit handler follows.
             run_connect(app, &["sh", "-c", "nmcli -t -f DEVICE,TYPE,STATE device | awk -F: '$2 == \"wifi\" && $3 == \"connected\" { print $1 }' | while IFS= read -r d; do nmcli device disconnect \"$d\"; done"]);
         }
         INPUT => {
@@ -590,11 +585,11 @@ pub fn activate(app: &mut App, code: u32) {
     }
 }
 
-/// Keys while the password field has focus (WifiWidget.qml:545-557, Qt's
-/// TextInput): Return submits and Esc cancels (its Keys handlers); text goes
-/// in at the cursor; Backspace, Delete, Left, Right, Home and End edit and
-/// move it; Ctrl+V and Shift+Insert paste. Returns true when the key was the
-/// field's - checked against Qt 6.12 offscreen.
+/// Keys while the password field has focus (as Qt's TextInput): Return
+/// submits and Esc cancels; text goes in at the cursor; Backspace, Delete,
+/// Left, Right, Home and End edit and move it; Ctrl+V and Shift+Insert
+/// paste. Returns true when the key was the field's - checked against Qt
+/// 6.12 offscreen.
 pub fn input_key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Keysym, mods: crate::app::Mods, utf8: Option<&str>) -> bool {
     use smithay_client_toolkit::seat::keyboard::Keysym;
     let Some(card) = app.card.as_ref() else { return false };
@@ -616,9 +611,9 @@ pub fn input_key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Key
             return true;
         }
         // Keypad Enter is Key_Enter: TextInput emits accepted() and lets it
-        // go, and nothing up to CardKeys takes it.
+        // go, and nothing up to the card's keys takes it.
         Keysym::KP_Enter => return true,
-        // CardKeys' Tab shortcuts; and what QQuickTextInput::keyPressEvent
+        // The card's Tab shortcuts; and what QQuickTextInput::keyPressEvent
         // leaves to it: Up, Down, Left at the start, Right at the end.
         Keysym::Tab | Keysym::ISO_Left_Tab | Keysym::Up | Keysym::Down | Keysym::KP_Up | Keysym::KP_Down => return false,
         Keysym::Left | Keysym::KP_Left if at == 0 => return false,

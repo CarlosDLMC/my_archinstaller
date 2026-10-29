@@ -77,7 +77,7 @@ echo -e "${CAT} ${MAGENTA}Pacman.conf${RESET} spicing up completed ${RESET}" 2>&
 # packages against the freshly synced databases; on a system that was not
 # upgraded first (a fresh ISO install, in particular CachyOS with an AUR helper
 # already present, where yay.sh/paru.sh and their -Syu never run) that is a
-# partial upgrade and mango/quickshell fail at first login with missing
+# partial upgrade and mango/the bar fail at first login with missing
 # libraries. Upgrading here makes the run safe on every path.
 #
 # Keyring first. `-Syu` verifies every package against the installed keyring, so

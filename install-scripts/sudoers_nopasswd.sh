@@ -16,8 +16,8 @@ LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_sudoers.log"
 # This machine runs with `%wheel ALL=(ALL:ALL) NOPASSWD: ALL`, which Arch ships
 # commented out. It is a deliberate choice, and several things in the dots
 # depend on it - the bar's VPN widget shells out to `sudo find /etc/wireguard`,
-# `sudo wg-quick up/down` and `sudo timedatectl set-timezone` from a QML
-# Process, which has no terminal to prompt on. With stock sudoers those calls
+# `sudo wg-quick up/down` and `sudo timedatectl set-timezone` from a process
+# the bar starts, with no terminal to prompt on. With stock sudoers those calls
 # fail silently and the VPN dropdown just does nothing.
 #
 # Be aware of what it means: any process running as your user can become root
@@ -54,9 +54,10 @@ trap 'rm -f "$TMP_RULE"' EXIT
 cat > "$TMP_RULE" <<'RULE'
 # Installed by my_archinstaller (install-scripts/sudoers_nopasswd.sh).
 #
-# Passwordless sudo for the wheel group. Required by the quickshell bar's VPN
-# widget, which runs `sudo find /etc/wireguard`, `sudo wg-quick up|down` and
-# `sudo timedatectl set-timezone` from a QML Process with no tty to prompt on.
+# Passwordless sudo for the wheel group. Required by the bar's VPN widget,
+# which runs `sudo find /etc/wireguard`, `sudo wg-quick up|down` and
+# `sudo timedatectl set-timezone` from a process the bar starts, with no tty
+# to prompt on.
 #
 # Removing this line means typing a password for every sudo, and the VPN
 # dropdown in the bar silently stops working.

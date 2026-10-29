@@ -221,8 +221,8 @@ if selected dots; then
         test -f "$HOME/.config/mango/config.conf"
     check_outcome "dotfiles not deployed: ~/.config/hypr/hyprlock.conf is missing - no lock screen (install-scripts/dotfiles-main.sh)" \
         test -f "$HOME/.config/hypr/hyprlock.conf"
-    check_outcome "dotfiles not deployed: ~/.config/quickshell/bar/scripts/layouts.py (the bar's scripts) is missing (install-scripts/dotfiles-main.sh)" \
-        test -f "$HOME/.config/quickshell/bar/scripts/layouts.py"
+    check_outcome "dotfiles not deployed: ~/.config/rust-bar/scripts/layouts.py (the bar's scripts) is missing (install-scripts/dotfiles-main.sh)" \
+        test -f "$HOME/.config/rust-bar/scripts/layouts.py"
     # Both names: GtkReload.sh switches between them after every wallpaper change.
     check_outcome "the Wallust GTK theme is missing from ~/.themes - GTK apps lose the wallpaper colours (dotfiles/copy.sh)" \
         test -f "$HOME/.themes/Wallust-A/gtk-3.0/gtk.css" -a -f "$HOME/.themes/Wallust-B/gtk-3.0/gtk.css"

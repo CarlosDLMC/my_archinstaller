@@ -193,7 +193,7 @@ pub struct App {
     pub(crate) running: HashMap<String, (Instant, u32)>,
     pub(crate) timers: HashMap<&'static str, RegistrationToken>,
     pub exit: bool,
-    /// When the bar started: Theme.qml's palette load lands just after it.
+    /// When the bar started: the wallust palette load lands just after it.
     pub(crate) started: Instant,
     /// Results of work done off the main thread, run back on the event loop.
     pub(crate) bg_tx: smithay_client_toolkit::reexports::calloop::channel::Sender<Box<dyn FnOnce(&mut App) + Send>>,
@@ -305,8 +305,7 @@ impl App {
     /// The strips, for what they show (bar.rs: mango's tags and title, the
     /// layout, the stats, the clock, the bell, the weather pill, the volume,
     /// the battery, the Wi-Fi and VPN icons and which widgets there are). A
-    /// card is a window of its own (CardSurface.qml): Qt repaints it only for
-    /// what it binds.
+    /// card is a window of its own, repainted only for what it shows.
     pub fn mark_strips_dirty(&mut self) {
         for s in &mut self.strips {
             s.win.dirty = true;
@@ -328,7 +327,7 @@ impl App {
         let logical = info.as_ref().and_then(|i| i.logical_size);
         let (sw, sh) = logical.or(current).map(|(w, h)| (w as f32, h as f32)).unwrap_or((2560.0, 1440.0));
         let surface = self.compositor.create_surface(&self.qh);
-        let layer = self.layer_shell.create_layer_surface(&self.qh, surface, Layer::Top, Some("quickshell:bar"), Some(&output));
+        let layer = self.layer_shell.create_layer_surface(&self.qh, surface, Layer::Top, Some("rust-bar:bar"), Some(&output));
         let height = bar::strip_height(sw);
         layer.set_anchor(Anchor::TOP | Anchor::LEFT | Anchor::RIGHT);
         layer.set_size(0, height);
@@ -472,10 +471,10 @@ impl App {
                     open: self.card.as_ref().filter(|c| c.strip == i).map(|c| c.kind),
                     wifi_pulse: self.svc.wifi_card.strip == Some(i),
                 };
-                // Theme.qml loads the wallust palette just after the QML bar's
-                // first frame, and to Qt that is a change: every strip text whose
-                // colour it moved is gray from then on (TextMemo). A silent pass
-                // in the built-in colours gives this bar the same history.
+                // The wallust palette loads just after the first frame, and to
+                // Qt that is a change: every strip text whose colour it moved
+                // is gray from then on (TextMemo). A silent pass in the
+                // built-in colours gives this bar that history.
                 if memo.is_empty() && self.started.elapsed() < std::time::Duration::from_secs(5) {
                     let mut dry = Scene::new(1.0, 1.0);
                     dry.clear(width as f32, height as f32);
@@ -544,7 +543,7 @@ impl App {
 
     /// The audio card's meter onto its own surface once the card has placed it.
     fn place_meter(&mut self) {
-        // Its clock runs while the meter has a node (LevelMeter.qml:61).
+        // Its clock runs while the meter has a node.
         if self.card.as_ref().map_or(false, |c| c.kind == cards::CardKind::Audio && c.meter_node) {
             crate::audio_card::start_meter(self);
         }
@@ -806,8 +805,8 @@ impl OutputHandler for App {
                 }
                 s.screen_width = w as f32;
                 s.screen_height = h as f32;
-                // shell.qml: implicitHeight and exclusiveZone are bindings on
-                // the width (uiScale) - a new mode or scale resizes the strip.
+                // The height and the exclusive zone follow the width
+                // (bar::ui_scale) - a new mode or scale resizes the strip.
                 let height = bar::strip_height(s.screen_width);
                 if height != s.win.height {
                     s.win.layer.set_size(0, height);
@@ -907,8 +906,8 @@ impl SeatHandler for App {
             }
         }
         if cap == Capability::Keyboard && self.keyboard.is_none() {
-            // QtWayland repeats a held key itself, at the compositor's
-            // repeat_info (mango: 50 a second after 300 ms), and the QML key
+            // A held key repeats at the compositor's repeat_info (mango: 50
+            // a second after 300 ms), as QtWayland repeats it, and the key
             // handlers take every repeat as a press: sctk's repeat timer
             // feeds them through the same path.
             let repeat = Box::new(|app: &mut App, _: &WlKeyboard, event: KeyEvent| {
@@ -965,11 +964,10 @@ impl PointerHandler for App {
     fn pointer_frame(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlPointer, events: &[PointerEvent]) {
         for e in events {
             if self.card.as_ref().map_or(false, |c| c.win.layer.wl_surface() == &e.surface) && self.pressed.is_none() && !cards::grabbing(self) {
-                // CardSurface: around the card, a press dismisses it and the
-                // wheel is eaten; the pointer is not over the card there. (A
-                // drag that started on the card keeps going.) Its MouseArea
-                // takes the left, right and middle buttons (CardSurface.qml:47):
-                // a side button reaches nothing.
+                // Around the card, a press dismisses it and the wheel is
+                // eaten; the pointer is not over the card there. (A drag that
+                // started on the card keeps going.) Only the left, right and
+                // middle buttons dismiss: a side button reaches nothing.
                 let (x, y) = (e.position.0 as f32, e.position.1 as f32);
                 if !matches!(e.kind, PointerEventKind::Leave { .. }) && !cards::inside(self, x, y) {
                     match e.kind {
@@ -993,10 +991,8 @@ impl PointerHandler for App {
                 }
             }
             if let Some(k) = crate::osd::is_dim(self, &e.surface) {
-                // The dialog's dim: a click outside the panel. Every dim's
-                // MouseArea keeps acceptedButtons' default, the left button
-                // (PowerOsd.qml:88, ShotOsd.qml:72, RecordOsd.qml:80,
-                // ClipboardOsd.qml:121, PolkitOsd.qml:82): the others do nothing.
+                // The dialog's dim: a click outside the panel. Every dim
+                // takes the left button only: the others do nothing.
                 match e.kind {
                     PointerEventKind::Enter { serial } => {
                         self.enter_serial = serial;
@@ -1093,12 +1089,11 @@ impl PointerHandler for App {
                     self.set_cursor(shape);
                 }
                 PointerEventKind::Press { button, time, .. } => {
-                    // The card's own MouseArea and its controls take the left
-                    // button only (DropdownWidget.qml:160): a right or middle
-                    // press falls through to CardSurface's, under the card,
-                    // and closes it - unless the control there takes that
-                    // button: a VolumeSlider the right one (its mute,
-                    // VolumeSlider.qml:104), the Wi-Fi password TextInput the
+                    // The card itself and its controls take the left button
+                    // only: a right or middle press falls through to the
+                    // surface under the card and closes it - unless the
+                    // control there takes that button: a volume slider the
+                    // right one (its mute), the Wi-Fi password field the
                     // middle one (the primary selection's paste).
                     if w == WinRef::Card && matches!(button, BTN_RIGHT | BTN_MIDDLE) {
                         let takes = match (self.card.as_ref().map(|c| c.kind), self.hit_at(w, x, y)) {

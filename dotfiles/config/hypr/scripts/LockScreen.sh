@@ -19,7 +19,7 @@ if [ "$_gen_rc" -ne 0 ] && [ -f "$_lock_conf" ]; then
         && mv "$_lock_conf.tmp" "$_lock_conf"
 fi
 
-# The panel reads the bar's weather cache, which quickshell refreshes hourly,
+# The panel reads the bar's weather cache, which the bar refreshes hourly,
 # so this only warms the legacy ~/.cache/.weather_cache fallback for a machine
 # without the bar. Detached and capped: it is a network call, measured at up to
 # 3s here and able to block far longer on a dead network, and locking the

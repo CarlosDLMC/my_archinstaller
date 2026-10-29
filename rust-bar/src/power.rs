@@ -1,6 +1,6 @@
-//! PowerState.qml + PowerOsd.qml: the power console (CTRL ALT P, and CTRL ALT
-//! Del opens it on ВЫХОД). A character-cell TUI: five keys, the radio line,
-//! and for logout/reboot/poweroff a five-second launch countdown that syncs
+//! The power console (CTRL ALT P, and CTRL ALT Del opens it on ВЫХОД). A
+//! character-cell TUI: five keys, the radio line, and for
+//! logout/reboot/poweroff a five-second launch countdown that syncs
 //! the disks on its third step and fires at zero; lock and suspend go at once.
 
 use std::time::{Duration, Instant};
@@ -145,7 +145,7 @@ fn crt() -> String {
     format!("{}/.config/hypr/scripts/CrtOff.sh ", services::home())
 }
 
-/// The command a key runs (cmd), as PowerState builds it.
+/// The command a key runs.
 fn command(app: &App, k: &str) -> String {
     let home = services::home();
     match k {
@@ -164,7 +164,7 @@ fn command(app: &App, k: &str) -> String {
     }
 }
 
-/// The probes PowerState runs once: firmware setup, a Windows boot entry.
+/// The probes run once at start: firmware setup, a Windows boot entry.
 pub fn start(app: &mut App) {
     app.spawn("power-firmware", &["busctl", "call", "org.freedesktop.login1", "/org/freedesktop/login1", "org.freedesktop.login1.Manager", "CanRebootToFirmwareSetup"], |app, d| {
         app.svc.power.can_firmware = d.stdout.contains("\"yes\"");
@@ -215,7 +215,7 @@ fn open(app: &mut App) {
 pub fn close(app: &mut App) {
     disarm(app);
     app.svc.power.open = false;
-    // The uptime Timer runs only while dialogOpen.
+    // The uptime timer runs only while the menu is open.
     app.cancel_timer("power-uptime");
     osd::hide(app, OsdKind::Power);
 }
@@ -228,7 +228,7 @@ pub fn toggle(app: &mut App) {
     }
 }
 
-/// openOn(): opens with `k` selected (CTRL ALT Del: ВЫХОД); closes if open.
+/// Opens with `k` selected (CTRL ALT Del: ВЫХОД); closes if open.
 pub fn open_on(app: &mut App, k: &str) {
     if app.svc.power.open {
         close(app);
@@ -241,7 +241,8 @@ pub fn open_on(app: &mut App, k: &str) {
     redraw(app);
 }
 
-/// PowerWidget.armEnd(): the logo card's keyboard path.
+/// The logo card's keyboard path: the menu opens on `k` and the key is
+/// pressed there, which arms its countdown.
 pub fn arm_end(app: &mut App, k: &str) {
     if !app.svc.power.open {
         open_on(app, k);
@@ -305,8 +306,8 @@ fn run(app: &mut App, cmd: String) {
 fn armed_tick(app: &mut App) {
     let p = &mut app.svc.power;
     let Some(at) = p.armed_at.filter(|_| p.armed()) else { return };
-    // The window binds step and secondsLeft, not elapsed: they move once a
-    // second, and so does what Qt draws.
+    // The menu shows step() and seconds_left(), not elapsed: they move once
+    // a second, and so does what is drawn.
     let shown = (p.step(), p.seconds_left());
     p.elapsed = at.elapsed().as_secs_f32();
     if p.step() >= 2 && !p.sync_done {
@@ -329,7 +330,7 @@ fn uptime_tick(app: &mut App) {
     }
     // Still on the focused screen: services::on_monitors moves the menu as
     // the focus changes; this also brings it back on another screen when
-    // the compositor closed it with its output (PowerOsd is per screen).
+    // the compositor closed it with its output (its surface is on one output).
     osd::follow_focus(app);
     let p = &mut app.svc.power;
     let shown = p.uptime.floor();
@@ -372,7 +373,7 @@ pub(crate) fn show_osd(app: &mut App) {
     let (x, y) = (ac(sw, w), ac(sh, h));
     // The surface also carries the window's shadow (2 cells right, 1 down).
     let size = ((w + 2.0 * g.cw).ceil() as u32, (h + g.ch).ceil() as u32);
-    osd::show(app, OpenParams { kind: OsdKind::Power, size, panel: (0.0, 0.0, w, h), dim: Some(Color::qt_rgba(0.0, 0.0, 0.0, 0.62)), keyboard: true, namespace: "quickshell:power", fade_ms: FADE_MS, min_scale: 0.97, fade_easing: crate::anim::Easing::OutCubic, pos: Some((x as i32, y as i32)), fill: false, output: None });
+    osd::show(app, OpenParams { kind: OsdKind::Power, size, panel: (0.0, 0.0, w, h), dim: Some(Color::qt_rgba(0.0, 0.0, 0.0, 0.62)), keyboard: true, namespace: "rust-bar:power", fade_ms: FADE_MS, min_scale: 0.97, fade_easing: crate::anim::Easing::OutCubic, pos: Some((x as i32, y as i32)), fill: false, output: None });
 }
 
 /// Cell: `text` on `bg` (one cell per character), the label centred
@@ -522,10 +523,8 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
     let hy = y0 + 20.0 * ch;
     let mut hx = x0 + 3.0 * cw;
     hx += cell(ui, &g, 0x40, hx, hy, " ", INK, Some(BLACK), false);
-    // The hints are a Repeater whose model is a new array on every arm and
-    // disarm (PowerOsd.qml:335-340): its delegates are made anew, so their
-    // Texts start subpixel again. One TextMemo part per state, the other's
-    // forgotten.
+    // The hints are made anew on every arm and disarm, so their Texts start
+    // subpixel again. One TextMemo part per state, the other's forgotten.
     let hp = if armed { 0xF3 } else { 0xF2 };
     ui.card.texts().forget_parts(&[if armed { 0xF2 } else { 0xF3 }]);
     for (i, (k, d)) in hints.iter().enumerate() {

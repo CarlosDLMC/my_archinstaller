@@ -1,6 +1,6 @@
-//! LayoutState.qml + LayoutOsd.qml: keyboard layouts in most-recently-used
-//! order (layout next = alt-tab between the last two), the switcher OSD that
-//! shows on every change, and clicking a layout in it.
+//! Keyboard layouts in most-recently-used order (layout next = alt-tab
+//! between the last two), the switcher OSD that shows on every change, and
+//! clicking a layout in it.
 
 use std::time::{Duration, Instant};
 
@@ -57,9 +57,9 @@ fn move_to_front(list: &[usize], v: usize) -> Vec<usize> {
     std::iter::once(v).chain(list.iter().copied().filter(|&x| x != v)).collect()
 }
 
-/// loadProc: the configured layouts and the current one.
+/// Reads the configured layouts and the current one (layouts.py).
 pub fn start(app: &mut App) {
-    let cmd = format!("{}/.config/quickshell/bar/scripts/layouts.py", services::home());
+    let cmd = format!("{}/.config/rust-bar/scripts/layouts.py", services::home());
     app.spawn_lines_tagged("layouts", &["sh", "-c", &cmd], |app, line| {
         let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else { return };
         let Some(list) = v.get("layouts").and_then(|l| l.as_array()) else { return };
@@ -117,8 +117,7 @@ fn commit_restart(app: &mut App) {
         s.session_pos = 0;
         // A new mru is a new model: the Repeater makes new delegates, and
         // their Texts start out subpixel again. The order and the selection
-        // are the popup's alone (LayoutState.qml:117-125; nothing on the strip
-        // binds them).
+        // are the popup's alone (nothing on the strip shows them).
         if let Some(o) = app.osd_mut(OsdKind::Layout) {
             o.st.texts.forget_parts(&[0xE1, 0xE2]);
             o.win.dirty = true;
@@ -126,7 +125,7 @@ fn commit_restart(app: &mut App) {
     });
 }
 
-/// Mango.onKeyboardLayoutChanged: a change from anywhere shows the OSD.
+/// mango's keyboard layout changed: a change from anywhere shows the OSD.
 pub fn layout_changed(app: &mut App) {
     let name = app.svc.mango.keyboard_layout.clone();
     if name.is_empty() {
@@ -147,7 +146,7 @@ pub fn layout_changed(app: &mut App) {
     }
 }
 
-/// selectPos(): a click on a layout in the OSD.
+/// A click on a layout in the OSD.
 fn select_pos(app: &mut App, pos: usize) {
     let s = &mut app.svc.layout;
     if !s.ready() || pos >= s.mru.len() {
@@ -161,7 +160,7 @@ fn select_pos(app: &mut App, pos: usize) {
     release(app);
 }
 
-/// releaseOsd(): the MRU commit runs again.
+/// The OSD let go: the MRU commit runs again.
 fn release(app: &mut App) {
     commit_restart(app);
 }
@@ -213,7 +212,7 @@ fn name_of(l: &Layout) -> String {
     }
 }
 
-/// The panel's size: the body Column plus panelPad.
+/// The panel's size: the body Column plus panel_pad.
 fn panel_size(app: &mut App) -> (f32, f32) {
     let m = MET();
     let n = app.svc.layout.switcher_items().len() as f32;
@@ -228,7 +227,7 @@ fn panel_size(app: &mut App) -> (f32, f32) {
     (body_w + m.panel_pad, body_h + m.panel_pad)
 }
 
-/// onShowOsd: the popup up, and hideTimer restarted. `from` is the entry
+/// The popup up, and its hide timer restarted. `from` is the entry
 /// that was selected before the change that shows it.
 fn show_osd(app: &mut App, from: usize) {
     if app.svc.layout.switcher_items().is_empty() {
@@ -244,11 +243,10 @@ fn show_osd(app: &mut App, from: usize) {
     hide_later(app);
 }
 
-/// A popup mapped anew shows the switch as it happens. QML's LayoutOsd is
-/// never destroyed (shell.qml:284-287): the selection moves while it is
-/// hidden, just before showOsd(), and the tile's and the lamp's Behaviors
-/// (LayoutOsd.qml:161-162, ConsoleLamp.qml:23,34) are still running while
-/// it fades in. They start here from the old selection, as draw_osd and
+/// A popup mapped anew shows the switch as it happens, as one only hidden
+/// would: the selection moves while it is hidden, just before it shows, and
+/// the tile's and the lamp's colour animations are still running while it
+/// fades in. They start here from the old selection, as draw_osd and
 /// cards::lamp would have left them.
 fn seed_selection(app: &mut App, from: usize) {
     let now = Instant::now();
@@ -266,17 +264,17 @@ fn seed_selection(app: &mut App, from: usize) {
     }
 }
 
-/// windowVisible = shown = true: maps the popup, or brings back a fading one.
+/// Shown: maps the popup, or brings back a fading one.
 pub(crate) fn map_osd(app: &mut App) {
     let (pw, ph) = panel_size(app);
     // implicitWidth: panel + 40; the panel centred in it.
     let (w, h) = ((pw + 40.0).ceil(), (ph + 40.0).ceil());
-    osd::show(app, OpenParams { kind: OsdKind::Layout, size: (w as u32, h as u32), panel: (ac(w, pw), ac(h, ph), pw, ph), dim: None, keyboard: false, namespace: "quickshell", fade_ms: OSD_FADE_MS, min_scale: 0.94, fade_easing: crate::anim::Easing::OutCubic, pos: None, fill: false, output: None });
+    osd::show(app, OpenParams { kind: OsdKind::Layout, size: (w as u32, h as u32), panel: (ac(w, pw), ac(h, ph), pw, ph), dim: None, keyboard: false, namespace: "rust-bar", fade_ms: OSD_FADE_MS, min_scale: 0.94, fade_easing: crate::anim::Easing::OutCubic, pos: None, fill: false, output: None });
     app.svc.layout.hovered = None;
 }
 
-/// hideTimer.restart(): the popup fades 1.3 s later, under the pointer or
-/// not (LayoutOsd.qml:97-101 hides unconditionally; only onEntered stops it).
+/// The popup fades 1.3 s later, under the pointer or not (the hide is
+/// unconditional; only osd_moved stops it).
 fn hide_later(app: &mut App) {
     app.debounce("layout-osd-hide", Duration::from_millis(OSD_VISIBLE_MS), |app| osd::hide(app, OsdKind::Layout));
 }
@@ -286,12 +284,12 @@ fn hide_osd(app: &mut App) {
     osd::hide(app, OsdKind::Layout);
 }
 
-/// MouseArea.onEntered / onExited over the panel - with one difference from
-/// QML. LayoutOsd.qml also holds the popup when it maps under a pointer
-/// that is just resting there (mango sends the enter), so SUPER+SPACE with
-/// the mouse in the middle of the screen left it up, the MRU commit
-/// suspended, until the hand went back to the mouse. Here the enter only
-/// marks the pointer resting; a real move over the popup holds it.
+/// The pointer entering or leaving the panel. An enter alone does not hold
+/// the popup: one that maps under a pointer just resting there gets an
+/// enter too (mango sends it), and holding it then left SUPER+SPACE with the
+/// mouse in the middle of the screen up, the MRU commit suspended, until
+/// the hand went back to the mouse. The enter only marks the pointer
+/// resting; a real move over the popup holds it.
 pub fn osd_hover(app: &mut App, inside: bool) {
     if inside {
         app.svc.layout.resting = true;
@@ -304,8 +302,8 @@ pub fn osd_hover(app: &mut App, inside: bool) {
 
 /// The pointer moved over the popup: now it points at it. Freeze: no
 /// auto-hide and no MRU commit while pointed at; a popup that was fading
-/// comes back (LayoutOsd.qml:233-240). A later switch restarts both, and
-/// then it hides under the pointer too.
+/// comes back. A later switch restarts both, and then it hides under the
+/// pointer too.
 pub fn osd_moved(app: &mut App) {
     if !std::mem::take(&mut app.svc.layout.resting) {
         return;
@@ -346,7 +344,7 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
     plate(ui, bx, plate_y, plate_w, plate_h);
     let (rx, ry) = (bx + m.plate_pad, plate_y + m.plate_pad);
 
-    // posAt(): the hovered entry, anywhere over the panel.
+    // The hovered entry, anywhere over the panel.
     let hovered = ui.card.pointer().filter(|&(x, y)| !s.resting && x >= px0 && x < px0 + pw && y >= py0 && y < py0 + ph).map(|(x, _)| {
         let i = ((x - rx) / (m.name_w + m.row_sp)).floor();
         i.clamp(0.0, (n - 1.0).max(0.0)) as usize
@@ -379,7 +377,7 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
         lamp(ui, 0x200 + i as u32, lx, ly + ac(row_h, 10.0), sel);
         ui.text_of(i as u32, 0xE2, &nl, lx + 10.0 + px(5.0), ly + ac(row_h, nl.height()), if sel { t.col_white } else { t.col_grey });
     }
-    // One MouseArea over the panel; posAt() splits it into a column per
+    // One MouseArea over the panel, split into a column per
     // entry, the first and last reaching the panel's edges.
     let step = m.name_w + m.row_sp;
     for i in 0..items.len() {

@@ -1,6 +1,6 @@
 //! The bar's IPC: what the keybinds call. `rust-bar msg <target> <function>
-//! [args...]` sends one line to $XDG_RUNTIME_DIR/rust-bar.sock - the same
-//! targets and functions as the QML bar's IpcHandlers (qs -c bar ipc call).
+//! [args...]` sends one line to $XDG_RUNTIME_DIR/rust-bar.sock, naming a
+//! target and one of its functions.
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::os::fd::{AsRawFd, IntoRawFd};
@@ -85,7 +85,7 @@ fn on_conn(app: &mut App, c: UnixStream) {
 fn call(app: &mut App, target: &str, function: &str, args: &[&str]) -> Result<(), String> {
     match (target, function) {
         ("gamemode", "set") => {
-            // shell.qml binds only exclusiveZone to game mode: nothing drawn
+            // Game mode changes only the exclusive zone: nothing drawn
             // changes, so nothing is drawn again.
             app.svc.mango.game_mode = args.first().map_or(false, |a| *a == "true");
             app.update_exclusive_zones();
@@ -149,8 +149,8 @@ fn call(app: &mut App, target: &str, function: &str, args: &[&str]) -> Result<()
     }
 }
 
-/// BarCards.qml: SUPER+CTRL+<letter> opens a card on the focused monitor's
-/// strip with its first control focused; the same shortcut closes it.
+/// SUPER+CTRL+<letter> opens a card on the focused monitor's strip with its
+/// first control focused; the same shortcut closes it.
 fn cards_toggle(app: &mut App, card: &str) {
     use crate::cards::CardKind;
     let kind = match card {
@@ -167,8 +167,8 @@ fn cards_toggle(app: &mut App, card: &str) {
         _ => return,
     };
     let action = crate::cards::icon_action(kind);
-    // Each bar takes the request only when it names its screen (shell.qml:51-55):
-    // with no strip on the focused monitor (no snapshot yet, an unknown name)
+    // A strip takes the request only when it is on the focused screen: with
+    // no strip on the focused monitor (no snapshot yet, an unknown name)
     // nothing opens.
     let focused = app.svc.mango.focused().map(|m| m.name.clone()).unwrap_or_default();
     let Some(strip) = app.strips.iter().position(|s| s.name == focused) else { return };
@@ -176,7 +176,7 @@ fn cards_toggle(app: &mut App, card: &str) {
     crate::cards::toggle(app, strip, kind, &hit, true);
 }
 
-/// LayoutState.cycle(): next keyboard layout (MRU order comes with the LayoutState port).
+/// `layout next`: the next keyboard layout in MRU order (layout::switch_next).
 pub fn layout_next(app: &mut App) {
     crate::layout::switch_next(app);
 }

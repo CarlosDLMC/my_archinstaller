@@ -2,6 +2,21 @@
 
 ## October 2026
 
+Changed (2026-10-29) - the bar is `rust-bar`, a rewrite of the quickshell bar
+in Rust (`rust-bar/`, built by `install-scripts/rust-bar.sh` from
+`pkgbuilds/rust-bar`): the same strip, cards, overview, menus and polkit agent,
+at about a fifth of the memory and less CPU. The numbers are in the README
+("Why the bar is written in Rust"). quickshell is no longer installed.
+
+- The old bar is gone: `dotfiles/config/quickshell/` is deleted. The bar's
+  scripts are in `~/.config/rust-bar/scripts/`, wallust writes its palette to
+  `~/.config/rust-bar/wallust-colors.json`, and its caches are in
+  `~/.cache/rust-bar/`.
+- The preset option is `bar`; an older preset that says `quickshell` gets the
+  unknown-key warning and no bar, so rename it.
+- `ToggleQuickshellBar.sh` is `ToggleBar.sh`; the mango layer rules match the
+  `rust-bar:*` namespaces.
+
 Changed (2026-10-27) - the mango patches live in our fork,
 [CarlosDLMC/mango](https://github.com/CarlosDLMC/mango): branch `patched` is
 upstream mango plus one commit per change, and `pkgbuilds/mangowm` builds a

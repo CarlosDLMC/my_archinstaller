@@ -102,11 +102,11 @@ wallust_targets=(
     # mango/config.conf - without it mango starts on settings.conf's fallback).
     "mango/wallust/colors.conf"
     "rofi/wallust/colors-rofi.rasi"
-    # bar/Theme.qml reads this through a FileView. The bar and initial-boot.sh's
-    # first `wallust run` start in parallel at login (mango/startup.conf), so
-    # without a seed the bar can load before the file exists and sit on its
-    # fallback palette until it is restarted.
-    "quickshell/bar/wallust-colors.json"
+    # The bar reads this when it starts (rust-bar/src/app.rs). The bar and
+    # initial-boot.sh's first `wallust run` start in parallel at login
+    # (mango/startup.conf), so without a seed the bar can load before the file
+    # exists and show its fallback palette until wallust writes it.
+    "rust-bar/wallust-colors.json"
     # btop's color_theme = "wallust" names this one; missing, btop quietly falls
     # back to its built-in theme. hypr/scripts/BtopTheme.py rebuilds it from the
     # palette below after every wallust run.
@@ -436,7 +436,7 @@ config_dirs=(
     # server's sockets, session.json and its logs live next to config.toml - so
     # moving it aside wholesale took the saved session and the live sockets with
     # it on every re-run. It is deployed file by file further down.
-    "quickshell"
+    "rust-bar"
     "wallust"
     "foot"
     "rofi"
@@ -605,7 +605,7 @@ for dir in "${config_dirs[@]}"; do
             ;;
         esac
         # Runtime files this script seeds itself (all gitignored), left out of the
-        # comparison: with them counted, hypr, quickshell, wallust, rofi and cava
+        # comparison: with them counted, hypr, rust-bar, wallust, rofi and cava
         # were backed up on every re-run with no edits at all, ~12 MB each time.
         # The "identical" branch copies the repo over the existing directory, so
         # they stay in place - the repo has none of them to overwrite with. Not
@@ -619,7 +619,7 @@ for dir in "${config_dirs[@]}"; do
         case "$dir" in
             hypr)       _cmp_x=(.initial_startup_done .wallpaper_current .wallpaper_modified .wallpaper_video wallust) ;;
             mango)      _cmp_x=(wallust state) ;;
-            quickshell) _cmp_x=(wallust-colors.json) ;;
+            rust-bar)   _cmp_x=(wallust-colors.json) ;;
             wallust)    _cmp_x=(output) ;;
             rofi)       _cmp_x=(wallust .current_wallpaper) ;;
             cava)       _cmp_x=(config) ;;
@@ -944,7 +944,7 @@ fi
 # Copy the wallpaper library
 #
 # The dots hardcode $HOME/Pictures/wallpapers in WallpaperSelect.sh,
-# WallpaperRandom.sh and the bar's carousel (WallpaperState.qml), so an empty directory there means
+# WallpaperRandom.sh and the bar's carousel (rust-bar/src/wallpaper.rs), so an empty directory there means
 # the wallpaper picker opens with nothing in it.
 printf "\n${INFO} Copying wallpapers...\n"
 if [ -d "$SCRIPT_DIR/wallpapers" ]; then

@@ -1,5 +1,4 @@
-//! Claude Code usage (AgentUsage.qml + AgentPanel.qml): the collector's
-//! readings and the agent card.
+//! Claude Code usage: the collector's readings and the agent card.
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -48,15 +47,15 @@ pub struct Usage {
     clock_texts: String,
 }
 
-/// The open card's 30 s timer (AgentPanel's nowTick + AgentUsage's stats
-/// Timer); cards::close stops it by this name.
+/// The open card's 30 s timer (the clock-driven texts and the stats
+/// reading); cards::close stops it by this name.
 pub(crate) const TICK: &str = "agent-tick";
 
 fn now_s() -> f64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map_or(0.0, |d| d.as_secs_f64())
 }
 
-/// AgentUsage.apply(): the collector's JSON.
+/// Applies the collector's JSON.
 fn apply(app: &mut App, text: &str) {
     let Ok(j) = serde_json::from_str::<Value>(text.trim()) else { return };
     // The strip shows the widget once it is installed; the readings are the
@@ -70,7 +69,7 @@ fn apply(app: &mut App, text: &str) {
     }
     let u = &mut app.svc.agent;
     // A Repeater handed an array that differs from its model makes all its
-    // rows anew: new Texts (subpixel again), and new SegmentGauges whose
+    // rows anew: new Texts (subpixel again), and new segment gauges whose
     // cells fade from their first layout pass (first_lit). An equal one
     // keeps them.
     let mut remade: Vec<u64> = Vec::new();
@@ -133,7 +132,7 @@ fn apply(app: &mut App, text: &str) {
 }
 
 pub fn run(app: &mut App, mode: &str) {
-    let cmd = format!("{}/.config/quickshell/bar/scripts/agent-usage.py {mode}", services::home());
+    let cmd = format!("{}/.config/rust-bar/scripts/agent-usage.py {mode}", services::home());
     app.spawn("agent-usage", &["sh", "-c", &cmd], |app, d| {
         apply(app, &d.stdout);
         busy_changed(app);
@@ -141,8 +140,8 @@ pub fn run(app: &mut App, mode: &str) {
     busy_changed(app);
 }
 
-/// AgentUsage.busy follows the process, whatever it prints (onRunningChanged,
-/// AgentUsage.qml:111-115), and the open card's no-data text follows busy.
+/// Busy follows the collector process, whatever it prints, and the open
+/// card's no-data text follows busy.
 fn busy_changed(app: &mut App) {
     let u = &app.svc.agent;
     if !(u.by_day.is_empty() && u.limits.is_empty()) {
@@ -153,8 +152,8 @@ fn busy_changed(app: &mut App) {
     }
 }
 
-/// cardOpen: a full probe if the last one is over two minutes old, then the
-/// tick while the card stays open; opening again restarts it.
+/// The card opened: a full probe if the last one is over two minutes old,
+/// then the tick while the card stays open; opening again restarts it.
 pub fn opened(app: &mut App) {
     let mode = if now_s() - app.svc.agent.last_probe_at > 120.0 { "full" } else { "stats" };
     run(app, mode);
@@ -164,10 +163,9 @@ pub fn opened(app: &mut App) {
     app.debounce(TICK, Duration::from_secs(30), tick);
 }
 
-/// While the card is open: AgentPanel's nowTick every 30 s (AgentPanel.qml:94-100),
-/// which moves the reset countdowns and the stale age, and AgentUsage's 60 s
-/// stats Timer (AgentUsage.qml:149-154) on every second tick. Both stop with
-/// the card; a stray tick after it closed ends here.
+/// While the card is open: a tick every 30 s, which moves the reset
+/// countdowns and the stale age, and the 60 s stats reading on every second
+/// tick. Both stop with the card; a stray tick after it closed ends here.
 fn tick(app: &mut App) {
     if app.card.as_ref().map(|c| c.kind) != Some(CardKind::Agent) {
         return;
@@ -188,8 +186,8 @@ fn tick(app: &mut App) {
     app.debounce(TICK, Duration::from_secs(30), tick);
 }
 
-/// What the two Texts reading nowTick show: the limits error with its age,
-/// and the reset countdowns.
+/// What the two clock-driven texts show: the limits error with its age, and
+/// the reset countdowns.
 fn clock_texts(u: &Usage) -> String {
     let error = if u.limits_error.is_empty() { String::new() } else { limits_error_text(u) };
     format!("{error}\n{}", session_text(u).unwrap_or_default())
@@ -238,7 +236,8 @@ fn parse_iso(s: &str) -> Option<f64> {
     Some(days as f64 * 86400.0 + hh * 3600.0 + mm * 60.0 + ss - off)
 }
 
-/// untilText()
+/// The time left until `iso`: "сейчас" under a minute, else days and hours,
+/// hours and minutes, or minutes.
 fn until(iso: &str) -> String {
     let Some(t) = parse_iso(iso) else { return String::new() };
     let s = (t - now_s()).round().max(0.0) as i64;
@@ -256,7 +255,8 @@ fn until(iso: &str) -> String {
     }
 }
 
-/// agoText()
+/// How long ago `epoch` was: "только что" under 90 s, else minutes, hours
+/// (under 48) or days.
 fn ago(epoch: f64) -> String {
     let s = (now_s() - epoch).round().max(0.0) as i64;
     if s < 90 {
@@ -299,7 +299,7 @@ const LIMIT_TEXTS: [u64; 2] = [0xA1, 0xA2];
 const DAY_TEXTS: [u64; 2] = [0xA3, 0xA4];
 const MODEL_TEXTS: [u64; 2] = [0xA5, 0xA6];
 /// TextMemo parts of the wrapped Texts: one Text each, one verdict for all
-/// its lines (AgentPanel.qml:283-297, 319-335).
+/// its lines.
 const ERROR_TEXT: u64 = 0xA7;
 const RESET_TEXT: u64 = 0xA8;
 
@@ -374,7 +374,7 @@ pub fn content_height(fonts: &mut crate::text::Fonts, svc: &Services, w: f32, bu
     b.iter().map(|x| x.1).sum::<f32>() + 8.0 * (b.len().saturating_sub(1)) as f32
 }
 
-/// MeterRow: label, SegmentGauge, value; `parts` names its two Texts.
+/// A meter row: label, segment gauge, value; `parts` names its two Texts.
 #[allow(clippy::too_many_arguments)]
 fn meter_row(ui: &mut Ui, id: u32, parts: [u64; 2], x: f32, y: f32, w: f32, label: &str, value: &str, fraction: f64, fill: Color, emphasise: bool) {
     let t = ui.theme;
@@ -396,25 +396,25 @@ fn meter_row(ui: &mut Ui, id: u32, parts: [u64; 2], x: f32, y: f32, w: f32, labe
     gauge(ui, id, gx, y + ac(h, 10.0), gw, 10.0, n, value as f32, tint);
 }
 
-/// The lit count of a SegmentGauge in a row a Repeater makes anew, at its
+/// The lit count of a segment gauge in a row a Repeater makes anew, at its
 /// first layout pass: the row has no parent yet, so it is 0 wide and the
-/// gauge has Math.max(10, ...) = 10 segments, and the panel's maximum is
-/// still the old one - maxDay and maxModel (AgentPanel.qml:20-32) hear of
-/// the new array after the Repeater. `at_least_one`: MeterRow lights one
-/// segment for any reading (AgentPanel.qml:145-149); ModelRow does not.
+/// gauge has its minimum of 10 segments, and the card's maximum is still
+/// the old one - the day and model maxima hear of the new array after the
+/// Repeater. `at_least_one`: a limit or day row lights one segment for any
+/// reading; a model row does not.
 fn first_lit(fraction: f64, at_least_one: bool) -> i32 {
     let f = fraction.clamp(0.0, 1.0);
     let value = if at_least_one && f > 0.0 { (f * 100.0).max(10.0) } else { f * 100.0 };
     (value / 100.0 * 10.0).round() as i32
 }
 
-/// SegmentGauge in a Repeater's row: each cell has Behavior on color
-/// (200 ms, SegmentGauge.qml:31-32). A row made anew while the card is open
-/// (gauge_from, set by apply()) gets its cells at the first layout pass -
-/// ten, at that pass's lit count - and the second pass adds the rest dark
-/// (the cells' Repeater hears of `segments` before `lit` does): the cells
-/// whose colour the second pass changes fade from there. A row made with
-/// the card does not animate (its Behaviors are not finalized yet).
+/// A segment gauge in a Repeater's row: each cell has a Behavior on its
+/// colour (200 ms). A row made anew while the card is open (gauge_from, set
+/// by apply()) gets its cells at the first layout pass - ten, at that pass's
+/// lit count - and the second pass adds the rest dark (the cells' Repeater
+/// hears of `segments` before `lit` does): the cells whose colour the second
+/// pass changes fade from there. A row made with the card does not animate
+/// (its Behaviors are not finalized yet).
 #[allow(clippy::too_many_arguments)]
 fn gauge(ui: &mut Ui, id: u32, x: f32, y: f32, w: f32, h: f32, n: i32, value: f32, tint: Color) {
     let cell = (w - 2.0 * (n - 1) as f32) / n as f32;
@@ -515,7 +515,7 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, busy: bool, top: f32) {
                     let name_h = ui.fonts.layout("a", theme::bar_font(false), LABEL - 1.0, 0.0).height();
                     let rh = name_h + 12.0;
                     let hover = ui.hovered(ix, cy, iw, rh);
-                    // .replace(/^claude-/, "").replace(/-\d{8}$/, "") (AgentPanel.qml:396-397),
+                    // The id less a `claude-` prefix and a `-\d{8}` date suffix,
                     // on char boundaries: the id comes from the transcripts on disk.
                     let base = m.model.strip_prefix("claude-").unwrap_or(&m.model);
                     let name = match base.rsplit_once('-') {

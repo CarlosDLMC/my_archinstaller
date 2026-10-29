@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # This script applies wallpapers.
 #
-#   WallpaperSelect.sh FILE   apply FILE. SUPER W opens the quickshell wallpaper
-#                             carousel (bar/components/WallpaperOsd.qml), and a
+#   WallpaperSelect.sh FILE   apply FILE. SUPER W opens the bar's wallpaper
+#                             carousel (rust-bar/src/wallpaper.rs), and a
 #                             pick there lands here through this mode.
 #   WallpaperSelect.sh        the old rofi menu, kept as a fallback.
 
@@ -18,7 +18,7 @@ iDIRi="$HOME/.config/hypr/notify/icons"
 
 # awww transition config. "center" grows the new wallpaper as a circle from
 # the middle of the screen out to the edges; "any" grew it from a random point.
-# WALLPAPER_TRANSITION overrides it: the quickshell carousel draws its own
+# WALLPAPER_TRANSITION overrides it: the bar's carousel draws its own
 # reveal (two slanted edges opening from the centre) and then asks for "none",
 # so awww swaps the image instantly under the finished reveal.
 FPS=60

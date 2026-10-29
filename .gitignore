@@ -53,7 +53,7 @@ GTK-themes-icons/*.log
 dotfiles/config/cava/config
 dotfiles/config/mango/wallust/colors.conf
 dotfiles/config/rofi/wallust/colors-rofi.rasi
-dotfiles/config/quickshell/bar/wallust-colors.json
+dotfiles/config/rust-bar/wallust-colors.json
 dotfiles/config/btop/themes/wallust.theme
 dotfiles/config/btop/themes/wallust-palette.json
 dotfiles/config/gtk-3.0/wallust.css

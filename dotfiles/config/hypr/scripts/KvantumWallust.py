@@ -29,7 +29,7 @@ SRC_NAME = "KvGnomeDark"
 NAME = "Wallust"
 SRC = os.path.join("/usr/share/Kvantum", SRC_NAME)
 DST = os.path.join(HOME, ".config", "Kvantum", NAME)
-PALETTE = os.path.join(HOME, ".config", "quickshell", "bar", "wallust-colors.json")
+PALETTE = os.path.join(HOME, ".config", "rust-bar", "wallust-colors.json")
 
 # Every saturated colour KvGnomeDark carries except one: Adwaita's blues, plus
 # the red it gives visited links (GTK draws those in the accent too). The

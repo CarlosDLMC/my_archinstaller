@@ -1,5 +1,5 @@
 {
-    "_comment": "wallust template - quickshell bar. Monochrome ramp; the alert colour is picked from hues by Theme.qml (alertFrom).",
+    "_comment": "wallust template - rust-bar. Monochrome ramp; the alert colour is picked from hues by the bar (alert_from in rust-bar/src/theme.rs).",
 
     "bg":     "{{background}}",
     "fg":     "{{foreground}}",

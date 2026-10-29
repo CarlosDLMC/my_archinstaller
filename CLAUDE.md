@@ -72,9 +72,9 @@ do. Back up a live file before overwriting it.
 - The wallpaper daemon (swww) ships here under the renamed binary `awww` /
   `awww-daemon`. Theming after a wallpaper change goes through `wallust`.
 - The bar is `rust-bar` (Rust, crate `rust-bar/`, built by
-  `install-scripts/rust-bar.sh` from `pkgbuilds/rust-bar`), a rewrite of the
-  quickshell (QML) bar in `dotfiles/config/quickshell/bar/` - which stays as the
-  reference it was matched against, and still holds the bar's `scripts/` and
-  `wallust-colors.json`. The overview (SUPER+A), the menus and the polkit agent
-  are part of it. It talks to mango over the IPC socket and gets the keybinds'
-  calls through `rust-bar msg <target> <function>`.
+  `install-scripts/rust-bar.sh` from `pkgbuilds/rust-bar`). The overview
+  (SUPER+A), the menus and the polkit agent are part of it. Its scripts are in
+  `dotfiles/config/rust-bar/scripts/` (`~/.config/rust-bar/scripts/` live),
+  wallust writes its palette to `~/.config/rust-bar/wallust-colors.json`, and
+  its caches are in `~/.cache/rust-bar/`. It talks to mango over the IPC socket
+  and gets the keybinds' calls through `rust-bar msg <target> <function>`.

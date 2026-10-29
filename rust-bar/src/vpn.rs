@@ -1,5 +1,5 @@
-//! The VPN widget's card (VpnWidget.qml): the tunnel, the time/weather sync
-//! keys and the WireGuard configs, with the same helper scripts.
+//! The VPN widget's card: the tunnel, the time/weather sync keys and the
+//! WireGuard configs, through the helper scripts.
 
 use std::time::{Duration, Instant};
 
@@ -14,11 +14,11 @@ use crate::theme::{self, FONT_SIZE};
 pub struct Vpn {
     pub configs: Vec<String>,
     pub connecting: bool,
-    /// The 450 ms spinner floors (timeSpinFloor / weatherSpinFloor).
+    /// The 450 ms spinner floors of the time and weather sync keys.
     pub time_floor: Option<Instant>,
     pub weather_floor: Option<Instant>,
-    /// What the card asked of vpnActionProc while it still ran (its
-    /// targetRunning, see tunnel()): Some(None) = ВЫКЛ, Some(Some(name)) = go there.
+    /// What the card asked of the tunnel action while it still ran (see
+    /// tunnel()): Some(None) = ВЫКЛ, Some(Some(name)) = go there.
     queued: Option<Option<String>>,
 }
 
@@ -30,7 +30,7 @@ pub const ROW: u32 = 0x100;
 const FLOOR: Duration = Duration::from_millis(450);
 
 fn scripts() -> String {
-    format!("{}/.config/quickshell/bar/scripts", services::home())
+    format!("{}/.config/rust-bar/scripts", services::home())
 }
 
 pub fn time_busy(app: &App) -> bool {
@@ -41,7 +41,7 @@ pub fn weather_busy(app: &App) -> bool {
     app.is_running("vpn-weather") || app.svc.vpn_card.weather_floor.map_or(false, |t| t.elapsed() < FLOOR)
 }
 
-/// onOpened: the configs, as root can list them.
+/// The card opened: the configs, as root can list them.
 pub fn opened(app: &mut App) {
     app.spawn("vpn-list", &["sh", "-c", "sudo find /etc/wireguard -name '*.conf' -exec basename {} .conf \\; 2>/dev/null | sort"], |app, d| {
         let list: Vec<String> = d.stdout.lines().map(str::trim).filter(|l| !l.is_empty()).map(String::from).collect();
@@ -134,7 +134,7 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, busy: (bool, bool)) {
         let n = configs.len().min(8);
         let h = n as f32 * (m.row + 2.0) - 2.0 + 8.0;
         plate(ui, x0, y, cw, h);
-        // vpnListView: 8 rows in view, the rest scrolled to; the tunnel in
+        // The tunnel list: 8 rows in view, the rest scrolled to; the tunnel in
         // use is lit and not pickable.
         let pickable = |i: usize| configs.get(i).map_or(false, |c| *c != svc.vpn);
         let list = ui.list_begin(ROW, x0 + 4.0, y + 4.0, cw - 8.0, n, configs.len(), m.row, 2.0, crate::cards::model_sig(configs), pickable);
@@ -153,8 +153,8 @@ pub fn activate(app: &mut App, code: u32) {
         OFF => {
             app.svc.vpn_card.connecting = true;
             tunnel(app, None);
-            // vpnResetProc.running = true: the dropped-tunnel check's reset,
-            // so one asked during another runs after it, not beside it.
+            // The same reset as the dropped-tunnel check's, so one asked
+            // during another runs after it, not beside it.
             services::vpn_reset(app);
             crate::cards::close(app);
         }
@@ -180,16 +180,13 @@ pub fn activate(app: &mut App, code: u32) {
     }
 }
 
-/// vpnActionProc.running = true: down the tunnel in use (`to` None, ВЫКЛ),
-/// or go to `to` - up from none, through vpn-switch.sh from another
-/// (VpnWidget.qml:98-128). Asked while an action still runs, it runs once
-/// that one has ended, the last request winning: Process keeps `running =
-/// true` on a process still running (targetRunning) and starts it again
-/// from onFinished (quickshell process.cpp:274-287), where spawn() dropped
-/// it - ВЫКЛ during a connect left the tunnel up. It is then taken against
-/// the tunnel up by that time; QML's re-run keeps the name ВЫКЛ saw, and
-/// its end handler has cleared switchFrom, so a pick made meanwhile comes
-/// up beside the tunnel already up. That part is not copied.
+/// The tunnel action: down the tunnel in use (`to` None, ВЫКЛ), or go to
+/// `to` - up from none, through vpn-switch.sh from another. Asked while an
+/// action still runs, it runs once that one has ended, the last request
+/// winning; spawn() alone would drop it - ВЫКЛ during a connect left the
+/// tunnel up. It is then taken against the tunnel up by that time, so a
+/// pick made meanwhile switches from that tunnel instead of coming up
+/// beside it.
 fn tunnel(app: &mut App, to: Option<String>) {
     if app.is_running("vpn-action") {
         app.svc.vpn_card.queued = Some(to);
@@ -199,8 +196,8 @@ fn tunnel(app: &mut App, to: Option<String>) {
     match to {
         None if active.is_empty() => {}
         None => app.spawn("vpn-action", &["sudo", "wg-quick", "down", &active], |app, _| {
-            // isDisconnect: activeVpn = "" (VpnWidget.qml:121-123) - the
-            // strip's icon goes grey now; the check below finds "" == "".
+            // A disconnect clears the active tunnel at once - the strip's
+            // icon goes grey now; the check below finds "" == "".
             if !app.svc.vpn.is_empty() {
                 app.svc.vpn.clear();
                 app.mark_strips_dirty();
@@ -217,9 +214,9 @@ fn tunnel(app: &mut App, to: Option<String>) {
     }
 }
 
-/// vpnActionProc's end (VpnWidget.qml:116-127): the status again 500 ms
-/// later (statusUpdateTimer.restart()), then what was asked meanwhile,
-/// against the tunnel the status shows now.
+/// The tunnel action's end: the status again 500 ms later (the status
+/// timer restarted), then what was asked meanwhile, against the tunnel the
+/// status shows now.
 fn tunnel_done(app: &mut App) {
     app.svc.vpn_card.connecting = false;
     app.debounce("vpn-status", Duration::from_millis(500), services::vpn_check);

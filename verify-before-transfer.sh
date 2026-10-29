@@ -67,7 +67,7 @@ done
 # icons/: the logo cuts plymouth.sh and hackbgrt.sh render from. GTK-themes-icons/:
 # the GTK theme, icons and cursor gtk_themes.sh extracts.
 for _dir in assets icons GTK-themes-icons rust-bar/src dotfiles/wallpapers dotfiles/.local/bin dotfiles/config/hypr \
-            dotfiles/config/mango dotfiles/config/quickshell/bar dotfiles/config/wallust \
+            dotfiles/config/mango dotfiles/config/rust-bar dotfiles/config/wallust \
             dotfiles/config/foot dotfiles/config/rofi; do
     check_dir "$_dir"
 done

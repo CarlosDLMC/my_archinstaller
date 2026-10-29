@@ -36,7 +36,7 @@ LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_battery_charge_limit.log"
 # Three things have to exist for the bar's battery card to offer it:
 #
 #   1. a root-owned helper, because those sysfs files are root-writable only
-#      and a QML Process has no tty to prompt on;
+#      and a process the bar starts has no tty to prompt on;
 #   2. somewhere to record the choice, because a sysfs write does not survive
 #      a reboot;
 #   3. a unit that reapplies it at boot and after resume, because some
@@ -87,7 +87,7 @@ cat > "$TMP_HELPER" <<'HELPEREOF'
 #   battery-charge-limit set <N>    set every pack to N% and persist it
 #   battery-charge-limit apply      re-apply the persisted value
 #
-# `set` is what the quickshell bar's battery card calls, through sudo.
+# `set` is what the bar's battery card calls, through sudo.
 # `apply` is what battery-charge-limit.service calls at boot and after resume.
 
 set -u
@@ -183,7 +183,7 @@ cmd_set() {
 
   # Persist only what at least one pack took. Recording a value the hardware
   # rejected would have the unit re-apply the same failure at every boot.
-  printf '# Written by battery-charge-limit. The quickshell bar edits this.\nLIMIT=%s\n' \
+  printf '# Written by battery-charge-limit. The bar edits this.\nLIMIT=%s\n' \
     "$limit" > "$CONF"
   sync_asusd "$limit"
 }
@@ -237,8 +237,8 @@ printf "${OK} Installed ${SKY_BLUE}$HELPER${RESET}\n" | tee -a "$LOG"
 # ---------------------------------------------------------------------------
 # The sudoers rule
 # ---------------------------------------------------------------------------
-# The bar runs `sudo -n /usr/local/bin/battery-charge-limit set N` from a QML
-# Process, which has no terminal to prompt on. With nopasswd_sudo="ON" the wheel
+# The bar runs `sudo -n /usr/local/bin/battery-charge-limit set N` from a
+# process with no terminal to prompt on. With nopasswd_sudo="ON" the wheel
 # rule covers it; with it OFF the picker failed silently. So, like the bluetooth
 # toggle's rule, this installs a rule for exactly this one root-owned helper.
 # Safe to grant because the helper is root:root 0755 (see above) and only takes
@@ -315,7 +315,7 @@ fi
 if [ ! -f "$CONF" ]; then
   current=$(cat /sys/class/power_supply/BAT*/charge_control_end_threshold 2>/dev/null | head -1)
   [ -n "$current" ] || current=100
-  printf '# Written by battery-charge-limit. The quickshell bar edits this.\nLIMIT=%s\n' \
+  printf '# Written by battery-charge-limit. The bar edits this.\nLIMIT=%s\n' \
     "$current" | sudo tee "$CONF" >/dev/null
   printf "${OK} Recorded the current limit (${SKY_BLUE}${current}%%${RESET}). Change it from the bar's battery card.\n" | tee -a "$LOG"
 else

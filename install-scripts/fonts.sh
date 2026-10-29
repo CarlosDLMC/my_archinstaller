@@ -18,11 +18,10 @@ fonts=(
 
   # REQUIRED by the bar. rust-bar/src/theme.rs sets
   #   pub const FONT: &str = "Terminess Nerd Font";
-  # and every widget in the bar renders through it (Theme.fontFamily in the
-  # QML bar it replaces), so without this package fontconfig substitutes
-  # something else and the whole bar is laid out in the wrong face -
-  # silently, since a font fallback is not an error. "Terminess" is the Nerd
-  # Fonts name for Terminus.
+  # and every widget in the bar renders through it, so without this package
+  # fontconfig substitutes something else and the whole bar is laid out in
+  # the wrong face - silently, since a font fallback is not an error.
+  # "Terminess" is the Nerd Fonts name for Terminus.
   ttf-terminus-nerd
 
   # ttf-fira-code above covers "Fira Code Semi-Bold", named by

@@ -224,8 +224,8 @@ impl Scene {
         }
     }
 
-    /// A QML Rectangle: fill, radius, border inside the edge. `aa` is
-    /// Rectangle.antialiasing (QML turns it on whenever radius > 0).
+    /// A Qt Quick Rectangle: fill, radius, border inside the edge. `aa` is
+    /// Rectangle.antialiasing (Qt Quick turns it on whenever radius > 0).
     pub fn rect(&mut self, x: f32, y: f32, w: f32, h: f32, fill: Color, radius: f32, border: f32, border_color: Color, aa: bool) {
         if w <= 0.0 || h <= 0.0 || self.opacity <= 0.0 {
             return;

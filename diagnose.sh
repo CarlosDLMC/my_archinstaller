@@ -76,10 +76,10 @@ else
     problems=$((problems + 1)); printf "  ${ERROR} ~/.config/hypr scripts or hyprlock.conf MISSING (custom config not installed)\n"
 fi
 
-if [ -d ~/.config/quickshell ]; then
-    printf "  ${OK} ~/.config/quickshell exists\n"
+if [ -d ~/.config/rust-bar ]; then
+    printf "  ${OK} ~/.config/rust-bar exists\n"
 else
-    problems=$((problems + 1)); printf "  ${ERROR} ~/.config/quickshell MISSING (the bar's scripts and wallust palette - dotfiles not copied)\n"
+    problems=$((problems + 1)); printf "  ${ERROR} ~/.config/rust-bar MISSING (the bar's scripts and wallust palette - dotfiles not copied)\n"
 fi
 
 if [ -d ~/.config/wallust ]; then

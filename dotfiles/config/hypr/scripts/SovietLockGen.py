@@ -253,7 +253,7 @@ def layout_list():
     """Positional short codes for $LAYOUT[...], from the machine's own
     kb_layout. Prefers the bar's layouts.py so the lock screen and the bar
     agree (us -> EN, GNOME style); falls back to the raw codes."""
-    helper = f"{HOME}/.config/quickshell/bar/scripts/layouts.py"
+    helper = f"{HOME}/.config/rust-bar/scripts/layouts.py"
     if os.path.exists(helper):
         try:
             data = json.loads(sh("python3", helper))

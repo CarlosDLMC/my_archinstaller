@@ -2,7 +2,7 @@
 name = "rust-bar"
 version = "0.1.0"
 edition = "2021"
-description = "The desktop bar, in Rust: same look and behaviour as the quickshell bar, less memory"
+description = "The desktop bar of my_archinstaller, in Rust"
 license = "MIT"
 
 [dependencies]

@@ -1,7 +1,7 @@
-//! `rust-bar crt`: the CRT power-off (quickshell/crt). Every monitor's
-//! picture folds into a bright horizontal line, the line draws in to a point,
-//! and the point dies away like phosphor; the screen then stays black until
-//! the session ends. CrtOff.sh puts one frame of each monitor in
+//! `rust-bar crt`: the CRT power-off. Every monitor's picture folds into a
+//! bright horizontal line, the line draws in to a point, and the point dies
+//! away like phosphor; the screen then stays black until the session ends.
+//! CrtOff.sh puts one frame of each monitor in
 //! $XDG_RUNTIME_DIR/crt-off/<name>.ppm first and waits for `done`.
 
 use std::time::{Duration, Instant};
@@ -42,7 +42,7 @@ fn load(name: &str) -> Option<(u32, u32, Vec<u8>)> {
 pub fn create(app: &mut App, output: WlOutput) {
     let name = app.output_name(&output).unwrap_or_default();
     let surface = app.compositor.create_surface(&app.qh);
-    let layer = app.layer_shell.create_layer_surface(&app.qh, surface, Layer::Overlay, Some("quickshell:crt"), Some(&output));
+    let layer = app.layer_shell.create_layer_surface(&app.qh, surface, Layer::Overlay, Some("rust-bar:crt"), Some(&output));
     layer.set_anchor(Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT);
     layer.set_exclusive_zone(-1);
     layer.set_keyboard_interactivity(KeyboardInteractivity::Exclusive);

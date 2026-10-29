@@ -1,10 +1,10 @@
 #!/bin/bash
 # The desktop bar: rust-bar, built from this repo's rust-bar/ crate with
-# pkgbuilds/rust-bar. It replaces quickshell - the bar strip, its cards, the
-# overview (SUPER+A), the wallpaper carousel, the clipboard history, the
-# screenshot/record dialogs, the power menu, the polkit agent and the CRT
-# power-off are all this one binary now. Its scripts and the wallust palette
-# stay where the QML bar had them, in ~/.config/quickshell/bar (dots).
+# pkgbuilds/rust-bar. The bar strip, its cards, the overview (SUPER+A), the
+# wallpaper carousel, the clipboard history, the screenshot/record dialogs,
+# the power menu, the polkit agent and the CRT power-off are all this one
+# binary. Its scripts and the wallust palette live in ~/.config/rust-bar
+# (dots).
 #
 # The package's version is the crate's plus a hash of the crate (0.1.0.<hash>);
 # a re-run builds again only when the crate changed since.

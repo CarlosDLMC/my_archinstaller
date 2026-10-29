@@ -28,22 +28,12 @@ done
 # quit ags & relaunch ags
 #ags -q && ags &
 
-# Quickshell is deliberately NOT restarted here.
+# The bar is deliberately NOT restarted here.
 #
-# It refreshes itself: Quickshell hot-reloads its QML when the files change, and
-# bar/Theme.qml watches wallust-colors.json through a FileView with
-# watchChanges, so colours derived from a new wallpaper are picked up live.
-# Killing it was the reason the bar vanished and reappeared every time the
-# wallpaper changed.
-#
-# The line that used to be here was also broken in a second way:
-#
-#     pkill qs && sleep 0.3 && qs -c bar & qs -c overview &
-#
-# `&` binds looser than `&&`, so that parsed as two background jobs -
-# { pkill qs && sleep 0.3 && qs -c bar; } & { qs -c overview; } & - so the
-# overview was relaunched without its previous instance being killed, and when
-# qs was not running at all, pkill failed and the bar was never brought back.
+# It refreshes itself: rust-bar watches ~/.config/rust-bar and reloads
+# wallust-colors.json when wallust rewrites it (rust-bar/src/services.rs), so
+# colours derived from a new wallpaper are picked up live. Killing it was the
+# reason the bar vanished and reappeared every time the wallpaper changed.
 #
 # To restart the bar: SUPER+CTRL+B (RestartBar.sh).
 

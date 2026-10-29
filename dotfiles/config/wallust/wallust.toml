@@ -49,7 +49,7 @@ rofi.target = '~/.config/rofi/wallust/colors-rofi.rasi'
 #kitty.target = '~/.config/kitty/kitty-themes/01-Wallust.conf'
 
 bar.template = 'bar-colors.json'
-bar.target = '~/.config/quickshell/bar/wallust-colors.json'
+bar.target = '~/.config/rust-bar/wallust-colors.json'
 
 # btop: the palette only. hypr/scripts/BtopTheme.py, run after wallust, turns it
 # into btop/themes/wallust.theme (picked by color_theme = "wallust") in

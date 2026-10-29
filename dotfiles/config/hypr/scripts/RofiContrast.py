@@ -132,8 +132,9 @@ def readable_on(fill, background, foreground):
         return "@foreground"
     # Neither clears: a mid-tone fill, which nothing already in the palette
     # can sit on. Lift one of them away from the fill instead - the same trick
-    # Theme.qml plays for the bar logo, where hue and saturation stay and only
-    # lightness moves, as far as it has to and no further.
+    # the bar plays for its logo (rust-bar/src/theme.rs), where hue and
+    # saturation stay and only lightness moves, as far as it has to and no
+    # further.
     #
     # Both are tried, because either can be stuck: @background is often pure
     # black and cannot go darker, and a near-white @foreground cannot go

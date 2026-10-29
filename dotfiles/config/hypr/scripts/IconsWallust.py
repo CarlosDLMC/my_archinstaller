@@ -36,7 +36,7 @@ SRC_NAME = "Flat-Remix-Blue-Dark"
 NAME = "Flat-Remix-Wallust-Dark"
 SRC = os.path.join(HOME, ".icons", SRC_NAME)
 DST = os.path.join(HOME, ".icons", NAME)
-PALETTE = os.path.join(HOME, ".config", "quickshell", "bar", "wallust-colors.json")
+PALETTE = os.path.join(HOME, ".config", "rust-bar", "wallust-colors.json")
 
 MANIFEST = os.path.join(DST, ".wallust-manifest")   # the icons that carry the blue
 STATE = os.path.join(DST, ".wallust-colours")       # the colours they carry now

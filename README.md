@@ -48,7 +48,7 @@ select exactly this and nothing else:
   installer release no longer ships it.
 - Uncheck everything else: the shell configuration, every desktop entry
   (especially **Hyprland** and the **Mango** editions - they bring SDDM or a shell
-  of their own, which would fight ly and the Quickshell bar), Firefox, both
+  of their own, which would fight ly and the bar), Firefox, both
   printing groups and accessibility. If a Mango edition is installed anyway,
   `01-desktop-pkgs.sh` removes its settings package and keeps mango itself.
 
@@ -80,7 +80,7 @@ then continue with the [Installation Steps](#installation-steps) below.
 
 ## Features
 
-- **Custom Quickshell Bar** with event-based monitoring (no polling)
+- **Custom bar** (`rust-bar`, written in Rust) with event-based monitoring (no polling)
 - **Complete mango configuration** with custom keybindings, tab groups and layouts
 - **Keyboard Layout Switcher** (US/ES/RU) with SUPER+SPACE
 - **Night Light Toggle** with wlsunset
@@ -104,7 +104,7 @@ The desktop runs on **[mango](https://github.com/mangowm/mango)** (mangowm), a
 wlroots-based Wayland compositor that grew out of dwl.
 
 It started out on **Hyprland**. The move to mango kept every piece of the
-desktop and how it behaves: the same keybinds, the Quickshell bar with its
+desktop and how it behaves: the same keybinds, the bar with its
 cards and the overview (SUPER+A), tab groups, the window and workspace
 animations, the lock screen, and the wallust theming that follows the
 wallpaper. Where stock mango behaved differently, it is patched:
@@ -138,7 +138,8 @@ opacity toggle).
 Measured on the desktop this repo was built on: **AMD Ryzen 5 7600, Radeon
 RX 6700 XT, 32 GB RAM, one 2560x1440 monitor, CachyOS** (kernel
 linux-cachyos). The same script ran under each compositor, on the same freshly
-logged-in, idle desktop: the Quickshell bar, dunst, the wallpaper daemon and
+logged-in, idle desktop: the bar (its earlier version, before [the Rust
+rewrite](#why-the-bar-is-written-in-rust)), dunst, the wallpaper daemon and
 one terminal. "RAM in use" is the system-wide *used* figure from `free`
 (kernel, drivers and everything running), minus the Claude Code session the
 measurement was run from - so the ~1.2 GB is the whole desktop at rest, not
@@ -166,7 +167,7 @@ log):
 
 | Part | Memory |
 |---|---|
-| rust-bar - the bar, its cards, menus and the overview (was quickshell: 92 MB) | 27 MB |
+| rust-bar - the bar, its cards, menus and the overview | 25 MB |
 | **mango** - the compositor (window manager, rendering, input) | **29 MB** |
 | **Xwayland** - X11 compatibility, for apps that are not Wayland (Steam, some games) | **19 MB** |
 | keyd - the Caps Lock navigation layer | 35 MB |
@@ -192,17 +193,13 @@ idle desktop of the comparison (~190 MB, which gives the ~1.2 GB). Counted the
 same way as in the resources table (with the shared libraries they use), mango
 is 70 MB where Hyprland was 153 MB.
 
-The bar is rust-bar since 2026-10-27, a Rust rewrite of the quickshell bar.
-Measured on this desktop the same way, idle after opening every card and
-menu: 27 MB against the quickshell bar's 94 MB (plus 23 MB of it in swap),
-4 threads against 31, 42 MB of GPU memory against 66, and 0.10% of a core
-idle against 0.12%. Opening a card costs a quarter of the CPU; the overview,
-the wallpaper carousel and the clipboard a little less than before (the rest
-of the table was measured with the quickshell bar).
+The bar rows in the Hyprland/mango comparison are from the bar's earlier
+version; today's bar uses about a fifth of that memory - see [Why the bar is
+written in Rust](#why-the-bar-is-written-in-rust).
 
 About half of it is the kernel and the AMD driver, the same under Hyprland or
 mango. That is why it does not go under 1 GB by changing the desktop: removing
-the bar entirely would save ~30 MB (~130 MB with the quickshell bar), and the VRAM bookkeeping only exists on a
+the bar entirely would save ~25 MB, and the VRAM bookkeeping only exists on a
 GPU with a lot of VRAM (it serves GPU compute, ROCm/OpenCL). A machine with a
 smaller or integrated GPU idles lower.
 
@@ -398,7 +395,7 @@ first prompt.
 - CUPS printing, socket-activated (see [Printing](#printing))
 
 ### Desktop Environment
-- Quickshell (custom bar)
+- rust-bar (the bar, written in Rust)
 - foot (terminal)
 - rofi (launcher) - built from `pkgbuilds/rofi` by `install-scripts/rofi-ondemand.sh`:
   Arch's rofi 2.0 plus five small patches - on-demand keyboard focus for the launcher
@@ -406,7 +403,7 @@ first prompt.
   counter, the cursor blink, `keep-list` for the ФАЙЛЫ tab's preview, and an escaped
   `{entry}` for its preview hook (stock rofi breaks on a file name with an odd `"`). If the build fails, the repo's stock rofi stays and
   the menus still work, only without those extras
-- «ПУСК · ПУЛЬТ» power menu (in the Quickshell bar, CTRL + ALT + P, or CTRL + ALT +
+- «ПУСК · ПУЛЬТ» power menu (in the bar, CTRL + ALT + P, or CTRL + ALT +
   Delete to open it on ВЫХОД); logout, reboot and
   power-off end with a CRT power-off - the picture folds into a line, then a dot
 - dunst (notifications — swaync is removed if present)
@@ -487,8 +484,8 @@ Three places consume it, and all three want Russian:
   the lock screen reads `Четверг, 10 сентября 2026`
 
 The bar's calendar picks up `firstDayOfWeek` and its `MMMM yyyy` heading from
-`Qt.locale()`. The bar's *clock* does not — `components/CenterInfo.qml` formats `"HH:mm"`
-directly, so it is 24-hour regardless of locale.
+the locale. The bar's *clock* does not — it formats `HH:mm` itself
+(`rust-bar/src/services.rs`), so it is 24-hour regardless of locale.
 
 **To change it**, edit `LC_TIME` in both `locale.conf` and `mango/env.conf`,
 add the locale to `wanted_locales` in `locales.sh`, and re-run it.
@@ -522,8 +519,8 @@ to `required_families` in the same file.
 One place names a font that is **not** installed and never has been:
 `config/rofi/themes/LonerOrZ.rasi` asks for `Iosevka`. It renders substituted
 here already, so this is inherited from upstream rather than something the
-install broke. (The overview, part of the bar, takes its fonts from
-`bar/overview/common/Appearance.qml`: Terminess and JetBrains Mono, as above.)
+install broke. (The overview, part of the bar, uses Terminess and JetBrains
+Mono, as above - `rust-bar/src/theme.rs`.)
 
 ### GTK theme
 
@@ -783,7 +780,7 @@ readlink /etc/resolv.conf       # /run/systemd/resolve/stub-resolv.conf
 
 ### Power profiles
 
-The bar's control panel (`PultWidget.qml`) reads and sets the profile with
+The bar's control panel (ПУЛЬТ, `rust-bar/src/pult.rs`) reads and sets the profile with
 `busctl` over `net.hadess.PowerProfiles` on the system bus. What it needs is
 that D-Bus API — not one particular package.
 
@@ -848,7 +845,7 @@ What it installs, and why each piece exists:
 
 | Piece | Why |
 |---|---|
-| `/usr/local/bin/battery-charge-limit` | Those sysfs files are root-writable only, and a QML `Process` has no tty to prompt on. Root-owned on purpose: sudo is passwordless here, so a user-writable script behind it would be a way to run anything as root |
+| `/usr/local/bin/battery-charge-limit` | Those sysfs files are root-writable only, and the bar runs the helper as a process with no tty to prompt on. Root-owned on purpose: sudo is passwordless here, so a user-writable script behind it would be a way to run anything as root |
 | `/etc/sudoers.d/battery-charge-limit` | Lets the bar run exactly that helper without a password, so the picker works even with `nopasswd_sudo="OFF"`. Validated with `visudo` before it is installed |
 | `/etc/battery-charge-limit.conf` | A sysfs write does not survive a reboot |
 | `battery-charge-limit.service` | Re-applies it at boot **and after resume** — some firmware clears the threshold on wake |
@@ -959,7 +956,7 @@ little of each. On a desktop that is mostly overhead. `thp_madvise="ON"` (the
 shipped preset) switches it to `madvise`, where only programs that ask for huge
 pages - databases, the JVM, some games - get them. Nothing loses a feature.
 
-Measured on the machine this repo was built from: the Quickshell bar went from
+Measured on the machine this repo was built from: the bar's earlier version went from
 192MB to 126MB (fair share), and the session from ~1.6GB to ~1.35GB at login.
 
 `install-scripts/thp.sh` writes `/etc/tmpfiles.d/thp-madvise.conf`, which sets it
@@ -1375,13 +1372,12 @@ lpstat -p          # should report the printer as idle
 
 ### The bar (rust-bar)
 
-The bar is `rust-bar`, a Rust rewrite of the quickshell (QML) bar that keeps
-its look, animations and behaviour with a fraction of the memory. One binary
-is the bar strip and its cards, the overview (SUPER+A), the wallpaper
-carousel, the clipboard history, the screenshot and recording dialogs, the
-power menu, the polkit agent and the CRT power-off (`rust-bar crt`). The
-keybinds call it with `rust-bar msg <target> <function>` - the same targets
-and functions as the old `qs -c bar ipc call`. See `rust-bar/README.md`.
+The bar is `rust-bar`, written in Rust (the `rust-bar/` crate). One binary is
+the bar strip and its cards, the overview (SUPER+A), the wallpaper carousel,
+the clipboard history, the screenshot and recording dialogs, the power menu,
+the keyboard-layout popup, the polkit agent and the CRT power-off
+(`rust-bar crt`). The keybinds call it with `rust-bar msg <target>
+<function>`. See `rust-bar/README.md`.
 
 The installer's `bar` option (`install-scripts/rust-bar.sh`) builds it from
 the `rust-bar/` crate with `pkgbuilds/rust-bar` and installs the package;
@@ -1390,12 +1386,59 @@ desktop packages), which takes a minute or a few. A re-run builds again only
 when the crate changed (the package version is the crate's plus a hash of it,
 `0.1.0.<hash>`). It draws with Vulkan: `graphics.sh` installs the driver, and a
 machine with none - and any virtual machine - gets Mesa's software Vulkan.
-Presets that still say `quickshell="ON"` get the bar.
 
-The bar's scripts and the wallust palette stay in
-`dotfiles/config/quickshell/bar/` (`scripts/`, `wallust-colors.json`), where
-the QML bar kept them; the QML files there are the reference the Rust bar was
-matched against.
+Its scripts are in `dotfiles/config/rust-bar/scripts/` (deployed to
+`~/.config/rust-bar/scripts/`), wallust writes its palette to
+`~/.config/rust-bar/wallust-colors.json`, and it keeps its caches - weather,
+time zone, thumbnails - in `~/.cache/rust-bar/`.
+
+### Why the bar is written in Rust
+
+Until October 2026 the bar was a QML configuration for
+[Quickshell](https://quickshell.outfoxxed.me/). It looked and behaved the way
+this desktop wants, but it was one of the heaviest things running: 90-140 MiB
+and 22-31 threads for the bar alone, with Qt behind it. It was rewritten in
+Rust with one goal: the same bar - the same look, animations and behaviour,
+pixel for pixel - on the same or less CPU and as little RAM as possible. It
+draws with Vulkan (wgpu) and reproduces how Qt draws text, rounded corners,
+layouts and animation curves; every widget was compared screenshot by
+screenshot against the old bar until they matched.
+
+Measured on 29 October 2026: both bars ran the same scripted session in the
+same sandbox desktop, three runs each, median shown. CPU is the bar process's
+own time.
+
+| Measure | QuickShell | Rust | Rust uses |
+|---|---:|---:|---:|
+| **Memory (PSS)** | | | |
+| Fresh, nothing open | 103.7 MiB | 21.0 MiB | 4.9× less |
+| After opening every card once | 115.8 MiB | 22.1 MiB | 5.2× less |
+| After the overview, carousel and clipboard | 136.7 MiB | 24.3 MiB | 5.6× less |
+| Private memory at the end | 128.0 MiB | 19.7 MiB | 6.5× less |
+| Threads | 22 | 4 | 5.5× less |
+| **CPU** | | | |
+| Start, until the bar is on screen (wall clock) | 251 ms | 65 ms | 3.9× less |
+| CPU spent starting | 240 ms | 30 ms | 8.0× less |
+| Idle for a minute | 30 ms | < 10 ms | ≥ 3× less |
+| Every card opened and closed once | 190 ms | 50 ms | 3.8× less |
+| Audio card open 10 s, talking mic, apps playing | 110 ms | 40 ms | 2.8× less |
+| Overview opened and closed 3× | 70 ms | 40 ms | 1.8× less |
+| Wallpaper carousel 3× | 280 ms | 180 ms | 1.6× less |
+| Clipboard history 3× | 160 ms | 40 ms | 4.0× less |
+| **Compositor (mango) CPU** | | | |
+| Every card opened and closed once | 150 ms | 170 ms | ≈ same |
+| Clipboard history 3× | 120 ms | 50 ms | 2.4× less |
+| Audio card open 10 s, talking mic | 30 ms | 30 ms | ≈ same |
+| **GPU memory** | | | |
+| VRAM, fresh | 32.5 MiB | 20.1 MiB | 1.6× less |
+| VRAM with a card open | 131.1 MiB | 83.1 MiB | 1.6× less |
+| VRAM at the end | 99.0 MiB | 25.5 MiB | 3.9× less |
+| GTT (driver buffers in system RAM) at the end | 8 MiB | 12 MiB | 1.5× more |
+
+The one place the Rust bar uses more is GTT: the graphics driver keeps upload
+buffers for reuse after the wallpaper carousel has run. Counting it, the Rust
+bar's total is about a quarter of the old one's: 36 MiB against 145. On the
+desktop it sits at about 25 MiB, 4 threads and 0.02% of a core at idle.
 
 ### Wallpapers
 
@@ -1446,7 +1489,7 @@ These are machine-specific, so a fresh install starts without them:
   workstation.
 - **The wallust colour files** — `cava/config`,
   `mango/wallust/colors.conf`, `rofi/wallust/colors-rofi.rasi` and
-  `quickshell/bar/wallust-colors.json`. Every one is a `target` in
+  `rust-bar/wallust-colors.json`. Every one is a `target` in
   `wallust.toml`, rewritten in full each time the wallpaper changes, so they are
   runtime state and are gitignored — otherwise whichever palette happened to be
   up got committed and the next wallpaper change dirtied the tree, which
@@ -1590,9 +1633,9 @@ every time it opens. (To restart the bar anyway, use SUPER+CTRL+B. A
 `pkill -xf rust-bar; rust-bar &` in a terminal leaves the new bar a job of
 that terminal, which takes it down when it closes.)
 
-**This needs passwordless sudo.** `VpnWidget.qml` runs `sudo find`,
-`sudo wg-quick up|down` and `sudo timedatectl set-timezone` from a QML `Process`,
-which has no terminal to prompt on — with stock sudoers those calls fail
+**This needs passwordless sudo.** The bar's VPN card (`rust-bar/src/vpn.rs`)
+runs `sudo find` and `sudo wg-quick up|down`, and its sync script
+`sudo timedatectl set-timezone`, as processes with no terminal to prompt on — with stock sudoers those calls fail
 silently and the dropdown does nothing at all. That is what the
 `nopasswd_sudo` preset option installs (`install-scripts/sudoers_nopasswd.sh`
 writes a validated `/etc/sudoers.d/10-wheel-nopasswd`). The trade-off is real:
@@ -1993,7 +2036,7 @@ notifications are counted off the session bus by `SovietLock.py --watch-reports`
 `LockRun.sh` runs for exactly as long as hyprlock does - dunst is not involved. The rows
 are there even unlit, because the widgets laid over the panel are placed once per lock.
 
-**Weather comes from the bar**, `~/.cache/quickshell/weather.json`, so the lock screen
+**Weather comes from the bar**, `~/.cache/rust-bar/weather.json`, so the lock screen
 and the bar always show the same reading. If that file is missing (a machine without
 the bar) it falls back to the legacy `~/.cache/.weather_cache`. Either way, a reading
 older than two hours is labelled with its age in the section header
@@ -2306,7 +2349,7 @@ of the old file and deletes it if nothing else is in it.
 All configs are in `~/.config/`. Main files to edit:
 - `~/.config/mango/` - mango configuration (keybinds, rules, startup, look)
 - `~/.config/hypr/` - the scripts the binds run, the lock screen and hypridle
-- `~/.config/quickshell/bar/` - the bar's scripts and wallust palette (the bar itself is
+- `~/.config/rust-bar/` - the bar's scripts and wallust palette (the bar itself is
   rust-bar: change `rust-bar/` in the repo and re-run `install-scripts/rust-bar.sh`)
 - `~/.config/foot/` - Terminal configuration
 - `~/.zshrc` - Shell configuration

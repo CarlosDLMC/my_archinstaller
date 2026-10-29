@@ -34,8 +34,8 @@ use text::{FontKey, Fonts};
 
 /// `rust-bar textref SPEC OUT.png`: draws the rows of SPEC (one per line:
 /// family|size|bold 0/1|style n/o|color|styleColor|text) in a Column at
-/// x 10, y 6, spacing 4 - the same layout tests/textref/shell.qml shows in
-/// quickshell, so the two renders can be diffed pixel for pixel.
+/// x 10, y 6, spacing 4 - a fixed layout, so the render can be diffed pixel
+/// for pixel against Qt's render of the same rows.
 fn textref(spec: &str, out: &str) {
     let mut fonts = Fonts::new();
     let mut gpu = Gpu::new(None, Gpu::new_instance());

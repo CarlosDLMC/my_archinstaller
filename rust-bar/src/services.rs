@@ -1,6 +1,5 @@
-//! The data the strip shows - the singletons of the QML bar (Mango.qml,
-//! SystemStats.qml, the clock and weather of CenterInfo.qml), with the same
-//! sources and the same intervals.
+//! The data the strip shows - mango's state, the system stats, the clock
+//! and the weather - each from its own source at its own interval.
 
 use std::os::unix::net::UnixStream;
 use std::time::{Duration, Instant};
@@ -62,7 +61,7 @@ pub struct Stats {
     pub cpu_temp: i64,
     pub mem_usage: String,
     pub shown: bool,
-    /// The `shown` whose onShownChanged has run (stats_shown_changed).
+    /// The `shown` that stats_shown_changed last applied.
     applied: bool,
     last_idle: u64,
     last_total: u64,
@@ -114,7 +113,8 @@ fn between(s: &str, open: &str, close: &str) -> Option<String> {
     None
 }
 
-/// CenterInfo.parseWeatherJson's reading of the tooltip.
+/// What the weather card takes from the tooltip: location, feels-like,
+/// icon, min and max, the hourly rain.
 fn parse_tooltip(w: &mut Weather, tip: &str) {
     if let Some(l) = between(tip, "<b>", "</b>") {
         w.location = strip_html(&l);
@@ -186,8 +186,8 @@ pub struct Services {
     pub mango: Mango,
     pub stats: Stats,
     pub clock: String,
-    /// The minute the clock last showed (lastClockMinute), and the wall
-    /// clock in ms and the monotonic one at the last tick (lastTickMs).
+    /// The minute the clock last showed, and the wall clock in ms and the
+    /// monotonic one at the last tick.
     clock_minute: Option<i32>,
     last_tick: Option<(i64, Instant)>,
     pub timezone: String,
@@ -215,7 +215,7 @@ pub struct Services {
     pub audio: (crate::pw::Audio, Option<crate::pw::NodeInfo>),
     pub pw: Option<crate::pw::Pw>,
     pub agent_installed: bool,
-    /// The command PowerWidget.endSession() runs 250 ms after its card closes.
+    /// The command the power card runs 250 ms after it closes.
     pub pending_end: String,
     pub pult: crate::pult::Pult,
     pub vpn_card: crate::vpn::Vpn,
@@ -225,7 +225,7 @@ pub struct Services {
     pub agent_busy: bool,
     /// (time sync busy, weather sync busy), mirrored for drawing.
     pub vpn_busy: (bool, bool),
-    /// btScanProc.running, mirrored for drawing.
+    /// The Bluetooth scan is running, mirrored for drawing.
     pub pult_scanning: bool,
 }
 
@@ -234,7 +234,7 @@ pub fn home() -> String {
 }
 
 pub fn palette_path() -> String {
-    format!("{}/.config/quickshell/bar/wallust-colors.json", home())
+    format!("{}/.config/rust-bar/wallust-colors.json", home())
 }
 
 fn parse_monitors(v: &Value) -> Option<Vec<Monitor>> {
@@ -277,8 +277,8 @@ fn parse_monitors(v: &Value) -> Option<Vec<Monitor>> {
 }
 
 /// Whether the strips draw two snapshots the same: per monitor its name, its
-/// tags' index and client count and its first active tag (WorkspaceBar), and
-/// the focused window's title (WindowInfo) - all bar.rs reads of them.
+/// tags' index and client count and its first active tag (the workspaces),
+/// and the focused window's title - all bar.rs reads of them.
 fn same_on_strips(a: &[Monitor], b: &[Monitor]) -> bool {
     let tags = |m: &Monitor| m.tags.iter().map(|t| (t.index, t.client_count)).collect::<Vec<_>>();
     let title = |ms: &[Monitor]| ms.iter().find(|m| m.active).filter(|m| m.client_id.is_some()).map(|m| m.client_title.clone()).unwrap_or_default();
@@ -291,26 +291,25 @@ fn on_monitors(app: &mut App, line: &str) {
     let before = app.svc.mango.focused().and_then(|m| m.client_id);
     let screen = app.svc.mango.focused().map(|m| m.name.clone());
     // mango sends 2-4 snapshots per action, and more for what no strip shows
-    // (geometry, layout symbol, keymode, urgency). Mango.qml takes each one,
-    // but a binding that comes out the same changes nothing on screen.
+    // (geometry, layout symbol, keymode, urgency). Each one is stored, but
+    // one that leaves what the strips show the same redraws nothing.
     let same = same_on_strips(&app.svc.mango.monitors, &mons);
     app.svc.mango.monitors = mons;
-    // The overview binds its frame, group and hidden-workspace layout to
-    // Mango.monitor(...): an open one follows every snapshot (it draws only
+    // The overview's frame, group and hidden-workspace layout come from the
+    // monitor snapshot: an open one follows every snapshot (it draws only
     // when what it shows changed). Not under `same`, which is the strips'.
     crate::overview::monitors_changed(app);
     let after = app.svc.mango.focused().and_then(|m| m.client_id);
     if before != after {
         crate::bar::close_all_popups(app);
     }
-    // The overlays show on the focused monitor (`onFocusedMonitor`,
-    // PowerOsd.qml:21-29, ShotOsd.qml:15-24, RecordOsd.qml:17-26,
-    // LayoutOsd.qml:60-63): an open one moves with the focus.
+    // The overlays show on the focused monitor: an open one moves with the
+    // focus.
     if app.svc.mango.focused().map(|m| &m.name) != screen.as_ref() {
         crate::osd::follow_focus(app);
     }
-    // Tags and the title: the strips' (WorkspaceBar, WindowInfo); no card
-    // shows them.
+    // Tags and the title: the strips' (the workspaces, the window title); no
+    // card shows them.
     if !same {
         app.mark_strips_dirty();
     }
@@ -322,7 +321,7 @@ fn on_layout(app: &mut App, line: &str) {
         if l != app.svc.mango.keyboard_layout {
             app.svc.mango.keyboard_layout = l.into();
             crate::layout::layout_changed(app);
-            // KeyboardLayoutWidget's label; the popup is layout.rs's.
+            // The strip's layout label; the popup is layout.rs's.
             app.mark_strips_dirty();
         }
     }
@@ -341,13 +340,13 @@ pub fn mango_dispatch(app: &App, command: &str) {
     app.exec_detached(&["mmsg", "dispatch", command]);
 }
 
-/// Mango.dispatch(command, clientId): the client as its own argument.
+/// `mmsg dispatch` on one client: the client as its own argument.
 pub fn mango_dispatch_client(app: &App, command: &str, client: i64) {
     let c = format!("client,{client}");
     app.exec_detached(&["mmsg", "dispatch", command, &c]);
 }
 
-// ---- SystemStats ----
+// ---- system stats ----
 
 fn read_cpu(s: &mut Stats) {
     let Ok(t) = std::fs::read_to_string("/proc/stat") else { return };
@@ -449,26 +448,25 @@ pub(crate) fn is_executable(path: &str) -> bool {
 }
 
 fn stats_pref() -> bool {
-    std::fs::read_to_string(format!("{}/.cache/quickshell/bar-stats", home())).map_or(true, |t| t.trim() != "off")
+    std::fs::read_to_string(format!("{}/.cache/rust-bar/bar-stats", home())).map_or(true, |t| t.trim() != "off")
 }
 
-/// SystemStats.refresh(): one reading of all three.
+/// One reading of all three.
 fn refresh_stats(app: &mut App) {
     let s = &mut app.svc.stats;
     let before = (s.cpu_usage, s.cpu_temp, s.mem_usage.clone());
     read_cpu(s);
     read_mem(s);
     read_temp(s);
-    // CpuWidget / MemoryWidget: no card shows the readings.
+    // The strip's CPU and memory widgets: no card shows the readings.
     if before != (s.cpu_usage, s.cpu_temp, s.mem_usage.clone()) {
         app.mark_strips_dirty();
     }
 }
 
-/// The bar's three 5 s Timers as one wakeup: SystemStats' (`running:
-/// root.shown`, SystemStats.qml:211-216), CenterInfo's DND poll and
-/// VpnWidget's status check (VpnWidget.qml:285-290). Separate, they woke
-/// the bar three times every five seconds, a few ms apart.
+/// The bar's three 5 s polls as one wakeup: the system stats (only while
+/// shown), the DND poll and the VPN status check. Separate, they woke the
+/// bar three times every five seconds, a few ms apart.
 fn poll_tick(app: &mut App) {
     if app.svc.stats.shown {
         refresh_stats(app);
@@ -478,16 +476,16 @@ fn poll_tick(app: &mut App) {
     app.debounce("poll", Duration::from_millis(5000), poll_tick);
 }
 
-/// SystemStats.setShown(on): the ПУЛЬТ switch.
+/// Shows or hides the stats: the ПУЛЬТ switch.
 pub fn set_stats_shown(app: &mut App, on: bool) {
     app.svc.stats.shown = on;
     stats_shown_changed(app);
 }
 
-/// onShownChanged: shown, a reading at once and a real CPU one a second
-/// later (settleTimer), then the 5 s tick; hidden, nothing is sampled and the
-/// CPU baseline is dropped - kept, the first reading after showing them again
-/// was the average over the whole hidden time.
+/// Shown, a reading at once and a real CPU one a second later, then the 5 s
+/// tick; hidden, nothing is sampled and the CPU baseline is dropped - kept,
+/// the first reading after showing them again was the average over the
+/// whole hidden time.
 fn stats_shown_changed(app: &mut App) {
     let on = app.svc.stats.shown;
     if on == app.svc.stats.applied {
@@ -526,10 +524,10 @@ fn local_now() -> (i32, String) {
     (tm.tm_min, format!("{:02}:{:02}", tm.tm_hour, tm.tm_min))
 }
 
-/// updateClock(force): only a new minute does anything. With a timezone from
-/// the VPN card's sync (~/.cache/quickshell/timezone), `date` gives the time
-/// there, as QML's timeProc does - TZ goes into that process's environment,
-/// never the bar's, which everything the bar runs would inherit.
+/// Unless forced, only a new minute does anything. With a timezone from the
+/// VPN card's sync (~/.cache/rust-bar/timezone), `date` gives the time
+/// there - TZ goes into that process's environment, never the bar's, which
+/// everything the bar runs would inherit.
 fn update_clock(app: &mut App, force: bool) {
     let (minute, hm) = local_now();
     if !force && Some(minute) == app.svc.clock_minute {
@@ -557,9 +555,8 @@ fn set_clock(app: &mut App, t: String) {
     }
 }
 
-/// refreshTimezone() / applyTimezoneText(): the timezone file again; a new
-/// zone redraws the clock (and the VPN card's ВРЕМЯ, which shows whether
-/// there is one).
+/// Reads the timezone file again; a new zone redraws the clock (and the VPN
+/// card's ВРЕМЯ, which shows whether there is one).
 fn refresh_timezone(app: &mut App) {
     let tz = read_cache("timezone");
     if tz != app.svc.timezone {
@@ -570,8 +567,8 @@ fn refresh_timezone(app: &mut App) {
     }
 }
 
-/// refreshWeather() / applyWeatherCityText(): the city file again; a new city
-/// fetches the weather (and redraws the VPN card's ПОГОДА).
+/// Reads the city file again; a new city fetches the weather (and redraws
+/// the VPN card's ПОГОДА).
 fn refresh_weather_city(app: &mut App) {
     let city = read_cache("weather_city");
     if city != app.svc.weather.city {
@@ -587,41 +584,40 @@ extern "C" {
 }
 
 fn cache_dir() -> String {
-    format!("{}/.cache/quickshell", home())
+    format!("{}/.cache/rust-bar", home())
 }
 
-/// A file of ~/.cache/quickshell, trimmed; "" when it is absent.
+/// A file of ~/.cache/rust-bar, trimmed; "" when it is absent.
 fn read_cache(name: &str) -> String {
     std::fs::read_to_string(format!("{}/{name}", cache_dir())).map(|t| t.trim().to_string()).unwrap_or_default()
 }
 
-/// ~/.cache/quickshell changed: CenterInfo's FileViews, each reading only its
-/// own file - the timezone and weather city follow the VPN card's sync, and a
-/// timezone event must not take a new city in before its own event compares
-/// it (that swallowed the fetch).
+/// ~/.cache/rust-bar changed: each file is read only on its own event - the
+/// timezone and weather city follow the VPN card's sync, and a timezone
+/// event must not take a new city in before its own event compares it (that
+/// swallowed the fetch).
 fn cache_changed(app: &mut App, name: &str) {
     match name {
         "timezone" => refresh_timezone(app),
         "weather_city" => refresh_weather_city(app),
-        // weatherCacheFile: weather-location.py writes it after every good
-        // reading, so a fetch the bar did not start (vpn-sync.sh, vpn-reset.sh)
-        // shows too; the bar's own fetch is parsed twice, as in QML.
+        // weather-location.py writes this cache after every good reading, so
+        // a fetch the bar did not start (vpn-sync.sh, vpn-reset.sh) shows
+        // too; the bar's own fetch is parsed twice, from its output and here.
         "weather.json" => {
             let t = read_cache("weather.json");
             if !t.is_empty() {
                 apply_weather(app, &t);
             }
         }
-        // SystemStats' prefFile: the switch, from the ПУЛЬТ card or anyone else.
+        // The stats preference: the switch, from the ПУЛЬТ card or anyone else.
         "bar-stats" => set_stats_shown(app, stats_pref()),
         _ => {}
     }
 }
 
-/// ~/.cache changed: NightLight.qml's FileView on .nightlight_state
-/// (watchChanges, NightLight.qml:28-62), so SUPER+N moves the ПУЛЬТ switch at
-/// once. applyState(): the file is the intent, and a fresh "on" is trusted -
-/// wlsunset may not have started yet; the pgrep is for later checks.
+/// ~/.cache changed: the watch on .nightlight_state, so SUPER+N moves the
+/// ПУЛЬТ switch at once. The file is the intent, and a fresh "on" is
+/// trusted - wlsunset may not have started yet; the pgrep is for later checks.
 fn home_cache_changed(app: &mut App, name: &str) {
     if name != ".nightlight_state" {
         return;
@@ -633,8 +629,8 @@ fn home_cache_changed(app: &mut App, name: &str) {
     }
 }
 
-/// Theme.qml's FileView on wallust-colors.json, debounced 80 ms (wallust
-/// rewrites it in place).
+/// The watch on wallust-colors.json, debounced 80 ms (wallust rewrites it
+/// in place).
 fn palette_changed(app: &mut App, name: &str) {
     if name == "wallust-colors.json" {
         crate::wallpaper::palette_changed(app);
@@ -648,7 +644,7 @@ fn palette_changed(app: &mut App, name: &str) {
                             m.dirty = true;
                         }
                     }
-                    // Theme's bindings reach every window: the overlays and
+                    // A new palette reaches every window: the overlays and
                     // the wallpaper reveal too, not just strips and card.
                     for o in &mut app.osds {
                         o.win.dirty = true;
@@ -667,14 +663,14 @@ fn wall_ms() -> i64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64)
 }
 
-/// CenterInfo's clock tick. QML ticks every second to catch the minute; this
-/// one comes on the minute (every_minute), and right after a resume. It also
-/// notices the resume: the timers run on the monotonic clock, which stops in
-/// suspend, so a wall clock that got over two minutes ahead of it since the
-/// last tick fetches the weather once the network has had ten seconds to come
-/// back (the hourly fetch could still be an hour away). After any jump the
-/// clock is redone even on the same minute of the hour - QML's minute check
-/// kept 23:10 up after a resume at 07:10 until 07:11.
+/// The clock tick. It comes on the minute (every_minute), not every second,
+/// and right after a resume. It also notices the resume: the timers run on
+/// the monotonic clock, which stops in suspend, so a wall clock that got
+/// over two minutes ahead of it since the last tick fetches the weather once
+/// the network has had ten seconds to come back (the hourly fetch could
+/// still be an hour away). After any jump the clock is redone even on the
+/// same minute of the hour - a check on the minute alone kept 23:10 up after
+/// a resume at 07:10 until 07:11.
 fn tick_clock(app: &mut App) {
     let (now, mono) = (wall_ms(), Instant::now());
     let jump = app.svc.last_tick.map_or(0, |(wall, at)| now - wall - mono.duration_since(at).as_millis() as i64);
@@ -703,7 +699,7 @@ pub fn start(app: &mut App) {
     let _ = std::fs::create_dir_all(cache_dir());
     app.watch_dir(&cache_dir(), cache_changed);
     app.watch_dir(&format!("{}/.cache", home()), home_cache_changed);
-    app.watch_dir(&format!("{}/.config/quickshell/bar", home()), palette_changed);
+    app.watch_dir(&format!("{}/.config/rust-bar", home()), palette_changed);
     update_clock(app, true);
     app.svc.last_tick = Some((wall_ms(), Instant::now()));
     // One wakeup a minute, not sixty; the 1 s tick without a timerfd.
@@ -758,9 +754,9 @@ pub fn start(app: &mut App) {
     app.svc.wifi.has = glob_dir("/sys/class/net", "").iter().any(|d| std::path::Path::new(&format!("{d}/wireless")).exists());
     if app.svc.wifi.has {
         wifi_status(app);
-        // savedProfilesProc runs at start too (Component.onCompleted,
-        // WifiWidget.qml:227): a saved network picked at the first opening,
-        // before that opening's read lands, connects without the password view.
+        // The saved profiles are read at start too: a saved network picked
+        // at the first opening, before that opening's read lands, connects
+        // without the password view.
         crate::wifi_card::load_saved(app);
         app.spawn_lines(&["nmcli", "monitor"], |app, _| app.debounce("wifi", Duration::from_millis(400), wifi_status));
     }
@@ -772,7 +768,7 @@ pub fn start(app: &mut App) {
     crate::agent::run(app, "check");
 }
 
-// ---- DND (dunst's pause state), as CenterInfo polls it ----
+// ---- DND (dunst's pause state), polled for the bell ----
 
 const DUNST: &str = "org.freedesktop.Notifications";
 const DUNST_PATH: &str = "/org/freedesktop/Notifications";
@@ -902,7 +898,7 @@ fn dnd_bus_ready(app: &mut App) {
 
 pub fn dnd_toggle(app: &mut App) {
     app.spawn("dnd-toggle", &["dunstctl", "set-paused", "toggle"], |app, d| {
-        // dndToggleProc.onExited: the hollow warn bell at once; the re-poll
+        // A failed toggle: the hollow warn bell at once; the re-poll
         // confirms or clears it.
         if !d.ok && app.svc.dnd_available {
             app.svc.dnd_available = false;
@@ -912,7 +908,7 @@ pub fn dnd_toggle(app: &mut App) {
     });
 }
 
-// ---- weather (weather-fetch.sh), with CenterInfo's retry ladder ----
+// ---- weather (weather-fetch.sh), with its retry ladder ----
 
 fn apply_weather(app: &mut App, out: &str) -> bool {
     let Ok(v) = serde_json::from_str::<Value>(out.trim()) else { return false };
@@ -933,21 +929,21 @@ fn apply_weather(app: &mut App, out: &str) -> bool {
     v.get("stale").and_then(Value::as_bool) != Some(true)
 }
 
-/// requestWeather(): weatherFetchDebounce.restart() - 250 ms, so a burst (the
-/// zone and the city of one VPN sync, a tunnel up and down) is one fetch.
+/// Asks for a fetch, debounced 250 ms, so a burst (the zone and the city of
+/// one VPN sync, a tunnel up and down) is one fetch.
 pub fn request_weather(app: &mut App) {
     app.debounce("weather-fetch", Duration::from_millis(250), fetch_weather);
 }
 
-/// weatherProc.running = true. A fetch already running does not drop it:
-/// Process runs again once that one ends (its targetRunning), so a city that
-/// changed mid-fetch still gets its own reading.
+/// Runs a fetch. A fetch already running does not drop it: it runs again
+/// once that one ends, so a city that changed mid-fetch still gets its own
+/// reading.
 fn fetch_weather(app: &mut App) {
     if app.is_running("weather") {
         app.svc.weather.fetch_again = true;
         return;
     }
-    let cmd = format!("{}/.config/quickshell/bar/scripts/weather-fetch.sh 2>/dev/null", home());
+    let cmd = format!("{}/.config/rust-bar/scripts/weather-fetch.sh 2>/dev/null", home());
     app.spawn("weather", &["sh", "-c", &cmd], |app, d| {
         let good = !d.stdout.trim().is_empty() && apply_weather(app, &d.stdout);
         if good {
@@ -964,7 +960,7 @@ fn fetch_weather(app: &mut App) {
     });
 }
 
-// ---- Wi-Fi (nmcli, as WifiWidget asks it) ----
+// ---- Wi-Fi (nmcli) ----
 
 /// nmcli -t splits on ':' with '\\' escapes.
 pub fn split_terse(line: &str) -> Vec<String> {
@@ -988,11 +984,10 @@ pub fn wifi_refresh(app: &mut App) {
     wifi_status(app);
 }
 
-/// wifiCurrentProc.running = true. On a read still running, Process runs it
-/// once more when that one ends (its targetRunning): a change nmcli monitor
-/// reported meanwhile, or the card's connect finishing, is not dropped.
-/// QML pipes nmcli through `grep '^\*' | head -1`; the line is picked here,
-/// one process per read instead of four.
+/// Reads the current Wi-Fi network. On a read still running, it runs once
+/// more when that one ends: a change nmcli monitor reported meanwhile, or
+/// the card's connect finishing, is not dropped. The `*` line is picked
+/// here, not by `grep '^\*' | head -1`: one process per read instead of four.
 fn wifi_status(app: &mut App) {
     if app.is_running("wifi-current") {
         app.svc.wifi.again = true;
@@ -1028,28 +1023,27 @@ fn wifi_status(app: &mut App) {
 
 // ---- VPN: the first WireGuard interface (what `wg show interfaces` lists) ----
 
-/// VpnWidget's side effects: a VPN that went down, or none at start with a
-/// city still cached from one, resets the time/weather sync (vpn-reset.sh).
-/// The card's ВЫКЛ starts the same vpnResetProc (VpnWidget.qml:249-262,
-/// 384-393). vpnResetProc.running = true during a reset runs it again after
-/// it, as Process does: a tunnel that came up and went down meanwhile is
-/// reset too, and ВЫКЛ during a reset does not run a second one beside it.
+/// A VPN that went down, or none at start with a city still cached from
+/// one, resets the time/weather sync (vpn-reset.sh). The card's ВЫКЛ starts
+/// the same reset. One asked for during a reset runs again after it: a
+/// tunnel that came up and went down meanwhile is reset too, and ВЫКЛ during
+/// a reset does not run a second one beside it.
 pub fn vpn_reset(app: &mut App) {
     if app.is_running("vpn-reset") {
         app.svc.vpn_reset_again = true;
         return;
     }
-    let cmd = format!("{}/.config/quickshell/bar/scripts/vpn-reset.sh all --forget", home());
+    let cmd = format!("{}/.config/rust-bar/scripts/vpn-reset.sh all --forget", home());
     app.spawn("vpn-reset", &["sh", "-c", &cmd], |app, _| {
-        // vpnResetProc ending: refreshTimezone(), refreshWeather() - a fetch
-        // only for a new city; the reset fetched home's weather itself, and
-        // the weather.json watch shows it.
+        // The reset ended: the timezone and the weather city are read again -
+        // a fetch only for a new city; the reset fetched home's weather
+        // itself, and the weather.json watch shows it.
         refresh_timezone(app);
         refresh_weather_city(app);
         if std::mem::take(&mut app.svc.vpn_reset_again) {
             vpn_reset(app);
         }
-        // ...and updateVpnStatus(), whose answer QML gets after the above.
+        // ...and the VPN status, checked after the above.
         vpn_poll(app);
     });
 }
@@ -1075,7 +1069,7 @@ fn vpn_poll(app: &mut App) {
     // vpn-switch.sh takes the old tunnel down before it brings the new one
     // up: no tunnel while the card's action still runs is no drop yet. Its
     // end looks again (vpn.rs tunnel_done, 500 ms later) and resets then if
-    // none came up. QML's 5 s check can land in that gap and send the clock
+    // none came up. The 5 s check could land in that gap and send the clock
     // and weather home mid-switch, forgetting the saved home zone.
     if active.is_empty() && was_active && app.is_running("vpn-action") {
         return;

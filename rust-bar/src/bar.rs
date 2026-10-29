@@ -1,5 +1,5 @@
-//! The strip: shell.qml's RowLayout and the widgets in it, laid out at the
-//! 2560 px reference width and scaled like the QML bar (uiScale).
+//! The strip: the row of widgets, laid out at the 2560 px reference width
+//! and scaled to the screen (ui_scale).
 
 use crate::app::App;
 use crate::color::Color;
@@ -96,8 +96,7 @@ pub struct Ctx<'a> {
     /// The card open on this strip, if any.
     pub open: Option<crate::cards::CardKind>,
     /// The Wi-Fi connect running (or last run) is this bar's: every bar has
-    /// its own WifiWidget and wifiConnectProc (shell.qml), and only that
-    /// widget's icon blinks.
+    /// its own Wi-Fi widget and connect, and only that widget's icon blinks.
     pub wifi_pulse: bool,
 }
 
@@ -120,7 +119,7 @@ impl Painter<'_> {
         self.fonts.layout(s, theme::bar_font(bold), size, 0.0)
     }
 
-    /// A bar Text: bold, outlined, Theme.fontSize, top-left at (x, y).
+    /// A bar Text: bold, outlined, FONT_SIZE, top-left at (x, y).
     fn label(&mut self, line: &Line, x: f32, y: f32, color: Color) {
         let shadow = self.theme.col_text_shadow;
         self.scene.text(self.fonts, line, x, y + line.ascent, color, TextStyle::Outline(shadow));
@@ -146,7 +145,7 @@ impl Painter<'_> {
     }
 }
 
-/// One slot of shell.qml's RowLayout.
+/// One slot of the strip's row.
 enum Slot {
     Pad(f32),
     Logo,
@@ -204,13 +203,13 @@ pub fn draw(scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, svc: &Services,
     memo.begin_frame();
     let ui = ui_scale(ctx.screen_width);
     let dw = ctx.width / ui;
-    // PanelWindow.color: the wash under the compositor blur.
+    // The strip's background: the wash under the compositor blur.
     scene.fill(0.0, 0.0, ctx.width, (DESIGN_HEIGHT * ui).round(), theme.col_bg_wash);
     scene.save();
     scene.scale(ui, ui);
     let mut p = Painter { now: std::time::Instant::now(), animating: false, scene, fonts, theme, hits: Vec::new(), ui, pointer: ctx.pointer, open: ctx.open, memo };
 
-    // shell.qml's order; a hidden widget takes its separator with it.
+    // The strip's order; a hidden widget takes its separator with it.
     let mut slots = vec![Slot::Pad(12.0), Slot::Logo, Slot::Workspaces, Slot::Sep, Slot::Title, Slot::Center];
     if svc.agent_installed {
         slots.extend([Slot::Agent, Slot::Sep]);
@@ -346,7 +345,7 @@ pub fn draw(scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, svc: &Services,
                 let line = p.line(wifi_icon(svc), true, FONT_SIZE + 4.0);
                 let c = if svc.wifi.connected { theme.col_white } else { theme.col_grey };
                 // Blinks 1 -> .35 -> 1 (450 ms each, InOutQuad) while this
-                // bar's connect runs (WifiWidget.qml:414-424).
+                // bar's connect runs.
                 let (o, running) = if ctx.wifi_pulse { svc.wifi.pulse.value(p.now, 0.35, 450, crate::anim::Easing::InOutQuad) } else { (1.0, false) };
                 p.animating |= running;
                 p.scene.save();
@@ -375,7 +374,7 @@ const AGENT_ICON: &str = "\u{f16a3}";
 const VPN_UP: &str = "\u{f0582}";
 const VPN_DOWN: &str = "\u{f099c}";
 
-/// A DropdownWidget's icon: a Text centred vertically in the 34 px slot.
+/// A card widget's icon: a Text centred vertically in the 34 px slot.
 fn icon_slot(p: &mut Painter, line: &Line, x: f32, color: Color, action: Action) {
     p.label(line, x, ac(DESIGN_HEIGHT, line.height()), color);
     p.hit(x, 0.0, line.width, DESIGN_HEIGHT, action);
@@ -388,8 +387,8 @@ fn volume_text(svc: &Services) -> String {
         "\u{f0581}"
     } else {
         let s = info.as_ref().map(|i| format!("{} {} {}", i.name, i.description, i.nick).to_lowercase()).unwrap_or_default();
-        // VolumeWidget.audioSink's order (VolumeWidget.qml:43-49): hdmi
-        // before bluetooth, for a sink whose name has both.
+        // The sink's kind, in this order: hdmi before bluetooth, for a
+        // sink whose name has both.
         if s.contains("headphone") || s.contains("headset") {
             "\u{f02cb}"
         } else if s.contains("hdmi") || s.contains("displayport") {
@@ -432,10 +431,9 @@ fn wifi_icon(svc: &Services) -> &'static str {
     if svc.wifi.connected { "\u{f05a9}" } else { "\u{f05aa}" }
 }
 
-/// Math.ceil(max(boundingRect.width)) of the two VPN glyphs: their ink widths.
-/// The font and the size never change, so it is measured once, as VpnWidget's
-/// TextMetrics are (VpnWidget.qml:304, 327-328) - not with two hinted glyph
-/// loads twice per strip frame.
+/// The wider of the two VPN glyphs' bounding-box (ink) widths, rounded up.
+/// The font and the size never change, so it is measured once - not with
+/// two hinted glyph loads twice per strip frame.
 fn vpn_slot_width(p: &mut Painter) -> f32 {
     static SLOT: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
     *SLOT.get_or_init(|| {
@@ -445,7 +443,8 @@ fn vpn_slot_width(p: &mut Painter) -> f32 {
     })
 }
 
-/// CenterInfo.getTempColor
+/// The weather's tint from the first number in the text, in steps at 0, 10,
+/// 18, 25 and 32 degrees; the palette's foreground when there is none.
 pub fn temp_color(text: &str, theme: &Theme) -> Color {
     let num: String = {
         let mut s = String::new();
@@ -478,7 +477,7 @@ pub fn temp_color(text: &str, theme: &Theme) -> Color {
     Color::parse(hex).unwrap()
 }
 
-/// barIcon / barTemp / barLocation of CenterInfo, from the weather text.
+/// The weather pill's icon, temperature and location, from the weather text.
 fn weather_parts(text: &str) -> (String, String, String) {
     if text.is_empty() {
         return Default::default();
@@ -549,7 +548,7 @@ fn draw_mem(p: &mut Painter, svc: &Services, x: f32) {
     p.label(&b, x + a.width + 4.0, y, p.theme.col_value);
 }
 
-/// CenterInfo: bell + weather pill right of centre, "|" on the screen's
+/// The centre: bell + weather pill ending 8 left of the "|" on the screen's
 /// centre line, the clock pill after it.
 fn draw_center(p: &mut Painter, svc: &Services, x0: f32, width: f32, design_width: f32) {
     let theme = p.theme;
@@ -565,7 +564,7 @@ fn draw_center(p: &mut Painter, svc: &Services, x0: f32, width: f32, design_widt
         p.scene.text(p.fonts, &sep, x0 + sep_x, ac(DESIGN_HEIGHT, sep.height()) + sep.ascent, theme.col_separator, st);
     }
 
-    // leftContent: Row { bell, weather pill }, its right edge 8 left of the "|".
+    // The bell and the weather pill in a row, its right edge 8 left of the "|".
     let bell_icon = if !svc.dnd_available { "\u{f009c}  " } else if svc.dnd_enabled { "\u{f009b}  " } else { "\u{f009a}  " };
     let bell_color = if !svc.dnd_available { theme.col_warn } else if svc.dnd_enabled { theme.col_alert } else { theme.col_grey };
     let bell = p.line(bell_icon, true, FONT_SIZE);
@@ -613,9 +612,8 @@ fn draw_center(p: &mut Painter, svc: &Services, x0: f32, width: f32, design_widt
     p.hit(pill_x, pill_y, pill_w, 26.0, Action::Clock);
 }
 
-/// barWindow.closeAllPopups(): the focused window changed. Only the
-/// DropdownWidget cards listen to it - CenterInfo's calendar and weather
-/// cards stay open.
+/// The focused window changed: the widgets' cards close, the calendar and
+/// weather cards of the centre stay open.
 pub fn close_all_popups(app: &mut App) {
     use crate::cards::CardKind;
     if matches!(app.card.as_ref().map(|c| c.kind), Some(CardKind::Calendar | CardKind::Weather)) {
@@ -627,7 +625,7 @@ pub fn close_all_popups(app: &mut App) {
 const BTN_LEFT: u32 = 0x110;
 const BTN_RIGHT: u32 = 0x111;
 
-/// DropdownWidget.wheelMoved: the volume widget steps 5%.
+/// The wheel over a widget: the volume widget steps 5%.
 pub fn wheel(app: &mut App, _strip: usize, action: Action, delta: f32) {
     if action == Action::Volume {
         let (a, n) = app.svc.audio.clone();
@@ -647,7 +645,7 @@ pub fn activate(app: &mut App, strip: usize, action: Action, button: u32) {
                 crate::cards::toggle(app, strip, crate::cards::CardKind::Power, &h, false);
             }
         }
-        // WorkspaceBar, KeyboardLayoutWidget and the bell: MouseAreas with the
+        // The workspaces, the layout label and the bell: MouseAreas with the
         // default acceptedButtons, the left button only.
         Action::Workspace(id) if button == BTN_LEFT => {
             let name = app.strips[strip].name.clone();
@@ -663,7 +661,7 @@ pub fn activate(app: &mut App, strip: usize, action: Action, button: u32) {
                 crate::cards::toggle(app, strip, crate::cards::CardKind::Weather, &h, false);
             }
         }
-        // VolumeWidget: right click opens the card, left click mutes.
+        // Volume: right click opens the card, left click mutes.
         Action::Volume if button == BTN_RIGHT => {
             if let Some(h) = hit {
                 crate::cards::toggle(app, strip, crate::cards::CardKind::Audio, &h, false);
@@ -690,10 +688,10 @@ pub fn activate(app: &mut App, strip: usize, action: Action, button: u32) {
                 crate::cards::toggle(app, strip, crate::cards::CardKind::Agent, &h, false);
             }
         }
-        // AgentWidget.onOtherClicked: the middle button forces a full probe.
+        // Agent: the middle button forces a full probe.
         Action::Agent if button == 0x112 => crate::agent::run(app, "full"),
-        // WifiWidget: left click lists the networks (or closes either view),
-        // right click the details card (NetworkPanel).
+        // Wi-Fi: left click lists the networks (or closes either view),
+        // right click the details card.
         Action::Wifi if button == BTN_LEFT => {
             if let Some(h) = hit {
                 crate::cards::toggle(app, strip, crate::cards::CardKind::Wifi, &h, false);

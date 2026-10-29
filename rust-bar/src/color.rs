@@ -1,7 +1,7 @@
-//! Colours with QColor's arithmetic. Theme.qml derives every role from the
+//! Colours with QColor's arithmetic. The theme derives every role from the
 //! wallust palette through hslHue/hslSaturation/hslLightness, Qt.hsla and
-//! Qt.darker, so the bar only matches if those conversions round the way
-//! QColor does: 16-bit channels, HSV through 8-bit ints for darker().
+//! Qt.darker, so its colours match Qt's only if those conversions round the
+//! way QColor does: 16-bit channels, HSV through 8-bit ints for darker().
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Color {

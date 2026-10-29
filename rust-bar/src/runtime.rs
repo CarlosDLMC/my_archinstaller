@@ -1,5 +1,5 @@
-//! The bar's runtime helpers on App: child processes (QML's Process /
-//! execDetached), timers (Timer), and fd/socket sources for the event loop.
+//! The bar's runtime helpers on App: child processes (collected or
+//! detached), timers, and fd/socket sources for the event loop.
 
 use std::io::Read;
 use std::os::fd::AsRawFd;
@@ -33,7 +33,7 @@ impl std::os::fd::AsFd for Stream {
 
 impl App {
     /// Runs `argv` with its stdout collected; `done` gets it when the process ends.
-    /// Children die with the bar (PR_SET_PDEATHSIG), as setpriv --pdeathsig does for the QML bar.
+    /// Children die with the bar (PR_SET_PDEATHSIG).
     pub fn spawn(&mut self, tag: &str, argv: &[&str], done: fn(&mut App, ProcDone)) {
         if self.running.contains_key(tag) {
             return;
@@ -81,7 +81,7 @@ impl App {
         });
     }
 
-    /// Process.running = false: SIGTERM to a helper started under `tag`, and
+    /// Stops a helper: SIGTERM to a helper started under `tag`, and
     /// to the children it left in its process group. A helper counts as
     /// running until its stdout closes, and a grandchild holding that pipe
     /// (the keep-awake inhibitor's `sleep 5`) kept the tag for seconds after
@@ -109,8 +109,9 @@ impl App {
         self.spawn_stream(tag, argv, on_line, None, None);
     }
 
-    /// Process with SplitParsers on stdout (and stderr, if `on_err`) and an
-    /// onExited (`on_exit`, once both streams are closed and it is reaped).
+    /// A helper whose stdout (and stderr, if `on_err`) is handed over line by
+    /// line, and an exit callback (`on_exit`, once both streams are closed
+    /// and it is reaped).
     pub fn spawn_stream(&mut self, tag: &str, argv: &[&str], on_out: fn(&mut App, &str), on_err: Option<fn(&mut App, &str)>, on_exit: Option<fn(&mut App)>) {
         if self.running.contains_key(tag) {
             return;
@@ -200,8 +201,8 @@ impl App {
         }
     }
 
-    /// FileView { watchChanges: true } for a directory: `changed(app, name)`
-    /// for each file in it that is written, created, moved in or removed.
+    /// Watches a directory (inotify): `changed(app, name)` for each file in
+    /// it that is written, created, moved in or removed.
     pub fn watch_dir(&mut self, dir: &str, changed: fn(&mut App, &str)) {
         let fd = unsafe { libc::inotify_init1(libc::IN_NONBLOCK | libc::IN_CLOEXEC) };
         if fd < 0 {
@@ -286,7 +287,7 @@ impl App {
         self.running.contains_key(tag)
     }
 
-    /// Fire and forget (Quickshell.execDetached).
+    /// Fire and forget, in a session of its own.
     pub fn exec_detached(&self, argv: &[&str]) {
         let mut cmd = Command::new(argv[0]);
         cmd.args(&argv[1..]).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());

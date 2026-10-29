@@ -6,7 +6,7 @@
 # size, so the change shows) and kept inside the work area. mango centres it on
 # the monitor instead, so it is moved back over its tile. The work area's top
 # is the bar's bottom edge: 34 px, scaled down on narrow screens as
-# quickshell/bar/shell.qml does.
+# rust-bar/src/bar.rs does.
 
 id=${1:-$(mmsg get focusing-client | jq -r '.id // empty')}
 [ -n "$id" ] || exit 0

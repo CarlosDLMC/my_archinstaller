@@ -13,7 +13,7 @@
 pkgname=rust-bar
 pkgver=0.1.0
 pkgrel=1
-pkgdesc='The desktop bar, in Rust: the quickshell bar with less memory'
+pkgdesc='The desktop bar of my_archinstaller, in Rust'
 arch=('x86_64' 'aarch64')
 license=('MIT')
 options=('!debug' '!lto')

@@ -9,5 +9,5 @@ for _ in $(seq 1 20); do
     pgrep -x -f '(/usr/bin/)?rust-bar' >/dev/null || break
     sleep 0.1
 done
-mkdir -p "$HOME/.cache/quickshell"
+mkdir -p "$HOME/.cache/rust-bar"
 exec rust-bar

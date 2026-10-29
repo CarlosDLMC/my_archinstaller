@@ -20,9 +20,9 @@ LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_locales.log"
 #
 # Three consumers:
 #   - environment.d/locale.conf and hypr/configs/ENVariables.lua set
-#     LC_TIME=ru_RU.UTF-8. CalendarPopup.qml reads Qt.locale() for
-#     firstDayOfWeek and for its "MMMM yyyy" heading, so this is what makes the
-#     calendar start on Monday with Russian month names.
+#     LC_TIME=ru_RU.UTF-8. The bar's calendar (rust-bar/src/cal.rs) reads
+#     LC_TIME for the first day of the week and its month heading, so this is
+#     what makes the calendar start on Monday with Russian month names.
 #   - SovietLock.py calls setlocale(LC_TIME, "ru_RU.utf8") and its own comment
 #     says it falls back to C "if ru_RU is not generated on this machine" -
 #     which is exactly what happened on a fresh install until now.

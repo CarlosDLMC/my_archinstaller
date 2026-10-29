@@ -1,8 +1,8 @@
-//! The overview (SUPER A; quickshell bar/overview): every screen shows its
-//! ten workspaces as a 5 x 2 grid with a still picture of each window and its
-//! app icon. Click a workspace to go there, a window to focus it, middle-click
-//! to close it; drag a window to another workspace (or onto a neighbour to
-//! swap); arrows walk the workspaces; Esc or Return leave.
+//! The overview (SUPER A): every screen shows its ten workspaces as a 5 x 2
+//! grid with a still picture of each window and its app icon. Click a
+//! workspace to go there, a window to focus it, middle-click to close it;
+//! drag a window to another workspace (or onto a neighbour to swap); arrows
+//! walk the workspaces; Esc or Return leave.
 
 use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
@@ -27,7 +27,7 @@ const SCALE: f32 = 0.16;
 const ROWS: i64 = 2;
 const COLS: i64 = 5;
 const SPACING: f32 = 5.0;
-/// Appearance.animation: elementMoveEnter (windows) and elementMoveFast (the frame).
+/// The easing curves: ENTER moves the windows, FAST the frame.
 const ENTER: Easing = Easing::Bezier(0.05, 0.7, 0.1, 1.0);
 const FAST: Easing = Easing::Bezier(0.34, 0.8, 0.34, 1.0);
 const MAIN: FontKey = FontKey { family: theme::FONT_CONTENT, bold: false, plain: false };
@@ -105,7 +105,7 @@ impl Press {
     }
 }
 
-/// A tile let go after a drag: followWindow() animates it back from there.
+/// A tile let go after a drag: it animates back from there.
 struct Dropped {
     serial: u32,
     /// Where the tile was let go and where it rested then (window space).
@@ -126,7 +126,7 @@ pub struct Overview {
     icons: HashMap<String, HashMap<u32, Option<Tex>>>,
     icon_loading: HashSet<(String, u32)>,
     desktop: Option<HashMap<String, String>>,
-    /// App id -> icon name (DesktopEntries.heuristicLookup), for drawing.
+    /// App id -> icon name (its desktop entry's, see icon_name), for drawing.
     names: HashMap<String, String>,
     /// Where an icon was found, by name and size.
     icon_paths: HashMap<(String, u32), Option<String>>,
@@ -143,7 +143,7 @@ pub struct Overview {
 }
 
 fn shot_dir() -> String {
-    format!("{}/quickshell-overview", std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into()))
+    format!("{}/rust-bar-overview", std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into()))
 }
 
 // ---- open / close ----
@@ -165,11 +165,11 @@ pub fn open(app: &mut App) {
     app.svc.overview_screens = app.strips.iter().map(|s| s.name.clone()).collect();
     let outputs: Vec<_> = app.strips.iter().map(|s| (s.output.clone(), s.screen_width, s.screen_height)).collect();
     for (i, out) in outputs.into_iter().enumerate() {
-        osd::show(app, OpenParams { kind: OsdKind::Overview(i as u8), size: (0, 0), panel: (0.0, 0.0, 0.0, 0.0), dim: None, keyboard: true, namespace: "quickshell:overview", fade_ms: 0, min_scale: 1.0, fade_easing: Easing::Linear, pos: None, fill: true, output: Some(out) });
+        osd::show(app, OpenParams { kind: OsdKind::Overview(i as u8), size: (0, 0), panel: (0.0, 0.0, 0.0, 0.0), dim: None, keyboard: true, namespace: "rust-bar:overview", fade_ms: 0, min_scale: 1.0, fade_easing: Easing::Linear, pos: None, fill: true, output: Some(out) });
     }
-    // A tile's Image asks for `<id>.ppm?shotGeneration` as soon as it exists:
-    // once a run has finished, the last open's pictures are up at once and
-    // this open's replace them when overview-shots.sh is done. Icons first
+    // The pictures of the last shot generation load at once: once a run has
+    // finished, the last open's pictures are up at once and this open's
+    // replace them when overview-shots.sh is done. Icons first
     // (monitors_changed loads them), so they do not wait behind the pictures
     // on the decode thread.
     monitors_changed(app);
@@ -246,13 +246,13 @@ fn monitor_sig(monitors: &[Monitor]) -> u64 {
     h.finish()
 }
 
-/// Mango.monitor's bindings re-evaluate in QML on every monitor snapshot; the
-/// open overview follows them here (services.rs on_monitors calls this; so
-/// does open(), for its first look). mango pushes the window list just
-/// before the monitors after each arrange (ipc.c handle_print_status), on
-/// another socket: a snapshot read in a later loop turn than the windows was
-/// never drawn, and the frame stayed on the last workspace. A snapshot that
-/// changes nothing the overview shows draws nothing.
+/// The open overview follows every monitor snapshot (services.rs
+/// on_monitors calls this; so does open(), for its first look). mango pushes
+/// the window list just before the monitors after each arrange (ipc.c
+/// handle_print_status), on another socket: a snapshot read in a later loop
+/// turn than the windows was never drawn, and the frame stayed on the last
+/// workspace. A snapshot that changes nothing the overview shows draws
+/// nothing.
 pub fn monitors_changed(app: &mut App) {
     if !app.svc.overview.open {
         return;
@@ -267,7 +267,7 @@ pub fn monitors_changed(app: &mut App) {
     redraw(app);
 }
 
-/// MangoData: `watch all-clients` on mango's socket while open.
+/// `watch all-clients` on mango's socket while the overview is open.
 fn watch(app: &mut App) {
     let Ok(path) = std::env::var("MANGO_INSTANCE_SIGNATURE") else { return };
     let Ok(mut s) = UnixStream::connect(&path) else { return };
@@ -298,9 +298,9 @@ fn watch(app: &mut App) {
             }
         }
         // mango hung up (it drops a watcher whose buffer filled, and all of
-        // them when it quits): stop, as the QML Socket does. A readable EOF
-        // would call this back without end. calloop takes the source out
-        // after this callback; the fd stays open until close().
+        // them when it quits): stop watching. A readable EOF would call this
+        // back without end. calloop takes the source out after this
+        // callback; the fd stays open until close().
         if gone {
             if let Some(t) = app.svc.overview.watch.as_mut().and_then(|w| w.1.take()) {
                 app.unwatch(t);
@@ -352,9 +352,9 @@ fn on_clients(app: &mut App, line: &str) {
     redraw(app);
 }
 
-/// overview-shots.sh: one still picture per window, then shotGeneration++.
+/// overview-shots.sh: one still picture per window, then the next shot generation.
 fn take_shots(app: &mut App) {
-    let script = format!("{}/.config/quickshell/bar/scripts/overview-shots.sh", services::home());
+    let script = format!("{}/.config/rust-bar/scripts/overview-shots.sh", services::home());
     let mut args = vec![script, shot_dir()];
     for w in &app.svc.overview.clients {
         if !w.toplevel.is_empty() && w.toplevel != "0" && !w.minimized && !(w.group && !w.group_focus) {
@@ -402,10 +402,10 @@ fn decode(file: std::fs::File) -> Option<(u32, u32, Vec<u8>)> {
     (w > 0 && h > 0).then(|| (w, h, img.into_raw()))
 }
 
-// ---- icons: DesktopEntries.heuristicLookup + Quickshell.iconPath ----
+// ---- icons: desktop entry lookup + icon theme path ----
 
 /// XDG_DATA_HOME, then XDG_DATA_DIRS; an empty variable counts as unset, as
-/// in quickshell's desktopPaths() and Qt's QStandardPaths.
+/// in Qt's QStandardPaths.
 fn data_dirs() -> Vec<String> {
     let var = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
     let mut dirs = vec![var("XDG_DATA_HOME").unwrap_or_else(|| format!("{}/.local/share", services::home()))];
@@ -414,11 +414,10 @@ fn data_dirs() -> Vec<String> {
 }
 
 /// Desktop entries by id, lowercase id and StartupWMClass: their Icon, empty
-/// when they have none. As quickshell 0.3.2 builds them (desktopentry.cpp
-/// DesktopEntryScanner::run, onScanCompleted): the data dirs from the lowest
-/// priority up, each in QDir's order; a later entry takes over its id and its
-/// lowercase id, Hidden=true removes both, and an entry that is no
-/// Application or has no Name is left out without hiding anything.
+/// when they have none. The data dirs are read from the lowest priority up,
+/// each in QDir's order; a later entry takes over its id and its lowercase
+/// id, Hidden=true removes both, and an entry that is no Application or has
+/// no Name is left out without hiding anything.
 fn desktop_index() -> HashMap<String, String> {
     // id -> (Icon, StartupWMClass); lowercase id -> Icon.
     let mut by_id: HashMap<String, (String, String)> = HashMap::new();
@@ -441,8 +440,8 @@ fn desktop_index() -> HashMap<String, String> {
             }
         }
     }
-    // heuristicLookup's StartupWMClass search runs over the entries in hash
-    // order (QHash there): the first match wins, exact before any case.
+    // The StartupWMClass search runs over the entries in hash order: the
+    // first match wins, exact before any case.
     let mut idx: HashMap<String, String> = HashMap::new();
     for (icon, class) in by_id.values().filter(|(_, c)| !c.is_empty()) {
         idx.entry(format!("wm:{class}")).or_insert_with(|| icon.clone());
@@ -453,10 +452,10 @@ fn desktop_index() -> HashMap<String, String> {
     idx
 }
 
-/// DesktopEntryScanner::scanDirectory: QDir's listing (no dot files, by name
-/// with case ignored), a subdirectory's entries named `<dir>-<name>`.
+/// An applications directory's entries: QDir's listing (no dot files, by
+/// name with case ignored), a subdirectory's entries named `<dir>-<name>`.
 fn scan_entries(dir: &std::path::Path, prefix: &str, depth: u32, out: &mut Vec<(String, std::path::PathBuf)>) {
-    // A link loop would recurse without end (quickshell's stack overflows).
+    // A link loop would recurse without end and overflow the stack.
     if depth > 16 {
         return;
     }
@@ -473,12 +472,12 @@ fn scan_entries(dir: &std::path::Path, prefix: &str, depth: u32, out: &mut Vec<(
     }
 }
 
-/// DesktopEntry::parseText, for the lookup: None for an entry quickshell
-/// leaves out (no Application, no Name), Some(None) for Hidden=true, else its
-/// Icon and StartupWMClass. Lines as quickshell takes them: split on '\n',
-/// `#` comments, `[group]` headers, key=value with nothing trimmed. A key's
-/// [locale] variant counts for the Name only (the Icon and StartupWMClass
-/// lines of the entries here have none).
+/// A desktop entry, for the lookup: None for an entry left out (no
+/// Application, no Name), Some(None) for Hidden=true, else its Icon and
+/// StartupWMClass. Lines are taken as they are: split on '\n', `#` comments,
+/// `[group]` headers, key=value with nothing trimmed. A key's [locale]
+/// variant counts for the Name only (the Icon and StartupWMClass lines of
+/// the entries here have none).
 fn parse_entry(text: &str) -> Option<Option<(String, String)>> {
     let mut in_entry = false;
     let (mut app, mut named, mut hidden) = (false, false, false);
@@ -498,8 +497,8 @@ fn parse_entry(text: &str) -> Option<Option<(String, String)>> {
             _ => {}
         }
     }
-    // finishCategory keeps nothing of a group that is no Application, and
-    // onScanCompleted masks a hidden entry before it checks the Name.
+    // Nothing is kept of a group that is no Application, and a hidden entry
+    // masks its id before the Name is checked.
     match (app, hidden, named) {
         (false, ..) => None,
         (true, true, _) => Some(None),
@@ -508,8 +507,7 @@ fn parse_entry(text: &str) -> Option<Option<(String, String)>> {
     }
 }
 
-/// The icon name for an app id: its desktop entry's Icon, else the app id
-/// (Quickshell.iconPath(entry?.icon ?? appid, ...)).
+/// The icon name for an app id: its desktop entry's Icon, else the app id.
 fn icon_name(idx: &HashMap<String, String>, appid: &str) -> String {
     for k in [appid.to_string(), format!("lc:{}", appid.to_lowercase()), format!("wm:{appid}"), format!("wmlc:{}", appid.to_lowercase())] {
         if let Some(i) = idx.get(&k) {
@@ -636,7 +634,7 @@ fn load_icons(app: &mut App) {
     for (name, size, known) in jobs {
         app.background(
             move || {
-                // Quickshell.iconPath(name, "image-missing"): QIcon::fromTheme(name), else the fallback's.
+                // The theme's icon for the name (QIcon::fromTheme), else image-missing's.
                 let path = known.unwrap_or_else(|| find_icon(&name, size).or_else(|| find_icon("image-missing", size)));
                 let img = path.as_deref().and_then(|p| render_icon(p, size));
                 (name, size, path, img)
@@ -700,8 +698,8 @@ fn group(m: &Monitor) -> i64 {
     (active_ws(m) - 1) / (ROWS * COLS)
 }
 
-/// retileHidden(): a hidden workspace's tiled windows laid out afresh, as
-/// mango would (halves, alternating), unless they already fill it.
+/// A hidden workspace's tiled windows laid out afresh, as mango would
+/// (halves, alternating), unless they already fill it.
 fn retile(list: Vec<Client>, m: &Monitor, g: &Geo) -> Vec<Client> {
     let gap = 12.0;
     let area = (m.x + gap, m.y + g.reserved_top, m.width - 2.0 * gap, m.height - g.reserved_top - gap);
@@ -820,11 +818,11 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, screen: u8, panel: (f32, f32, f32, f32), 
     }
     // The windows, then the frame on the active workspace.
     let wins = visible(o, m, &g);
-    // Where each tile is. A window whose data changed is a new delegate in
-    // QML (ScriptModel compares structurally), so a new resting place is
-    // taken at once and the size never animates; only followWindow() after
+    // Where each tile is. A window whose data changed is a new tile (the
+    // window list is compared structurally), so a new resting place is
+    // taken at once and the size never animates; only the move back after
     // a drag animates, from where the tile was let go. The dragged tile is
-    // where the drag puts it (setPosition, no Behavior).
+    // where the drag puts it, not animated.
     let press = o.press.as_ref().filter(|p| p.screen == screen);
     let mut at: Vec<(f32, f32)> = Vec::with_capacity(wins.len());
     for (c, (tx, ty, _, _)) in &wins {
@@ -846,8 +844,8 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, screen: u8, panel: (f32, f32, f32, f32), 
         ui.animating |= r1 || r2;
         at.push((x, y));
     }
-    // z: windowZ + index at rest, windowDraggingZ while away from it; the
-    // frame (windowZ, declared after the windows) right above the first.
+    // Stacking: the tiles at rest in list order, the ones away from their
+    // place above them all; the frame right above the first tile.
     let away: Vec<bool> = wins.iter().zip(&at).map(|((_, r), a)| *a != (r.0, r.1)).collect();
     let first_rests = away.first() == Some(&false);
     if !first_rests {
@@ -867,7 +865,7 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, screen: u8, panel: (f32, f32, f32, f32), 
         let wash = if pressed { wa(0.22) } else if hovered { wa(0.12) } else { wa(0.0) };
         ui.scene.rect(x, y, w, h, wash, 0.0, 1.0, Color { a: 0.3, ..t.col_grey }, false);
         // The icon at its size; until that is rendered, the closest one there
-        // is (QML's new tile loads its icon synchronously, nothing blinks).
+        // is, so a new tile never blinks without its icon.
         let s = icon_size(c, m, &g);
         let want = s.round() as u32;
         let tex = o.names.get(&c.appid).and_then(|n| o.icons.get(n)).and_then(|by| match by.get(&want) {
@@ -882,10 +880,10 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, screen: u8, panel: (f32, f32, f32, f32), 
             draw_indicator(ui, m, &g, white);
         }
     }
-    // The hovered window's tooltip (StyledToolTip, a Basic ToolTip), shown
+    // The hovered window's tooltip (a Basic style ToolTip), shown
     // while the pointer is in the tile and no button is held (Drag.active
     // goes up on the press). Each show grows the plate from its bottom
-    // centre and fades it in (elementMoveFast); a hide is at once.
+    // centre and fades it in (FAST); a hide is at once.
     let tip = if o.press.is_none() { o.hovered.filter(|h| h.0 == screen).and_then(|h| wins.iter().position(|(c, _)| c.id == h.1)) } else { None };
     let mut prog = 0.0;
     for (i, (c, _)) in wins.iter().enumerate() {
@@ -934,7 +932,7 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, screen: u8, panel: (f32, f32, f32, f32), 
 }
 
 /// A tile's x and y animation keys: a pair per resting place (and per drop),
-/// so a new place is a new item that starts where it rests, as QML's new
+/// so a new place is a new item that starts where it rests, as a new
 /// delegate does. Bit 31 keeps them apart from the frame's and the tooltips'.
 fn tile_keys(id: i64, rest: (f32, f32), drop: Option<u32>) -> (u32, u32) {
     use std::hash::{Hash, Hasher};
@@ -944,7 +942,7 @@ fn tile_keys(id: i64, rest: (f32, f32), drop: Option<u32>) -> (u32, u32) {
     (k, k | 1)
 }
 
-/// The frame on the active workspace (z = windowZ: above the first window,
+/// The frame on the active workspace (stacked above the first window,
 /// under the others).
 fn draw_indicator(ui: &mut Ui<OsdState>, m: &Monitor, g: &Geo, white: Color) {
     let n = ROWS * COLS;
@@ -994,10 +992,9 @@ fn workspace_at(app: &App, screen: u8, x: f32, y: f32) -> Option<i64> {
     None
 }
 
-/// Every pointer event on an overview window: the window tiles' MouseAreas
-/// (left and middle, drag.target: the tile), the workspaces' (left, click
-/// only) and the background's press beside the panel (OverviewWidget.qml,
-/// Overview.qml).
+/// Every pointer event on an overview window: the window tiles (left and
+/// middle, dragging the tile), the workspaces (left, click only) and the
+/// background's press beside the panel.
 pub fn pointer(app: &mut App, screen: u8, ev: &PointerEventKind, x: f32, y: f32) -> bool {
     match ev {
         PointerEventKind::Motion { .. } | PointerEventKind::Enter { .. } => {
@@ -1083,7 +1080,7 @@ pub fn pointer(app: &mut App, screen: u8, ev: &PointerEventKind, x: f32, y: f32)
             redraw_screen(app, screen);
             rehover(app);
             if p.id < 0 {
-                // The workspace's onClicked: released on the workspace it went
+                // A click on a workspace: released on the workspace it went
                 // down on, however far it moved.
                 if let Some(ws) = p.cell.filter(|c| workspace_at(app, screen, x, y) == Some(*c)) {
                     let name = app.svc.overview_screens.get(screen as usize).cloned().unwrap_or_default();
@@ -1094,8 +1091,8 @@ pub fn pointer(app: &mut App, screen: u8, ev: &PointerEventKind, x: f32, y: f32)
             }
             let Some(win) = app.svc.overview.clients.iter().find(|c| c.id == p.id).cloned() else { return true };
             if p.dragging {
-                // onReleased: the workspace under the hot spot takes the
-                // window; its own keeps it (dropInside). No click after a drag.
+                // A drag let go: the workspace under the hot spot takes the
+                // window; its own keeps it (drop_inside). No click after a drag.
                 remember_drop(app, screen, &p);
                 let hot = p.hotspot();
                 match workspace_at(app, screen, hot.0, hot.1) {
@@ -1105,7 +1102,7 @@ pub fn pointer(app: &mut App, screen: u8, ev: &PointerEventKind, x: f32, y: f32)
                 }
                 return true;
             }
-            // onClicked: released inside the tile it went down on.
+            // A click: released inside the tile it went down on.
             if !tile_rect(app, screen, win.id).map_or(false, |(tx, ty, tw, th)| x >= tx && x < tx + tw && y >= ty && y < ty + th) {
                 return true;
             }
@@ -1123,7 +1120,7 @@ pub fn pointer(app: &mut App, screen: u8, ev: &PointerEventKind, x: f32, y: f32)
     }
 }
 
-/// followWindow() after a drag: the tile goes back from where it was let go.
+/// After a drag: the tile goes back from where it was let go.
 fn remember_drop(app: &mut App, screen: u8, p: &Press) {
     let Some(name) = app.svc.overview_screens.get(screen as usize) else { return };
     let Some(m) = app.svc.mango.monitor(name) else { return };
@@ -1135,8 +1132,8 @@ fn remember_drop(app: &mut App, screen: u8, p: &Press) {
     o.dropped.insert((screen, p.id), Dropped { serial: o.drop_serial, at: (tx + dx, ty + dy), rest: (tx, ty) });
 }
 
-/// dropInside(): a floating window moves there; a tiled one swaps with the
-/// tiled window under the hot spot.
+/// A window dropped on its own workspace: a floating window moves there; a
+/// tiled one swaps with the tiled window under the hot spot.
 fn drop_inside(app: &mut App, screen: u8, win: &Client, p: &Press) {
     let (dx, dy) = p.offset();
     if dx.abs() < 8.0 && dy.abs() < 8.0 {
@@ -1147,7 +1144,7 @@ fn drop_inside(app: &mut App, screen: u8, win: &Client, p: &Press) {
     let g = geo(&m);
     let (gx, gy) = g.grid;
     let list = visible(&app.svc.overview, &m, &g);
-    // The tile's windowData: on a hidden workspace, laid out afresh.
+    // The tile's place: on a hidden workspace, laid out afresh.
     let Some((me, (tx, ty, ..))) = list.iter().find(|(c, _)| c.id == win.id) else { return };
     if me.floating {
         let col = (me.ws() - 1) % COLS;
@@ -1178,7 +1175,7 @@ pub fn key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Keysym) {
     match sym {
         Keysym::Escape | Keysym::Return => close(app),
         // Qt's xkb table gives the keypad's arrows (Num Lock off) the arrow
-        // keys' codes (qxkbcommon.cpp:107-110), so Overview.qml:72 takes them.
+        // keys' codes (qxkbcommon.cpp:107-110), so they walk the workspaces too.
         Keysym::Left | Keysym::Right | Keysym::Up | Keysym::Down | Keysym::KP_Left | Keysym::KP_Right | Keysym::KP_Up | Keysym::KP_Down => {
             let n = ROWS * COLS;
             let cur = app.svc.mango.focused().and_then(|m| m.active_tags.first().copied()).unwrap_or(1);

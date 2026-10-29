@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Night light: toggle, status and the login restore (startup.conf `init`).
-# The bar's ПУЛЬТ card switches it (quickshell/bar/NightLight.qml).
+# The bar's ПУЛЬТ card switches it (rust-bar/src/pult.rs).
 #
 # wlsunset keeps the warm colour while it runs (wlr-gamma-control: the screen
 # goes back to normal by itself when it exits). It has no fixed-temperature

@@ -1,6 +1,6 @@
-//! ПУЛЬТ (PultWidget.qml): Bluetooth, night light, НЕ ЗАСЫПАТЬ, the stats
-//! switch and the power profile - its state, the same helper commands, and
-//! its card. KeepAwake and the stats switch live here too.
+//! ПУЛЬТ: Bluetooth, night light, НЕ ЗАСЫПАТЬ, the stats switch and the
+//! power profile - its state, its helper commands, and its card. Keep-awake
+//! and the stats switch live here too.
 
 use std::time::Duration;
 
@@ -29,7 +29,7 @@ pub struct Pult {
     /// Which opening of the card this is: its D-Bus watchers run under tags
     /// that carry it (watch()).
     opening: u32,
-    /// Asked for again while still running (Process's targetRunning): the
+    /// Asked for again while still running, so it runs once more after: the
     /// power chain with the last click's state, one more night-light toggle.
     bt_power_again: Option<bool>,
     night_again: bool,
@@ -55,7 +55,7 @@ fn profile_label(p: &str) -> String {
 
 pub fn start(app: &mut App) {
     refresh(app);
-    // KeepAwake: the switch survives a bar restart in the session's runtime dir.
+    // Keep-awake: the switch survives a bar restart in the session's runtime dir.
     let on = std::fs::read_to_string(keep_awake_path()).map_or(false, |t| t.trim() == "on");
     app.svc.pult.keep_awake = on;
     if on {
@@ -91,18 +91,18 @@ pub fn refresh(app: &mut App) {
     redraw(app);
 }
 
-/// btPresenceProc (PultWidget.qml:28-32, 129-145): `ls -d
-/// /sys/class/bluetooth/hci*`, else `rfkill -n -o TYPE list bluetooth | grep -q
-/// bluetooth` - a blocked radio empties the class but keeps its rfkill
-/// switch. Read here rather than through sh, ls, rfkill and grep.
+/// An adapter is there when `ls -d /sys/class/bluetooth/hci*` finds one,
+/// else when `rfkill -n -o TYPE list bluetooth | grep -q bluetooth` does - a
+/// blocked radio empties the class but keeps its rfkill switch. Read here
+/// rather than through sh, ls, rfkill and grep.
 fn has_bluetooth() -> bool {
     let any = |dir: &str, f: &dyn Fn(&std::fs::DirEntry) -> bool| std::fs::read_dir(dir).map_or(false, |d| d.flatten().any(|e| f(&e)));
     any("/sys/class/bluetooth", &|e| e.file_name().to_string_lossy().starts_with("hci"))
         || any("/sys/class/rfkill", &|e| std::fs::read_to_string(e.path().join("type")).map_or(false, |t| t.trim() == "bluetooth"))
 }
 
-/// btStatusProc: `bluetoothctl show | grep -E 'Powered|Name'`, then "Powered:
-/// yes" anywhere in it - the same as in the whole output, so no shell or grep.
+/// `bluetoothctl show`: powered when "Powered: yes" is anywhere in it - a
+/// grep for the Powered and Name lines finds the same, so no shell or grep.
 fn bt_status(app: &mut App) {
     app.spawn("bt-status", &["bluetoothctl", "show"], |app, d| {
         app.svc.pult.bt_powered = d.stdout.contains("Powered: yes");
@@ -110,8 +110,8 @@ fn bt_status(app: &mut App) {
     });
 }
 
-/// btConnectedProc: `bluetoothctl info 2>/dev/null | grep -E 'Name|Connected'
-/// | head -2`, the filter done here.
+/// `bluetoothctl info`, filtered here as `grep -E 'Name|Connected' | head -2`
+/// would: whether a device is connected, and its name.
 fn bt_connected(app: &mut App) {
     app.spawn("bt-connected", &["bluetoothctl", "info"], |app, d| {
         let out: Vec<&str> = d.stdout.lines().filter(|l| l.contains("Name") || l.contains("Connected")).take(2).collect();
@@ -129,14 +129,15 @@ fn bt_connected(app: &mut App) {
     });
 }
 
-/// btDevices / foundDevices = a list. A different one is a new model for its
-/// ListView, which makes the rows anew (setModel compares the values): their
-/// texts start fresh (subpixel) - this list's only, so each list has its own
-/// text parts (the framework's list_replaced forgets ConsoleRow's 0xC1-0xC4,
-/// card-wide, which these rows do not use). The model count goes into the
-/// value list_begin compares: a found list emptied by a new search (its
-/// plate hidden, so no frame shows the empty model) and then filled with the
-/// same devices is still a new model, back at the top with fresh rows.
+/// The paired or the found devices = a list. A different one is a new model
+/// for its ListView, which makes the rows anew (setModel compares the
+/// values): their texts start fresh (subpixel) - this list's only, so each
+/// list has its own text parts (the framework's list_replaced forgets the
+/// console rows' 0xC1-0xC4, card-wide, which these rows do not use). The
+/// model count goes into the value list_begin compares: a found list emptied
+/// by a new search (its plate hidden, so no frame shows the empty model) and
+/// then filled with the same devices is still a new model, back at the top
+/// with fresh rows.
 fn set_list(app: &mut App, found: bool, list: Vec<(String, String)>) {
     let p = &mut app.svc.pult;
     let (old, texts) = if found { (&mut p.found, FOUND_TEXTS) } else { (&mut p.bt_devices, PAIRED_TEXTS) };
@@ -193,12 +194,10 @@ fn set_bluetooth(app: &mut App, on: bool) {
     redraw(app);
 }
 
-/// btPowerProc.running = true with powerOn = `on` (PultWidget.qml:312-326).
-/// Clicked again while the chain still runs, Process runs it once more when
-/// it ends, with the last click's powerOn (targetRunning, quickshell
-/// process.cpp:274-287): a quick on-off ends with the radio off, as in QML.
-/// spawn() dropped the second run, so the radio stayed on while the switch
-/// said off and the applet had been killed.
+/// Powers the radio `on` or off. Clicked again while the chain still runs,
+/// it runs once more when it ends, with the last click's state: a quick
+/// on-off ends with the radio off. spawn() dropped the second run, so the
+/// radio stayed on while the switch said off and the applet had been killed.
 fn bt_power(app: &mut App, on: bool) {
     if app.is_running("bt-power") {
         app.svc.pult.bt_power_again = Some(on);
@@ -236,10 +235,9 @@ fn start_scan(app: &mut App) {
     redraw(app);
 }
 
-/// Timer { interval: 1500; running: pult.scanning; repeat: true }
-/// (PultWidget.qml:262-267): one, by name, started again with each search -
-/// a search stopped and started again within 1.5 s kept the old one ticking
-/// beside the new one.
+/// The 1.5 s poll of the found devices while a search runs: one, by name,
+/// started again with each search - a search stopped and started again
+/// within 1.5 s kept the old one ticking beside the new one.
 const FOUND_POLL: &str = "bt-found-poll";
 
 fn found_tick(app: &mut App) {
@@ -302,9 +300,8 @@ fn night_file_on() -> bool {
     std::fs::read_to_string(format!("{}/.cache/.nightlight_state", services::home())).map_or(false, |t| t.trim() == "on")
 }
 
-/// NightLight.qml: on = the state file says so and wlsunset is alive
-/// (aliveProc's `pgrep -x wlsunset`, read here from /proc - refresh()
-/// redraws).
+/// The night light is on when the state file says so and wlsunset is alive
+/// (`pgrep -x wlsunset`, read here from /proc - refresh() redraws).
 fn read_night(app: &mut App) {
     app.svc.pult.night_on = night_file_on() && wlsunset_alive();
 }
@@ -318,12 +315,11 @@ fn wlsunset_alive() -> bool {
     })
 }
 
-/// NightLight.toggle(): toggleProc.running = true (NightLight.qml:64-71). On
-/// a toggle still running, Process runs it once more after it (targetRunning),
-/// so a double click toggles twice, as in QML. Its end shows what the script
-/// wrote, as the state file's watch does (applyState, NightLight.qml:28-35):
-/// a fresh "on" is trusted - a pgrep right then can come before nohup has
-/// started wlsunset and turn the switch off.
+/// Toggles the night light. On a toggle still running, it runs once more
+/// after it, so a double click toggles twice. Its end shows what the script
+/// wrote, as the state file's watch does: a fresh "on" is trusted - a pgrep
+/// right then can come before nohup has started wlsunset and turn the
+/// switch off.
 fn night_toggle(app: &mut App) {
     if app.is_running("night-toggle") {
         app.svc.pult.night_again = true;
@@ -339,13 +335,13 @@ fn night_toggle(app: &mut App) {
 }
 
 fn keep_awake_path() -> String {
-    format!("{}/quickshell-keep-awake", std::env::var("XDG_RUNTIME_DIR").unwrap_or("/tmp".into()))
+    format!("{}/rust-bar-keep-awake", std::env::var("XDG_RUNTIME_DIR").unwrap_or("/tmp".into()))
 }
 
-/// KeepAwake: systemd-inhibit --what=idle held by a child that ends with the bar.
+/// Keep-awake: systemd-inhibit --what=idle held by a child that ends with the bar.
 fn inhibit(app: &mut App, on: bool) {
     if on {
-        let cmd = "exec systemd-inhibit --what=idle --who=\"Quickshell bar\" --why=\"НЕ ЗАСЫПАТЬ is on\" --mode=block sh -c 'while kill -0 \"$1\" 2>/dev/null && kill -0 \"$PPID\" 2>/dev/null; do sleep 5; done' sh \"$PPID\"";
+        let cmd = "exec systemd-inhibit --what=idle --who=\"rust-bar\" --why=\"НЕ ЗАСЫПАТЬ is on\" --mode=block sh -c 'while kill -0 \"$1\" 2>/dev/null && kill -0 \"$PPID\" 2>/dev/null; do sleep 5; done' sh \"$PPID\"";
         app.spawn_lines_tagged("keep-awake", &["sh", "-c", cmd], |_, _| {});
     } else {
         app.kill("keep-awake");
@@ -359,13 +355,12 @@ fn set_keep_awake(app: &mut App, on: bool) {
     redraw(app);
 }
 
-/// SystemStats.setShown: the strip's CPU/RAM readouts. `shown = on` runs
-/// onShownChanged at once (SystemStats.qml:43-47, 75-83): shown, a reading
+/// Shows or hides the strip's CPU/RAM readouts, at once: shown, a reading
 /// now and a real CPU one a second later; the file's watch event then finds
 /// it applied.
 fn set_stats_shown(app: &mut App, on: bool) {
     services::set_stats_shown(app, on);
-    let path = format!("{}/.cache/quickshell/bar-stats", services::home());
+    let path = format!("{}/.cache/rust-bar/bar-stats", services::home());
     if let Some(dir) = std::path::Path::new(&path).parent() {
         let _ = std::fs::create_dir_all(dir);
     }
@@ -384,9 +379,9 @@ pub fn opened(app: &mut App) {
     watch(app);
 }
 
-/// btMonitor / profileMonitor (PultWidget.qml:338-397): `running:
-/// pult.dropdownOpen && pult.hasAdapter` (hasProfiles) - started whenever
-/// both hold, so also when the adapter or the daemon answers after the card
+/// The Bluetooth and power-profile watchers run while the card is open and
+/// the adapter (or the profile daemon) is there - started whenever both
+/// hold, so also when the adapter or the daemon answers after the card
 /// opened. The tags carry the opening: the last opening's watcher, killed by
 /// closed() but holding its tag until its pipe closes, made another bar's ⚙
 /// (a close and an open in one go) start none.
@@ -396,10 +391,9 @@ fn watch(app: &mut App) {
     }
     let n = app.svc.pult.opening;
     if app.svc.pult.has_adapter {
-        // --profile: one line per signal (QML's `while read line` turns each
-        // of the default format's 8-10 lines into a line), so a search's RSSI
-        // stream restarts the 400 ms settle once per signal; the output is
-        // only ever a trigger.
+        // --profile: one line per signal (the default format prints 8-10
+        // lines for each), so a search's RSSI stream restarts the 400 ms
+        // settle once per signal; the output is only ever a trigger.
         app.spawn_lines_tagged(&format!("bt-monitor-{n}"), &["dbus-monitor", "--system", "--profile", "type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path_namespace='/org/bluez'"], |app, _| {
             app.debounce("bt-settle", Duration::from_millis(400), |app| {
                 bt_status(app);
@@ -503,21 +497,21 @@ pub fn card_height(fonts: &mut crate::text::Fonts, svc: &Services, scanning: boo
 // and grayed it, where Qt makes the new item's node fresh (subpixel) and
 // leaves the others alone. Captions and notes: part NOTE, id = their kind in
 // children(); a switch: parts SWITCH + 1..3 (glyph, label, detail), id = its
-// code (its key's caption is ConsoleButton's 0xB2); a device row: its list's
+// code (its key's caption is the console button's 0xB2); a device row: its list's
 // parts + 1 (icon), + 3 (detail), + 4 (label), id = its code.
 const NOTE: u64 = 0xA0;
 const SWITCH: u64 = 0xA4;
 const PAIRED_TEXTS: u64 = 0xD0;
 const FOUND_TEXTS: u64 = 0xE0;
 
-/// ConsoleCaption: bold, fontSize - 5, letterSpacing 1, colDim.
+/// A caption: bold, FONT_SIZE - 5, letter spacing 1, col_dim.
 fn caption(ui: &mut Ui, kind: u8, text: &str, x: f32, y: f32) {
     let l = crate::cards::caption(ui.fonts, text);
     let c = ui.theme.col_dim;
     ui.text_of(kind as u32, NOTE, &l, x, y, c);
 }
 
-/// PultSwitch: lamp, glyph, bold label, detail, and the ВКЛ/ВЫКЛ key.
+/// A switch: lamp, glyph, bold label, detail, and the ВКЛ/ВЫКЛ key.
 #[allow(clippy::too_many_arguments)]
 fn switch(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32, icon: &str, label: &str, detail: &str, on: bool) {
     let t = ui.theme;
@@ -545,9 +539,9 @@ fn switch(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32, icon: &str, la
     ui.console_button_sized(code, bx, y + ac(h, bh), bw, font, "", t.col_grey, if on { "ВКЛ" } else { "ВЫКЛ" }, on);
 }
 
-/// A device row: ConsoleRow (as cards::console_row draws it) with the icon
-/// 󰂯, a detail, and on the found list the trailing Row with its Spinner
-/// (`spinner_cell`: Some(pairing)). `texts` is the list's text parts.
+/// A device row: a console row (as cards::console_row draws it) with the
+/// icon 󰂯, a detail, and on the found list the trailing cell with its
+/// spinner (`spinner_cell`: Some(pairing)). `texts` is the list's text parts.
 #[allow(clippy::too_many_arguments)]
 fn device_row(ui: &mut Ui, code: u32, texts: u64, x: f32, y: f32, w: f32, h: f32, label: &str, lit: bool, detail: &str, detail_color: Color, spinner_cell: Option<bool>) {
     let t = ui.theme;
@@ -563,11 +557,11 @@ fn device_row(ui: &mut Ui, code: u32, texts: u64, x: f32, y: f32, w: f32, h: f32
     let il = ui.fonts.layout("\u{f00af}", theme::bar_font(false), font, 0.0);
     ui.text_of(code, texts + 1, &il, ix + (font + 2.0 - il.adv) / 2.0, y + qround((h - il.height()) / 2.0), fg);
     let tx = ix + font + 2.0 + 8.0;
-    // ConsoleRow's RowLayout (ConsoleRow.qml:117-171): the detail and the
-    // trailing Row are cells of qCeil(implicitWidth) on whole pixels from the
-    // right edge, 8 apart, each Text at its cell's start; the label fills
-    // what is left. The found rows' Row always holds the Spinner, so it is a
-    // cell with its spacing even while the Spinner is hidden (zero wide).
+    // Laid out as a Qt Quick RowLayout: the detail and the trailing cell are
+    // cells of qCeil(implicitWidth) on whole pixels from the right edge, 8
+    // apart, each text at its cell's start; the label fills what is left. A
+    // found row's trailing cell always holds the spinner, so it is a cell
+    // with its spacing even while the spinner is hidden (zero wide).
     let mut right = x + w - 6.0;
     if let Some(spinning) = spinner_cell {
         if spinning {
@@ -590,7 +584,7 @@ fn device_row(ui: &mut Ui, code: u32, texts: u64, x: f32, y: f32, w: f32, h: f32
     ui.hits.push(Hit { x, y, w, h, action: Action::Card(code) });
 }
 
-/// Spinner: eight dots on a ring, fading towards the tail, a turn per 900 ms.
+/// A spinner: eight dots on a ring, fading towards the tail, a turn per 900 ms.
 pub fn spinner<S: crate::cards::UiState>(ui: &mut Ui<S>, x: f32, y: f32, size: f32, color: Color) {
     let dot = 2f32.max((size / 7.0).round());
     let r = size / 2.0 - dot / 2.0;
@@ -644,15 +638,15 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, scanning: bool) {
                 let font = FONT_SIZE - 6.0;
                 let label = if scanning { "СТОП" } else { "ПОИСК" };
                 let bw = ui.console_button_width(font, "\u{f0349}", label, 58.0);
-                // busy: pult.scanning (PultWidget.qml:465-474) - the spinner
-                // takes the glyph's place in its box and the caption stays
-                // beside it; the key stays enabled.
+                // Busy while scanning: the spinner takes the glyph's place
+                // in its box and the caption stays beside it; the key stays
+                // enabled.
                 ui.console_button_ex(SEARCH, x0 + cw - bw, y, bw, font, "\u{f0349}", t.col_grey, label, false, scanning, true);
             }
             3 | 6 => {
                 plate(ui, x0, y, cw, h);
                 let (list, base) = if kind == 3 { (&p.bt_devices, PAIRED_ROW) } else { (&p.found, FOUND_ROW) };
-                // deviceList / foundList: 6 rows in view, the rest scrolled to.
+                // The paired and found lists: 6 rows in view, the rest scrolled to.
                 // A list has 0x100 codes: a 257th found device would be the
                 // РАЗГОН key (PROFILE), a 257th paired one a found row.
                 let count = list.len().min(0x100);
@@ -671,7 +665,7 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, scanning: bool) {
                 }
                 ui.view_end(lv);
             }
-            // Two Texts in QML: "Нет сопряжённых…" and the search's note.
+            // Two separate notes: "Нет сопряжённых…" and the search's.
             4 | 7 => {
                 let text = if kind == 4 { "Нет сопряжённых устройств" } else if scanning { "Поиск устройств…" } else { "Ничего не найдено" };
                 let l = ui.fonts.layout(text, theme::bar_font(false), FONT_SIZE - 4.0, 0.0);

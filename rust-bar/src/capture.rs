@@ -1,7 +1,7 @@
-//! ShotState + ShotOsd and RecordState + RecordOsd: the screenshot and
-//! screen-recording dialogs (SUPER SHIFT S / R). Two big keys (whole screen,
-//! region), a monitor picker when there is more than one, the recorder's
-//! audio switches, and the same ScreenShot.sh / ScreenRecord.sh calls.
+//! The screenshot and screen-recording dialogs (SUPER SHIFT S / R), their
+//! state and their OSD windows. Two big keys (whole screen, region), a
+//! monitor picker when there is more than one, the recorder's audio
+//! switches, and the ScreenShot.sh / ScreenRecord.sh calls.
 
 use std::time::Duration;
 
@@ -75,7 +75,8 @@ impl Capture {
     }
 }
 
-/// Monitors.focusedName() / resolveTarget().
+/// The monitor to capture: `name` while it is enabled, else the focused
+/// one, else the first.
 fn resolve_target(app: &App, name: &str) -> String {
     if !name.is_empty() && app.svc.capture.monitors.iter().any(|m| m.name == name) {
         return name.into();
@@ -83,7 +84,7 @@ fn resolve_target(app: &App, name: &str) -> String {
     app.svc.mango.focused().map(|m| m.name.clone()).filter(|n| !n.is_empty()).or(app.svc.capture.monitors.first().map(|m| m.name.clone())).unwrap_or_default()
 }
 
-/// Monitors.refresh(): wlr-randr's enabled outputs and their current modes.
+/// Reads wlr-randr's enabled outputs and their current modes.
 fn refresh_monitors(app: &mut App) {
     let cmd = "wlr-randr --json | jq -c '[.[] | select(.enabled) | . as $o | ($o.modes[] | select(.current)) as $m | {name: $o.name, width: $m.width, height: $m.height, refresh: ($m.refresh|round), description: $o.description}]'";
     app.spawn("monitors", &["sh", "-c", cmd], |app, d| {
@@ -102,8 +103,8 @@ fn refresh_monitors(app: &mut App) {
     });
 }
 
-/// RecordState's saved audio choice, at start. The monitors are asked for
-/// when a dialog opens: Monitors.qml is a singleton nothing touches before.
+/// The recording's saved audio choice, at start. The monitors are asked for
+/// only when a dialog opens: nothing needs them before.
 pub fn start(app: &mut App) {
     let mode = std::fs::read_to_string(audio_file()).unwrap_or_default();
     let m = mode.trim();
@@ -126,7 +127,7 @@ fn shot_close(app: &mut App) {
     osd::hide(app, OsdKind::Shot);
 }
 
-/// run(): close, then ScreenShot.sh after the dialog has faded (settleMs).
+/// Close, then ScreenShot.sh once the dialog has faded (300 ms).
 fn shot_run(app: &mut App, args: String) {
     app.svc.capture.pending_shot = args;
     shot_close(app);
@@ -288,7 +289,7 @@ pub(crate) fn show(app: &mut App, kind: OsdKind) {
     let (cw, ch) = content_size(&mut app.fonts, &app.svc, kind == OsdKind::Record);
     let (pw, ph) = (cw + 2.0 * m.pad, ch + 2.0 * m.pad);
     let (x, y) = (ac(sw, pw), ac(sh, ph));
-    osd::show(app, OpenParams { kind, size: (pw.ceil() as u32, ph.ceil() as u32), panel: (0.0, 0.0, pw, ph), dim: Some(Color::qt_rgba(0.0, 0.0, 0.0, 0.5)), keyboard: true, namespace: "quickshell", fade_ms: FADE_MS, min_scale: 0.96, fade_easing: crate::anim::Easing::OutCubic, pos: Some((x as i32, y as i32)), fill: false, output: None });
+    osd::show(app, OpenParams { kind, size: (pw.ceil() as u32, ph.ceil() as u32), panel: (0.0, 0.0, pw, ph), dim: Some(Color::qt_rgba(0.0, 0.0, 0.0, 0.5)), keyboard: true, namespace: "rust-bar", fade_ms: FADE_MS, min_scale: 0.96, fade_easing: crate::anim::Easing::OutCubic, pos: Some((x as i32, y as i32)), fill: false, output: None });
 }
 
 /// The panel's size follows its content (monitors arrive, a switch flips).
@@ -395,8 +396,8 @@ fn caption_at<S: UiState>(ui: &mut Ui<S>, text: &str, size: f32) -> crate::text:
     ui.fonts.layout(text, theme::bar_font(true), size, 1.0)
 }
 
-/// BigButton: a key with an icon, a bold label and a hint, its key letter
-/// in the corner; lighter on hover, accent while held.
+/// A big key with an icon, a bold label and a hint, its key letter in the
+/// corner; lighter on hover, accent while held.
 #[allow(clippy::too_many_arguments)]
 fn big_button<S: UiState>(ui: &mut Ui<S>, id: u32, x: f32, y: f32, m: &M, icon: &str, label: &str, key: &str, hint: &str, down: bool) {
     let t = ui.theme;
@@ -428,8 +429,8 @@ fn big_button<S: UiState>(ui: &mut Ui<S>, id: u32, x: f32, y: f32, m: &M, icon: 
     ui.hits.push(Hit { x, y, w: m.btn_w, h: m.btn_h, action: Action::Card(id) });
 }
 
-/// ToggleRow: lamp, icon, bold label, key letter, and the ВКЛ/ВЫКЛ key on
-/// the right; the whole row is the hit area.
+/// A toggle row: lamp, icon, bold label, key letter, and the ВКЛ/ВЫКЛ key
+/// on the right; the whole row is the hit area.
 #[allow(clippy::too_many_arguments)]
 fn toggle_row<S: UiState>(ui: &mut Ui<S>, id: u32, x: f32, y: f32, w: f32, m: &M, icon: &str, label: &str, key: &str, checked: bool) {
     let t = ui.theme;
@@ -493,9 +494,9 @@ pub fn click(app: &mut App, kind: OsdKind, action: Action) {
 /// A press on the dialog, before the click machinery. Qt turns a second
 /// left press within 400 ms and 5 px of the first (MouseDoubleClickInterval
 /// and -Distance; another button in between breaks it) into a double
-/// click, delivered with that press: on a monitor tile, onDoubleClicked
-/// picks it and shoots (ShotOsd.qml:224-227, RecordOsd.qml:237-240), and
-/// no click follows on the release. True when it did.
+/// click, delivered with that press: a double click on a monitor tile
+/// picks it and shoots, and no click follows on the release. True when
+/// it did.
 pub fn press(app: &mut App, kind: OsdKind, button: u32, time: u32, x: f32, y: f32) -> bool {
     let c = &mut app.svc.capture;
     let double = button == 0x110 && c.last_press.map_or(false, |(t, px, py)| time.wrapping_sub(t) < 400 && (x - px).abs() <= 5.0 && (y - py).abs() <= 5.0);

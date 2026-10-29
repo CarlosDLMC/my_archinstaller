@@ -1,11 +1,12 @@
-//! The strip's dropdown cards (DropdownWidget + CardSurface + CardKeys).
+//! The strip's dropdown cards: the surface, the card's place under its icon
+//! and its keyboard navigation.
 //!
-//! As CardSurface.qml: one full-screen transparent layer surface with the card
-//! drawn in it at its place under the bar. A press anywhere outside the card
-//! closes it. The surface keeps its size while the card grows and shrinks:
-//! mango animates a layer whose size changes (a move, with the fade-in played
-//! again), and a card-sized surface flickered on every view change. mango
-//! blurs only under visible pixels, so only the card is blurred.
+//! One full-screen transparent layer surface with the card drawn in it at its
+//! place under the bar. A press anywhere outside the card closes it. The
+//! surface keeps its size while the card grows and shrinks: mango animates a
+//! layer whose size changes (a move, with the fade-in played again), and a
+//! card-sized surface flickered on every view change. mango blurs only under
+//! visible pixels, so only the card is blurred.
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -42,28 +43,27 @@ pub enum CardKind {
     Network,
 }
 
-/// A fixed origin for animations that run on the clock (Spinner).
+/// A fixed origin for animations that run on the clock (the spinner).
 pub static EPOCH: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
 
-/// What a bar keeps of a card QML makes once and only hides (see KEPT).
+/// What a bar keeps of a card that is made once and only hidden (see KEPT).
 struct Kept {
     output: WlOutput,
     kind: CardKind,
-    /// CardKeys' focused control when the card closed.
+    /// The keys' focused control when the card closed.
     focus: Option<u32>,
 }
 
 thread_local! {
-    /// CalendarPopup and CenterInfo's weather card are no Loaders: every bar
-    /// has its own of each, made once and only hidden when it closes
-    /// (CenterInfo.qml:903-911). The calendar's CardKeys keeps its focused
-    /// arrow, which the next opening by the mouse shows again: the window
-    /// gives its focus back down the focus scopes (QQuickWindow::
-    /// focusInEvent). Their Texts start subpixel at every opening all the
-    /// same: hiding a layer-shell PanelWindow deletes its QQuickWindow
-    /// (quickshell 0.3.2, WlrLayershell::deleteOnInvisible), so every node
-    /// is new when it shows again. Kept by the bar's output: a new output is
-    /// a new bar, and a gone one's state goes at the next closing.
+    /// The calendar and the weather card are not built anew at each opening
+    /// as the other cards are: every bar has its own of each, made once and
+    /// only hidden when it closes. The calendar keeps its focused arrow,
+    /// which the next opening by the mouse shows again: the window gives its
+    /// focus back down the focus scopes (QQuickWindow::focusInEvent). Their
+    /// Texts start subpixel at every opening all the same: hiding a
+    /// layer-shell window deletes it, so every node is new when it shows
+    /// again. Kept by the bar's output: a new output is a new bar, and a gone
+    /// one's state goes at the next closing.
     static KEPT: std::cell::RefCell<Vec<Kept>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
@@ -81,7 +81,7 @@ pub struct OpenCard {
     pub hits: Vec<Hit>,
     pub pointer: Option<(f32, f32)>,
     pub shift: bool,
-    /// Index into the card's focus chain (CardKeys), None = nothing focused.
+    /// Index into the card's keyboard focus chain, None = nothing focused.
     /// Code that sets it names the control at that place in the next draw's
     /// chain; after a draw it is where `focus_code` is.
     pub(crate) focus: Option<usize>,
@@ -110,13 +110,13 @@ pub struct OpenCard {
     colors: HashMap<u32, Animated<Color>>,
     /// Calendar: the month shown (year, month 1-12) and the wheel's remainder.
     month: (i32, u32),
-    /// Calendar: the date it opened on, the day it shows as today
-    /// (CalendarPopup.qml:33-39 sets currentDate when it opens, and only then).
+    /// Calendar: the date it opened on, the day it shows as today (set when
+    /// it opens, and only then).
     today: (i32, u32, u32),
     wheel_acc: f32,
     /// Sliders of the last draw: (code, x, width, maximum).
     pub(crate) sliders: Vec<(u32, f32, f32, f32)>,
-    /// LevelMeter: (level, hold, hold ticks left).
+    /// The level meter: (level, hold, hold ticks left).
     pub(crate) meter: (f32, f32, i32),
     /// The meter's segment count at the last draw (it follows the width).
     pub(crate) meter_cells: i32,
@@ -125,14 +125,15 @@ pub struct OpenCard {
     pub(crate) meter_at: Option<(f32, f32, f32)>,
     pub(crate) meter_node: bool,
     pub(crate) meter_win: Option<crate::audio_card::MeterWin>,
-    /// ConsoleButton.tint for the next button: colAlert (the mute buttons).
+    /// The next console buttons are lit in col_alert, not col_accent (the
+    /// mute buttons).
     pub(crate) tint_alert: bool,
     /// The control and button a press went down on in this card (its
     /// MouseArea's grab, which dies with the card): a release or a drag
     /// whose press began on a card closed since is not this card's.
     held: Option<(Action, u32)>,
     numbers: HashMap<u32, Animated<f32>>,
-    /// SegmentGauges of rows a Repeater made anew while the card is open
+    /// Segment gauges of rows a Repeater made anew while the card is open
     /// (agent.rs): gauge id -> the lit count of their first layout pass.
     pub(crate) gauge_from: HashMap<u32, i32>,
     /// The card's Flickable and ListViews: where each is scrolled to.
@@ -144,8 +145,8 @@ pub struct OpenCard {
     notch_stale: bool,
     /// The anchoring icon's centre on screen (for cards whose width changes).
     icon_center: f32,
-    /// The card's place on the screen: CardSurface's card.x and cardY (QML's
-    /// card x can be fractional, but it lands on whole pixels - measured).
+    /// The card's place on the screen, x and y (x can be fractional, but it
+    /// lands on whole pixels - measured).
     left: f32,
     top: f32,
     /// Which of the card's Texts have changed since it opened.
@@ -163,7 +164,7 @@ impl OpenCard {
         self.height
     }
 
-    /// The palette changed: repaint the notch in the new colBg.
+    /// The palette changed: repaint the notch in the new col_bg.
     pub fn invalidate_notch(&mut self) {
         self.notch_stale = true;
     }
@@ -188,7 +189,7 @@ impl OpenCard {
         self.colors.insert(id, Animated::new(from, ms, Easing::Linear));
     }
 
-    /// CardKeys.step: the next (or previous) control of the chain, wrapping
+    /// A step of the keys: the next (or previous) control of the chain, wrapping
     /// around; from the card's scope (nothing focused) the first (or last).
     fn step_focus(&mut self, forward: bool) {
         let n = self.focus_codes.len();
@@ -231,10 +232,10 @@ impl OpenCard {
     /// connectModel -> updateCurrent: setFocus): the new first row has it,
     /// scrolled to the top - checked against Qt 6.12. A focus left on a row
     /// that was no longer shown stays with the card's scope. (A first row
-    /// that is not pickable - the VPN tunnel in use - would show the focus
-    /// ring in QML; here it stays with the scope.) The rows' lamps and
-    /// texts start fresh; their backgrounds from transparent, as a new
-    /// delegate's, so hover and focus fade in on them. A press held on an
+    /// that is not pickable - the VPN tunnel in use - does not take it: the
+    /// focus stays with the scope.) The rows' lamps and texts start fresh;
+    /// their backgrounds from transparent, as a new delegate's, so hover and
+    /// focus fade in on them. A press held on an
     /// old row died with its delegate (its MouseArea's grab): the release
     /// clicks nothing, not the row now in its place - the Wi-Fi scans
     /// re-sort the list 1.4 s and 3.2 s after the card opens.
@@ -249,14 +250,14 @@ impl OpenCard {
             self.focus = None;
             self.focus_seen = None;
         }
-        // ConsoleRow's background (0x5_0000), ConsoleLamp's dot (0x4_0000) and halo (0x3_0000).
+        // The rows' backgrounds (0x5_0000), their lamps' dots (0x4_0000) and halos (0x3_0000).
         let row_key = |k: u32, kinds: &[u32]| kinds.contains(&(k >> 16)) && rows.contains(&(k & 0xFFFF));
         self.colors.retain(|k, _| !row_key(*k, &[4, 5]));
         for code in rows.clone().take(count) {
             self.colors.insert(0x5_0000 + code, Animated::new(Color::TRANSPARENT, 110, Easing::Linear));
         }
         self.numbers.retain(|k, _| !row_key(*k, &[3]));
-        // ConsoleRow's texts (text_of parts 0xC1-0xC4): the list cards have no other rows.
+        // The rows' texts (text_of parts 0xC1-0xC4): the list cards have no other rows.
         self.texts.forget_parts(&[0xC1, 0xC2, 0xC3, 0xC4]);
     }
 }
@@ -425,7 +426,7 @@ struct MouseDrag {
     press_time: u32,
     /// The pointer's last y and time, its velocity as QEventPoint estimates
     /// it for a device without the Velocity capability, and the Flickable's
-    /// last three samples of it (velocityBuffer, QML_FLICK_SAMPLEBUFFER).
+    /// last three samples of it (Qt's velocityBuffer).
     last: (f32, u32),
     velocity: f32,
     samples: [f32; 3],
@@ -627,29 +628,29 @@ pub(crate) const STEM_H: f32 = 12.0;
 const NOTCH_R: f32 = 10.0;
 const CARD_R: f32 = 12.0;
 
-/// popupWidth, popupHeight, stem alignment of each card.
+/// Width, height (0: measured from the content) and stem alignment of each card.
 fn geometry(kind: CardKind) -> (f32, f32, Stem) {
     match kind {
-        // PowerWidget: 210 wide; four 42 px buttons, spacing 6, + 28.
+        // Power: 210 wide; four 42 px buttons, spacing 6, + 28.
         CardKind::Power => (210.0, (4.0 * 42.0 + 3.0 * 6.0f32).ceil() + 28.0, Stem::Left),
-        // CalendarPopup: 400 wide; header 38 + 8 + plate (8 + 24 + 4 + 240 + 8) + 12 + 24.
+        // Calendar: 400 wide; header 38 + 8 + plate (8 + 24 + 4 + 240 + 8) + 12 + 24.
         CardKind::Calendar => (400.0, 38.0 + 8.0 + 284.0 + 12.0 + 24.0, Stem::Center),
-        // CenterInfo's weather card: 340 wide, its height is measured from the content.
+        // Weather: 340 wide, its height is measured from the content.
         CardKind::Weather => (340.0, 0.0, Stem::Center),
-        // VolumeWidget: 330 wide, max(120, min(content + 30, 560)) high.
+        // Audio: 330 wide, max(120, min(content + 30, 560)) high.
         CardKind::Audio => (330.0, 0.0, Stem::Center),
-        // PultWidget: 360 wide, content + 28 high, stem on the right.
+        // ПУЛЬТ: 360 wide, content + 28 high, stem on the right.
         CardKind::Pult => (360.0, 0.0, Stem::Right),
-        // VpnWidget: 260 wide, content + 28 high.
+        // VPN: 260 wide, content + 28 high.
         CardKind::Vpn => (260.0, 0.0, Stem::Center),
-        // AgentWidget: 420 wide, max(160, min(content + 30, 85% of the screen)).
+        // Agent: 420 wide, max(160, min(content + 30, 85% of the screen)).
         CardKind::Agent => (420.0, 0.0, Stem::Center),
-        // WifiWidget (networks): as wide as the longest SSID needs.
+        // Wi-Fi (networks): as wide as the longest SSID needs.
         CardKind::Wifi => (300.0, 0.0, Stem::Center),
-        // BatteryWidget: 440 wide, max(200, min(content + 30, 620)).
+        // Battery: 440 wide, max(200, min(content + 30, 620)).
         CardKind::Battery => (440.0, 0.0, Stem::Center),
-        // WifiWidget's details view (NetworkPanel): 520 wide, max(200,
-        // min(content + 30, 85% of the screen)).
+        // Wi-Fi's details view: 520 wide, max(200, min(content + 30, 85% of
+        // the screen)).
         CardKind::Network => (520.0, 0.0, Stem::Center),
     }
 }
@@ -668,8 +669,8 @@ pub fn toggle(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard:
     open(app, strip, kind, icon, keyboard);
 }
 
-/// WifiWidget.onOtherClicked (right click): the details view closes itself,
-/// the networks view turns into it in place, otherwise it opens.
+/// A right click on the Wi-Fi widget: the details view closes itself, the
+/// networks view turns into it in place, otherwise it opens.
 pub fn wifi_details(app: &mut App, strip: usize, icon: &Hit) {
     match app.card.as_ref().map(|c| (c.kind, c.strip)) {
         Some((CardKind::Network, s)) if s == strip => close(app),
@@ -681,7 +682,7 @@ pub fn wifi_details(app: &mut App, strip: usize, icon: &Hit) {
             card.focus = None;
             card.focus_code = None;
             card.focus_seen = None;
-            // NetworkPanel is new content: its Flickable starts at the top,
+            // The details view is new content: its Flickable starts at the top,
             // and no press on the old view is one on the new.
             card.flicks.clear();
             card.held = None;
@@ -754,7 +755,7 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         content_h = crate::agent::content_height(&mut app.fonts, &app.svc, w, false);
         h = 160f32.max((content_h.ceil() + 30.0).min(s.screen_height * 0.85));
     }
-    // DropdownWidget.cardX: from the icon's centre on the screen.
+    // The card's x: from the icon's centre on the screen.
     let (icon_center, stem_w, card_x) = anchor(kind, icon, w, ui);
     let x = card_x.min(s.screen_width - w).max(0.0);
     let y = crate::bar::strip_height(s.screen_width) as f32 + 2.0;
@@ -762,15 +763,13 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
     let output = s.output.clone();
     let (screen_w, screen_h) = (s.screen_width as u32, s.screen_height as u32);
     let today = crate::cal::today();
-    // CardKeys.focusFirst() runs once, when the Loader has built the card
-    // (DropdownWidget.qml:184, Qt.callLater), before the process the opening
-    // starts has answered: the Wi-Fi networks (WifiWidget.qml:199,306) and
-    // the VPN configs (VpnWidget.qml:29,92) are the last opening's, none at
-    // the first, and the disconnect / off button shows only on a link
-    // (WifiWidget.qml:511, VpnWidget.qml:378). With nothing to focus the
-    // keys stay with the card's scope. The index below is resolved at the
-    // first draw, by when that process may have answered: its rows must not
-    // take the focus.
+    // The first control takes the focus once, right after the card is
+    // built, before the process the opening starts has answered: the Wi-Fi
+    // networks and the VPN configs are the last opening's, none at the
+    // first, and the disconnect / off button shows only on a link. With
+    // nothing to focus the keys stay with the card's scope. The index below
+    // is resolved at the first draw, by when that process may have
+    // answered: its rows must not take the focus.
     let first = match kind {
         CardKind::Wifi => app.svc.wifi.connected || !app.svc.wifi_card.networks.is_empty(),
         CardKind::Vpn => !app.svc.vpn.is_empty() || !app.svc.vpn_card.configs.is_empty(),
@@ -778,7 +777,7 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
     };
 
     let surface = app.compositor.create_surface(&app.qh);
-    let layer = app.layer_shell.create_layer_surface(&app.qh, surface, Layer::Top, Some("quickshell:card"), Some(&output));
+    let layer = app.layer_shell.create_layer_surface(&app.qh, surface, Layer::Top, Some("rust-bar:card"), Some(&output));
     layer.set_anchor(Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT);
     layer.set_exclusive_zone(-1);
     layer.set_keyboard_interactivity(KeyboardInteractivity::Exclusive);
@@ -833,7 +832,7 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         let output = &app.strips[strip].output;
         let kept = KEPT.with_borrow_mut(|v| v.iter().position(|k| k.kind == kind && k.output == *output).map(|i| v.swap_remove(i)));
         if let (Some(k), Some(card)) = (kept, app.card.as_mut()) {
-            // A keyboard opening focuses the first control (focusFirst).
+            // A keyboard opening focuses the first control.
             if !keyboard {
                 card.focus_code = k.focus;
             }
@@ -856,11 +855,10 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
 }
 
 pub fn close(app: &mut App) {
-    // The agent card's tick (AgentPanel.qml nowTick, AgentUsage.qml:149-154):
-    // QML's Timers run while the card is open (running: cardOpen) and stop
-    // when it closes. The mic meter's Timer is audio_card's one clock
-    // (start_meter, after the card's first draw), which ends at its first
-    // tick without the audio card.
+    // The agent card's tick runs while the card is open and stops when it
+    // closes. The mic meter's Timer is audio_card's one clock (start_meter,
+    // after the card's first draw), which ends at its first tick without
+    // the audio card.
     app.cancel_timer(crate::agent::TICK);
     if app.card.as_ref().map(|c| c.kind) == Some(CardKind::Pult) {
         crate::pult::closed(app);
@@ -912,7 +910,7 @@ pub fn update_height(app: &mut App) {
             let h = crate::wifi_card::card_height(&mut app.fonts, &app.svc);
             let card = app.card.as_mut().unwrap();
             if (w - card.width).abs() >= 0.5 {
-                // popupWidth moved: the centred card moves with it.
+                // The width changed: the centred card moves with it.
                 let screen_w = app.strips.get(card.strip).map_or(2560.0, |s| s.screen_width);
                 let x = (card.icon_center - w / 2.0).min(screen_w - w).max(0.0).round();
                 card.width = w;
@@ -957,13 +955,13 @@ pub fn update_height(app: &mut App) {
             120f32.max((content.ceil() + 30.0).min(560.0))
         }
         CardKind::Weather => {
-            // CenterInfo's card: open: popupVisible && !!weatherText - a
-            // reading with no text closes it.
+            // The weather card is open only while there is a weather text:
+            // a reading with no text closes it.
             if app.svc.weather.text.is_empty() {
                 close(app);
                 return;
             }
-            // cardX and the stem follow the pill as the strip draws it
+            // The card's x and the stem follow the pill as the strip draws it
             // (follow_strip).
             let w = card.width;
             weather_height(&mut app.fonts, &app.svc, w)
@@ -994,11 +992,11 @@ pub(crate) fn icon_action(kind: CardKind) -> Action {
 }
 
 /// From the icon's hit on the strip: its centre on the screen, the stem's
-/// width and cardX. DropdownWidget: rawStemWidth (int) = the icon + 16, kept
-/// clear of the notch corners, cardX by stemAlignment; CalendarPopup: a
-/// fixed 60 px stem, cardX = anchorX (int) - 200; CenterInfo's weather card:
-/// the stem is the pill's width (int), the card centred on the pill
-/// (CenterInfo.qml:638-647).
+/// width and the card's x. A dropdown card: the stem is the icon + 16
+/// (int), kept clear of the notch corners, x by the stem's alignment; the
+/// calendar: a fixed 60 px stem, x = the icon's centre (int) - 200; the
+/// weather card: the stem is the pill's width (int), the card centred on
+/// the pill.
 fn anchor(kind: CardKind, icon: &Hit, w: f32, ui: f32) -> (f32, f32, f32) {
     let icon_w = icon.w / ui;
     let center = icon.x + icon.w / 2.0;
@@ -1026,14 +1024,12 @@ fn stem_center(stem: Stem, w: f32, stem_w: f32) -> f32 {
     }
 }
 
-/// The card follows its icon. cardX, the stem's width and cardY are
-/// bindings on the strip's layout and the screen (DropdownWidget.qml cardX
-/// and rawStemWidth, CalendarPopup's anchorX, CenterInfo.qml:638-647,
-/// CardSurface.qml:26-30), and CardSurface keeps the card on the screen
-/// (CardSurface.qml:55-58): after each draw of the card's strip - a new
-/// weather reading, a volume of 100%, CPU digits moving the widgets left of
-/// them, a new mode of the output - the card takes its icon's new place.
-/// It redraws only when its place or its stem changed.
+/// The card follows its icon. Its x, the stem's width and its y follow the
+/// strip's layout and the screen, and the card is kept on the screen: after
+/// each draw of the card's strip - a new weather reading, a volume of 100%,
+/// CPU digits moving the widgets left of them, a new mode of the output -
+/// the card takes its icon's new place. It redraws only when its place or
+/// its stem changed.
 pub fn follow_strip(app: &mut App) {
     let Some(card) = app.card.as_ref() else { return };
     let Some(s) = app.strips.get(card.strip) else { return };
@@ -1058,16 +1054,16 @@ pub fn follow_strip(app: &mut App) {
     card.win.dirty = true;
 }
 
-/// Whether a point of the card's surface is on the card (CardSurface's card
-/// item, whose MouseArea takes every click on it) rather than around it.
+/// Whether a point of the card's surface is on the card (which takes every
+/// click on it) rather than around it.
 pub fn inside(app: &App, x: f32, y: f32) -> bool {
     app.card.as_ref().map_or(false, |c| x >= c.left && x < c.left + c.width && y >= c.top && y < c.top + c.height)
 }
 
 // ---- drawing ----
 
-/// The card outline, as DropdownWidget's Canvas paints it: HTML canvas
-/// arcTo corners, filled with Theme.colBg, anti-aliased like QPainter.
+/// The card outline, as a Qt Quick Canvas paints it: HTML canvas arcTo
+/// corners, filled with col_bg, anti-aliased like QPainter.
 fn notch_mask(w: f32, h: f32, cx: f32, sw: f32) -> (Vec<u8>, u32, u32) {
     let mut p = CanvasPath::default();
     let (sh, nr, r) = (STEM_H, NOTCH_R, CARD_R);
@@ -1243,14 +1239,14 @@ impl<S: UiState> Ui<'_, S> {
         self.scene.text(self.fonts, line, x, y + line.ascent, color, style);
     }
 
-    /// ConsoleButton: a key on the console - plate colour, white focus ring,
+    /// A console button: a key on the console - plate colour, white focus ring,
     /// shadow lip, icon + bold caption centred one pixel high.
     #[allow(clippy::too_many_arguments)]
     pub fn console_button(&mut self, id: u32, x: f32, y: f32, w: f32, icon: &str, icon_color: Color, label: &str, current: bool) {
         self.console_button_sized(id, x, y, w, FONT_SIZE - 4.0, icon, icon_color, label, current);
     }
 
-    /// ConsoleButton.implicitWidth: max(minWidth, face + 26).
+    /// A console button's implicitWidth: max(min_width, face + 26).
     pub fn console_button_width(&mut self, font: f32, icon: &str, label: &str, min_width: f32) -> f32 {
         let icon_box = font + 2.0;
         let cap = if label.is_empty() { 0.0 } else { self.fonts.layout(label, theme::bar_font(true), font, 0.0).width };
@@ -1267,7 +1263,7 @@ impl<S: UiState> Ui<'_, S> {
         self.console_button_ex(id, x, y, w, font, icon, icon_color, label, current, false, true);
     }
 
-    /// ConsoleButton with busy (a Spinner where the icon is) and enabled
+    /// A console button with busy (a spinner where the icon is) and enabled
     /// (opacity .45, not in the focus chain, not clickable).
     #[allow(clippy::too_many_arguments)]
     pub fn console_button_ex(&mut self, id: u32, x: f32, y: f32, w: f32, font: f32, icon: &str, icon_color: Color, label: &str, current: bool, busy: bool, enabled: bool) {
@@ -1373,10 +1369,10 @@ impl Ui<'_, OpenCard> {
     /// the control base + i and is drawn at row_y(i); `pickable` says which
     /// rows take the keys' focus. `sig` is the model's value (model_sig): a
     /// different one is a new model, scrolled back to the top. When the keys
-    /// move to a row, the list scrolls it into view (ConsoleRow:
-    /// positionViewAtIndex(index, ListView.Contain)). Every row stays in the
-    /// focus chain, in order, which is how ConsoleRow.stepInList/entryRow walk
-    /// it. Ends with view_end().
+    /// move to a row, the list scrolls it into view
+    /// (positionViewAtIndex(index, ListView.Contain)). Every row stays in the
+    /// focus chain, in order, which is how the keys walk the list, row by row
+    /// and into it. Ends with view_end().
     #[allow(clippy::too_many_arguments)]
     pub fn list_begin(&mut self, base: u32, x: f32, y: f32, w: f32, shown: usize, count: usize, row_h: f32, spacing: f32, sig: u64, pickable: impl Fn(usize) -> bool) -> View {
         let now = self.now;
@@ -1395,8 +1391,8 @@ impl Ui<'_, OpenCard> {
         // The rows the list is scrolled to, one after the other, first to
         // last (positionViewAtIndex(n, ListView.Contain) each). An index set
         // by code (a keyboard open) names its row, counting the pickable rows
-        // from here. The keys (CardKeys.step, ConsoleRow.stepInList and
-        // entryRow) pass every row on their way, pickable or not: in the list,
+        // from here. The keys (along the chain, within the list, or into it)
+        // pass every row on their way, pickable or not: in the list,
         // the rows after the one they left; coming in, the rows from the end
         // they enter at; going out, the rest of the list that way. A model
         // replaced this frame came after the keys: it starts at the top.
@@ -1476,7 +1472,7 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
             gpu.drop_image(id);
         }
         let (mask, iw, ih) = notch_mask(w, h, card.stem_cx, card.stem_w);
-        // Premultiplied colBg through the coverage.
+        // Premultiplied col_bg through the coverage.
         let bg = theme.col_bg;
         let mut rgba = Vec::with_capacity(mask.len() * 4);
         for m in mask {
@@ -1499,8 +1495,8 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
     if card.kind == CardKind::Wifi && card.wifi_password != svc.wifi_card.password_mode {
         card.wifi_password = svc.wifi_card.password_mode;
         if card.wifi_password {
-            // WifiWidget: passwordInput.forceActiveFocus() - enter_password
-            // set the field's index in the chain this draw makes.
+            // The password field takes the focus (forceActiveFocus()):
+            // enter_password set the field's index in the chain this draw makes.
             card.focus_seen = None;
         } else {
             // The field and its keys hide: the keys go to the card's scope.
@@ -1513,7 +1509,7 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
     card.flicks.iter_mut().for_each(|f| f.rect = None);
     card.hover_clip = None;
     let mut ui = Ui { card, scene, fonts, theme, now: Instant::now(), animating: false, hits: Vec::new(), focus_codes: Vec::new() };
-    // The Loader's margins: top stemHeight + 8, 8 around.
+    // The content's margins: top STEM_H + 8, 8 around.
     let (cx, cy, cw) = (8.0, STEM_H + 8.0, w - 16.0);
     match ui.card.kind {
         CardKind::Power => {
@@ -1578,7 +1574,7 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
     card.pointer = pointer;
     card.hits = hits.into_iter().map(|h| Hit { x: h.x + ox, y: h.y + oy, ..h }).collect();
     card.sliders.iter_mut().for_each(|s| s.1 += ox);
-    // CardKeys' focus is on a control, not a place in the chain: it follows
+    // The keys' focus is on a control, not a place in the chain: it follows
     // its control when the chain changes; a control that left the chain
     // (disabled, hidden) leaves the keys with the card's scope until it is
     // back. An index set by code since the last draw names the control at
@@ -1593,8 +1589,7 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
     animating
 }
 
-/// ConsolePlate: the recessed plate, with its 1 px highlight along the bottom.
-/// ConsoleLamp in its 10 x 10 slot at (x, y): halo and dot fade over 160 ms.
+/// A lamp in its 10 x 10 slot at (x, y): halo and dot fade over 160 ms.
 pub(crate) fn lamp<S: UiState>(ui: &mut Ui<S>, id: u32, x: f32, y: f32, lit: bool) {
     let tint = ui.theme.col_accent;
     lamp_tinted(ui, id, x, y, lit, tint);
@@ -1615,15 +1610,15 @@ pub(crate) fn lamp_tinted<S: UiState>(ui: &mut Ui<S>, id: u32, x: f32, y: f32, l
     ui.scene.rect(x + ac(10.0, 9.0), y + ac(10.0, 9.0), 9.0, 9.0, dot, 4.5, 1.0, border, true);
 }
 
-/// ConsoleRow: lamp, optional icon, label (elided), optional detail and a
-/// trailing text (an emoji flag), laid out by its RowLayout.
+/// A console row: lamp, optional icon, label (elided), optional detail and a
+/// trailing text (an emoji flag), laid out as a RowLayout lays them out.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn console_row<S: UiState>(ui: &mut Ui<S>, code: u32, x: f32, y: f32, w: f32, h: f32, icon: &str, label: &str, lit: bool, interactive: bool, detail: Option<(&str, Color)>, trailing: Option<&str>) {
     let tint = ui.theme.col_accent;
     console_row_inner(ui, code, x, y, w, h, icon, label, lit, interactive, tint, detail, trailing.map(|t| (t, None)));
 }
 
-/// ConsoleRow with a lamp tint and a trailing glyph in the bar font (the lock).
+/// A console row with a lamp tint and a trailing glyph in the bar font (the lock).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn console_row_full<S: UiState>(ui: &mut Ui<S>, code: u32, x: f32, y: f32, w: f32, h: f32, icon: &str, label: &str, lit: bool, interactive: bool, tint: Color, detail: Option<(&str, Color)>, trailing: Option<(&str, Color)>) {
     console_row_inner(ui, code, x, y, w, h, icon, label, lit, interactive, tint, detail, trailing.map(|(s, c)| (s, Some(c))));
@@ -1652,14 +1647,14 @@ fn console_row_inner<S: UiState>(ui: &mut Ui<S>, code: u32, x: f32, y: f32, w: f
     // Row is a cell (and a spacing) even when its Text is empty.
     let mut right = x + w - 6.0;
     match trailing {
-        // The VPN card's flag: a Text with the app font at fontSize + 2.
+        // The VPN card's flag: a Text with the app font at FONT_SIZE + 2.
         Some((tr, None)) => {
             let tl = ui.fonts.layout(tr, theme::FontKey { family: "Fira Code:medium", bold: false, plain: false }, FONT_SIZE + 2.0, 0.0);
             right -= tl.width.ceil();
             ui.text_of(code, 0xC2, &tl, right, y + qround((h - tl.height()) / 2.0), t.col_white);
             right -= 8.0;
         }
-        // The Wi-Fi lock: Terminess at fontSize - 4.
+        // The Wi-Fi lock: Terminess at FONT_SIZE - 4.
         Some((tr, Some(col))) => {
             let tl = ui.fonts.layout(tr, theme::bar_font(false), FONT_SIZE - 4.0, 0.0);
             right -= tl.width.ceil();
@@ -1687,12 +1682,12 @@ fn qround(v: f32) -> f32 {
     (v + 0.5).floor()
 }
 
-/// ConsoleCaption: bold, fontSize - 5, letterSpacing 1.
+/// A caption: bold, FONT_SIZE - 5, letter spacing 1.
 pub(crate) fn caption(fonts: &mut Fonts, text: &str) -> crate::text::Line {
     fonts.layout(text, theme::bar_font(true), FONT_SIZE - 5.0, 1.0)
 }
 
-/// SegmentGauge: 28 cells, 2 px apart, the lit ones fading over 200 ms;
+/// A segment gauge: 28 cells, 2 px apart, the lit ones fading over 200 ms;
 /// a white 2 px marker (when 0 < marker < 100).
 pub(crate) fn gauge<S: UiState>(ui: &mut Ui<S>, x: f32, y: f32, w: f32, value: f32, marker: f32, tint: Color) {
     const SEGMENTS: u32 = 28;
@@ -1710,7 +1705,7 @@ pub(crate) fn gauge<S: UiState>(ui: &mut Ui<S>, x: f32, y: f32, w: f32, value: f
     }
 }
 
-/// An InfoGrid label/value pair: GLabel text, GValue text and colour.
+/// An info grid's label/value pair: label text, value text and colour.
 pub(crate) type GridPair<'a> = (&'a str, String, Color);
 
 const GRID_LABEL: f32 = FONT_SIZE - 4.0;
@@ -1726,17 +1721,17 @@ pub(crate) fn info_grid_height(fonts: &mut Fonts, rows: usize) -> f32 {
     rows as f32 * grid_row_h(fonts) + rows.saturating_sub(1) as f32 * 4.0
 }
 
-/// A card's only InfoGrid (the battery card's): see info_grid_of.
+/// A card's only info grid (the battery card's): see info_grid_of.
 pub(crate) fn info_grid<S: UiState>(ui: &mut Ui<S>, x: f32, y: f32, w: f32, rows: &[Vec<GridPair>]) {
     info_grid_of(ui, 0, x, y, w, rows);
 }
 
-/// InfoGrid: four columns (label, value, label, value), spacing 14 x 4; the
-/// values (preferredWidth 0, fillWidth) share what the labels leave and are
-/// right-aligned, elided. A row of one pair spans its value over the rest.
-/// Each GLabel and GValue is an item of its own (NetworkPanel.qml:469-489),
-/// so their texts are keyed by the grid, `id` (a card's grids 0x100 apart),
-/// and the cell: a grid in one view never takes over another view's texts.
+/// An info grid: four columns (label, value, label, value), spacing 14 x 4;
+/// the values (preferredWidth 0, fillWidth) share what the labels leave and
+/// are right-aligned, elided. A row of one pair spans its value over the
+/// rest. Each label and value is an item of its own, so their texts are
+/// keyed by the grid, `id` (a card's grids 0x100 apart), and the cell: a
+/// grid in one view never takes over another view's texts.
 pub(crate) fn info_grid_of<S: UiState>(ui: &mut Ui<S>, id: u32, x: f32, y: f32, w: f32, rows: &[Vec<GridPair>]) {
     let t = ui.theme;
     let lkey = theme::bar_font(false);
@@ -1766,7 +1761,7 @@ pub(crate) fn info_grid_of<S: UiState>(ui: &mut Ui<S>, id: u32, x: f32, y: f32, 
     }
 }
 
-/// The text_of parts of an InfoGrid's GLabel and GValue.
+/// The text_of parts of an info grid's label and value.
 const GRID_TEXTS: [u64; 2] = [0xD5, 0xD6];
 
 /// QGridLayoutRowData::calculateGeometries with snapToPixelGrid: each cell's
@@ -1807,6 +1802,7 @@ fn snap_cells(pos: &mut [f32], size: &mut [f32], spacing: f32, target: f32, mini
     }
 }
 
+/// The recessed plate, with its 1 px highlight along the bottom.
 pub(crate) fn plate<S: UiState>(ui: &mut Ui<S>, x: f32, y: f32, w: f32, h: f32) {
     ui.scene.rect(x, y, w, h, ui.theme.col_plate, 5.0, 0.0, Color::TRANSPARENT, true);
     ui.scene.fill(x + 5.0, y + h - 1.0, w - 10.0, 1.0, Color::qt_rgba(1.0, 1.0, 1.0, 0.07));
@@ -1872,7 +1868,8 @@ fn draw_calendar(ui: &mut Ui, w: f32) {
     }
 }
 
-/// CenterInfo.getConditionColor
+/// The weather condition's tint, by keyword (sun or clear, cloud, rain,
+/// storm, snow, fog, wind); the palette's foreground for anything else.
 fn condition_color(cond: &str, t: &Theme) -> Color {
     let c = cond.to_lowercase();
     let hex = if c.contains("sun") || c.contains("clear") {
@@ -1962,7 +1959,7 @@ fn weather_height(fonts: &mut Fonts, svc: &Services, w: f32) -> f32 {
     let plates = [l.p1, l.p2, l.p3];
     let shown: Vec<f32> = plates.iter().copied().filter(|h| *h > 0.0).collect();
     let content = shown.iter().sum::<f32>() + 8.0 * (shown.len().saturating_sub(1)) as f32;
-    // Column (from STEM_H + 12) + bottom margin 12; cardHeight = implicitHeight + 12 + 24.
+    // Column (from STEM_H + 12) + bottom margin 12; the card's height = implicitHeight + 12 + 24.
     (content + 12.0 + 24.0).ceil()
 }
 
@@ -2043,10 +2040,10 @@ fn calendar_step(app: &mut App, delta: i32) {
     }
 }
 
-/// A VolumeSlider under the pointer takes the wheel first: 5% an event, by
-/// the angle's sign (VolumeSlider.qml:129-133). Every fader spans the same
-/// x, so the hit under the pointer (the top one, as app.rs hit_at finds it)
-/// says which; one scrolled out of view has no hit there.
+/// A volume slider under the pointer takes the wheel first: 5% an event, by
+/// the angle's sign. Every fader spans the same x, so the hit under the
+/// pointer (the top one, as app.rs hit_at finds it) says which; one
+/// scrolled out of view has no hit there.
 fn slider_wheel(app: &mut App, angle_delta_y: f32) -> bool {
     let Some(c) = app.card.as_ref().filter(|c| c.kind == CardKind::Audio) else { return false };
     let over = c.pointer.and_then(|(px, py)| c.hits.iter().rev().find(|h| h.contains(px, py))).and_then(|h| match h.action {
@@ -2075,7 +2072,7 @@ fn flicks_at(c: &OpenCard, p: Option<(f32, f32)>) -> Vec<usize> {
     [false, true].iter().filter_map(|&body| c.flicks.iter().position(|f| (f.id == BODY) == body && under(f))).collect()
 }
 
-/// A wheel turn over the card (QML angleDelta: +120 per notch away from you),
+/// A wheel turn over the card (Qt's angleDelta: +120 per notch away from you),
 /// at the event's `time`.
 pub fn wheel(app: &mut App, angle_delta_y: f32, time: u32) {
     if slider_wheel(app, angle_delta_y) {
@@ -2154,7 +2151,7 @@ pub fn finger_scroll(app: &mut App, s: Scroll) {
     }
 }
 
-/// CalendarPopup's wheel: a month a notch's angle, summed (CalendarPopup.qml:72-86).
+/// The calendar's wheel: a month a notch's angle, summed.
 fn calendar_wheel(app: &mut App, angle_delta_y: f32) {
     let Some(c) = app.card.as_mut().filter(|c| c.kind == CardKind::Calendar) else { return };
     c.wheel_acc += angle_delta_y;
@@ -2302,7 +2299,7 @@ pub fn drag(app: &mut App, action: Action, x: f32) {
     }
 }
 
-/// A VolumeSlider under the left button follows the pointer.
+/// A volume slider under the left button follows the pointer.
 fn slide(app: &mut App, action: Action, x: f32) {
     if let (Action::Card(code), Some(card)) = (action, app.card.as_ref()) {
         if card.kind == CardKind::Audio && crate::audio_card::is_slider(code) {
@@ -2366,7 +2363,7 @@ fn power_pick(app: &mut App, i: u32, keyboard: bool) {
         _ => "systemctl poweroff",
     };
     if keyboard {
-        // armEnd(): by keyboard these arm the power menu's countdown on that
+        // By keyboard these arm the power menu's countdown on that
         // order (a stray "Up, Enter" used to power off on the spot).
         close(app);
         let k = ["L", "E", "R", "S"][i.min(3) as usize];
@@ -2378,7 +2375,7 @@ fn power_pick(app: &mut App, i: u32, keyboard: bool) {
         return;
     }
     close(app);
-    // endSession(): the card closes, the CRT effect starts 250 ms later.
+    // By the mouse: the card closes, the CRT effect starts 250 ms later.
     let full = format!("{crt}{cmd}");
     app.svc.pending_end = full;
     app.after(Duration::from_millis(250), |app| {
@@ -2387,13 +2384,13 @@ fn power_pick(app: &mut App, i: u32, keyboard: bool) {
     });
 }
 
-/// CardKeys: Esc closes, Tab/arrows walk the focus chain, Return/Enter/Space press.
+/// The card's keys: Esc closes, Tab/arrows walk the focus chain, Return/Enter/Space press.
 pub fn key(app: &mut App, sym: Keysym, mods: crate::app::Mods, utf8: Option<&str>) {
     if app.card.as_ref().map(|c| c.kind) == Some(CardKind::Wifi) && crate::wifi_card::input_key(app, sym, mods, utf8) {
         return;
     }
     let Some(card) = app.card.as_mut() else { return };
-    // A focused VolumeSlider takes Left/Right and its mute keys first.
+    // A focused volume slider takes Left/Right and its mute keys first.
     let focused = card.focus.and_then(|f| card.focus_codes.get(f).copied());
     if card.kind == CardKind::Audio {
         if let Some(code) = focused.filter(|c| crate::audio_card::is_slider(*c)) {

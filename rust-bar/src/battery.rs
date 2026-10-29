@@ -1,5 +1,5 @@
-//! BatteryState.qml + BatteryPanel.qml: the system batteries read straight
-//! from sysfs (energy-weighted level, state, prediction, charge limit), kept
+//! The battery state and card: the system batteries read straight from
+//! sysfs (energy-weighted level, state, prediction, charge limit), kept
 //! fresh by the kernel's power_supply uevents, and the battery card.
 
 use crate::app::App;
@@ -87,9 +87,8 @@ fn read_int(path: &str) -> i64 {
     std::fs::read_to_string(path).ok().and_then(|t| t.trim().parse().ok()).unwrap_or(0)
 }
 
-/// Probe + the minute timer + the uevent socket (`udevadm monitor` in QML).
-/// Both only with a battery, as their `running: root.present`
-/// (BatteryState.qml:429, 462): a desktop does not wake for them.
+/// Probe + the minute timer + the uevent socket. Both only with a battery
+/// present: a desktop does not wake for them.
 pub fn start(app: &mut App) {
     probe(app);
     if app.svc.battery.present {
@@ -101,7 +100,7 @@ pub fn start(app: &mut App) {
     }
 }
 
-/// probeProc: the system batteries, the mains supply, the limit helper.
+/// The probe: the system batteries, the mains supply, the limit helper.
 fn probe(app: &mut App) {
     let b = &mut app.svc.battery;
     b.paths.clear();
@@ -298,7 +297,7 @@ pub fn refresh(app: &mut App, with_limits: bool) {
     }
 }
 
-/// setLimit(): through the root helper, then re-read the thresholds.
+/// Sets the charge limit through the root helper, then re-reads the thresholds.
 fn set_limit(app: &mut App, percent: i64) {
     if !app.svc.battery.limit_writable() || app.is_running("battery-limit") {
         return;
@@ -323,7 +322,7 @@ pub const LIMIT: u32 = 0x10;
 /// TextMemo parts of a pack row's Texts (name, model, stats), named by row.
 const PACK_TEXTS: [u64; 3] = [0xA9, 0xAA, 0xAB];
 /// TextMemo parts of the wrapped Texts: one Text each, one verdict for all
-/// its lines (BatteryPanel.qml:355-378, 382-391).
+/// its lines.
 const NOTE_TEXT: u64 = 0xAC;
 const WARN_TEXT: u64 = 0xAD;
 
@@ -443,7 +442,7 @@ pub fn content_height(fonts: &mut Fonts, svc: &Services, w: f32) -> f32 {
     bl.iter().map(|b| b.1).sum::<f32>() + 8.0 * (bl.len() as f32 - 1.0)
 }
 
-/// popupHeight: max(200, min(ceil(content) + 30, 620)).
+/// The card's height: max(200, min(ceil(content) + 30, 620)).
 pub fn card_height(fonts: &mut Fonts, svc: &Services, w: f32) -> f32 {
     200f32.max((content_height(fonts, svc, w).ceil() + 30.0).min(620.0))
 }

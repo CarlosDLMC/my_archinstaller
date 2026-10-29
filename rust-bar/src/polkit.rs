@@ -1,8 +1,8 @@
-//! PolkitState + PolkitOsd, and the agent quickshell's PolkitAgent was: the
-//! bar registers as the session's polkit authentication agent on the system
-//! bus, queues BeginAuthentication requests, runs each through polkit's
-//! helper (the socket-activated polkit-agent-helper-1, as libpolkit-agent-1
-//! does) and asks for the password in its own dialog.
+//! The polkit agent and its dialog: the bar registers as the session's
+//! polkit authentication agent on the system bus, queues BeginAuthentication
+//! requests, runs each through polkit's helper (the socket-activated
+//! polkit-agent-helper-1, as libpolkit-agent-1 does) and asks for the
+//! password in its own dialog.
 
 use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
@@ -52,7 +52,7 @@ struct Session {
     buf: Vec<u8>,
 }
 
-/// AuthFlow: the active request and what the helper last asked.
+/// The authentication flow: the active request and what the helper last asked.
 pub struct Flow {
     req: Request,
     user: String,
@@ -75,7 +75,7 @@ pub struct Polkit {
     pub flow: Option<Flow>,
     /// Helper sockets of ended sessions, open until the next loop turn.
     closed: Vec<UnixStream>,
-    /// PolkitState.error / checking, and the password field.
+    /// The dialog's error line, its checking state, and the password field.
     pub error: String,
     pub checking: bool,
     pub field: String,
@@ -254,7 +254,7 @@ fn dbus_ready(app: &mut App) {
     }
 }
 
-/// initiateAuthentication(): queue it; start it if nothing else runs.
+/// BeginAuthentication: queue it; start it if nothing else runs.
 fn begin(app: &mut App, call: Message) {
     type Args = (String, String, String, HashMap<String, String>, String, Vec<(String, PropMap)>);
     let Ok((action_id, message, _icon, _details, cookie, identities)) = call.read_all::<Args>() else {
@@ -273,7 +273,7 @@ fn begin(app: &mut App, call: Message) {
     }
 }
 
-/// activateAuthenticationRequest(): the next queued request becomes the flow.
+/// The next queued request becomes the flow.
 fn activate(app: &mut App) {
     while let Some(req) = app.svc.polkit.queue.pop_front() {
         let Some(user) = req.uids.first().and_then(|&u| user_name(u)) else {
@@ -296,7 +296,7 @@ fn activate(app: &mut App) {
     }
 }
 
-/// setupSession(): a fresh conversation with the helper.
+/// A fresh conversation with the helper.
 fn setup_session(app: &mut App) {
     close_session(app);
     let Some(f) = app.svc.polkit.flow.as_ref() else { return };
@@ -437,7 +437,7 @@ fn helper_ready(app: &mut App) {
     }
 }
 
-/// The field's `enabled` (PolkitOsd.qml:168): it has the keyboard focus then.
+/// Whether the field is enabled: it has the keyboard focus then.
 fn enabled(p: &Polkit) -> bool {
     p.flow.as_ref().map_or(false, |f| f.response_required) && !p.checking
 }
@@ -449,7 +449,7 @@ fn request(app: &mut App, prompt: &str, echo: bool) {
         f.response_required = true;
         f.input_prompt = prompt.into();
         f.response_visible = echo;
-        // onIsResponseRequiredChanged: a prompt ends the checking state.
+        // A prompt ends the checking state.
         p.checking = false;
     }
     // Enabled again, the field gets the focus back: focusInEvent shows the
@@ -469,7 +469,7 @@ fn supplementary(app: &mut App, msg: &str, is_error: bool) {
     redraw(app);
 }
 
-/// AuthFlow::completed(): success answers polkitd; a cancel just ends; a
+/// The conversation ended: success answers polkitd; a cancel just ends; a
 /// failure says so and starts a new conversation.
 fn completed(app: &mut App, gained: bool) {
     close_session(app);
@@ -490,11 +490,11 @@ fn completed(app: &mut App, gained: bool) {
     }
 }
 
-/// finishAuthenticationRequest(): the dialog goes, the next one comes.
+/// The flow is over: the dialog goes, the next one comes.
 fn finish(app: &mut App) {
     app.svc.polkit.flow = None;
     clear_field(&mut app.svc.polkit);
-    // PolkitState.onFlowChanged.
+    // The error and the checking state go with the flow.
     app.svc.polkit.error.clear();
     app.svc.polkit.checking = false;
     osd::hide(app, OsdKind::Polkit);
@@ -510,7 +510,7 @@ fn reply_cancelled(app: &mut App, text: &str) {
     }
 }
 
-/// cancelAuthenticationRequest(): Esc.
+/// Esc: the request is cancelled.
 pub fn cancel(app: &mut App) {
     let Some(f) = app.svc.polkit.flow.as_mut() else { return };
     f.cancelled = true;
@@ -582,9 +582,9 @@ fn met() -> M {
 const CONTENT: FontKey = FontKey { family: theme::FONT_CONTENT, bold: false, plain: false };
 const FIELD: FontKey = FontKey { family: theme::FONT_CONTENT, bold: false, plain: true };
 
-/// What the dialog shows of the flow. Once PolkitState.flow is null - the
-/// card fading out after its request ended - QML's bindings read "" and
-/// false: no message, no action id, the field disabled with «Пароль».
+/// What the dialog shows of the flow. Once there is no flow - the card
+/// fading out after its request ended - it reads "" and false: no message,
+/// no action id, the field disabled with «Пароль».
 struct View<'a> {
     message: &'a str,
     action_id: &'a str,
@@ -653,10 +653,9 @@ fn show_osd(app: &mut App) {
 }
 
 /// The focused monitor changed while the dialog is up (osd::follow_focus,
-/// after the old screen's window went): PolkitOsd is a window per screen,
-/// shown on the focused one (PolkitOsd.qml:20-29). As the dialog moves,
-/// onShownChanged empties the field on both windows and the new one takes
-/// the focus (PolkitOsd.qml:54-64).
+/// after the old screen's window went): the dialog shows on the focused
+/// screen. As it moves, the field is emptied and the new window takes the
+/// focus.
 pub(crate) fn refocus(app: &mut App) {
     clear_field(&mut app.svc.polkit);
     show_osd(app);
@@ -667,7 +666,7 @@ fn map_osd(app: &mut App) {
     let Some((_, sw, sh)) = osd::focused_output(app) else { return };
     let m = met();
     let h = card_h(&mut app.fonts, &app.svc);
-    osd::show(app, OpenParams { kind: OsdKind::Polkit, size: (m.card_w as u32, h.ceil() as u32), panel: (0.0, 0.0, m.card_w, h), dim: Some(Color::qt_rgba(0.0, 0.0, 0.0, 0.45)), keyboard: true, namespace: "quickshell", fade_ms: FADE_MS, min_scale: 0.96, fade_easing: crate::anim::Easing::OutCubic, pos: Some((ac(sw, m.card_w) as i32, ac(sh, h) as i32)), fill: false, output: None });
+    osd::show(app, OpenParams { kind: OsdKind::Polkit, size: (m.card_w as u32, h.ceil() as u32), panel: (0.0, 0.0, m.card_w, h), dim: Some(Color::qt_rgba(0.0, 0.0, 0.0, 0.45)), keyboard: true, namespace: "rust-bar", fade_ms: FADE_MS, min_scale: 0.96, fade_easing: crate::anim::Easing::OutCubic, pos: Some((ac(sw, m.card_w) as i32, ac(sh, h) as i32)), fill: false, output: None });
     // A dialog still up (the next queued request follows the last at once)
     // keeps its old size in osd::show: the card's height is this request's.
     reshow(app);
@@ -700,10 +699,10 @@ fn blink(app: &mut App) {
         return;
     }
     // mango closes the layer surfaces of a screen that goes away, and a
-    // request can come while there is no screen at all. PolkitOsd is a window
-    // per screen, shown on the focused one, so QML shows the dialog again
-    // there; without it here the flow would wait for a dialog nobody sees,
-    // polkitd with it, and every later request behind it.
+    // request can come while there is no screen at all. The dialog shows on
+    // the focused screen, so it is shown again there; without that the flow
+    // would wait for a dialog nobody sees, polkitd with it, and every later
+    // request behind it.
     if app.osd(OsdKind::Polkit).is_none() {
         map_osd(app);
     }
@@ -726,9 +725,9 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
     let p = &svc.polkit;
     let (x0, mut y0, w, mut h) = panel;
     if p.flow.is_none() {
-        // Fading out after its request: the card is QML's without a flow,
-        // smaller, still centred (anchors.centerIn) - the surface keeps its
-        // size until it goes.
+        // Fading out after its request: the card is laid out without a
+        // flow, smaller, still centred - the surface keeps its size until
+        // it goes.
         let ch = card_h(ui.fonts, svc);
         if ch < h {
             y0 += ac(h, ch);
@@ -774,7 +773,7 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
     // QQuickTextInput::clipRect: one cursor width wider on the right.
     ui.scene.clip_rect(fx, y, fw + 1.0, m.field_h);
     if p.field.is_empty() {
-        // inputPrompt.replace(/:\s*$/, ""): one colon at the end and the
+        // The prompt with /:\s*$/ cut off: one colon at the end and the
         // blanks after it; a prompt without one keeps its own blanks.
         let prompt = f.prompt.trim_end().strip_suffix(':').unwrap_or(f.prompt);
         let ph_text = if p.checking {
@@ -796,7 +795,7 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
     // at the end leaves the cursor just past the box, inside the wider clip.
     let shift = crate::wifi_card::scroll(p.hscroll, cur, fl.adv, fw);
     if p.sel.0 < p.sel.1 {
-        // The selection, in selectionColor (PolkitOsd.qml:179), under the text.
+        // The selection, in the selection colour, under the text.
         let (s0, s1) = (x_at(ui.fonts, p, f.response_visible, p.sel.0), x_at(ui.fonts, p, f.response_visible, p.sel.1));
         ui.scene.fill(fx + s0 - shift, fy, s1 - s0, fl.height(), t.col_grey);
     }
@@ -843,9 +842,9 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
         kx += ll.width;
     }
     ui.hits.push(Hit { x: x0, y: y0, w, h, action: Action::Hover(0) });
-    // The TextInput's own rect (the arrow over it) - the plate less gap on
-    // each side, its full height (PolkitOsd.qml:163-166) - while it takes
-    // input: a disabled one takes no press.
+    // The text field's own rect (the arrow over it) - the plate less gap on
+    // each side, its full height - while it takes input: a disabled one
+    // takes no press.
     if enabled {
         ui.hits.push(Hit { x: fx, y: field_y, w: fw, h: m.field_h, action: Action::Hover(crate::bar::TEXT_FIELD) });
     }
@@ -921,7 +920,7 @@ fn rescroll(app: &mut App) {
 /// to the start or end, as QTextLayout finds no word in the dots), and the
 /// text QInputControl::isAcceptableInput takes - none typed with Ctrl or
 /// Ctrl+Shift - over the selection. Copy and Cut give nothing out of a
-/// Password field; Cut, undo and the mouse are not ported.
+/// Password field; Cut, undo and the mouse are not handled.
 fn edit(p: &mut Polkit, sym: Keysym, mods: crate::app::Mods, utf8: Option<&str>, visible: bool) {
     // NumLock off, the keypad's keys reach Qt as Key_Left .. Key_Delete.
     let sym = match sym {

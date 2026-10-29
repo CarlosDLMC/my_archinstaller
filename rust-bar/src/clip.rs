@@ -1,6 +1,6 @@
-//! ClipboardState + ClipboardOsd: the clipboard history (SUPER ALT V) from
-//! cliphist - a search line, the entries (image ones with thumbnails), the
-//! selected one's preview, and pick / delete / wipe through clip.sh.
+//! The clipboard history (SUPER ALT V) from cliphist - a search line, the
+//! entries (image ones with thumbnails), the selected one's preview, and
+//! pick / delete / wipe through clip.sh.
 
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
@@ -75,16 +75,16 @@ pub struct Clip {
 }
 
 fn script() -> String {
-    format!("{}/.config/quickshell/bar/scripts/clip.sh", services::home())
+    format!("{}/.config/rust-bar/scripts/clip.sh", services::home())
 }
 
 fn thumb_dir() -> String {
-    // Quickshell.env("XDG_CACHE_HOME") || HOME + "/.cache": empty counts as unset.
+    // $XDG_CACHE_HOME, else $HOME/.cache: empty counts as unset.
     let cache = std::env::var("XDG_CACHE_HOME").ok().filter(|v| !v.is_empty()).unwrap_or_else(|| format!("{}/.cache", services::home()));
-    format!("{cache}/quickshell/clip-thumbs")
+    format!("{cache}/rust-bar/clip-thumbs")
 }
 
-/// parseList(): `id<TAB>preview`, image entries recognised by cliphist's
+/// cliphist's list: `id<TAB>preview`, image entries recognised by cliphist's
 /// "[[ binary data SIZE UNIT TYPE WxH ]]".
 fn parse_list(text: &str) -> Vec<Entry> {
     text.lines()
@@ -222,12 +222,11 @@ fn show(app: &mut App) {
     let Some((_, sw, sh)) = osd::focused_output(app) else { return };
     let (w, h) = (px(820.0), px(480.0));
     let fresh = app.osd(OsdKind::Clipboard).is_none();
-    osd::show(app, OpenParams { kind: OsdKind::Clipboard, size: (w as u32, h as u32), panel: (0.0, 0.0, w, h), dim: Some(Color::qt_rgba(0.0, 0.0, 0.0, 0.45)), keyboard: true, namespace: "quickshell", fade_ms: FADE_MS, min_scale: 0.97, fade_easing: crate::anim::Easing::Linear, pos: Some((ac(sw, w) as i32, ac(sh, h) as i32)), fill: false, output: None });
-    // The card is in the Loader (ClipboardOsd.qml:132-138), which builds it
-    // when onShownChanged sets windowVisible - `shown` is already true, so
-    // its opacity and scale start at 1 and their Behaviors never run: QML
-    // pops the card in and only the dim fades. Reopened while it is still
-    // fading out, the loaded card animates back (osd::show's re-show).
+    osd::show(app, OpenParams { kind: OsdKind::Clipboard, size: (w as u32, h as u32), panel: (0.0, 0.0, w, h), dim: Some(Color::qt_rgba(0.0, 0.0, 0.0, 0.45)), keyboard: true, namespace: "rust-bar", fade_ms: FADE_MS, min_scale: 0.97, fade_easing: crate::anim::Easing::Linear, pos: Some((ac(sw, w) as i32, ac(sh, h) as i32)), fill: false, output: None });
+    // A new card is built already shown: its opacity and scale start at 1
+    // and never animate - the card pops in and only the dim fades. Reopened
+    // while it is still fading out, the card animates back (osd::show's
+    // re-show).
     if fresh {
         if let Some(o) = app.osd_mut(OsdKind::Clipboard) {
             o.fade.snap(1.0);
@@ -236,14 +235,11 @@ fn show(app: &mut App) {
 }
 
 /// The focused monitor changed while the picker is up (osd::follow_focus,
-/// after the old screen's window went): ClipboardOsd is a window per screen,
-/// shown on the focused one (ClipboardOsd.qml:33-45), and the new screen's
-/// builds its Loader content - the card pops in, a new ListView starts at
-/// its top and shows the selected entry (onCurrentIndexChanged:
-/// positionViewAtIndex(currentIndex, ListView.Contain)), and the new field
-/// takes the focus with its cursor blinking anew. ClipboardState's filter
-/// and selection stay. (QML's new field is empty while that filter still
-/// applies to the list; the port keeps showing the filter in effect.)
+/// after the old screen's window went): the new screen's picker is built
+/// anew - the card pops in, a new ListView starts at its top and shows the
+/// selected entry (positionViewAtIndex(currentIndex, ListView.Contain)), and
+/// the new field takes the focus with its cursor blinking anew. The filter
+/// and the selection stay, and the field keeps showing the filter in effect.
 pub(crate) fn refocus(app: &mut App) {
     show(app);
     let c = &mut app.svc.clip;
@@ -275,10 +271,9 @@ fn blink(app: &mut App) {
     if !app.svc.clip.open {
         return;
     }
-    // mango closes the layer surfaces of a screen that goes away; QML's
-    // ClipboardOsd is a window per screen, shown on the focused one, so the
-    // open picker shows up there. Without this, `open` stayed true with no
-    // dialog and the next SUPER+ALT+V only "closed" it.
+    // mango closes the layer surfaces of a screen that goes away; the open
+    // picker then shows up again on the focused screen. Without this, `open`
+    // stayed true with no dialog and the next SUPER+ALT+V only "closed" it.
     if app.osd(OsdKind::Clipboard).is_none() {
         show(app);
     }
@@ -389,7 +384,7 @@ fn request_thumb(app: &mut App, id: String) {
     pump(app);
 }
 
-/// pumpThumbs(): clip.sh decodes one at a time.
+/// The next thumbnail: clip.sh decodes one at a time.
 fn pump(app: &mut App) {
     if app.svc.clip.decoding.is_some() || app.is_running("clip-thumb") {
         return;
@@ -405,7 +400,6 @@ fn pump(app: &mut App) {
             // deletes the file 400 ms later: recorded after close, the entry
             // pointed at nothing, and the next open never asked for that
             // picture again - a row (and its preview) left on the glyph.
-            // QML's onExited records it all the same; this keeps its intent.
             if d.ok && c.open {
                 c.thumbs.insert(id.clone(), format!("{}/{id}.img", thumb_dir()));
             }
@@ -415,8 +409,8 @@ fn pump(app: &mut App) {
     });
 }
 
-/// Image { asynchronous: true; sourceSize }: decode off the main thread at
-/// the size QML asks for, then upload.
+/// Decode off the main thread at a fixed source size (96 x 96 for a row's
+/// thumbnail, 900 x 700 for the preview), then upload.
 fn load_textures(app: &mut App) {
     let c = &app.svc.clip;
     if !c.open {
@@ -497,7 +491,7 @@ fn decode(path: &str, req: (u32, u32), crop: bool, max: u32) -> Option<(u32, u32
 fn pick(app: &mut App, entry: Option<Entry>) {
     let Some(e) = entry else { return };
     close(app);
-    let cmd = format!("{} copy {} && {}/.config/quickshell/bar/scripts/clip-paste.sh", script(), e.id, services::home());
+    let cmd = format!("{} copy {} && {}/.config/rust-bar/scripts/clip-paste.sh", script(), e.id, services::home());
     app.exec_detached(&["sh", "-c", &cmd]);
 }
 
@@ -656,11 +650,12 @@ pub fn click(app: &mut App, action: Action) {
     }
 }
 
-/// handleKey(), then the search line (TextInput).
+/// A key: the dialog's own keys first, then the search line (TextInput).
 pub fn key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Keysym, mods: Mods, utf8: Option<&str>) {
     use smithay_client_toolkit::seat::keyboard::Keysym;
     // NumLock off, the keypad's keys reach Qt as Key_Up .. Key_Delete (with
-    // KeypadModifier, which handleKey and TextInput's key matching ignore).
+    // KeypadModifier, which the dialog's keys and TextInput's key matching
+    // ignore).
     let sym = match sym {
         Keysym::KP_Up => Keysym::Up,
         Keysym::KP_Down => Keysym::Down,
@@ -851,9 +846,9 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
         ui.scene.fill(sx + cursor_x - shift, sy, 1.0, ih, t.col_white);
     }
     ui.scene.restore();
-    // The search TextInput's own rect (the arrow over it): from the caption
-    // row's right + 20 to the count's left - 10, a line high, centred
-    // (ClipboardOsd.qml:199-206). A click there is the field's, not a row's.
+    // The search field's own rect (the arrow over it): from the caption
+    // row's right + 20 to the count's left - 10, a line high, centred. A
+    // click there is the field's, not a row's.
     ui.hits.push(Hit { x: sx, y: sy, w: sw, h: ih, action: Action::Hover(crate::bar::TEXT_FIELD) });
     y += head_h + px(10.0);
 
@@ -881,7 +876,7 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
         let fg = if sel { t.col_bg } else { t.col_grey };
         let ib = m.row_h - 10.0;
         let (ix, iy) = (lx + 8.0, ry + ac(m.row_h, ib));
-        // close() empties `thumbs`: thumbFor() is "" for every row at once,
+        // close() empties `thumbs`: every row loses its picture at once,
         // so the glyphs stand in for the pictures while the card fades out.
         match c.thumb_tex.get(&e.id).filter(|_| e.image.is_some() && c.open) {
             Some(&tex) => {

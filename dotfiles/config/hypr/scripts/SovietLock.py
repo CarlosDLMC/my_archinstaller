@@ -47,12 +47,12 @@ for _loc in ("ru_RU.utf8", "ru_RU.UTF-8", "ru_RU"):
 PUA = re.compile("[\ue000-\uf8ff\U000f0000-\U000ffffd]")
 
 # Weather comes from the bar's own cache, so the lock screen shows the same
-# reading the bar does. quickshell keeps this file current; the legacy
+# reading the bar does. The bar keeps this file current; the legacy
 # ~/.cache/.weather_cache is written only by UserScripts/Weather.py, which
 # nothing runs except scripts/LockScreen.sh - so on the idle-lock path it was
 # never refreshed at all, and the panel spent 45 days presenting July's
 # weather as current. It stays as a fallback for a machine without the bar.
-QS_WEATHER = f"{HOME}/.cache/quickshell/weather.json"
+QS_WEATHER = f"{HOME}/.cache/rust-bar/weather.json"
 LEGACY_WEATHER = f"{HOME}/.cache/.weather_cache"
 
 # Past this, the reading is labelled with its age rather than shown as
@@ -60,9 +60,9 @@ LEGACY_WEATHER = f"{HOME}/.cache/.weather_cache"
 # weather.com scraper broke when weather.com changed its CSS classes - so the
 # panel must not imply freshness it cannot vouch for.
 #
-# Set to twice the bar's own refresh interval (CenterInfo.qml's weather Timer,
-# 3600000 ms) so one missed or slow refresh is not reported as stale, but a
-# fetcher that has actually stopped working is.
+# Set to twice the bar's own refresh interval (the hourly weather fetch in
+# rust-bar/src/services.rs) so one missed or slow refresh is not reported as
+# stale, but a fetcher that has actually stopped working is.
 WEATHER_STALE_AFTER = 2 * 3600  # seconds
 
 WEATHER_RU = {
@@ -233,10 +233,10 @@ def ago_ru(secs):
 
 
 def weather_qs():
-    """Parse the bar's ~/.cache/quickshell/weather.json.
+    """Parse the bar's ~/.cache/rust-bar/weather.json.
 
     Its tooltip layout is a documented contract - weather-location.py says to
-    keep it in sync with the regex parsing in components/CenterInfo.qml - so
+    keep it in sync with the bar's parsing in rust-bar/src/services.rs - so
     the markers used here (first <b> is the location, the xx-large span is the
     temperature, "Feels like N°", "<wind>km/h <humidity>%", "<vis> km AQI n")
     are the same ones the bar itself relies on.
@@ -299,7 +299,7 @@ def temp_ru(temp, feels):
 
 def weather_legacy():
     """Parse ~/.cache/.weather_cache, written by UserScripts/Weather.py. Only
-    reached on a machine without the quickshell bar."""
+    reached on a machine without the bar."""
     raw = read(LEGACY_WEATHER)
     if not raw:
         return None
@@ -421,8 +421,8 @@ def mode_footer():
     """Only keys that actually work here - the lock screen is keyboard only.
 
     hyprlock clears the password buffer on ESC, Ctrl+U and Ctrl+Backspace.
-    ALT+SHIFT is listed because that bind is `bindld` and dispatches a global
-    to quickshell, which keeps running while locked. F1 is ly's shutdown key:
+    ALT+SHIFT is listed because that bind is `bindl` and switches through the
+    bar (LayoutNext.sh), still running while locked. F1 is ly's shutdown key:
     mango's locked binds fire whether the session is locked or not, so it is
     bound non-consuming (apps keep their F1) and LockPower.sh does nothing
     unless hyprlock is running; two presses, so one stray key cannot power off."""

@@ -4,7 +4,7 @@
 # CachyOS's kernel is built with THP "always": every program's anonymous memory
 # is backed by whole 2MB pages wherever the kernel can, even where the program
 # only touches a little of each. For a desktop that is mostly overhead. Measured
-# on the machine this repo was built from: the quickshell bar was 192MB fair
+# on the machine this repo was built from: the old bar was 192MB fair
 # share under "always" and 126MB under "madvise" (84MB of it had been huge
 # pages), and the session read ~1.6GB at login before and ~1.35GB after.
 # Programs that want huge pages - databases, the JVM, some games - still get

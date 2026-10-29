@@ -1,7 +1,7 @@
-//! NetworkPanel.qml: the Wi-Fi widget's details card (right click) - the
-//! link, addresses, traffic and latency from network-status.sh every 3 s,
-//! the radio switch, the DNS picker, the speed test and the share-by-QR view,
-//! with the same scripts and nmcli calls.
+//! The Wi-Fi widget's details card (right click) - the link, addresses,
+//! traffic and latency from network-status.sh every 3 s, the radio switch,
+//! the DNS picker, the speed test and the share-by-QR view, through their
+//! scripts and nmcli calls.
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -29,8 +29,8 @@ pub const DNS: u32 = 0x10;
 
 const DNS_CHOICES: [(&str, &str); 3] = [("DHCP", ""), ("Cloudflare", "1.1.1.1 1.0.0.1"), ("Google", "8.8.8.8 8.8.4.4")];
 
-/// The InfoGrids' ids (cards::info_grid_of): each plate's GLabels and
-/// GValues are items of their own, the speed view's too.
+/// The info grids' ids (cards::info_grid_of): each plate's labels and
+/// values are items of their own, the speed view's too.
 const GRID_CHANNEL: u32 = 0x8100;
 const GRID_CONNECTION: u32 = 0x8200;
 const GRID_TRAFFIC: u32 = 0x8300;
@@ -195,29 +195,27 @@ fn shq(s: &str) -> String {
 }
 
 fn scripts() -> String {
-    format!("{}/.config/quickshell/bar/scripts", services::home())
+    format!("{}/.config/rust-bar/scripts", services::home())
 }
 
 fn is_open(app: &App) -> bool {
     app.card.as_ref().map(|c| c.kind) == Some(crate::cards::CardKind::Network)
 }
 
-/// What NetworkPanel shows changed: the details card redraws, not the
-/// strips (WifiWidget's icon reads the status read alone).
+/// What the details card shows changed: it redraws, not the strips (the
+/// Wi-Fi icon reads the status read alone).
 fn redraw(app: &mut App) {
     app.mark_card_dirty(&[crate::cards::CardKind::Network]);
 }
 
 // ---- the processes ----
 
-/// A new NetworkPanel: QML makes one with every opening, in the card's
-/// Loader (WifiWidget.qml:429-439, DropdownWidget.qml:174-176), so every
-/// reading starts at its declared default (NetworkPanel.qml:28-33, 147-151,
-/// 281-298, 391-394) - dashes, no gauge, Готов / СТАРТ, no QR - until the
-/// first answers land. The speed test's generation goes on, so the exit of
-/// a test still dying from the last opening stays ignored, and an action
-/// still running keeps its spinner until it ends. Then onActiveChanged(true):
-/// every source once, the status every 3 s (triggeredOnStart).
+/// A new panel with every opening, so every reading starts at its default
+/// - dashes, no gauge, Готов / СТАРТ, no QR - until the first answers land.
+/// The speed test's generation goes on, so the exit of a test still dying
+/// from the last opening stays ignored, and an action still running keeps
+/// its spinner until it ends. Then every source once, and the status every
+/// 3 s, starting now.
 pub fn opened(app: &mut App) {
     let old = std::mem::take(&mut app.svc.net);
     let busy = if app.is_running("net-action") { old.busy } else { String::new() };
@@ -226,7 +224,7 @@ pub fn opened(app: &mut App) {
     status_tick(app);
 }
 
-/// onActiveChanged(false): the speed test stops, the view goes back to info.
+/// The card closed: the speed test stops, the view goes back to info.
 pub fn closed(app: &mut App) {
     stop_speed_test(app);
     app.svc.net.view = View::Info;
@@ -574,7 +572,7 @@ pub fn content_height(fonts: &mut Fonts, svc: &Services, w: f32) -> f32 {
     bl.iter().map(|b| b.1).sum::<f32>() + 8.0 * (bl.len() as f32 - 1.0)
 }
 
-/// popupHeight: max(200, min(ceil(content) + 30, 85% of the screen)).
+/// The card's height: max(200, min(ceil(content) + 30, 85% of the screen)).
 pub fn card_height(fonts: &mut Fonts, svc: &Services, w: f32, screen_h: f32) -> f32 {
     200f32.max((content_height(fonts, svc, w).ceil() + 30.0).min(screen_h * 0.85))
 }
@@ -583,12 +581,12 @@ fn elide_middle(fonts: &mut Fonts, text: &str, size: f32, bold: bool, max: f32) 
     fonts.elide_middle(text, theme::bar_font(bold), size, 0.0, max)
 }
 
-/// The КАНАЛ plate's SegmentGauge exists from the panel's start, hidden at
-/// value 0 while no signal is known (NetworkPanel.qml:649-655), and its
-/// cells follow the signal in every view: the first reading fades the lit
-/// cells in (Behavior on color, 200 ms), and a change made while another
-/// view was up has faded by the time the readings come back. The targets
-/// cards::gauge gives its 28 cells, set without drawing them.
+/// The КАНАЛ plate's segment gauge exists from the panel's start, hidden at
+/// value 0 while no signal is known, and its cells follow the signal in
+/// every view: the first reading fades the lit cells in (Behavior on color,
+/// 200 ms), and a change made while another view was up has faded by the
+/// time the readings come back. The targets cards::gauge gives its 28
+/// cells, set without drawing them.
 fn gauge_follows(ui: &mut Ui, n: &NetPanel) {
     let pct = n.num("signal_pct");
     let value = if pct.is_nan() { 0.0 } else { pct as f32 };

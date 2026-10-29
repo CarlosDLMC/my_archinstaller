@@ -294,13 +294,9 @@ load_preset() {
         # blank line a command named $'\r' ("command not found").
         source <(tr -d '\r' < "$1")
         # Renamed options: an older preset's name still counts, unless the
-        # preset sets the new one too. xdph became portals, quickshell became
-        # bar (the bar is rust-bar now, quickshell is not installed).
+        # preset sets the new one too. xdph became portals.
         if [ -n "${xdph+x}" ] && ! tr -d '\r' < "$1" | grep -qE '^[[:space:]]*portals='; then
             portals="$xdph"
-        fi
-        if [ -n "${quickshell+x}" ] && ! tr -d '\r' < "$1" | grep -qE '^[[:space:]]*bar='; then
-            bar="$quickshell"
         fi
 
         # Collect any key the preset sets that this installer does not use.
@@ -320,7 +316,6 @@ load_preset() {
             [ -n "$_key" ] || continue
             [[ " $known_options " == *" $_key "* ]] && continue
             [ "$_key" = xdph ] && continue # renamed to portals, mapped above
-            [ "$_key" = quickshell ] && continue # renamed to bar, mapped above
             preset_unknown_keys+=("$_key")
         # No [[:space:]] before the '=': a shell assignment cannot have one, so
         # `docker = "OFF"` is not setting docker at all (it tries to *run*

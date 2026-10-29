@@ -1,6 +1,7 @@
 //! Animations: QEasingCurve's curves and a value that eases from one target
-//! to the next (a QML Behavior / NumberAnimation / ColorAnimation). A surface
-//! with a running animation draws on every frame callback; none draws nothing.
+//! to the next, as a Qt Quick Behavior / NumberAnimation / ColorAnimation
+//! does. A surface with a running animation draws on every frame callback;
+//! none draws nothing.
 
 use std::time::{Duration, Instant};
 

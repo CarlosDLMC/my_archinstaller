@@ -16,7 +16,7 @@ LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_power_profiles.log"
 
 # Why this is not just another entry in 01-desktop-pkgs.sh
 #
-# The bar's control panel (PultWidget.qml) reads and sets the profile with
+# The bar's control panel (rust-bar/src/pult.rs) reads and sets the profile with
 # `busctl` over net.hadess.PowerProfiles on the system bus. What it needs is
 # that D-Bus API, not one specific package. On Arch the API comes from power-profiles-daemon.
 # On CachyOS it normally comes from tuned-cachy-ppd, which *provides* the same

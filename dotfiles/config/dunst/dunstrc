@@ -1,7 +1,7 @@
 [global]
     # ------------------------------------------------------------------
     # Look: a slip off the central terminal, in the fixed palette of the
-    # «ПУСК · ПУЛЬТ» power menu and the lock screen (PowerState.qml,
+    # «ПУСК · ПУЛЬТ» power menu and the lock screen (rust-bar/src/power.rs,
     # hyprlock.conf): black, ink, a dim frame, red only for an alarm.
     # Square, opaque and text only - the bar tells widgets apart by their
     # label, never by a brand colour, and the cards do the same.
@@ -11,7 +11,7 @@
     # ------------------------------------------------------------------
     origin = top-center
     # 12 px down: the bar reserves 12 px less than its height (the windows'
-    # top gap fills the rest, quickshell/bar/shell.qml), and dunst starts at
+    # top gap fills the rest, rust-bar/src/bar.rs), and dunst starts at
     # the reserved edge - with no offset it overlapped the bar's bottom.
     offset = (0, 12)
     width = 600

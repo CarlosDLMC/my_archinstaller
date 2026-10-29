@@ -15,7 +15,7 @@ LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_boot_windows.log"
 
 # What this is for
 #
-# The bar's power menu (PowerOsd, key W) reboots into Windows once: it sets the
+# The bar's power menu (key W) reboots into Windows once: it sets the
 # firmware's one-shot BootNext to Windows and reboots - to the "Windows
 # (HackBGRT)" entry hackbgrt.sh adds when HackBGRT is set up, so Windows shows
 # the same logo as through Limine, else to Windows Boot Manager.
@@ -56,7 +56,7 @@ cat > "$TMP_HELPER" <<'HELPEREOF'
 #
 # Points the firmware's one-shot BootNext at Windows, so the next reboot - and
 # only the next one - starts Windows. Takes no arguments and does nothing else;
-# the quickshell power menu runs it through sudo and then reboots with
+# the bar's power menu runs it through sudo and then reboots with
 # `systemctl reboot`.
 #
 # Prefers an entry that starts HackBGRT (\EFI\HackBGRT\loader.efi), so Windows

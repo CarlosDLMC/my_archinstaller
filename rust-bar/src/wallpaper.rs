@@ -1,8 +1,7 @@
-//! WallpaperState + WallpaperOsd + WallpaperReveal: the wallpaper carousel
-//! (SUPER W) - sheared cards in a strip, folder tabs or a search line above,
-//! the centred card's name below - and, after a pick, the reveal: the new
-//! picture opening as a sheared band across every screen before
-//! wallpapers.py applies it.
+//! The wallpaper carousel (SUPER W) - sheared cards in a strip, folder tabs
+//! or a search line above, the centred card's name below - and, after a
+//! pick, the reveal: the new picture opening as a sheared band across every
+//! screen before wallpapers.py applies it.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -63,7 +62,7 @@ pub struct Item {
     pub kind: String,
     pub src: String,
     pub thumb: String,
-    /// The scan's own "ready" (the object QML keeps; `Wall::ready` follows
+    /// The scan's own "ready" (as the item was scanned; `Wall::ready` follows
     /// the thumb lines): part of what ListView compares a new model with.
     pub ready: bool,
 }
@@ -206,7 +205,7 @@ pub struct Wall {
     select_all: bool,
     /// When the search line's cursor last showed anew (it blinks from there).
     blink_since: Option<Instant>,
-    // The view: list.currentIndex, contentX and what reselect() keeps.
+    // The view: the ListView's currentIndex, contentX and what reselect() keeps.
     index: usize,
     view_x: Option<Smoothed>,
     pending: Pending,
@@ -214,7 +213,7 @@ pub struct Wall {
     /// The strip the ListView holds (its content, hashed); None before a new
     /// ListView's first model.
     model: Option<u64>,
-    /// ListView.currentIndex as QML has it: -1 in a new ListView and with an
+    /// ListView.currentIndex as Qt has it: -1 in a new ListView and with an
     /// empty model.
     list_index: i64,
     /// A new model's first delegates were made with this currentIndex; the
@@ -250,20 +249,19 @@ fn wall_dir() -> String {
 }
 
 fn script() -> String {
-    format!("{}/.config/quickshell/bar/scripts/wallpapers.py", home())
+    format!("{}/.config/rust-bar/scripts/wallpapers.py", home())
 }
 
-/// WallpaperState.thumbDir: `env("XDG_CACHE_HOME") || home + "/.cache"` -
-/// an empty value falls back too.
+/// The thumbnails' directory: under $XDG_CACHE_HOME, else ~/.cache - an
+/// empty value falls back too.
 fn thumb_dir() -> String {
     let cache = std::env::var("XDG_CACHE_HOME").ok().filter(|c| !c.is_empty()).unwrap_or_else(|| format!("{}/.cache", home()));
-    format!("{cache}/quickshell/wall-thumbs")
+    format!("{cache}/rust-bar/wall-thumbs")
 }
 
 /// The file behind a wallpapers.py URL. file_url() percent-encodes every
 /// byte of the path but letters, digits, "_.-~" and "/" (a space, Cyrillic,
-/// "#", "%"); QML's Image gets them decoded by QUrl, so decode them back to
-/// the path's own bytes.
+/// "#", "%"), so decode them back to the path's own bytes, as QUrl does.
 fn path_of(url: &str) -> std::path::PathBuf {
     use std::os::unix::ffi::OsStringExt;
     let s = url.strip_prefix("file://").unwrap_or(url).as_bytes();
@@ -324,7 +322,7 @@ impl Wall {
         }
         0
     }
-    /// thumbUrl(): the thumbnail once made; else the picture (not a video, not failed).
+    /// A card's picture: the thumbnail once made; else the picture (not a video, not failed).
     fn thumb_path(&self, it: &Item) -> Option<std::path::PathBuf> {
         if self.ready.contains(&it.id) {
             return Some(path_of(&it.thumb));
@@ -392,7 +390,7 @@ fn scan_line(app: &mut App, line: &str) {
         w.scanned = true;
         let cur = s(&v, "current");
         let folder = w.folder_index;
-        // recenterRequested(): only while the dialog is up and untouched.
+        // A recentre: only while the dialog is up and untouched.
         let mut recenter = false;
         if cur != w.current_id && w.picked_id.is_empty() {
             w.current_id = cur.clone();
@@ -406,8 +404,8 @@ fn scan_line(app: &mut App, line: &str) {
             reveal_tab(app);
             reset |= sync_model(app);
         }
-        // onModelChanged and onRecenterRequested reselect; a scan that
-        // changes neither leaves the view alone.
+        // A new model and a recentre reselect; a scan that changes neither
+        // leaves the view alone.
         if reset || recenter {
             reselect(app);
         }
@@ -417,7 +415,7 @@ fn scan_line(app: &mut App, line: &str) {
         forget_card(app, id);
     } else if let Some(id) = line.strip_prefix("fail ") {
         app.svc.wall.failed.insert(id.to_string());
-        // thumbUrl() is "" now: the Image lets go of the original too.
+        // The card has no picture now: the Image lets go of the original too.
         forget_card(app, id);
     }
     redraw(app);
@@ -476,11 +474,11 @@ pub fn open(app: &mut App) {
     w.open = true;
     w.pending = Pending::Current;
     show_osd(app);
-    // A new ListView takes its first model; reopen() reselects either way.
-    // quickshell sizes a layer surface's window only at the compositor's
-    // first configure, so the new ListView is 0x0 when it is made and has
-    // no delegate to animate before reselect() places it: the cards come up
-    // at their places.
+    // A new ListView takes its first model; the opening reselects either
+    // way. A layer surface's window is sized only at the compositor's first
+    // configure, so the new ListView is 0x0 when it is made and has no
+    // delegate to animate before reselect() places it: the cards come up at
+    // their places.
     if sync_model(app) && fresh {
         app.svc.wall.reset_pre = None;
     }
@@ -490,19 +488,14 @@ pub fn open(app: &mut App) {
 
 /// The carousel's window on the focused screen (or its fade turned back).
 fn show_osd(app: &mut App) {
-    osd::show(app, OpenParams { kind: OsdKind::Wallpaper, size: (0, 0), panel: (0.0, 0.0, 0.0, 0.0), dim: None, keyboard: true, namespace: "quickshell:wallpaper", fade_ms: FADE_MS, min_scale: 1.0, fade_easing: Easing::Linear, pos: None, fill: true, output: None });
+    osd::show(app, OpenParams { kind: OsdKind::Wallpaper, size: (0, 0), panel: (0.0, 0.0, 0.0, 0.0), dim: None, keyboard: true, namespace: "rust-bar:wallpaper", fade_ms: FADE_MS, min_scale: 1.0, fade_easing: Easing::Linear, pos: None, fill: true, output: None });
 }
 
 /// The focused monitor changed while the carousel is up (osd::follow_focus,
-/// after the old screen's window went): QML has a WallpaperOsd per screen,
-/// shown on the focused one (WallpaperOsd.qml:26-35), and the new screen's
-/// builds its Loader content - a new ListView and handlers, the tabs at
-/// contentX 0 - whose Component.onCompleted runs reopen(): the search line
-/// emptied, the current wallpaper centred (WallpaperOsd.qml:134-143). The
-/// folder and `navigated` are WallpaperState's and stay. (reopen()'s
-/// `search.text = ""` changes nothing on a new, empty field, so QML's strip
-/// stays filtered under an empty line; the port clears the search, as
-/// reopen() means to.)
+/// after the old screen's window went): the new screen's carousel is built
+/// anew - a new ListView and handlers, the tabs at contentX 0 - with the
+/// search cleared (the strip unfiltered) and the current wallpaper centred.
+/// The folder and `navigated` stay.
 pub(crate) fn refocus(app: &mut App) {
     let w = &mut app.svc.wall;
     w.model = None;
@@ -579,8 +572,8 @@ fn geo(w: f32, h: f32) -> Geo {
     Geo { w, h, card_w, card_h, spacing: (card_w * 0.05).round(), list_h, list_y: ac(h, list_h), begin: w / 2.0 - card_w / 2.0 }
 }
 
-/// WallpaperOsd's `top` item, where the tabs or the search line sit: a gap
-/// above the centred card's band, a gap in from each side (x, y, w, h).
+/// The row where the tabs or the search line sit: a gap above the centred
+/// card's band, a gap in from each side (x, y, w, h).
 fn tab_row(g: &Geo) -> (f32, f32, f32, f32) {
     let gap = px(22.0);
     let h = (24.0f32 * 2.2).round();
@@ -630,8 +623,7 @@ fn delegates(g: &Geo, n: usize, x: f32) -> std::ops::Range<usize> {
     lo.min(n)..hi.min(n)
 }
 
-/// A card's scale and opacity (WallpaperOsd.qml:325-330) at `dist` from
-/// currentIndex.
+/// A card's scale and opacity at `dist` from currentIndex.
 fn card_targets(dist: u64, picked: bool, other_picked: bool, hover: bool, is_centre: bool) -> (f32, f32) {
     let dist = dist as f32;
     let falloff = 1.0 / (1.0 + dist * dist);
@@ -651,7 +643,7 @@ fn strip_sig(strip: &[&Item]) -> u64 {
     h.finish()
 }
 
-/// What the tabs' Repeater compares a new model with: WallpaperState.folders.
+/// What the tabs' Repeater compares a new model with: the folder list.
 fn folders_sig(w: &Wall) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -661,13 +653,13 @@ fn folders_sig(w: &Wall) -> u64 {
     h.finish()
 }
 
-/// list.model = scope.strip, while the window has its content. ListView
-/// takes a model only when its content differs from the one it holds
-/// (QQuickItemView::setModel compares them: a search that keeps the same
-/// matches changes nothing), then makes the delegates for the start of the
-/// strip with the currentIndex it still has (-1 in a new ListView), sets
-/// currentIndex to 0 (-1 when empty), and onModelChanged reselects. True
-/// when that happened.
+/// The strip becomes the ListView's model, while the window has its
+/// content. ListView takes a model only when its content differs from the
+/// one it holds (QQuickItemView::setModel compares them: a search that keeps
+/// the same matches changes nothing), then makes the delegates for the
+/// start of the strip with the currentIndex it still has (-1 in a new
+/// ListView), sets currentIndex to 0 (-1 when empty), and the new model
+/// reselects. True when that happened.
 fn sync_model(app: &mut App) -> bool {
     if app.osd(OsdKind::Wallpaper).is_none() {
         return false;
@@ -852,7 +844,7 @@ fn random(app: &mut App) {
     go_to(app, i as i64);
 }
 
-/// IpcHandler next()/prev(): open, or step when open.
+/// `next` / `prev` over IPC: open, or step when open.
 pub fn next(app: &mut App, delta: i64) {
     if !app.svc.wall.open {
         open(app);
@@ -875,9 +867,9 @@ fn step_folder(app: &mut App, delta: i64) {
     set_folder(app, i);
 }
 
-/// stepFolder() and a tab click: navigated, the search cleared, then the
-/// folder set. onFilterChanged and onFolderIndexChanged ask for the card on
-/// screen; each strip change the ListView takes reselects (once, later).
+/// A folder step and a tab click: navigated, the search cleared, then the
+/// folder set. A filter or folder change asks for the card on screen; each
+/// strip change the ListView takes reselects (once, later).
 fn set_folder(app: &mut App, i: usize) {
     let w = &mut app.svc.wall;
     w.navigated = true;
@@ -903,7 +895,7 @@ fn set_folder(app: &mut App, i: usize) {
     }
 }
 
-/// tabsView.reveal() on every folderIndex change while the carousel is up:
+/// On every folder change while the carousel is up:
 /// when the tabs overflow their row (the Flickable is interactive), scroll
 /// just enough to show the chosen one. Opening starts at contentX 0.
 fn reveal_tab(app: &mut App) {
@@ -982,16 +974,16 @@ pub fn key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Keysym, m
     }
 }
 
-/// The keys handleKey leaves to the search TextInput, as
+/// The keys the carousel's key handler leaves to the search TextInput, as
 /// QQuickTextInputPrivate::processKeyEvent takes them with the KB_X11 key
 /// sequences: text, Backspace and Delete - by word with Ctrl
 /// (DeleteStartOfWord / DeleteEndOfWord) -, SelectAll Ctrl+A,
 /// DeleteCompleteLine Ctrl+U, DeleteEndOfLine Ctrl+K, Paste, Copy and Cut.
-/// handleKey takes every move, so the cursor stays at the end and Ctrl+A's
-/// is the only selection; what acts on it does as Qt's moveCursor would
-/// (Ctrl+Backspace on it keeps the last word). Its highlight is the
-/// palette's colour, which the port does not know (nor does clip.rs).
-/// Undo and redo are not ported.
+/// The key handler takes every move, so the cursor stays at the end and
+/// Ctrl+A's is the only selection; what acts on it does as Qt's moveCursor
+/// would (Ctrl+Backspace on it keeps the last word). Its highlight is the
+/// Qt palette's colour, which is not known here (nor in clip.rs). There is
+/// no undo or redo.
 fn search_key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Keysym, mods: Mods, utf8: Option<&str>) {
     use smithay_client_toolkit::seat::keyboard::Keysym;
     let w = &app.svc.wall;
@@ -1051,7 +1043,7 @@ fn search_key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Keysym
 }
 
 /// An edit of the search line: `range` replaced by `text`, the cursor after
-/// it, the selection gone; the filter follows (onTextChanged).
+/// it, the selection gone; the filter follows.
 fn edit_search(app: &mut App, range: std::ops::Range<usize>, text: &str) {
     let mut f = app.svc.wall.filter.clone();
     let (a, b) = (range.start.min(f.len()), range.end.min(f.len()));
@@ -1095,7 +1087,7 @@ fn blink(app: &mut App) {
     app.debounce("wall-blink", Duration::from_millis(500 - since % 500), blink);
 }
 
-/// onFilterChanged: the first match is centred; clearing it goes back home.
+/// A new filter: the first match is centred; clearing it goes back home.
 /// Only on a change: Backspace in an empty field is no signal at all. Only
 /// a strip the ListView takes as new reselects: typing on with the same
 /// matches, or a leading space, leaves the view where it is.
@@ -1156,17 +1148,17 @@ pub fn finger_scroll(app: &mut App, s: crate::cards::Scroll) {
     }
 }
 
-/// The ListView's WheelHandler (WallpaperOsd.qml:292-299), the carousel's
-/// only one, over the strip's own height, the tab row included. The tabs'
-/// one (:493-499) never runs on mango: it keeps WheelHandler's default
-/// acceptedDevices, Mouse, and QtWayland gives every pointer event its
-/// touchpad device whenever the compositor has pointer gestures and no
-/// mouse device is registered (QWaylandInputDevice::seat_capabilities,
-/// QPointingDevice::primaryPointingDevice), so wantsPointerEvent turns it
-/// down and the wheel goes on to the ListView's. Its orientation is
+/// The ListView's WheelHandler, the carousel's only one, over the strip's
+/// own height, the tab row included. A WheelHandler on the tabs would never
+/// run on mango: with WheelHandler's default acceptedDevices, Mouse, and
+/// QtWayland giving every pointer event its touchpad device whenever the
+/// compositor has pointer gestures and no mouse device is registered
+/// (QWaylandInputDevice::seat_capabilities,
+/// QPointingDevice::primaryPointingDevice), wantsPointerEvent turns it down
+/// and the wheel goes on to the ListView's. Its orientation is
 /// WheelHandler's default, Qt.Vertical: while it is not active it turns
 /// down an event with no y delta, angle or pixel (wantsPointerEvent), so
-/// onWheel's angleDelta.x (:295) counts only in a horizontal swipe that a
+/// the wheel's angleDelta.x counts only in a horizontal swipe that a
 /// vertical frame woke, or within 100 ms of a vertical notch. (A continuous
 /// frame's pixelDelta is not followed: below 1/24 of a unit, where its
 /// angle rounds to 0, its pixel rarely is not.)
@@ -1211,7 +1203,7 @@ pub fn click(app: &mut App, action: Action) {
     if code >= TAB {
         let w = &mut app.svc.wall;
         w.navigated = true;
-        // The chosen tab again: folderIndex keeps its value, nothing moves.
+        // The chosen tab again: the folder index keeps its value, nothing moves.
         // (Tabs take clicks only while nothing is searched.)
         if (code - TAB) as usize == w.folder_index {
             return;
@@ -1374,8 +1366,8 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, panel: (f32, f32, f32, f32), svc: &Servic
     let w = &svc.wall;
     let g = geo(sw, sh);
     let now = ui.now;
-    // The dim under everything; a click anywhere out there dismisses
-    // (WallpaperOsd.qml's dim MouseArea - first, so every other hit wins).
+    // The dim under everything; a click anywhere out there dismisses (its
+    // hit goes first, so every other hit wins).
     ui.scene.fill(0.0, 0.0, sw, sh, Color::qt_rgba(0.0, 0.0, 0.0, 0.6));
     ui.hits.push(crate::bar::Hit { x: 0.0, y: 0.0, w: sw, h: sh, action: Action::Hover(DIM) });
     let strip = w.strip();
@@ -1519,10 +1511,9 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, panel: (f32, f32, f32, f32), svc: &Servic
         if w.blink_since.map_or(true, |s| s.elapsed().as_millis() / 500 % 2 == 0) {
             ui.scene.fill(fx + cx, fy, 1.0, fl.height(), t.col_white);
         }
-        // The TextInput's own rect (WallpaperOsd.qml:588-591; the arrow over it),
-        // which takes a click there instead of the dim behind it. (At opacity
-        // 0, with nothing typed, QML's would do both over the tabs' middle;
-        // the port leaves the tabs theirs.)
+        // The search field's own rect (the arrow over it), which takes a
+        // click there instead of the dim behind it. (With nothing typed the
+        // field has no rect: the tabs' middle stays theirs.)
         ui.hits.push(crate::bar::Hit { x: fx, y: fy, w: iw, h: fl.height(), action: Action::Hover(crate::bar::TEXT_FIELD) });
         ui.text_of(0, SEARCH_COUNT, &cnt, fx + iw + sp, ry + ac(row_h, cnt.height()), t.col_grey);
     }
@@ -1637,13 +1628,12 @@ fn draw_tabs(ui: &mut Ui<OsdState>, w: &Wall, x0: f32, y0: f32, width: f32, h: f
 
 // ---- the reveal ----
 
-/// startReveal(): load the picture on every screen first.
+/// The reveal of a pick: load the picture on every screen first.
 fn start_reveal(app: &mut App, it: Item) {
     end_reveal_windows(app);
     // The last reveal's hold is over with its windows: its wallust drop
     // (250 ms) or 6 s timeout firing now would end this reveal before it
-    // opens, and this pick would never be applied. (WallpaperState's
-    // startReveal() leaves revealDrop and revealHoldTimeout running.)
+    // opens, and this pick would never be applied.
     app.cancel_timer("wall-reveal-drop");
     app.cancel_timer("wall-reveal-hold");
     let cancel = Cancel::default();
@@ -1657,7 +1647,7 @@ fn start_reveal(app: &mut App, it: Item) {
     let max = max_texture(app);
     for (output, sw, sh) in outputs {
         let surface = app.compositor.create_surface(&app.qh);
-        let layer = app.layer_shell.create_layer_surface(&app.qh, surface, Layer::Bottom, Some("quickshell:wallpaper-reveal"), Some(&output));
+        let layer = app.layer_shell.create_layer_surface(&app.qh, surface, Layer::Bottom, Some("rust-bar:wallpaper-reveal"), Some(&output));
         layer.set_anchor(Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT);
         layer.set_exclusive_zone(-1);
         layer.set_keyboard_interactivity(KeyboardInteractivity::None);

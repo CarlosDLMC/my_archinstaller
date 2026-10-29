@@ -1,6 +1,5 @@
 //! PipeWire: the default sink and source, their volume and mute, and the
-//! nodes the audio card lists - what the QML bar gets from
-//! Quickshell.Services.Pipewire. Event-driven: PipeWire's loop fd sits in the
+//! nodes the audio card lists. Event-driven: PipeWire's loop fd sits in the
 //! bar's event loop, nothing is polled.
 
 use std::cell::{Cell, RefCell};
@@ -17,9 +16,9 @@ use pw::spa::pod::deserialize::PodDeserializer;
 use pw::spa::pod::{Object, Pod, Property, PropertyFlags, Value, ValueArray};
 use pw::types::ObjectType;
 
-/// What quickshell makes of a node's media.class (PwNodeType): exact classes
-/// only. Anything else (Audio/Source/Virtual, ...) has no `audio` and is in
-/// none of the card's lists.
+/// A node's kind, from its media.class: exact classes only. Anything else
+/// (Audio/Source/Virtual, ...) has no `audio` and is in none of the card's
+/// lists.
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 enum Kind {
     #[default]
@@ -43,12 +42,12 @@ impl Kind {
         }
     }
 
-    /// PwNodeType::Audio: the node has a PwNodeAudio (volume and mute).
+    /// An audio node: it has a volume and a mute.
     fn audio(self) -> bool {
         matches!(self, Kind::AudioSink | Kind::AudioSource | Kind::AudioDuplex | Kind::AudioOutStream)
     }
 
-    /// PwNodeType::Sink (isSink).
+    /// A sink of any kind, a playback stream and a video sink included.
     fn sink(self) -> bool {
         matches!(self, Kind::AudioSink | Kind::AudioDuplex | Kind::AudioOutStream | Kind::VideoSink)
     }
@@ -62,40 +61,40 @@ pub struct NodeInfo {
     pub nick: String,
     pub app_name: String,
     /// From the node's info once it is bound - the registry carries 17 keys,
-    /// none of these: what nodeLabel, nodeBlob and streamLabel read from
-    /// node.properties.
+    /// none of these: what the audio card's labels and glyphs read from the
+    /// node's properties.
     pub media_name: String,
     pub icon_name: String,
     pub product_name: String,
     pub profile_description: String,
     kind: Kind,
-    /// Arrival order: Pipewire.nodes keeps it (PipeWire reuses ids).
+    /// Arrival order: the node list keeps it (PipeWire reuses ids).
     seq: u64,
     /// device.id; card.profile.device and device.profile.pro from the info
-    /// (PwNode::shouldUseDevice).
+    /// (see on_device).
     device: Option<u32>,
     route: Option<i32>,
     pro_audio: bool,
 }
 
 impl NodeInfo {
-    /// sinkList: isSink && !isStream (Audio/Sink, Audio/Duplex, Video/Sink).
+    /// The card's sinks: a sink that is no stream (Audio/Sink, Audio/Duplex, Video/Sink).
     pub fn is_sink(&self) -> bool {
         self.kind.sink() && self.kind != Kind::AudioOutStream
     }
 
-    /// sourceList: an audio node neither sink nor stream (Audio/Source), less
-    /// the bar's own client and the mic noise filter (VolumeWidget.qml:153-172).
+    /// The card's sources: an audio node neither sink nor stream (Audio/Source), less
+    /// the bar's own client and the mic noise filter.
     pub fn is_source(&self) -> bool {
-        self.kind == Kind::AudioSource && self.name != "quickshell" && self.name != "mic_denoise"
+        self.kind == Kind::AudioSource && self.name != "rust-bar-level-meter" && self.name != "mic_denoise"
     }
 
-    /// streamList: Stream/Output/Audio.
+    /// The card's playback streams: Stream/Output/Audio.
     pub fn is_playback_stream(&self) -> bool {
         self.kind == Kind::AudioOutStream
     }
 
-    /// PwNode::unbindHooks: the info's properties go with the binding.
+    /// Unbound: the info's properties go with the binding.
     fn clear_info(&mut self) {
         (self.media_name, self.icon_name, self.product_name, self.profile_description) = Default::default();
         (self.route, self.pro_audio) = (None, false);
@@ -106,25 +105,25 @@ impl NodeInfo {
 pub struct Audio {
     pub ready: bool,
     pub channels: usize,
-    /// Quickshell's PwNodeAudio.volume: the mean of the channel volumes,
-    /// cube-rooted (the scale pavucontrol and wpctl show).
+    /// The mean of the channel volumes, cube-rooted (the scale pavucontrol
+    /// and wpctl show).
     pub volume: f32,
     pub muted: bool,
 }
 
-/// PwVolumeProps: what a Props object says about volume.
+/// What a Props object says about volume.
 #[derive(Clone, Default, PartialEq)]
 struct VolumeProps {
     /// Cube-rooted channel volumes.
     volumes: Vec<f32>,
     channels: Vec<u32>,
     mute: bool,
-    /// SPA_PROP_volumeStep (-1 in quickshell when there is none).
+    /// SPA_PROP_volumeStep, if the node has one.
     step: Option<f32>,
 }
 
 impl VolumeProps {
-    /// PwVolumeProps::parseSpaPod.
+    /// Reads a Props object's properties.
     fn parse(props: &[Property]) -> VolumeProps {
         let mut p = VolumeProps::default();
         for prop in props {
@@ -155,16 +154,16 @@ impl VolumeProps {
     }
 }
 
-/// PwNodeBoundAudio: a bound audio node's volume.
+/// A bound audio node's volume.
 #[derive(Default)]
 struct Vol {
     channels: Vec<u32>,
-    /// mVolumes: cube-rooted, set as soon as a write goes out.
+    /// Cube-rooted, set as soon as a write goes out.
     volumes: Vec<f32>,
-    /// mServerVolumes: what the server last said.
+    /// What the server last said.
     server: Vec<f32>,
     /// The device path: the last route write, and the one held back while
-    /// the card has not answered the previous (mDeviceVolumes, waitingVolumes).
+    /// the card has not answered the previous.
     device: Vec<f32>,
     waiting: Vec<f32>,
     muted: bool,
@@ -172,7 +171,7 @@ struct Vol {
 }
 
 impl Vol {
-    /// PwNodeAudio as QML reads it: averageVolume() and muted.
+    /// The node's audio state: the average volume and the mute.
     fn audio(&self) -> Audio {
         let n = self.volumes.len();
         let volume = if n == 0 { 0.0 } else { self.volumes.iter().sum::<f32>() / n as f32 };
@@ -180,7 +179,7 @@ impl Vol {
     }
 }
 
-/// PwNodeBoundAudio::updateVolumeProps; true when what shows changed.
+/// Takes a Props reading in; true when what shows changed.
 fn update_volume_props(v: &mut Vol, p: &VolumeProps) -> bool {
     if p.volumes.len() != p.channels.len() {
         return false;
@@ -194,18 +193,19 @@ fn update_volume_props(v: &mut Vol, p: &VolumeProps) -> bool {
     changed
 }
 
-/// PwDevice: an audio card, its active routes and their volumes.
+/// An audio card, its active routes and their volumes.
 struct Dev {
     /// First: it unhooks while the proxy still lives.
     _listener: DeviceListener,
     proxy: Device,
-    /// routeDeviceIndexes: route device -> route index.
+    /// Route device -> route index.
     routes: HashMap<i32, i32>,
-    /// stagingIndexes: the route devices the enumeration in progress listed.
+    /// The route devices the enumeration in progress listed.
     staging: Vec<i32>,
-    /// routeDeviceVolumes.
+    /// Each route device's volume.
     volumes: HashMap<i32, VolumeProps>,
-    /// deviceResponded, mWaitingForDevice.
+    /// The card answered since its params changed; a route write is out and
+    /// not answered yet.
     responded: bool,
     waiting: bool,
 }
@@ -219,7 +219,7 @@ struct State {
     /// The "default" metadata: its global id, the listener, the proxy.
     metadata: Option<(u32, MetadataListener, Metadata)>,
     /// Bound nodes, listener before proxy: the defaults and every node the
-    /// card lists, all the time (VolumeWidget's PwObjectTrackers).
+    /// card lists, all the time.
     bound: HashMap<u32, (NodeListener, Node)>,
     vols: HashMap<u32, Vol>,
     devices: HashMap<u32, Dev>,
@@ -228,11 +228,11 @@ struct State {
     /// Nodes or defaults came or went.
     topo: bool,
     changed: bool,
-    /// The daemon went away (PwCore::onError).
+    /// The daemon went away (a fatal core error).
     fatal: bool,
 }
 
-/// PwNode::shouldUseDevice: the node's volume lives on its card's route.
+/// The card and route a node's volume lives on, if it does.
 fn on_device(s: &State, n: &NodeInfo) -> Option<(u32, i32)> {
     let (dev, route) = (n.device?, n.route?);
     (!n.pro_audio && s.devices.get(&dev)?.routes.contains_key(&route)).then_some((dev, route))
@@ -272,8 +272,8 @@ fn with_pod(value: &Value, send: impl FnOnce(&Pod)) {
     }
 }
 
-/// PwDevice::setRouteProps: `props` on the route that route device is on,
-/// saved (WirePlumber keeps it across logins, pamixer and pavucontrol read it).
+/// Writes `props` on the route that route device is on, saved (WirePlumber
+/// keeps it across logins, pamixer and pavucontrol read it).
 fn write_route(d: &Dev, route: i32, props: Value) -> bool {
     let Some(&index) = d.routes.get(&route) else { return false };
     let value = Value::Object(Object {
@@ -290,7 +290,7 @@ fn write_route(d: &Dev, route: i32, props: Value) -> bool {
     true
 }
 
-/// PwDevice::onInfo: changed params mean its routes are read again.
+/// A card's info: changed params mean its routes are read again.
 fn device_info(st: &RefCell<State>, dev: u32, info: &pw::device::DeviceInfoRef) {
     if info.as_raw().change_mask & pw::sys::PW_DEVICE_CHANGE_MASK_PARAMS as u64 == 0 {
         return;
@@ -306,9 +306,9 @@ fn device_info(st: &RefCell<State>, dev: u32, info: &pw::device::DeviceInfoRef) 
     d.proxy.enum_params(0, Some(ParamType::Route), 0, u32::MAX);
 }
 
-/// PwDevice::onParam: a route of the card. The first answer since the
-/// last write lets held-back volumes go (deviceReady); each route's volume
-/// reaches the nodes on it (routeVolumesChanged).
+/// A route of the card. The first answer since the last write lets
+/// held-back volumes go (device_ready); each route's volume reaches the
+/// nodes on it.
 fn device_route(st: &RefCell<State>, dev: u32, pod: Option<&Pod>) {
     let mut guard = st.borrow_mut();
     let s = &mut *guard;
@@ -343,8 +343,8 @@ fn device_route(st: &RefCell<State>, dev: u32, pod: Option<&Pod>) {
     }
 }
 
-/// PwNodeBoundAudio::onDeviceReady: the last volume held back while the
-/// card had not answered goes out now.
+/// The card answered: the last volume held back while it had not goes out
+/// now.
 fn device_ready(s: &mut State, dev: u32) {
     let on: Vec<(u32, i32)> = s.nodes.values().map(|n| &n.0).filter(|n| n.device == Some(dev) && n.kind.audio() && s.bound.contains_key(&n.id)).map(|n| (n.id, n.route.unwrap_or(-1))).collect();
     for (id, route) in on {
@@ -362,7 +362,7 @@ fn device_ready(s: &mut State, dev: u32) {
     }
 }
 
-/// PwNodePeakMonitor's stream. The listener first: it unhooks while the
+/// The peak monitor's stream. The listener first: it unhooks while the
 /// stream still lives (the other order wrote into the freed stream).
 struct Peak {
     node: u32,
@@ -389,7 +389,7 @@ pub struct Pw {
     /// moved since: dispatch() says so until the strip has it.
     strip: RefCell<(Audio, Option<NodeInfo>)>,
     strip_moved: Cell<bool>,
-    /// PwConnection's reconnect: tried again until the daemon answers.
+    /// The reconnect: tried again until the daemon answers.
     retry: pw::loop_::TimerSource<'static>,
     retry_due: Rc<Cell<bool>>,
     connected_at: Cell<Instant>,
@@ -427,11 +427,11 @@ impl Pw {
             context,
             mainloop,
         };
-        // Like quickshell, a daemon that is not there at start is not waited for.
+        // A daemon that is not there at start is not waited for.
         pw.connect().then_some(pw)
     }
 
-    /// PwCore::start: the core, its error event, the registry.
+    /// Connects: the core, its error event, the registry.
     fn connect(&self) -> bool {
         let Ok(core) = self.context.connect_rc(None) else { return false };
         let Ok(registry) = core.get_registry_rc() else { return false };
@@ -440,7 +440,7 @@ impl Pw {
         let core_listener = core
             .add_listener_local()
             .error(move |id, _, res, _| {
-                // PwCore::onError: fatal, but for the harmless ENOENTs seen
+                // A core error is fatal, but for the harmless ENOENTs seen
                 // on device removal. The connection's own errors (a daemon
                 // restart) come on the core.
                 if id == pw::core::PW_ID_CORE && res != -libc::ENOENT {
@@ -548,8 +548,8 @@ impl Pw {
         true
     }
 
-    /// PwConnection::onFatalError: all the connection made goes, the
-    /// defaults and the lists with it.
+    /// After a fatal error: all the connection made goes, the defaults and
+    /// the lists with it.
     fn teardown(&self) {
         {
             let mut s = self.state.borrow_mut();
@@ -581,8 +581,8 @@ impl Pw {
         let fatal = std::mem::take(&mut self.state.borrow_mut().fatal);
         if fatal {
             self.teardown();
-            // PwConnection::beginReconnect: at once (a restarted daemon's
-            // socket is there) - unless this connection died young.
+            // Reconnect at once (a restarted daemon's socket is there) -
+            // unless this connection died young.
             let young = self.connected_at.get().elapsed() < Duration::from_secs(1);
             if young || !self.connect() {
                 self.retry.update_timer(Some(Duration::from_secs(1)), None);
@@ -593,7 +593,7 @@ impl Pw {
         }
         let topo = {
             let mut guard = self.state.borrow_mut();
-            // PwDevice::polled: routes the last enumeration did not list are gone.
+            // Routes the last enumeration did not list are gone.
             for d in guard.devices.values_mut() {
                 let Dev { routes, staging, .. } = d;
                 if !staging.is_empty() {
@@ -618,7 +618,7 @@ impl Pw {
         self.strip_moved.get() || (any && card)
     }
 
-    /// Keeps the bound set what VolumeWidget tracks: the defaults and every
+    /// Keeps the bound set what the audio card tracks: the defaults and every
     /// sink, source and playback stream it lists, open card or not.
     fn follow(&self) {
         let (want, have): (Vec<u32>, Vec<u32>) = {
@@ -652,12 +652,12 @@ impl Pw {
     fn bind_node(&self, registry: &pw::registry::RegistryRc, g: &pw::registry::GlobalObject<pw::properties::PropertiesBox>, id: u32) -> Option<(NodeListener, Node)> {
         let node: Node = registry.bind(g).ok()?;
         let (st_info, st_param) = (self.state.clone(), self.state.clone());
-        // quickshell reads Props index 0 of the enum_params it sends on each
-        // info whose params changed (node.cpp onInfo, onSpaParam): the node's
-        // first Props object, the volume one. The server's notices to a
-        // subscriber number a client-node's params (pw-loopback, filter-chain,
-        // every app stream) in its whole param list (index 31, not 0), but each
-        // comes right after that info: the first Props after it is index 0.
+        // The volume is Props index 0, as an enum_params on each info whose
+        // params changed returns it: the node's first Props object. The
+        // server's notices to a subscriber number a client-node's params
+        // (pw-loopback, filter-chain, every app stream) in its whole param
+        // list (index 31, not 0), but each comes right after that info: the
+        // first Props after it is index 0.
         let first = Rc::new(Cell::new(false));
         let first_param = first.clone();
         let l = node
@@ -666,7 +666,7 @@ impl Pw {
                 if info.change_mask().contains(NodeChangeMask::PARAMS) {
                     first.set(info.params().iter().any(|p| p.id() == ParamType::Props && p.flags().contains(ParamInfoFlags::READWRITE)));
                 }
-                // PwNode::onInfo: the node's full properties.
+                // The node's full properties.
                 if !info.change_mask().contains(NodeChangeMask::PROPS) {
                     return;
                 }
@@ -688,7 +688,7 @@ impl Pw {
                 let mut changed = *n != before;
                 let n = n.clone();
                 if let (Some(r), true) = (n.route.filter(|_| route.is_some()), n.kind.audio()) {
-                    // onDeviceChanged: the route's volume, if the card already told it.
+                    // On a card's route: its volume, if the card already told it.
                     if let Some(p) = n.device.and_then(|d| s.devices.get(&d)).and_then(|d| d.volumes.get(&r)).cloned() {
                         changed |= update_volume_props(s.vols.entry(id).or_default(), &p);
                     }
@@ -698,8 +698,8 @@ impl Pw {
                 }
             })
             .param(move |_, ty, _, _, pod| {
-                // PwNodeBoundAudio::onSpaParam: Props index 0, unless the
-                // card's route has this node's volume.
+                // The volume is Props index 0, unless the card's route has
+                // this node's volume.
                 if ty != ParamType::Props || !first_param.replace(false) {
                     return;
                 }
@@ -736,7 +736,7 @@ impl Pw {
         s.nodes.values().find(|n| !name.is_empty() && n.0.name == *name).map(|n| n.0.id)
     }
 
-    /// Pipewire.defaultAudioSink / defaultAudioSource as they are now.
+    /// The default sink or source as it is now.
     pub fn default_node(&self, sink: bool) -> (Audio, Option<NodeInfo>) {
         self.default_id(sink).map(|id| self.view(id)).unwrap_or_default()
     }
@@ -775,8 +775,7 @@ impl Pw {
         s.nodes.values().map(|n| &n.0).filter(|n| n.is_playback_stream() && matches(n.id)).find_map(|n| s.vols.get(&n.id).map(Vol::audio).filter(|a| a.ready).map(|a| (n.id, a)))
     }
 
-    /// Every audio node with its volume, in the order they appeared (the
-    /// order of Pipewire.nodes).
+    /// Every audio node with its volume, in the order they appeared.
     pub fn nodes(&self) -> Vec<(NodeInfo, Audio)> {
         let s = self.state.borrow();
         let mut v: Vec<(NodeInfo, Audio)> = s.nodes.values().map(|n| (n.0.clone(), s.vols.get(&n.0.id).map(Vol::audio).unwrap_or_default())).collect();
@@ -784,8 +783,8 @@ impl Pw {
         v
     }
 
-    /// PwNodeAudio.volume = v (setAverageVolume): each channel scaled by v
-    /// over the old average, so a balance stays; every one at v from silence.
+    /// Sets the average volume to v: each channel scaled by v over the old
+    /// average, so a balance stays; every one at v from silence.
     pub fn set_volume(&self, id: u32, v: f32) {
         let volumes: Vec<f32> = {
             let s = self.state.borrow();
@@ -797,7 +796,7 @@ impl Pw {
         self.set_volumes(id, volumes);
     }
 
-    /// PwNodeBoundAudio::setVolumes: a device node through its card's route,
+    /// Sets the channel volumes: a device node through its card's route,
     /// one write in flight at a time; anything else through its Props. Shown
     /// at once; an unchanged value is not sent.
     fn set_volumes(&self, id: u32, volumes: Vec<f32>) {
@@ -836,7 +835,7 @@ impl Pw {
         s.changed = true;
     }
 
-    /// PwNodeAudio.muted = m: a device node's on its card's route.
+    /// Sets the mute: a device node's on its card's route.
     pub fn set_mute(&self, id: u32, muted: bool) {
         let mut guard = self.state.borrow_mut();
         let s = &mut *guard;
@@ -856,7 +855,7 @@ impl Pw {
         s.changed = true;
     }
 
-    /// Pipewire.preferredDefaultAudioSink/Source = node.
+    /// Makes the node the configured default sink or source.
     pub fn set_default(&self, sink: bool, name: &str) {
         let s = self.state.borrow();
         let Some((_, _, md)) = &s.metadata else { return };
@@ -875,9 +874,9 @@ impl Pw {
         }
     }
 
-    /// LevelMeter { node: sourceReady ? source : null; enabled: !!node &&
-    /// !muted }: while the audio card is open the meter hears the default
-    /// source - the new one when it changes - and nothing while it is muted.
+    /// While the audio card is open the meter hears the default source (once
+    /// it is ready) - the new one when it changes - and nothing while it is
+    /// muted.
     fn follow_peak(&self) {
         let want = {
             let s = self.state.borrow();
@@ -887,10 +886,10 @@ impl Pw {
         self.set_peak(want);
     }
 
-    /// PwNodePeakMonitor on `want` (None stops it); peak() is the last
-    /// buffer's peak. A stream like quickshell's: not passive, so it wakes a
-    /// suspended microphone while the audio card is open - a passive one only
-    /// heard the mic while something else was recording, and the meter sat still.
+    /// A peak monitor on `want` (None stops it); peak() is the last buffer's
+    /// peak. The stream is not passive, so it wakes a suspended microphone
+    /// while the audio card is open - a passive one only heard the mic while
+    /// something else was recording, and the meter sat still.
     fn set_peak(&self, want: Option<u32>) {
         let mut conn = self.conn.borrow_mut();
         let Some(c) = conn.as_mut() else { return };
@@ -905,17 +904,17 @@ impl Pw {
             *pw::keys::MEDIA_TYPE => "Audio",
             *pw::keys::MEDIA_CATEGORY => "Monitor",
             *pw::keys::MEDIA_NAME => "Peak detect",
-            *pw::keys::APP_NAME => "Quickshell Peak Detect",
+            *pw::keys::APP_NAME => "Bar level meter",
             "stream.monitor" => "true",
             "stream.capture.sink" => if sink { "true" } else { "false" },
             "target.object" => target.as_str(),
         };
-        let Ok(stream) = pw::stream::StreamRc::new(c.core.clone(), "quickshell-peak-monitor", props) else { return };
+        let Ok(stream) = pw::stream::StreamRc::new(c.core.clone(), "rust-bar-level-meter", props) else { return };
         let Ok(listener) = stream
             .add_local_listener_with_user_data(self.peak_value.clone())
             .state_changed(|_, peak, old, new| {
-                // PwPeakStream::handleStateChanged: paused is silence (the
-                // mic went away); so is an error - the meter does not freeze.
+                // A paused stream is silence (the mic went away); so is an
+                // error - the meter does not freeze.
                 let paused = new == pw::stream::StreamState::Paused && old != pw::stream::StreamState::Paused;
                 if paused || matches!(new, pw::stream::StreamState::Error(_)) {
                     peak.set(0.0);
@@ -948,9 +947,9 @@ impl Pw {
         }
     }
 
-    /// PwNodePeakMonitor.peak: the cube root of the sample peak (the scale
-    /// the volumes are on), undone by the node's own volume unless that volume
-    /// is the card's route (PwNode::shouldUseDevice), as quickshell does.
+    /// The cube root of the sample peak (the scale the volumes are on),
+    /// undone by the node's own volume unless that volume is the card's
+    /// route.
     pub fn peak(&self) -> f32 {
         let Some(id) = self.conn.borrow().as_ref().and_then(|c| c.peak.as_ref()).map(|p| p.node) else { return 0.0 };
         let mut v = self.peak_value.get().cbrt();

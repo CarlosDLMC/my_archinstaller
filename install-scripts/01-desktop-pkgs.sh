@@ -35,8 +35,8 @@ hypr_package=(
   # through the wlroots output-power protocol (Hyprland had `hyprctl dispatch
   # dpms`).
   wlopm
-  # The outputs as JSON for the bar's capture dialogs (Monitors.qml): wlr-randr
-  # replaces `hyprctl monitors` there.
+  # The outputs as JSON for the bar's capture dialogs (rust-bar/src/capture.rs):
+  # wlr-randr replaces `hyprctl monitors` there.
   wlr-randr
   # The polkit agent is the bar (rust-bar's polkit.rs); Polkit.sh starts this one
   # only when the bar is not there to answer.
@@ -62,7 +62,7 @@ hypr_package=(
   # so a fresh machine got a picker that quietly failed to paste.
   wtype
   # qrencode: the bar's network card turns the current Wi-Fi into a join QR
-  # (config/quickshell/bar/scripts/network-qr.sh). Without it that button
+  # (config/rust-bar/scripts/network-qr.sh). Without it that button
   # reports the package as missing rather than failing silently.
   qrencode
   # power-profiles-daemon is deliberately NOT here: on CachyOS the API is
@@ -72,7 +72,7 @@ hypr_package=(
   # python-requests: UserScripts/Weather.py and the bar's weather-location.py.
   python-requests
   # python-pyquery is deliberately NOT here any more. Its only consumer was
-  # quickshell/bar/scripts/weather.py, which scraped weather.com and has been
+  # the old bar's scripts/weather.py, which scraped weather.com and has been
   # removed - the bar fetches from Open-Meteo through weather-fetch.sh ->
   # weather-location.py, which needs requests and nothing else.
   # SovietLockGen.py imports gi/Pango (python-gobject) and cairo (python-cairo)

@@ -1,5 +1,5 @@
-//! The volume widget's card (AudioPanel.qml): output and input with their
-//! faders and device lists, the live mic meter, per-application faders.
+//! The volume widget's card: output and input with their faders and device
+//! lists, the live mic meter, per-application faders.
 
 use std::cell::Cell;
 use std::time::{Duration, Instant};
@@ -20,9 +20,9 @@ pub const OUT_SLIDER: u32 = 2;
 pub const IN_MUTE: u32 = 3;
 pub const IN_SLIDER: u32 = 4;
 /// A device row or an app's controls carry their node (slot()), not their
-/// place in the list: a QML delegate belongs to its node, so a click or a
-/// drag never lands on the next one when a node before it goes, and
-/// colours and texts do not pass to whatever moves up. Every code stays
+/// place in the list: a row belongs to its node, so a click or a drag
+/// never lands on the next one when a node before it goes, and colours
+/// and texts do not pass to whatever moves up. Every code stays
 /// under 0x1_0000, so the keys made from codes (0x2_0000 + code, ...,
 /// 0x100_0000 + code * 64) keep their ranges apart.
 const SLOTS: u32 = 0x3C00;
@@ -40,7 +40,8 @@ const LABEL: f32 = FONT_SIZE - 2.0;
 const HEADER: f32 = FONT_SIZE - 4.0;
 const ROW_FONT: f32 = FONT_SIZE - 3.0;
 
-/// What the card lists: VolumeWidget's sinkList / sourceList / streamList.
+/// What the card lists: the default sink and source, the sinks, the sources
+/// and the playback streams.
 pub struct Lists {
     pub sink: (Audio, Option<NodeInfo>),
     pub source: (Audio, Option<NodeInfo>),
@@ -63,9 +64,8 @@ pub fn lists(svc: &Services) -> Lists {
         } else if n.is_source() {
             sources.push(n);
         } else if n.is_playback_stream() && a.ready {
-            // Once its volume is known: QML's rows come 75 ms after the list
-            // changed (VolumeWidget.qml:208-217), by then with their level, and
-            // a row drawn before it filled its fader from 0 over 200 ms.
+            // Once its volume is known, so the row comes with its level: a
+            // row drawn before it filled its fader from 0 over 200 ms.
             streams.push((n, a));
         }
     }
@@ -82,7 +82,7 @@ pub fn lists(svc: &Services) -> Lists {
     Lists { sink, source, sinks, sources, streams }
 }
 
-/// nodeLabel(): nick, then profile description, description, name.
+/// A device's label: nick, then profile description, description, name.
 fn node_label(n: &NodeInfo) -> String {
     [&n.nick, &n.profile_description, &n.description, &n.name].into_iter().find(|s| !s.is_empty()).cloned().unwrap_or_else(|| "Unknown".into())
 }
@@ -180,7 +180,7 @@ fn section_header(ui: &mut Ui, x: f32, y: f32, w: f32, h: f32, label: &str, deta
     }
 }
 
-/// VolumeSlider: a SegmentGauge under a 6 x 20 handle; max > 1 marks 100%.
+/// A volume slider: a segment gauge under a 6 x 20 handle; max > 1 marks 100%.
 #[allow(clippy::too_many_arguments)]
 fn slider(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, value: f32, max: f32, muted: bool, enabled: bool) {
     let t = ui.theme;
@@ -193,7 +193,7 @@ fn slider(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, value: f32, max: f32, 
         ui.scene.rect(x - 3.0, y - 3.0, w + 6.0, 26.0, Color::TRANSPARENT, 4.0, 2.0, t.col_white, true);
     }
     let ratio = if max > 0.0 { (value / max).clamp(0.0, 1.0) } else { 0.0 };
-    // SegmentGauge, 10 high, centred in the 20 px slider
+    // The gauge, 10 high, centred in the 20 px slider
     let gy = y + 5.0;
     let n = 12.max((w / 12.0).round() as i32);
     let cell = (w - 2.0 * (n - 1) as f32) / n as f32;
@@ -226,20 +226,20 @@ fn slider(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, value: f32, max: f32, 
     }
 }
 
-/// ConsoleRow (AudioPanel's device rows: interactive: !lit): the shared
-/// one, whose lamp dot sits where Qt's anchors.centerIn puts it.
+/// A device row: the shared console row, interactive only while not lit,
+/// whose lamp dot sits where Qt's anchors.centerIn puts it.
 fn console_row(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32, icon: &str, label: &str, lit: bool) {
     crate::cards::console_row(ui, code, x, y, w, h, icon, label, lit, !lit, None, None);
 }
 
 pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
     // The meter's place is this draw's: none if the ВХОД plate went away
-    // (its LevelMeter goes with it), or the meter surface stayed live there.
+    // (its level meter goes with it), or the meter surface stayed live there.
     ui.card.meter_at = None;
     ui.card.meter_node = false;
-    // The Flickable clips input as well as paint (AudioPanel.qml:47-51, clip:
-    // true): cards::draw draws this inside its view_begin/view_end, so a
-    // control scrolled out of view takes neither hover nor clicks.
+    // The list's view clips input as well as paint: cards::draw draws this
+    // inside its view_begin/view_end, so a control scrolled out of view
+    // takes neither hover nor clicks.
     let t = ui.theme;
     let l = lists(svc);
     let m = metrics(ui.fonts);
@@ -437,7 +437,7 @@ impl Drop for MeterWin {
     }
 }
 
-/// LevelMeter's segments and hold marker, w wide at (x, y): on the card, or
+/// The level meter's segments and hold marker, w wide at (x, y): on the card, or
 /// on the meter's own surface.
 pub fn meter_cells(scene: &mut Scene, t: &Theme, x: f32, y: f32, w: f32, level: f32, hold: f32) {
     let n = 12.max((w / 12.0).round() as i32);
@@ -460,7 +460,7 @@ pub fn meter_cells(scene: &mut Scene, t: &Theme, x: f32, y: f32, w: f32, level: 
     }
 }
 
-/// LevelMeter: dB-scaled live level with a falling bar and a peak hold.
+/// The level meter: dB-scaled live level with a falling bar and a peak hold.
 fn level_meter(ui: &mut Ui, x: f32, y: f32, w: f32, has_node: bool) {
     ui.card.meter_cells = 12.max((w / 12.0).round() as i32);
     let (level, hold) = if has_node { (ui.card.meter.0, ui.card.meter.1) } else { (0.0, 0.0) };
@@ -487,13 +487,13 @@ const METER_PERIOD: Duration = Duration::from_millis(33);
 
 thread_local! {
     /// When the meter's clock last moved (started or ticked); None while it
-    /// is stopped. LevelMeter has one Timer.
+    /// is stopped. There is one meter, so one clock.
     static METER_CLOCK: Cell<Option<Instant>> = const { Cell::new(None) };
 }
 
-/// LevelMeter's Timer runs while the meter has a node (LevelMeter.qml:58-61,
-/// running: meter.visible && !!meter.node): the card's draw starts it when
-/// no clock runs, so an input that appears with the card open starts it again.
+/// The meter's clock runs while the meter is shown and has a node: the
+/// card's draw starts it when no clock runs, so an input that appears with
+/// the card open starts it again.
 pub fn start_meter(app: &App) {
     // A running clock moved within the period (three, for a slow frame).
     if METER_CLOCK.get().map_or(true, |t| t.elapsed() > METER_PERIOD * 3) {
@@ -561,7 +561,7 @@ pub fn slider_to(app: &mut App, code: u32, x: f32) {
 }
 
 /// The node a control acts on, as the lists are now: an app's control whose
-/// stream is gone acts on nothing (its QML delegate went with it). Looked up
+/// stream is gone acts on nothing (its row went with it). Looked up
 /// without copying the lists: a fader drag asks on every pointer motion.
 fn target_of(app: &App, code: u32) -> Option<(u32, Audio)> {
     let pw = app.svc.pw.as_ref()?;
@@ -611,7 +611,7 @@ pub fn activate(app: &mut App, code: u32) {
     }
 }
 
-/// A slider's right click / Return / Space / M: its mute (rightClicked).
+/// A slider's right click / Return / Space / M: its mute.
 pub fn slider_mute(app: &mut App, code: u32) {
     let mute = match code {
         OUT_SLIDER => OUT_MUTE,
