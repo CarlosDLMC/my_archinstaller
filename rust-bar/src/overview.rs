@@ -120,8 +120,8 @@ pub struct Overview {
     watch: Option<(UnixStream, Option<RegistrationToken>, Vec<u8>)>,
     shots_pending: bool,
     shot_gen: u32,
-    previews: HashMap<i64, Tex>,
-    preview_loading: HashSet<i64>,
+    /// Each window's picture and the shot generation it is from.
+    previews: HashMap<i64, (Tex, u32)>,
     icons: HashMap<(String, u32), Option<Tex>>,
     icon_loading: HashSet<(String, u32)>,
     desktop: Option<HashMap<String, String>>,
@@ -161,6 +161,14 @@ pub fn open(app: &mut App) {
     for (i, out) in outputs.into_iter().enumerate() {
         osd::show(app, OpenParams { kind: OsdKind::Overview(i as u8), size: (0, 0), panel: (0.0, 0.0, 0.0, 0.0), dim: None, keyboard: true, namespace: "quickshell:overview", fade_ms: 0, min_scale: 1.0, fade_easing: Easing::Linear, pos: None, fill: true, output: Some(out) });
     }
+    // A tile's Image asks for `<id>.ppm?shotGeneration` as soon as it exists:
+    // once a run has finished, the last open's pictures are up at once and
+    // this open's replace them when overview-shots.sh is done. Icons first,
+    // so they do not wait behind the pictures on the decode thread.
+    load_icons(app);
+    if app.svc.overview.shot_gen > 0 {
+        load_shots(app);
+    }
     watch(app);
 }
 
@@ -179,8 +187,7 @@ pub fn close(app: &mut App) {
         app.unwatch(t);
     }
     app.osds.retain(|o| !matches!(o.kind, OsdKind::Overview(_)));
-    let ids: Vec<u32> = app.svc.overview.previews.drain().map(|(_, t)| t.id).chain(app.svc.overview.icons.drain().filter_map(|(_, t)| t.map(|t| t.id))).collect();
-    app.svc.overview.preview_loading.clear();
+    let ids: Vec<u32> = app.svc.overview.previews.drain().map(|(_, (t, _))| t.id).chain(app.svc.overview.icons.drain().filter_map(|(_, t)| t.map(|t| t.id))).collect();
     app.svc.overview.icon_loading.clear();
     if let Some(gpu) = app.gpu.as_mut() {
         for id in ids {
@@ -315,37 +322,43 @@ fn take_shots(app: &mut App) {
     }
     let argv: Vec<&str> = args.iter().map(String::as_str).collect();
     app.spawn("overview-shots", &argv, |app, _| {
-        let o = &mut app.svc.overview;
-        o.shot_gen += 1;
-        if !o.open {
-            return;
-        }
-        let ids: Vec<i64> = o.clients.iter().map(|c| c.id).collect();
-        for id in ids {
-            if app.svc.overview.preview_loading.insert(id) {
-                let path = format!("{}/{id}.ppm", shot_dir());
-                app.background(move || (id, decode(&path).map(|(w, h, rgba)| crate::gpu::mip_levels(w, h, rgba, true))), |app, (id, img)| {
-                    app.svc.overview.preview_loading.remove(&id);
-                    let Some(levels) = img else { return };
-                    if !app.svc.overview.open {
-                        return;
-                    }
-                    let Some(gpu) = app.gpu.as_mut() else { return };
-                    let t = Tex { id: gpu.add_levels(levels) };
-                    if let Some(old) = app.svc.overview.previews.insert(id, t) {
-                        gpu.drop_image(old.id);
-                    }
-                    redraw(app);
-                });
-            }
+        app.svc.overview.shot_gen += 1;
+        if app.svc.overview.open {
+            load_shots(app);
         }
     });
 }
 
-fn decode(path: &str) -> Option<(u32, u32, Vec<u8>)> {
-    let img = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?.decode().ok()?.to_rgba8();
+/// The windows' pictures of the current shot generation, decoded off the
+/// main thread; a picture never replaces one from a later generation. Each
+/// file is opened here, so the script's `rm` at the next open cannot take
+/// it away before its decode.
+fn load_shots(app: &mut App) {
+    let (gen, dir) = (app.svc.overview.shot_gen, shot_dir());
+    let ids: Vec<i64> = app.svc.overview.clients.iter().map(|c| c.id).collect();
+    for id in ids {
+        let Ok(file) = std::fs::File::open(format!("{dir}/{id}.ppm")) else { continue };
+        app.background(move || (id, gen, decode(file).map(|(w, h, rgba)| crate::gpu::mip_levels(w, h, rgba, true))), |app, (id, gen, img)| {
+            let Some(levels) = img else { return };
+            let o = &app.svc.overview;
+            if !o.open || o.previews.get(&id).map_or(false, |p| p.1 > gen) {
+                return;
+            }
+            let Some(gpu) = app.gpu.as_mut() else { return };
+            let t = Tex { id: gpu.add_levels(levels) };
+            if let Some((old, _)) = app.svc.overview.previews.insert(id, (t, gen)) {
+                gpu.drop_image(old.id);
+            }
+            redraw(app);
+        });
+    }
+}
+
+fn decode(file: std::fs::File) -> Option<(u32, u32, Vec<u8>)> {
+    let img = image::ImageReader::new(std::io::BufReader::new(file)).with_guessed_format().ok()?.decode().ok()?.to_rgba8();
     let (w, h) = img.dimensions();
-    Some((w, h, img.into_raw()))
+    // A zero-size texture is a wgpu validation error, and a panic aborts.
+    (w > 0 && h > 0).then(|| (w, h, img.into_raw()))
 }
 
 // ---- icons: DesktopEntries.heuristicLookup + Quickshell.iconPath ----
@@ -742,7 +755,7 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, screen: u8, panel: (f32, f32, f32, f32), 
         let (x, y, w, h) = (gx + at[i].0, gy + at[i].1, *w, *h);
         ui.scene.save();
         ui.scene.clip_rect(x, y, w, h);
-        if let Some(tex) = o.previews.get(&c.id) {
+        if let Some((tex, _)) = o.previews.get(&c.id) {
             ui.scene.image(tex.id, x, y, w, h, [0.0, 0.0, 1.0, 1.0]);
         }
         let pressed = press.map_or(false, |p| p.id == c.id);
