@@ -494,9 +494,14 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, busy: bool) {
         let fw = cw - 16.0;
         let (fl, cur) = field_text(ui.fonts, wc);
         let hs = scroll(wc.hscroll, cur, fl.adv, fw);
-        let ty = y + 8.0 + ac(20.0, fl.height());
+        // QQuickTextInputPrivate::updateVerticalScroll: AlignVCenter centres a
+        // line that fits; this one (Terminess at 23 px: 26) is taller than
+        // the 20 px TextInput, so autoScroll moves it up until its bottom is
+        // the TextInput's (vscroll = bottom - height).
+        let ty = y + 8.0 + if fl.height() > 20.0 { 20.0 - fl.height() } else { ac(20.0, fl.height()) };
         ui.scene.save();
-        ui.scene.clip_rect(x0 + 8.0, y + 8.0, fw, 20.0);
+        // QQuickTextInput::clipRect: one cursor width wider on the right.
+        ui.scene.clip_rect(x0 + 8.0, y + 8.0, fw + 1.0, 20.0);
         ui.text(&fl, x0 + 8.0 - hs, ty, t.col_white, TextStyle::Normal);
         if focused {
             // TextInput's cursor: 1 px, the text colour, 500 ms on / 500 ms

@@ -559,10 +559,11 @@ pub fn raw_pointer(app: &mut App, kind: OsdKind, ev: &smithay_client_toolkit::se
 
 const BTN_LEFT: u32 = 0x110;
 
-/// The wheel over the panel (QML angleDelta: +120 per notch away from you).
-pub fn wheel(app: &mut App, kind: OsdKind, delta: f32) {
+/// The wheel over the panel (QML angleDelta: +120 per notch away from you),
+/// at the event's `time`.
+pub fn wheel(app: &mut App, kind: OsdKind, delta: f32, time: u32) {
     if kind == OsdKind::Clipboard {
-        crate::clip::wheel(app, delta);
+        crate::clip::wheel(app, delta, time);
     }
     if kind == OsdKind::Wallpaper {
         crate::wallpaper::wheel(app, delta);

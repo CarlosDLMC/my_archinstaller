@@ -132,6 +132,9 @@ pub struct OpenCard {
     /// whose press began on a card closed since is not this card's.
     held: Option<(Action, u32)>,
     numbers: HashMap<u32, Animated<f32>>,
+    /// SegmentGauges of rows a Repeater made anew while the card is open
+    /// (agent.rs): gauge id -> the lit count of their first layout pass.
+    pub(crate) gauge_from: HashMap<u32, i32>,
     /// The card's Flickable and ListViews: where each is scrolled to.
     flicks: Vec<Flick>,
     /// Hover is cut to this (a Flickable's clip) while one is drawn.
@@ -179,6 +182,12 @@ impl OpenCard {
         (a.get(now), a.running(now))
     }
 
+    /// A new item's colour `from`, whatever the old item's was: the next
+    /// color() fades from it.
+    pub(crate) fn color_from(&mut self, id: u32, from: Color, ms: u64) {
+        self.colors.insert(id, Animated::new(from, ms, Easing::Linear));
+    }
+
     /// CardKeys.step: the next (or previous) control of the chain, wrapping
     /// around; from the card's scope (nothing focused) the first (or last).
     fn step_focus(&mut self, forward: bool) {
@@ -208,7 +217,7 @@ impl OpenCard {
         let i = match self.flicks.iter().position(|f| f.id == id) {
             Some(i) => i,
             None => {
-                self.flicks.push(Flick { id, glide: Animated::new(0.0, 300, Easing::OutExpo), flicking: false, rest: 0.0, max: 0.0, content: 0.0, height: 0.0, sig, rect: None, drag: None, mouse: None });
+                self.flicks.push(Flick { id, glide: Animated::new(0.0, 300, Easing::OutExpo), flicking: false, rest: 0.0, max: 0.0, content: 0.0, height: 0.0, sig, wheel_time: None, rect: None, drag: None, mouse: None });
                 self.flicks.len() - 1
             }
         };
@@ -273,6 +282,8 @@ struct Flick {
     height: f32,
     /// A ListView's model at the last draw (see model_sig).
     sig: u64,
+    /// lastPosTime as the wheel sets it (see wheel_time).
+    wheel_time: Option<u32>,
     /// The viewport in the card's coordinates, if the last draw showed it.
     rect: Option<[f32; 4]>,
     /// A finger's scroll that began over it (QQuickFlickable's pixel path).
@@ -499,9 +510,13 @@ impl Flick {
     /// QQuickFlickable::wheelEvent (Qt 6.12, wheelDeceleration 15000 > 14999):
     /// a fixed wheelScrollLines (3) x 24 px per 120 of angleDelta, glided over
     /// 3/4 of fixupDuration (300 ms) OutExpo from where the content is now,
-    /// cut at the bounds (StopAtBounds). At a bound in that direction it does
-    /// not take the wheel (false).
-    fn wheel(&mut self, angle_delta_y: f32, now: Instant) -> bool {
+    /// cut at the bounds (StopAtBounds). At a bound in that direction, or for
+    /// an event no later than the last (wheel_time), it does not take the
+    /// wheel (false).
+    fn wheel(&mut self, angle_delta_y: f32, time: u32, now: Instant) -> bool {
+        if !wheel_time(&mut self.wheel_time, time) {
+            return false;
+        }
         let y = self.y(now);
         let step = -angle_delta_y / 120.0 * 72.0;
         if step == 0.0 || (step < 0.0 && y <= 0.0) || (step > 0.0 && y >= self.max) {
@@ -565,6 +580,18 @@ fn pixel(y: f32, down: bool) -> f32 {
     } else {
         y.ceil()
     }
+}
+
+/// QQuickFlickable::wheelEvent's first test (Qt 6.12, qquickflickable.cpp
+/// 1764-1768): a wheel event whose time (the wl_pointer.axis time, as
+/// QtWayland stamps it) is no later than lastPosTime only becomes the new
+/// lastPosTime - it moves nothing and goes on to what is under the
+/// Flickable. Every other one sets it too, moved or not. A new Flickable
+/// starts with none (-1). False: drop the event.
+pub(crate) fn wheel_time(last: &mut Option<u32>, time: u32) -> bool {
+    let later = last.map_or(true, |l| time > l);
+    *last = Some(time);
+    later
 }
 
 /// A Flickable or ListView being drawn into the card, from view_begin() or
@@ -734,6 +761,20 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
     let output = s.output.clone();
     let (screen_w, screen_h) = (s.screen_width as u32, s.screen_height as u32);
     let today = crate::cal::today();
+    // CardKeys.focusFirst() runs once, when the Loader has built the card
+    // (DropdownWidget.qml:184, Qt.callLater), before the process the opening
+    // starts has answered: the Wi-Fi networks (WifiWidget.qml:199,306) and
+    // the VPN configs (VpnWidget.qml:29,92) are the last opening's, none at
+    // the first, and the disconnect / off button shows only on a link
+    // (WifiWidget.qml:511, VpnWidget.qml:378). With nothing to focus the
+    // keys stay with the card's scope. The index below is resolved at the
+    // first draw, by when that process may have answered: its rows must not
+    // take the focus.
+    let first = match kind {
+        CardKind::Wifi => app.svc.wifi.connected || !app.svc.wifi_card.networks.is_empty(),
+        CardKind::Vpn => !app.svc.vpn.is_empty() || !app.svc.vpn_card.configs.is_empty(),
+        _ => true,
+    };
 
     let surface = app.compositor.create_surface(&app.qh);
     let layer = app.layer_shell.create_layer_surface(&app.qh, surface, Layer::Top, Some("quickshell:card"), Some(&output));
@@ -749,7 +790,7 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         hits: Vec::new(),
         pointer: None,
         shift: false,
-        focus: if keyboard { Some(0) } else { None },
+        focus: (keyboard && first).then_some(0),
         focus_codes: Vec::new(),
         focus_code: None,
         focus_seen: None,
@@ -775,6 +816,7 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         tint_alert: false,
         held: None,
         numbers: HashMap::new(),
+        gauge_from: HashMap::new(),
         flicks: Vec::new(),
         hover_clip: None,
         content_h,
@@ -2035,8 +2077,9 @@ fn flicks_at(c: &OpenCard, p: Option<(f32, f32)>) -> Vec<usize> {
     [false, true].iter().filter_map(|&body| c.flicks.iter().position(|f| (f.id == BODY) == body && under(f))).collect()
 }
 
-/// A wheel turn over the card (QML angleDelta: +120 per notch away from you).
-pub fn wheel(app: &mut App, angle_delta_y: f32) {
+/// A wheel turn over the card (QML angleDelta: +120 per notch away from you),
+/// at the event's `time`.
+pub fn wheel(app: &mut App, angle_delta_y: f32, time: u32) {
     if slider_wheel(app, angle_delta_y) {
         return;
     }
@@ -2045,7 +2088,7 @@ pub fn wheel(app: &mut App, angle_delta_y: f32) {
     // the wheel go on to what is under it.
     let now = Instant::now();
     for i in flicks_under(c) {
-        if c.flicks[i].wheel(angle_delta_y, now) {
+        if c.flicks[i].wheel(angle_delta_y, time, now) {
             c.win.dirty = true;
             return;
         }

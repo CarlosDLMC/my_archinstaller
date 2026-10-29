@@ -652,9 +652,20 @@ impl Pw {
     fn bind_node(&self, registry: &pw::registry::RegistryRc, g: &pw::registry::GlobalObject<pw::properties::PropertiesBox>, id: u32) -> Option<(NodeListener, Node)> {
         let node: Node = registry.bind(g).ok()?;
         let (st_info, st_param) = (self.state.clone(), self.state.clone());
+        // quickshell reads Props index 0 of the enum_params it sends on each
+        // info whose params changed (node.cpp onInfo, onSpaParam): the node's
+        // first Props object, the volume one. The server's notices to a
+        // subscriber number a client-node's params (pw-loopback, filter-chain,
+        // every app stream) in its whole param list (index 31, not 0), but each
+        // comes right after that info: the first Props after it is index 0.
+        let first = Rc::new(Cell::new(false));
+        let first_param = first.clone();
         let l = node
             .add_listener_local()
             .info(move |info| {
+                if info.change_mask().contains(NodeChangeMask::PARAMS) {
+                    first.set(info.params().iter().any(|p| p.id() == ParamType::Props && p.flags().contains(ParamInfoFlags::READWRITE)));
+                }
                 // PwNode::onInfo: the node's full properties.
                 if !info.change_mask().contains(NodeChangeMask::PROPS) {
                     return;
@@ -686,10 +697,10 @@ impl Pw {
                     s.changed = true;
                 }
             })
-            .param(move |_, ty, index, _, pod| {
-                // PwNodeBoundAudio::onSpaParam: Props, unless the card's route
-                // has this node's volume.
-                if ty != ParamType::Props || index != 0 {
+            .param(move |_, ty, _, _, pod| {
+                // PwNodeBoundAudio::onSpaParam: Props index 0, unless the
+                // card's route has this node's volume.
+                if ty != ParamType::Props || !first_param.replace(false) {
                     return;
                 }
                 let Some(obj) = pod.and_then(object) else { return };
