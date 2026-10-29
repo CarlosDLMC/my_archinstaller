@@ -193,6 +193,43 @@ pub fn focused_output(app: &App) -> Option<(WlOutput, f32, f32)> {
     Some((s.output.clone(), s.screen_width, s.screen_height))
 }
 
+/// The focused monitor changed, or an open dialog's screen went away. QML
+/// has an overlay window per screen and shows it only on the focused one.
+/// The layout popups all run the same fade, so the focused screen's simply
+/// shows it as it stands (LayoutOsd.qml:60-63). A dialog (`shown: ready &&
+/// <open> && onFocusedMonitor`, PowerOsd.qml:21-29, ShotOsd.qml:15-24,
+/// RecordOsd.qml:17-26) fades in on the new screen and takes the keyboard
+/// while the old screen's lets go; here the old surface goes at once.
+pub fn follow_focus(app: &mut App) {
+    let Some((out, _, _)) = focused_output(app) else { return };
+    if let Some(o) = app.osd_mut(OsdKind::Layout).filter(|o| o.output != out) {
+        let (shown, fade) = (o.shown, o.fade);
+        let (colors, numbers) = (std::mem::take(&mut o.st.colors), std::mem::take(&mut o.st.numbers));
+        drop_now(app, OsdKind::Layout);
+        crate::layout::map_osd(app);
+        if let Some(o) = app.osd_mut(OsdKind::Layout) {
+            (o.shown, o.fade) = (shown, fade);
+            (o.st.colors, o.st.numbers) = (colors, numbers);
+        }
+    }
+    for kind in [OsdKind::Power, OsdKind::Shot, OsdKind::Record] {
+        let open = match kind {
+            OsdKind::Power => app.svc.power.open,
+            OsdKind::Shot => app.svc.capture.shot_open,
+            _ => app.svc.capture.rec_open,
+        };
+        // Closed (or fading out), or already where the focus is.
+        if !open || app.osd(kind).map_or(false, |o| !o.shown || o.output == out) {
+            continue;
+        }
+        drop_now(app, kind);
+        match kind {
+            OsdKind::Power => crate::power::show_osd(app),
+            _ => crate::capture::show(app, kind),
+        }
+    }
+}
+
 /// Maps the overlay (or, if it is already up, retargets its fade to shown).
 pub fn show(app: &mut App, p: OpenParams) {
     let now = Instant::now();
@@ -233,11 +270,17 @@ pub fn show(app: &mut App, p: OpenParams) {
     layer.set_size(p.size.0, p.size.1);
     layer.set_exclusive_zone(-1);
     layer.set_keyboard_interactivity(if p.keyboard { KeyboardInteractivity::Exclusive } else { KeyboardInteractivity::None });
-    // mask: Region { item: panel } - clicks outside the panel go through.
-    if let (false, Ok(region)) = (p.fill, smithay_client_toolkit::compositor::Region::new(&app.compositor)) {
-        let (x, y, w, h) = p.panel;
-        region.add(x.floor() as i32, y.floor() as i32, w.ceil() as i32, h.ceil() as i32);
-        layer.wl_surface().set_input_region(Some(region.wl_region()));
+    // mask: Region { item: panel } - clicks outside the panel go through. A
+    // panel that is the whole surface needs none: QML's dialogs are
+    // full-screen windows without a mask, and the default region grows with
+    // the surface when the dialog does (capture's and polkit's reshow).
+    let (x, y, w, h) = p.panel;
+    let whole = x <= 0.0 && y <= 0.0 && w.ceil() as u32 >= p.size.0 && h.ceil() as u32 >= p.size.1;
+    if !p.fill && !whole {
+        if let Ok(region) = smithay_client_toolkit::compositor::Region::new(&app.compositor) {
+            region.add(x.floor() as i32, y.floor() as i32, w.ceil() as i32, h.ceil() as i32);
+            layer.wl_surface().set_input_region(Some(region.wl_region()));
+        }
     }
     layer.commit();
     let mut fade = Animated::new(0.0, p.fade_ms, p.fade_easing);
@@ -308,10 +351,27 @@ fn gone_timer(kind: OsdKind) -> &'static str {
 
 /// Unmaps the overlay now, unless it was shown again meanwhile.
 pub fn destroy(app: &mut App, kind: OsdKind) {
-    if app.osd(kind).map_or(true, |o| o.shown) {
-        return;
+    if app.osd(kind).map_or(false, |o| !o.shown) {
+        drop_now(app, kind);
     }
+}
+
+/// The overlay's surfaces go now, as its window hides.
+fn drop_now(app: &mut App, kind: OsdKind) {
+    let Some(o) = app.osd_mut(kind) else { return };
+    let hovered = o.st.pointer.is_some();
+    // LayoutOsd's window is only hidden: its Texts live on (TextMemo).
+    let texts = (kind == OsdKind::Layout).then(|| std::mem::take(&mut o.st.texts));
     app.osds.retain(|o| o.kind != kind);
+    if let Some(t) = texts {
+        crate::layout::keep_texts(app, t);
+    }
+    // A hidden window clears its hover (QQuickWindow::hideEvent): the
+    // MouseArea still under the pointer gets onExited. No wl_pointer.leave
+    // comes for a surface that is gone.
+    if hovered {
+        hover_changed(app, kind, false);
+    }
     unsafe { libc::malloc_trim(0) };
 }
 
@@ -457,13 +517,29 @@ pub fn key(app: &mut App, kind: OsdKind, sym: smithay_client_toolkit::seat::keyb
 }
 
 /// Every pointer event on an overlay, before the generic hit handling; true
-/// when the overlay took it (the overview's drags).
+/// when the overlay took it (the overview's drags, the buttons QML ignores).
 pub fn raw_pointer(app: &mut App, kind: OsdKind, ev: &smithay_client_toolkit::seat::pointer::PointerEventKind, x: f32, y: f32) -> bool {
+    use smithay_client_toolkit::seat::pointer::PointerEventKind as P;
     match kind {
         OsdKind::Overview(i) => crate::overview::pointer(app, i, ev, x, y),
+        // Their MouseAreas keep acceptedButtons' default, Qt.LeftButton
+        // (LayoutOsd.qml:216, PowerOsd.qml:123,263, BigButton.qml:88,
+        // ToggleRow.qml:94, ShotOsd.qml:219, RecordOsd.qml:232): a right,
+        // middle or side button neither presses nor clicks anything.
+        OsdKind::Layout | OsdKind::Power | OsdKind::Shot | OsdKind::Record => {
+            // A monitor tile's onDoubleClicked comes with the second press.
+            if let (OsdKind::Shot | OsdKind::Record, P::Press { time, button, .. }) = (kind, ev) {
+                if crate::capture::press(app, kind, *button, *time, x, y) {
+                    return true;
+                }
+            }
+            matches!(ev, P::Press { button, .. } | P::Release { button, .. } if *button != BTN_LEFT)
+        }
         _ => false,
     }
 }
+
+const BTN_LEFT: u32 = 0x110;
 
 /// The wheel over the panel (QML angleDelta: +120 per notch away from you).
 pub fn wheel(app: &mut App, kind: OsdKind, delta: f32) {

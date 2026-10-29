@@ -3,7 +3,7 @@
 //! region), a monitor picker when there is more than one, the recorder's
 //! audio switches, and the same ScreenShot.sh / ScreenRecord.sh calls.
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use smithay_client_toolkit::shell::WaylandSurface;
 
@@ -49,8 +49,8 @@ pub struct Capture {
     pub audio_sys: bool,
     pub audio_mic: bool,
     open_pending: bool,
-    /// The last tile click, for MouseArea.onDoubleClicked.
-    last_tile: Option<(u32, Instant)>,
+    /// The last left press on a dialog (event time, x, y), for Qt's double click.
+    last_press: Option<(u32, f32, f32)>,
 }
 
 fn script(name: &str) -> String {
@@ -102,13 +102,13 @@ fn refresh_monitors(app: &mut App) {
     });
 }
 
-/// RecordState's saved audio choice, and the monitors, at start.
+/// RecordState's saved audio choice, at start. The monitors are asked for
+/// when a dialog opens: Monitors.qml is a singleton nothing touches before.
 pub fn start(app: &mut App) {
     let mode = std::fs::read_to_string(audio_file()).unwrap_or_default();
     let m = mode.trim();
     app.svc.capture.audio_sys = m == "system" || m == "both";
     app.svc.capture.audio_mic = m == "mic" || m == "both";
-    refresh_monitors(app);
 }
 
 // ---- screenshot ----
@@ -282,7 +282,7 @@ fn keycaps_size(fonts: &mut crate::text::Fonts, size: f32, record: bool) -> (f32
     (w, h)
 }
 
-fn show(app: &mut App, kind: OsdKind) {
+pub(crate) fn show(app: &mut App, kind: OsdKind) {
     let Some((_, sw, sh)) = osd::focused_output(app) else { return };
     let m = met();
     let (cw, ch) = content_size(&mut app.fonts, &app.svc, kind == OsdKind::Record);
@@ -300,8 +300,9 @@ fn reshow(app: &mut App) {
         let m = met();
         let (cw, ch) = content_size(&mut app.fonts, &app.svc, kind == OsdKind::Record);
         let (pw, ph) = (cw + 2.0 * m.pad, ch + 2.0 * m.pad);
-        let Some((_, sw, sh)) = osd::focused_output(app) else { return };
-        let o = app.osd_mut(kind).unwrap();
+        let Some(o) = app.osd_mut(kind) else { continue };
+        // anchors.centerIn on the dialog's own screen, which focus may have left.
+        let (sw, sh) = o.screen;
         if (o.panel.2 - pw).abs() >= 0.5 || (o.panel.3 - ph).abs() >= 0.5 {
             o.panel = (0.0, 0.0, pw, ph);
             o.win.width = pw.ceil() as u32;
@@ -483,18 +484,36 @@ pub fn click(app: &mut App, kind: OsdKind, action: Action) {
         c if c >= MON => {
             let Some(name) = app.svc.capture.monitors.get((c - MON) as usize).map(|m| m.name.clone()) else { return };
             if record { app.svc.capture.rec_target = name } else { app.svc.capture.shot_target = name }
-            // onDoubleClicked: the second click within Qt's 400 ms.
-            let now = Instant::now();
-            let double = app.svc.capture.last_tile.map_or(false, |(lc, at)| lc == c && now.duration_since(at) < Duration::from_millis(400));
-            app.svc.capture.last_tile = if double { None } else { Some((c, now)) };
-            if double {
-                if record { rec_full(app) } else { shot_full(app) }
-            } else {
-                reshow(app);
-            }
+            reshow(app);
         }
         _ => {}
     }
+}
+
+/// A press on the dialog, before the click machinery. Qt turns a second
+/// left press within 400 ms and 5 px of the first (MouseDoubleClickInterval
+/// and -Distance; another button in between breaks it) into a double
+/// click, delivered with that press: on a monitor tile, onDoubleClicked
+/// picks it and shoots (ShotOsd.qml:224-227, RecordOsd.qml:237-240), and
+/// no click follows on the release. True when it did.
+pub fn press(app: &mut App, kind: OsdKind, button: u32, time: u32, x: f32, y: f32) -> bool {
+    let c = &mut app.svc.capture;
+    let double = button == 0x110 && c.last_press.map_or(false, |(t, px, py)| time.wrapping_sub(t) < 400 && (x - px).abs() <= 5.0 && (y - py).abs() <= 5.0);
+    c.last_press = (button == 0x110 && !double).then_some((time, x, y));
+    if !double {
+        return false;
+    }
+    let hit = app.osd(kind).and_then(|o| o.hits.iter().rev().find(|h| h.contains(x, y)).map(|h| h.action));
+    let Some(Action::Card(code)) = hit.filter(|a| matches!(a, Action::Card(c) if *c >= MON)) else { return false };
+    let Some(name) = app.svc.capture.monitors.get((code - MON) as usize).map(|m| m.name.clone()) else { return false };
+    if kind == OsdKind::Record {
+        app.svc.capture.rec_target = name;
+        rec_full(app);
+    } else {
+        app.svc.capture.shot_target = name;
+        shot_full(app);
+    }
+    true
 }
 
 pub fn dim_clicked(app: &mut App, kind: OsdKind) {

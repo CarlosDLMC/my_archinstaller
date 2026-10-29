@@ -215,6 +215,8 @@ fn open(app: &mut App) {
 pub fn close(app: &mut App) {
     disarm(app);
     app.svc.power.open = false;
+    // The uptime Timer runs only while dialogOpen.
+    app.cancel_timer("power-uptime");
     osd::hide(app, OsdKind::Power);
 }
 
@@ -303,6 +305,9 @@ fn run(app: &mut App, cmd: String) {
 fn armed_tick(app: &mut App) {
     let p = &mut app.svc.power;
     let Some(at) = p.armed_at.filter(|_| p.armed()) else { return };
+    // The window binds step and secondsLeft, not elapsed: they move once a
+    // second, and so does what Qt draws.
+    let shown = (p.step(), p.seconds_left());
     p.elapsed = at.elapsed().as_secs_f32();
     if p.step() >= 2 && !p.sync_done {
         p.sync_done = true;
@@ -312,7 +317,9 @@ fn armed_tick(app: &mut App) {
         fire(app);
         return;
     }
-    redraw(app);
+    if (app.svc.power.step(), app.svc.power.seconds_left()) != shown {
+        redraw(app);
+    }
     app.debounce("power-armed", Duration::from_millis(100), armed_tick);
 }
 
@@ -320,9 +327,17 @@ fn uptime_tick(app: &mut App) {
     if !app.svc.power.open {
         return;
     }
+    // Still on the focused screen: services::on_monitors moves the menu as
+    // the focus changes; this also brings it back on another screen when
+    // the compositor closed it with its output (PowerOsd is per screen).
+    osd::follow_focus(app);
     let p = &mut app.svc.power;
+    let shown = p.uptime.floor();
     p.uptime = read_uptime().unwrap_or(p.uptime + 1.0);
-    redraw(app);
+    // The title shows whole seconds of it, and only while not armed.
+    if !p.armed() && p.uptime.floor() != shown {
+        redraw(app);
+    }
     app.debounce("power-uptime", Duration::from_secs(1), uptime_tick);
 }
 
@@ -350,7 +365,7 @@ fn grid(sw: f32, sh: f32) -> Grid {
     Grid { cw: 13.0 * k, ch: 29.0 * k, px: (22.0 * k).round(), k }
 }
 
-fn show_osd(app: &mut App) {
+pub(crate) fn show_osd(app: &mut App) {
     let Some((_, sw, sh)) = osd::focused_output(app) else { return };
     let g = grid(sw, sh);
     let (w, h) = (WW * g.cw, WH * g.ch);
@@ -364,6 +379,12 @@ fn show_osd(app: &mut App) {
 /// vertically, its letter spacing making every character exactly one cell.
 #[allow(clippy::too_many_arguments)]
 fn cell<S: UiState>(ui: &mut Ui<S>, g: &Grid, id: u32, x: f32, y: f32, text: &str, fg: Color, bg: Option<Color>, bold: bool) -> f32 {
+    cell_in(ui, g, 0xF0, id, x, y, text, fg, bg, bold)
+}
+
+/// A Cell whose Text is remembered under `part` (TextMemo).
+#[allow(clippy::too_many_arguments)]
+fn cell_in<S: UiState>(ui: &mut Ui<S>, g: &Grid, part: u64, id: u32, x: f32, y: f32, text: &str, fg: Color, bg: Option<Color>, bold: bool) -> f32 {
     let n = text.encode_utf16().count() as f32;
     let w = n * g.cw;
     if let Some(bg) = bg {
@@ -372,7 +393,7 @@ fn cell<S: UiState>(ui: &mut Ui<S>, g: &Grid, id: u32, x: f32, y: f32, text: &st
     let key = if bold { MONO_BOLD } else { MONO };
     let m_adv = ui.fonts.layout("M", MONO, g.px, 0.0).adv;
     let line = ui.fonts.layout(text, key, g.px, g.cw - m_adv);
-    ui.text_of(id, 0xF0, &line, x, y + ac(g.ch, line.height()), fg);
+    ui.text_of(id, part, &line, x, y + ac(g.ch, line.height()), fg);
     w
 }
 
@@ -501,13 +522,19 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
     let hy = y0 + 20.0 * ch;
     let mut hx = x0 + 3.0 * cw;
     hx += cell(ui, &g, 0x40, hx, hy, " ", INK, Some(BLACK), false);
+    // The hints are a Repeater whose model is a new array on every arm and
+    // disarm (PowerOsd.qml:335-340): its delegates are made anew, so their
+    // Texts start subpixel again. One TextMemo part per state, the other's
+    // forgotten.
+    let hp = if armed { 0xF3 } else { 0xF2 };
+    ui.card.texts().forget_parts(&[if armed { 0xF2 } else { 0xF3 }]);
     for (i, (k, d)) in hints.iter().enumerate() {
         let id = 0x50 + 3 * i as u32;
         if i > 0 {
-            hx += cell(ui, &g, id, hx, hy, "   ", INK, Some(BLACK), false);
+            hx += cell_in(ui, &g, hp, id, hx, hy, "   ", INK, Some(BLACK), false);
         }
-        hx += cell(ui, &g, id + 1, hx, hy, k, if armed { WHITE } else { INK }, Some(BLACK), true);
-        hx += cell(ui, &g, id + 2, hx, hy, &format!(" {d}"), if armed { INK } else { DIM }, Some(BLACK), false);
+        hx += cell_in(ui, &g, hp, id + 1, hx, hy, k, if armed { WHITE } else { INK }, Some(BLACK), true);
+        hx += cell_in(ui, &g, hp, id + 2, hx, hy, &format!(" {d}"), if armed { INK } else { DIM }, Some(BLACK), false);
     }
     cell(ui, &g, 0x41, hx, hy, " ", INK, Some(BLACK), false);
     let motto = " «КОСМОС НАШ» ";
@@ -591,15 +618,17 @@ pub fn key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Keysym, s
                 press(app, k);
             }
         }
-        Keysym::Left | Keysym::ISO_Left_Tab if !armed => {
+        // Qt's xkb table gives the keypad's arrows and Tab (NumLock off)
+        // Key_Left, Key_Right and Key_Tab, so they move the selection too.
+        Keysym::Left | Keysym::KP_Left | Keysym::ISO_Left_Tab if !armed => {
             app.svc.power.selected = (app.svc.power.selected + 4) % 5;
             redraw(app);
         }
-        Keysym::Tab if !armed && shift => {
+        Keysym::Tab | Keysym::KP_Tab if !armed && shift => {
             app.svc.power.selected = (app.svc.power.selected + 4) % 5;
             redraw(app);
         }
-        Keysym::Right | Keysym::Tab if !armed => {
+        Keysym::Right | Keysym::KP_Right | Keysym::Tab | Keysym::KP_Tab if !armed => {
             app.svc.power.selected = (app.svc.power.selected + 1) % 5;
             redraw(app);
         }

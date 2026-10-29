@@ -2,7 +2,7 @@
 //! order (layout next = alt-tab between the last two), the switcher OSD that
 //! shows on every change, and clicking a layout in it.
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::app::App;
 use crate::bar::{ac, Action, Hit};
@@ -11,6 +11,7 @@ use crate::color::Color;
 use crate::gpu::TextStyle;
 use crate::osd::{self, OpenParams, OsdKind};
 use crate::services::{self, Services};
+use crate::text::TextMemo;
 use crate::theme;
 
 const OSD_VISIBLE_MS: u64 = 1300;
@@ -30,9 +31,12 @@ pub struct LayoutState {
     pub current: usize,
     session_active: bool,
     session_pos: usize,
-    held: bool,
     /// The OSD's hovered entry, -1 = none.
     hovered: Option<usize>,
+    /// The popup's Texts while it is unmapped: LayoutOsd is not on demand
+    /// (shell.qml:284-287), so its Text items live as long as the bar, and
+    /// one whose colour changed in between (a new palette) comes back gray.
+    texts: TextMemo,
 }
 
 impl LayoutState {
@@ -93,6 +97,7 @@ pub fn switch_next(app: &mut App) {
     if !s.ready() || s.mru.len() < 2 {
         return;
     }
+    let from = s.selected_pos();
     if !s.session_active {
         s.session_active = true;
         s.session_pos = 1;
@@ -101,7 +106,7 @@ pub fn switch_next(app: &mut App) {
     }
     let target = s.mru[s.session_pos];
     activate(app, target);
-    show_osd(app);
+    show_osd(app, from);
     commit_restart(app);
 }
 
@@ -111,6 +116,12 @@ fn commit_restart(app: &mut App) {
         s.mru = move_to_front(&s.mru, s.current);
         s.session_active = false;
         s.session_pos = 0;
+        // A new mru is a new model: the Repeater makes new delegates, and
+        // their Texts start out subpixel again.
+        s.texts.forget_parts(&[0xE1, 0xE2]);
+        if let Some(o) = app.osd_mut(OsdKind::Layout) {
+            o.st.texts.forget_parts(&[0xE1, 0xE2]);
+        }
         app.mark_all_dirty();
     });
 }
@@ -126,9 +137,10 @@ pub fn layout_changed(app: &mut App) {
     if idx == s.current && !s.session_active {
         return;
     }
+    let from = s.selected_pos();
     s.current = idx;
     if !s.session_active {
-        show_osd(app);
+        show_osd(app, from);
         commit_restart(app);
     }
     app.mark_all_dirty();
@@ -148,8 +160,8 @@ fn select_pos(app: &mut App, pos: usize) {
     release(app);
 }
 
+/// releaseOsd(): the MRU commit runs again.
 fn release(app: &mut App) {
-    app.svc.layout.held = false;
     commit_restart(app);
 }
 
@@ -215,21 +227,71 @@ fn panel_size(app: &mut App) -> (f32, f32) {
     (body_w + m.panel_pad, body_h + m.panel_pad)
 }
 
-fn show_osd(app: &mut App) {
+/// onShowOsd: the popup up, and hideTimer restarted. `from` is the entry
+/// that was selected before the change that shows it.
+fn show_osd(app: &mut App, from: usize) {
     if app.svc.layout.switcher_items().is_empty() {
         return;
     }
+    // Shown on the focused screen: a popup still up on another one moves.
+    osd::follow_focus(app);
+    let fresh = app.osd(OsdKind::Layout).is_none();
+    map_osd(app);
+    if fresh {
+        seed_selection(app, from);
+    }
+    hide_later(app);
+}
+
+/// A popup mapped anew shows the switch as it happens. QML's LayoutOsd is
+/// never destroyed (shell.qml:284-287): the selection moves while it is
+/// hidden, just before showOsd(), and the tile's and the lamp's Behaviors
+/// (LayoutOsd.qml:161-162, ConsoleLamp.qml:23,34) are still running while
+/// it fades in. They start here from the old selection, as draw_osd and
+/// cards::lamp would have left them.
+fn seed_selection(app: &mut App, from: usize) {
+    let now = Instant::now();
+    let t = &app.theme;
+    let (accent, key, glass) = (t.col_accent, t.col_plate.lighter(1.25), t.col_plate.darker(1.3));
+    let (to, n) = (app.svc.layout.selected_pos(), app.svc.layout.switcher_items().len());
+    let Some(o) = app.osd_mut(OsdKind::Layout) else { return };
+    for i in 0..n {
+        let id = i as u32;
+        for lit in [i == from, i == to] {
+            o.st.color(0x100 + id, if lit { accent } else { key }, 120, now);
+            o.st.number(0x3_0200 + id, if lit { 0.22 } else { 0.0 }, 160, now);
+            o.st.color(0x4_0200 + id, if lit { accent } else { glass }, 160, now);
+        }
+    }
+}
+
+/// windowVisible = shown = true: maps the popup, or brings back a fading one.
+pub(crate) fn map_osd(app: &mut App) {
+    let fresh = app.osd(OsdKind::Layout).is_none();
     let (pw, ph) = panel_size(app);
     // implicitWidth: panel + 40; the panel centred in it.
     let (w, h) = ((pw + 40.0).ceil(), (ph + 40.0).ceil());
     osd::show(app, OpenParams { kind: OsdKind::Layout, size: (w as u32, h as u32), panel: (ac(w, pw), ac(h, ph), pw, ph), dim: None, keyboard: false, namespace: "quickshell", fade_ms: OSD_FADE_MS, min_scale: 0.94, fade_easing: crate::anim::Easing::OutCubic, pos: None, fill: false, output: None });
     app.svc.layout.hovered = None;
-    // hideTimer: fade after 1.3 s unless the pointer holds it.
-    app.debounce("layout-osd-hide", Duration::from_millis(OSD_VISIBLE_MS), |app| {
-        if !app.svc.layout.held {
-            osd::hide(app, OsdKind::Layout);
+    if fresh {
+        let texts = std::mem::take(&mut app.svc.layout.texts);
+        if let Some(o) = app.osd_mut(OsdKind::Layout) {
+            o.st.texts = texts;
+        } else {
+            app.svc.layout.texts = texts;
         }
-    });
+    }
+}
+
+/// The popup was unmapped: its Texts wait for the next showing.
+pub fn keep_texts(app: &mut App, texts: TextMemo) {
+    app.svc.layout.texts = texts;
+}
+
+/// hideTimer.restart(): the popup fades 1.3 s later, under the pointer or
+/// not (LayoutOsd.qml:97-101 hides unconditionally; only onEntered stops it).
+fn hide_later(app: &mut App) {
+    app.debounce("layout-osd-hide", Duration::from_millis(OSD_VISIBLE_MS), |app| osd::hide(app, OsdKind::Layout));
 }
 
 fn hide_osd(app: &mut App) {
@@ -240,17 +302,16 @@ fn hide_osd(app: &mut App) {
 /// MouseArea.onEntered / onExited over the panel.
 pub fn osd_hover(app: &mut App, inside: bool) {
     if inside {
-        app.svc.layout.held = true;
-        show_osd(app);
+        // Freeze: no auto-hide and no MRU commit while pointed at; a popup
+        // that was fading comes back (LayoutOsd.qml:233-240). A later
+        // switch restarts both, and then it hides under the pointer too.
+        map_osd(app);
+        app.cancel_timer("layout-osd-hide");
         app.cancel_timer("layout-commit");
     } else {
         app.svc.layout.hovered = None;
         release(app);
-        app.debounce("layout-osd-hide", Duration::from_millis(OSD_VISIBLE_MS), |app| {
-            if !app.svc.layout.held {
-                osd::hide(app, OsdKind::Layout);
-            }
-        });
+        hide_later(app);
     }
 }
 
