@@ -294,6 +294,10 @@ fn on_monitors(app: &mut App, line: &str) {
     // but a binding that comes out the same changes nothing on screen.
     let same = same_on_strips(&app.svc.mango.monitors, &mons);
     app.svc.mango.monitors = mons;
+    // The overview binds its frame, group and hidden-workspace layout to
+    // Mango.monitor(...): an open one follows every snapshot (it draws only
+    // when what it shows changed). Not under `same`, which is the strips'.
+    crate::overview::monitors_changed(app);
     let after = app.svc.mango.focused().and_then(|m| m.client_id);
     if before != after {
         crate::bar::close_all_popups(app);
