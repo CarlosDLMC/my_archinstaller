@@ -300,8 +300,9 @@ fn reshow(app: &mut App) {
         let m = met();
         let (cw, ch) = content_size(&mut app.fonts, &app.svc, kind == OsdKind::Record);
         let (pw, ph) = (cw + 2.0 * m.pad, ch + 2.0 * m.pad);
-        let Some((_, sw, sh)) = osd::focused_output(app) else { return };
-        let o = app.osd_mut(kind).unwrap();
+        let Some(o) = app.osd_mut(kind) else { continue };
+        // anchors.centerIn on the dialog's own screen, which focus may have left.
+        let (sw, sh) = o.screen;
         if (o.panel.2 - pw).abs() >= 0.5 || (o.panel.3 - ph).abs() >= 0.5 {
             o.panel = (0.0, 0.0, pw, ph);
             o.win.width = pw.ceil() as u32;
