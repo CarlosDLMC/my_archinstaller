@@ -634,7 +634,10 @@ fn edit_line(c: &mut Clip, sym: smithay_client_toolkit::seat::keyboard::Keysym, 
         let r = &rest[skip..];
         i + skip + r.find(char::is_whitespace).unwrap_or(r.len())
     };
-    if c.select_all && !matches!(sym, Keysym::Left | Keysym::Right | Keysym::Home | Keysym::End) && (matches!(sym, Keysym::BackSpace | Keysym::Delete) || utf8.map_or(false, |s| !s.is_empty() && !s.chars().any(char::is_control))) {
+    // QInputControl::isAcceptableInput: printable text, unless typed with Ctrl
+    // or Ctrl+Shift (Ctrl+1 is no input; Ctrl+Alt is AltGr to it).
+    let typed = utf8.filter(|s| !s.is_empty() && !s.chars().any(char::is_control) && !(mods.ctrl && !mods.alt));
+    if c.select_all && !matches!(sym, Keysym::Left | Keysym::Right | Keysym::Home | Keysym::End) && (matches!(sym, Keysym::BackSpace | Keysym::Delete) || typed.is_some()) {
         c.filter.clear();
         c.cursor = 0;
         c.select_all = false;
@@ -643,7 +646,8 @@ fn edit_line(c: &mut Clip, sym: smithay_client_toolkit::seat::keyboard::Keysym, 
         }
     }
     match sym {
-        Keysym::a | Keysym::A if mods.ctrl => {
+        // QKeySequence::SelectAll is Ctrl+A alone.
+        Keysym::a | Keysym::A if mods.ctrl && !mods.shift && !mods.alt => {
             c.select_all = true;
             c.cursor = c.filter.len();
         }
@@ -676,10 +680,7 @@ fn edit_line(c: &mut Clip, sym: smithay_client_toolkit::seat::keyboard::Keysym, 
             c.cursor = c.filter.len();
         }
         _ => {
-            if mods.ctrl {
-                return;
-            }
-            if let Some(s) = utf8.filter(|s| !s.is_empty() && !s.chars().any(char::is_control)) {
+            if let Some(s) = typed {
                 c.filter.insert_str(c.cursor, s);
                 c.cursor += s.len();
             }
