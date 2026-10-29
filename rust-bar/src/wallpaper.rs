@@ -127,8 +127,29 @@ fn thumb_dir() -> String {
     format!("{cache}/quickshell/wall-thumbs")
 }
 
-fn path_of(url: &str) -> String {
-    url.strip_prefix("file://").unwrap_or(url).to_string()
+/// The file behind a wallpapers.py URL. file_url() percent-encodes every
+/// byte of the path but letters, digits, "_.-~" and "/" (a space, Cyrillic,
+/// "#", "%"); QML's Image gets them decoded by QUrl, so decode them back to
+/// the path's own bytes.
+fn path_of(url: &str) -> std::path::PathBuf {
+    use std::os::unix::ffi::OsStringExt;
+    let s = url.strip_prefix("file://").unwrap_or(url).as_bytes();
+    let hex = |b: u8| (b as char).to_digit(16);
+    let mut out = Vec::with_capacity(s.len());
+    let mut i = 0;
+    while i < s.len() {
+        match (s[i], s.get(i + 1).and_then(|&b| hex(b)), s.get(i + 2).and_then(|&b| hex(b))) {
+            (b'%', Some(hi), Some(lo)) => {
+                out.push((hi * 16 + lo) as u8);
+                i += 3;
+            }
+            (b, _, _) => {
+                out.push(b);
+                i += 1;
+            }
+        }
+    }
+    std::ffi::OsString::from_vec(out).into()
 }
 
 impl Wall {
@@ -171,7 +192,7 @@ impl Wall {
         0
     }
     /// thumbUrl(): the thumbnail once made; else the picture (not a video, not failed).
-    fn thumb_path(&self, it: &Item) -> Option<String> {
+    fn thumb_path(&self, it: &Item) -> Option<std::path::PathBuf> {
         if self.ready.contains(&it.id) {
             return Some(path_of(&it.thumb));
         }
@@ -662,7 +683,7 @@ fn load_visible(app: &mut App) {
 }
 
 /// sourceSize.height only: scaled down (never up) to that height.
-fn decode_height(path: &str, h: u32) -> Option<(u32, u32, Vec<u8>)> {
+fn decode_height(path: &std::path::Path, h: u32) -> Option<(u32, u32, Vec<u8>)> {
     let img = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?.decode().ok()?.to_rgba8();
     let (iw, ih) = img.dimensions();
     let img = if ih > h {
@@ -676,7 +697,7 @@ fn decode_height(path: &str, h: u32) -> Option<(u32, u32, Vec<u8>)> {
 }
 
 /// sourceSize width and height with PreserveAspectCrop: scaled to cover.
-fn decode_cover(path: &str, w: u32, h: u32) -> Option<(u32, u32, Vec<u8>)> {
+fn decode_cover(path: &std::path::Path, w: u32, h: u32) -> Option<(u32, u32, Vec<u8>)> {
     let img = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?.decode().ok()?.to_rgba8();
     let (iw, ih) = img.dimensions();
     let s = (w as f32 / iw as f32).max(h as f32 / ih as f32);
