@@ -285,24 +285,29 @@ pub struct FontKey {
     pub plain: bool,
 }
 
+/// Glyph bitmaps packed on shelves. The texels live on the GPU only: a
+/// glyph's bitmap waits in `pending` until the next frame uploads it, and
+/// when the atlas grows the texture's content is copied over on the GPU,
+/// so no copy of the whole atlas is kept in memory.
 pub struct Atlas {
     /// Bytes per texel: 1 (distance fields, coverage) or 4 (colour glyphs).
     pub bpp: u32,
     pub width: u32,
     pub height: u32,
-    pub pixels: Vec<u8>,
     shelf_x: u32,
     shelf_y: u32,
     shelf_h: u32,
-    /// Regions written since the last upload (x, y, w, h).
-    pub dirty: Vec<(u32, u32, u32, u32)>,
+    /// Bitmaps placed since the last upload: (x, y, w, h) and their texels.
+    pub pending: Vec<(u32, u32, u32, u32, Vec<u8>)>,
     /// The texture must be recreated (it grew).
     pub resized: bool,
+    /// Nothing of it is on the GPU yet: its texture starts empty (zeroed).
+    pub fresh: bool,
 }
 
 impl Atlas {
     fn new(bpp: u32, width: u32, height: u32) -> Atlas {
-        Atlas { bpp, width, height, pixels: vec![0; (width * height * bpp) as usize], shelf_x: 0, shelf_y: 0, shelf_h: 0, dirty: vec![], resized: true }
+        Atlas { bpp, width, height, shelf_x: 0, shelf_y: 0, shelf_h: 0, pending: vec![], resized: true, fresh: true }
     }
 
     fn alloc(&mut self, w: u32, h: u32) -> (u32, u32) {
@@ -312,11 +317,8 @@ impl Atlas {
             self.shelf_h = 0;
         }
         while self.shelf_y + h > self.height {
-            let old = self.height;
             self.height *= 2;
-            self.pixels.resize((self.width * self.height * self.bpp) as usize, 0);
             self.resized = true;
-            let _ = old;
         }
         let at = (self.shelf_x, self.shelf_y);
         self.shelf_x += w + 1;
@@ -754,12 +756,7 @@ impl Fonts {
             }
         }
         let (ax, ay) = self.color_atlas.alloc(dw as u32, dh as u32);
-        let aw = self.color_atlas.width as usize;
-        for y in 0..dh {
-            let dst = ((ay as usize + y) * aw + ax as usize) * 4;
-            self.color_atlas.pixels[dst..dst + dw * 4].copy_from_slice(&out[y * dw * 4..(y + 1) * dw * 4]);
-        }
-        self.color_atlas.dirty.push((ax, ay, dw as u32, dh as u32));
+        self.color_atlas.pending.push((ax, ay, dw as u32, dh as u32, out));
         Some(ColorGlyph { ax, ay, w: dw as u32, h: dh as u32, left: (*slot).bitmap_left as f32 * f, top: (*slot).bitmap_top as f32 * f })
     }
 
@@ -974,15 +971,13 @@ impl Fonts {
             return Some(NativeGlyph { ax: 0, ay: 0, w: 0, h: 0, left, top });
         }
         let (ax, ay) = self.atlas.alloc(w + 4, h + 4);
-        let aw = self.atlas.width;
-        for j in 0..h + 4 {
-            let row = ((ay + j) * aw + ax) as usize;
-            self.atlas.pixels[row..row + (w + 4) as usize].fill(0);
-        }
+        // The coverage inside two zero texels on every side.
+        let pw = w + 4;
+        let mut px = vec![0u8; (pw * (h + 4)) as usize];
         let mono = bm.pixel_mode as u32 == ft::FT_PIXEL_MODE_MONO as u32;
         for j in 0..h {
             let src = bm.buffer.offset((j as isize) * bm.pitch as isize);
-            let dst = ((ay + 2 + j) * aw + ax + 2) as usize;
+            let dst = ((2 + j) * pw + 2) as usize;
             for i in 0..w {
                 let v = if mono {
                     let byte = *src.add((i / 8) as usize);
@@ -990,10 +985,10 @@ impl Fonts {
                 } else {
                     *src.add(i as usize)
                 };
-                self.atlas.pixels[dst + i as usize] = v;
+                px[dst + i as usize] = v;
             }
         }
-        self.atlas.dirty.push((ax, ay, w + 4, h + 4));
+        self.atlas.pending.push((ax, ay, pw, h + 4, px));
         Some(NativeGlyph { ax: ax + 2, ay: ay + 2, w, h, left, top })
     }
 
@@ -1092,12 +1087,7 @@ impl Fonts {
             }
         }
         let (ax, ay) = self.atlas.alloc(w, h);
-        let aw = self.atlas.width;
-        for j in 0..h {
-            let dst = ((ay + j) * aw + ax) as usize;
-            self.atlas.pixels[dst..dst + w as usize].copy_from_slice(&bits[(j * w) as usize..((j + 1) * w) as usize]);
-        }
-        self.atlas.dirty.push((ax, ay, w, h));
+        self.atlas.pending.push((ax, ay, w, h, bits));
         Some(DfGlyph { ax, ay, w, h, x0: x0 as f32, y0: y0 as f32 })
     }
 }
