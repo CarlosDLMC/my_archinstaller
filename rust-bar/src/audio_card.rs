@@ -147,10 +147,6 @@ pub fn content_height(fonts: &mut crate::text::Fonts, svc: &Services) -> f32 {
     parts.iter().sum::<f32>() + 8.0 * (parts.len().saturating_sub(1)) as f32
 }
 
-fn qround(v: f32) -> f32 {
-    (v + 0.5).floor()
-}
-
 fn section_header(ui: &mut Ui, x: f32, y: f32, w: f32, h: f32, label: &str, detail: &str) {
     let t = ui.theme;
     let cap = ui.fonts.layout(label, theme::bar_font(true), FONT_SIZE - 5.0, 1.0);
@@ -207,47 +203,10 @@ fn slider(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, value: f32, max: f32, 
     }
 }
 
-/// ConsoleLamp, centred in its 10 x 10 slot at (x, y).
-fn lamp(ui: &mut Ui, id: u32, x: f32, y: f32, lit: bool) {
-    let t = ui.theme;
-    let (halo, r1) = ui.card.number(0x3_0000 + id, if lit { 0.22 } else { 0.0 }, 160, ui.now);
-    let (dot, r2) = ui.card.color(0x4_0000 + id, if lit { t.col_accent } else { t.col_plate.darker(1.3) }, 160, ui.now);
-    ui.animating |= r1 || r2;
-    if halo > 0.0 {
-        ui.scene.save();
-        ui.scene.multiply_opacity(halo);
-        ui.scene.rect(x - 4.0, y - 4.0, 18.0, 18.0, t.col_accent, 9.0, 0.0, Color::TRANSPARENT, true);
-        ui.scene.restore();
-    }
-    let border = if lit { t.col_accent.lighter(1.25) } else { Color::qt_rgba(1.0, 1.0, 1.0, 0.12) };
-    ui.scene.rect(x + 1.0, y + 1.0, 9.0, 9.0, dot, 4.5, 1.0, border, true);
-}
-
-/// ConsoleRow: lamp, icon, label; hot while hovered or focused.
+/// ConsoleRow (AudioPanel's device rows: interactive: !lit): the shared
+/// one, whose lamp dot sits where Qt's anchors.centerIn puts it.
 fn console_row(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32, icon: &str, label: &str, lit: bool) {
-    let t = ui.theme;
-    let interactive = !lit;
-    let focused = if interactive { ui.focusable(code) } else { false };
-    let hot = (interactive && ui.hovered(x, y, w, h)) || focused;
-    let (bg, run) = ui.card.color(0x5_0000 + code, if hot { t.col_plate.lighter(1.6) } else { Color::TRANSPARENT }, 110, ui.now);
-    ui.animating |= run;
-    ui.scene.rect(x, y, w, h, bg, 4.0, if focused { 2.0 } else { 0.0 }, t.col_white, true);
-    let lx = x + 6.0;
-    lamp(ui, code, lx, y + qround((h - 10.0) / 2.0), lit);
-    let fg = if lit || hot { t.col_white } else { t.col_grey };
-    let icon_w = ROW_FONT + 2.0;
-    let ix = lx + 10.0 + 8.0;
-    let il = ui.fonts.layout(icon, theme::bar_font(false), ROW_FONT, 0.0);
-    ui.text(&il, ix + (icon_w - il.adv) / 2.0, y + qround((h - il.height()) / 2.0), fg, TextStyle::Normal);
-    let tx = ix + icon_w + 8.0;
-    let tw = x + w - 6.0 - tx;
-    let key = theme::bar_font(lit);
-    let full = ui.fonts.layout(label, key, ROW_FONT, 0.0);
-    let line = ui.fonts.elide_right(&full, label, key, tw, 0.0);
-    ui.text(&line, tx, y + qround((h - line.height()) / 2.0), fg, TextStyle::Normal);
-    if interactive {
-        ui.hits.push(Hit { x, y, w, h, action: Action::Card(code) });
-    }
+    crate::cards::console_row(ui, code, x, y, w, h, icon, label, lit, !lit, None, None);
 }
 
 pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
