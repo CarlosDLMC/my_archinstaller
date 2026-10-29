@@ -199,7 +199,12 @@ impl App {
         if !crt_mode {
             crate::ipc::single_instance();
         }
-        let conn = Connection::connect_to_env().expect("no Wayland display");
+        // Started outside a Wayland session (a TTY, ssh): a message and exit
+        // status 1, not an abort and a core dump.
+        let Ok(conn) = Connection::connect_to_env() else {
+            eprintln!("rust-bar: no Wayland display (WAYLAND_DISPLAY)");
+            std::process::exit(1);
+        };
         let (globals, queue) = registry_queue_init::<App>(&conn).expect("registry");
         let qh = queue.handle();
         let mut ev: EventLoop<'static, App> = EventLoop::try_new().expect("event loop");
