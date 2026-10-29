@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use crate::app::App;
 use crate::bar::ac;
-use crate::cards::{caption, info_grid, info_grid_height, lamp_tinted, plate, GridPair, Ui};
+use crate::cards::{caption, info_grid_height, info_grid_of, lamp_tinted, plate, GridPair, Ui};
 use crate::color::Color;
 use crate::gpu::TextStyle;
 use crate::services::{self, js_num, to_fixed, Services};
@@ -28,6 +28,13 @@ pub const STOP: u32 = 6;
 pub const DNS: u32 = 0x10;
 
 const DNS_CHOICES: [(&str, &str); 3] = [("DHCP", ""), ("Cloudflare", "1.1.1.1 1.0.0.1"), ("Google", "8.8.8.8 8.8.4.4")];
+
+/// The InfoGrids' ids (cards::info_grid_of): each plate's GLabels and
+/// GValues are items of their own, the speed view's too.
+const GRID_CHANNEL: u32 = 0x8100;
+const GRID_CONNECTION: u32 = 0x8200;
+const GRID_TRAFFIC: u32 = 0x8300;
+const GRID_SPEED: u32 = 0x8400;
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub enum View {
@@ -653,7 +660,7 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
                     if band == "—" { v } else { format!("{v} · {band}") }
                 };
                 let rows: [Vec<GridPair>; 1] = [vec![("СИГНАЛ", signal, if weak { t.col_alert } else { t.col_white }), ("СКОРОСТЬ", n.field("bitrate", "—"), t.col_white)]];
-                info_grid(ui, ix, cy, iw, &rows);
+                info_grid_of(ui, GRID_CHANNEL, ix, cy, iw, &rows);
             }
             Block::Connection => {
                 plate(ui, x0, y, cw, h);
@@ -666,7 +673,7 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
                     vec![("ШЛЮЗ", n.field("gateway", "—"), t.col_white), ("РОУТЕР", ms(n.num("router_ping_ms")), t.col_white)],
                     vec![("DNS", n.field("dns", "—"), t.col_white)],
                 ];
-                info_grid(ui, ix, y + 10.0 + cap.height() + 6.0, iw, &rows);
+                info_grid_of(ui, GRID_CONNECTION, ix, y + 10.0 + cap.height() + 6.0, iw, &rows);
             }
             Block::Traffic => {
                 plate(ui, x0, y, cw, h);
@@ -682,7 +689,7 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
                         ("ПОТЕРИ", if loss.is_nan() { "—".into() } else { format!("{}%", js_num(loss)) }, if !loss.is_nan() && loss > 0.0 { t.col_alert } else { t.col_white }),
                     ],
                 ];
-                info_grid(ui, ix, y + 10.0 + cap.height() + 6.0, iw, &rows);
+                info_grid_of(ui, GRID_TRAFFIC, ix, y + 10.0 + cap.height() + 6.0, iw, &rows);
             }
             Block::DnsRow => {
                 let cap = caption(ui.fonts, "DNS");
@@ -709,7 +716,7 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
                     ("ПРИЁМ", if n.speed_down > 0.0 { format!("{} Мбит/с", js_num(n.speed_down)) } else { "—".into() }, if n.speed_phase == "down" { t.col_alert } else { t.col_white }),
                     ("ПЕРЕДАЧА", if n.speed_up > 0.0 { format!("{} Мбит/с", js_num(n.speed_up)) } else { "—".into() }, if n.speed_phase == "up" { t.col_alert } else { t.col_white }),
                 ]];
-                info_grid(ui, ix, cy, iw, &rows);
+                info_grid_of(ui, GRID_SPEED, ix, cy, iw, &rows);
                 cy += info_grid_height(ui.fonts, 1) + 6.0;
                 if n.speed_error.is_empty() {
                     let status = match n.speed_phase {

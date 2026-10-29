@@ -26,6 +26,7 @@ use crate::gpu::{Gpu, Scene, TextStyle};
 use crate::services::{self, Services};
 use crate::text::{Fonts, Line};
 use crate::theme::{self, Theme, FONT_SIZE};
+use wayland_client::protocol::wl_output::WlOutput;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum CardKind {
@@ -43,6 +44,28 @@ pub enum CardKind {
 
 /// A fixed origin for animations that run on the clock (Spinner).
 pub static EPOCH: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+
+/// What a bar keeps of a card QML makes once and only hides (see KEPT).
+struct Kept {
+    output: WlOutput,
+    kind: CardKind,
+    texts: crate::text::TextMemo,
+    /// CardKeys' focused control when the card closed.
+    focus: Option<u32>,
+}
+
+thread_local! {
+    /// CalendarPopup and CenterInfo's weather card are no Loaders: every bar
+    /// has its own of each, made once and only hidden when it closes
+    /// (CenterInfo.qml:903-911). Their Texts keep what happened to them - a
+    /// month paged or an arrow hovered is gray from then on - and the
+    /// calendar's CardKeys keeps its focused arrow, which the next opening
+    /// by the mouse shows again: the window gives its focus back down the
+    /// focus scopes (QQuickWindow::focusInEvent). Kept by the bar's output:
+    /// a new output is a new bar, and a gone one's state goes at the next
+    /// closing.
+    static KEPT: std::cell::RefCell<Vec<Kept>> = const { std::cell::RefCell::new(Vec::new()) };
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Stem {
@@ -87,6 +110,9 @@ pub struct OpenCard {
     colors: HashMap<u32, Animated<Color>>,
     /// Calendar: the month shown (year, month 1-12) and the wheel's remainder.
     month: (i32, u32),
+    /// Calendar: the date it opened on, the day it shows as today
+    /// (CalendarPopup.qml:33-39 sets currentDate when it opens, and only then).
+    today: (i32, u32, u32),
     wheel_acc: f32,
     /// Sliders of the last draw: (code, x, width, maximum).
     pub(crate) sliders: Vec<(u32, f32, f32, f32)>,
@@ -199,9 +225,15 @@ impl OpenCard {
     /// that is not pickable - the VPN tunnel in use - would show the focus
     /// ring in QML; here it stays with the scope.) The rows' lamps and
     /// texts start fresh; their backgrounds from transparent, as a new
-    /// delegate's, so hover and focus fade in on them.
+    /// delegate's, so hover and focus fade in on them. A press held on an
+    /// old row died with its delegate (its MouseArea's grab): the release
+    /// clicks nothing, not the row now in its place - the Wi-Fi scans
+    /// re-sort the list 1.4 s and 3.2 s after the card opens.
     fn list_replaced(&mut self, base: u32, count: usize) {
         let rows = base..base + 0x100;
+        if matches!(self.held, Some((Action::Card(c), _)) if rows.contains(&c)) {
+            self.held = None;
+        }
         if self.focus_code.map_or(false, |c| rows.contains(&c)) {
             let shown = self.focus == self.focus_seen && self.focus.and_then(|f| self.focus_codes.get(f)).map_or(false, |c| rows.contains(c));
             self.focus_code = Some(base).filter(|_| shown && count > 0);
@@ -464,11 +496,14 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         h = weather_height(&mut app.fonts, &app.svc, w);
     }
     if kind == CardKind::Audio {
+        // No PipeWire dispatch of its own: what the card lists is bound all
+        // the time (pw.rs follow), and a dispatch here ate the events whose
+        // new default sink then reached the strip only at PipeWire's next
+        // wakeup. services.rs's watcher dispatches them and applies them.
         if let Some(pw) = app.svc.pw.as_mut() {
             pw.track_all(true);
             let src = pw.source().1.map(|n| n.id);
             pw.monitor_peak(src);
-            pw.dispatch();
         }
         content_h = crate::audio_card::content_height(&mut app.fonts, &app.svc);
         h = 120f32.max((content_h.ceil() + 30.0).min(560.0));
@@ -512,6 +547,7 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
     };
     let output = s.output.clone();
     let (screen_w, screen_h) = (s.screen_width as u32, s.screen_height as u32);
+    let today = crate::cal::today();
 
     let surface = app.compositor.create_surface(&app.qh);
     let layer = app.layer_shell.create_layer_surface(&app.qh, surface, Layer::Top, Some("quickshell:card"), Some(&output));
@@ -541,7 +577,8 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         stem_w,
         notch: None,
         colors: HashMap::new(),
-        month: { let (y, m, _) = crate::cal::today(); (y, m) },
+        month: (today.0, today.1),
+        today,
         wheel_acc: 0.0,
         sliders: Vec::new(),
         meter: (0.0, 0.0, 0),
@@ -562,16 +599,19 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         top: y.round(),
     });
     app.strips[strip].win.dirty = true;
-    if kind == CardKind::Weather {
-        // CenterInfo's weather card is not a Loader: Qt makes its Texts' nodes
-        // the first time it is shown and keeps them, so what changed since the
-        // last opening is gray (the palette load at startup came before any node).
-        if let Some(m) = app.weather_texts.take() {
-            app.card.as_mut().unwrap().texts = m;
+    if matches!(kind, CardKind::Calendar | CardKind::Weather) {
+        // This bar's own (KEPT): Qt made its Texts' nodes the first time it
+        // was shown, so what changed since is gray (the palette load at
+        // startup came before any node).
+        let output = &app.strips[strip].output;
+        let kept = KEPT.with_borrow_mut(|v| v.iter().position(|k| k.kind == kind && k.output == *output).map(|i| v.swap_remove(i)));
+        if let (Some(k), Some(card)) = (kept, app.card.as_mut()) {
+            card.texts = k.texts;
+            // A keyboard opening focuses the first control (focusFirst).
+            if !keyboard {
+                card.focus_code = k.focus;
+            }
         }
-    }
-    if kind == CardKind::Audio {
-        app.debounce(METER_TIMER, Duration::from_millis(33), meter_timer);
     }
     if kind == CardKind::Pult {
         crate::pult::opened(app);
@@ -589,26 +629,15 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
     }
 }
 
-/// LevelMeter's Timer (interval 33, running while the meter shows): one
-/// timer, by name, so a card closed and opened again (toggle() on another
-/// bar does both at once) does not leave a second one ticking.
-const METER_TIMER: &str = "audio-meter";
-
-/// The timers a card runs while it is open (QML: Timer { running: cardOpen }),
-/// stopped when it closes: the meter's, and the agent card's tick
-/// (AgentPanel.qml nowTick, AgentUsage.qml:149-154), agent.rs's "agent-tick".
-const CARD_TIMERS: [&str; 2] = [METER_TIMER, "agent-tick"];
-
-fn meter_timer(app: &mut App) {
-    if crate::audio_card::meter_tick(app) {
-        app.debounce(METER_TIMER, Duration::from_millis(33), meter_timer);
-    }
-}
+/// The agent card's tick (AgentPanel.qml nowTick, AgentUsage.qml:149-154),
+/// agent.rs's TICK: QML's Timers run while the card is open (running:
+/// cardOpen) and stop when it closes. The mic meter's Timer is audio_card's
+/// one clock (start_meter, after the card's first draw), which ends at its
+/// first tick without the audio card.
+const AGENT_TICK: &str = "agent-tick";
 
 pub fn close(app: &mut App) {
-    for t in CARD_TIMERS {
-        app.cancel_timer(t);
-    }
+    app.cancel_timer(AGENT_TICK);
     if app.card.as_ref().map(|c| c.kind) == Some(CardKind::Pult) {
         crate::pult::closed(app);
     }
@@ -618,8 +647,14 @@ pub fn close(app: &mut App) {
     let Some(mut card) = app.card.take() else { return };
     // The meter's subsurface goes before the card's surface.
     card.meter_win = None;
-    if card.kind == CardKind::Weather {
-        app.weather_texts = Some(std::mem::take(&mut card.texts));
+    if matches!(card.kind, CardKind::Calendar | CardKind::Weather) {
+        if let Some(s) = app.strips.get(card.strip) {
+            let kept = Kept { output: s.output.clone(), kind: card.kind, texts: std::mem::take(&mut card.texts), focus: card.focus_code };
+            KEPT.with_borrow_mut(|v| {
+                v.retain(|k| app.strips.iter().any(|s| s.output == k.output));
+                v.push(kept);
+            });
+        }
     }
     if card.kind == CardKind::Audio {
         if let Some(pw) = app.svc.pw.as_mut() {
@@ -1411,10 +1446,18 @@ pub(crate) fn info_grid_height(fonts: &mut Fonts, rows: usize) -> f32 {
     rows as f32 * grid_row_h(fonts) + rows.saturating_sub(1) as f32 * 4.0
 }
 
+/// A card's only InfoGrid (the battery card's): see info_grid_of.
+pub(crate) fn info_grid<S: UiState>(ui: &mut Ui<S>, x: f32, y: f32, w: f32, rows: &[Vec<GridPair>]) {
+    info_grid_of(ui, 0, x, y, w, rows);
+}
+
 /// InfoGrid: four columns (label, value, label, value), spacing 14 x 4; the
 /// values (preferredWidth 0, fillWidth) share what the labels leave and are
 /// right-aligned, elided. A row of one pair spans its value over the rest.
-pub(crate) fn info_grid<S: UiState>(ui: &mut Ui<S>, x: f32, y: f32, w: f32, rows: &[Vec<GridPair>]) {
+/// Each GLabel and GValue is an item of its own (NetworkPanel.qml:469-489),
+/// so their texts are keyed by the grid, `id` (a card's grids 0x100 apart),
+/// and the cell: a grid in one view never takes over another view's texts.
+pub(crate) fn info_grid_of<S: UiState>(ui: &mut Ui<S>, id: u32, x: f32, y: f32, w: f32, rows: &[Vec<GridPair>]) {
     let t = ui.theme;
     let lkey = theme::bar_font(false);
     let vkey = theme::bar_font(true);
@@ -1428,19 +1471,23 @@ pub(crate) fn info_grid<S: UiState>(ui: &mut Ui<S>, x: f32, y: f32, w: f32, rows
     let (cx, cw) = snap_columns([label_w[0], value_w, label_w[1], value_w], 14.0, w, [label_w[0], 0.0, label_w[1], 0.0]);
     let row_h = grid_row_h(ui.fonts);
     let mut ry = y;
-    for row in rows {
+    for (r, row) in rows.iter().enumerate() {
         for (c, (label, value, vc)) in row.iter().enumerate().take(2) {
+            let cell = id + (r * 2 + c) as u32;
             let l = ui.fonts.layout(label, lkey, GRID_LABEL, 1.0);
-            ui.text(&l, x + cx[2 * c], ry + ac(row_h, l.height()), t.col_dim, TextStyle::Normal);
+            ui.text_of(cell, GRID_TEXTS[0], &l, x + cx[2 * c], ry + ac(row_h, l.height()), t.col_dim);
             // A lone pair's value spans columns 1-3.
             let (vx, vw) = if row.len() == 1 { (cx[1], cx[3] + cw[3] - cx[1]) } else { (cx[2 * c + 1], cw[2 * c + 1]) };
             let full = ui.fonts.layout(value, vkey, GRID_VALUE, 0.0);
             let v = ui.fonts.elide_right(&full, value, vkey, vw, 0.0);
-            ui.text(&v, x + vx + vw - v.adv, ry + ac(row_h, v.height()), *vc, TextStyle::Normal);
+            ui.text_of(cell, GRID_TEXTS[1], &v, x + vx + vw - v.adv, ry + ac(row_h, v.height()), *vc);
         }
         ry += row_h + 4.0;
     }
 }
+
+/// The text_of parts of an InfoGrid's GLabel and GValue.
+const GRID_TEXTS: [u64; 2] = [0xD5, 0xD6];
 
 /// QGridLayoutRowData::calculateGeometries with snapToPixelGrid: each cell's
 /// start is qRound()ed, its neighbours absorb the difference, the last one
@@ -1519,7 +1566,7 @@ fn draw_calendar(ui: &mut Ui, w: f32) {
         ui.text(&l, cx, cy, t.col_dim, TextStyle::Normal);
     }
     let gy = py + 8.0 + 24.0 + 4.0;
-    let today = crate::cal::today();
+    let today = ui.card.today;
     let start = crate::cal::grid_start(year, month, first);
     for k in 0..42u32 {
         let (dy, dm, dd) = crate::cal::add_days(start, k as i64);
@@ -1720,9 +1767,14 @@ fn calendar_step(app: &mut App, delta: i32) {
 pub fn wheel(app: &mut App, angle_delta_y: f32) {
     let Some(c) = app.card.as_mut() else { return };
     if c.kind == CardKind::Audio {
-        // A VolumeSlider under the pointer takes it first: 5% a notch.
-        let over = c.pointer.and_then(|(px, py)| c.sliders.iter().find(|s| px >= s.1 && px < s.1 + s.2 && py >= 0.0).map(|s| s.0));
-        let over = over.filter(|code| c.hits.iter().any(|h| h.action == Action::Card(*code) && c.pointer.map_or(false, |(px, py)| h.contains(px, py))));
+        // A VolumeSlider under the pointer takes it first: 5% a notch
+        // (VolumeSlider.qml:129-133). Every fader spans the same x, so the
+        // hit under the pointer (the top one, as app.rs hit_at finds it)
+        // says which; one scrolled out of view has no hit there.
+        let over = c.pointer.and_then(|(px, py)| c.hits.iter().rev().find(|h| h.contains(px, py))).and_then(|h| match h.action {
+            Action::Card(code) if crate::audio_card::is_slider(code) => Some(code),
+            _ => None,
+        });
         if let Some(code) = over {
             crate::audio_card::slider_step(app, code, angle_delta_y > 0.0);
             return;

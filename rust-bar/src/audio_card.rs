@@ -238,11 +238,8 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
     ui.card.meter_at = None;
     ui.card.meter_node = false;
     // The Flickable clips input as well as paint (AudioPanel.qml:47-51, clip:
-    // true): a control scrolled out of view takes neither hover nor clicks.
-    let view = (8.0, crate::cards::STEM_H + 8.0, w - 16.0, ui.card.card_height() - 28.0);
-    let pointer = ui.card.pointer;
-    ui.card.pointer = pointer.filter(|&(px, py)| px >= view.0 && px < view.0 + view.2 && py >= view.1 && py < view.1 + view.3);
-    let first_hit = ui.hits.len();
+    // true): cards::draw draws this inside its view_begin/view_end, so a
+    // control scrolled out of view takes neither hover nor clicks.
     let t = ui.theme;
     let l = lists(svc);
     let m = metrics(ui.fonts);
@@ -329,15 +326,6 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
         let e = ui.fonts.layout("Нет аудиоустройств", theme::bar_font(false), LABEL, 0.0);
         ui.text(&e, x0 + (cw - e.adv) / 2.0, y, t.col_grey, TextStyle::Normal);
     }
-    ui.card.pointer = pointer;
-    let mut hits = ui.hits.split_off(first_hit);
-    hits.retain_mut(|h| {
-        let (x, y) = (h.x.max(view.0), h.y.max(view.1));
-        let (r, b) = ((h.x + h.w).min(view.0 + view.2), (h.y + h.h).min(view.1 + view.3));
-        (h.x, h.y, h.w, h.h) = (x, y, r - x, b - y);
-        r > x && b > y
-    });
-    ui.hits.append(&mut hits);
 }
 
 /// The meter on a surface of its own, redrawn alone while only the level
