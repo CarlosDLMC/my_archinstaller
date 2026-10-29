@@ -696,7 +696,28 @@ impl Gpu {
 
     /// An image with its mip levels already built by mip_levels() - the
     /// carousel and the overview build them on the decode thread.
-    pub fn add_levels(&mut self, levels: Vec<(u32, u32, Vec<u8>)>) -> u32 {
+    pub fn add_levels(&mut self, mut levels: Vec<(u32, u32, Vec<u8>)>) -> u32 {
+        // A texture past the device's limit is a validation error, which
+        // wgpu makes a panic (and panic = abort). Qt scales such an image
+        // down to the limit before the upload (QSGPlainTexture: each side
+        // clamped, aspect ignored - the texture coordinates are normalised,
+        // so it still fills its rect); a mip chain just loses its biggest
+        // levels. Reached by e.g. a clipboard image of 20000 x 50, whose
+        // 96 px thumbnail is not scaled at all.
+        let max = self.device.limits().max_texture_dimension_2d;
+        let fits = |l: &(u32, u32, Vec<u8>)| l.0 <= max && l.1 <= max;
+        while levels.len() > 1 && !fits(&levels[0]) {
+            levels.remove(0);
+        }
+        if !fits(&levels[0]) {
+            let (w, h, px) = levels.remove(0);
+            let (nw, nh) = (w.min(max), h.min(max));
+            let px = match image::RgbaImage::from_raw(w, h, px) {
+                Some(img) => scale(img, nw, nh).into_raw(),
+                None => vec![0; nw as usize * nh as usize * 4],
+            };
+            levels.insert(0, (nw, nh, px));
+        }
         let (width, height) = (levels[0].0, levels[0].1);
         let tex = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("image"),
