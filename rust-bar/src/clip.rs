@@ -226,6 +226,13 @@ fn blink(app: &mut App) {
     if !app.svc.clip.open {
         return;
     }
+    // mango closes the layer surfaces of a screen that goes away; QML's
+    // ClipboardOsd is a window per screen, shown on the focused one, so the
+    // open picker shows up there. Without this, `open` stayed true with no
+    // dialog and the next SUPER+ALT+V only "closed" it.
+    if app.osd(OsdKind::Clipboard).is_none() {
+        show(app);
+    }
     if let Some(o) = app.osd_mut(OsdKind::Clipboard) {
         o.win.dirty = true;
     }
@@ -652,7 +659,9 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
     if !c.filter.is_empty() {
         ui.text(&line, sx - shift, sy, t.col_white, TextStyle::Normal);
     }
-    if c.blink_since.map_or(true, |s| s.elapsed().as_millis() / 500 % 2 == 0) {
+    // No cursor once closed: the keyboard leaves with `shown`, and an
+    // unfocused TextInput draws none while the card fades out.
+    if c.open && c.blink_since.map_or(true, |s| s.elapsed().as_millis() / 500 % 2 == 0) {
         ui.scene.fill(sx + cursor_x - shift, sy, 1.0, ih, t.col_white);
     }
     ui.scene.restore();
