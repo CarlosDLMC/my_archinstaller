@@ -29,6 +29,10 @@ pub struct Pult {
     /// Which opening of the card this is: its D-Bus watchers run under tags
     /// that carry it (watch()).
     opening: u32,
+    /// Asked for again while still running (Process's targetRunning): the
+    /// power chain with the last click's state, one more night-light toggle.
+    bt_power_again: Option<bool>,
+    night_again: bool,
 }
 
 const PROFILES: [&str; 3] = ["performance", "balanced", "power-saver"];
@@ -153,6 +157,27 @@ fn bt_found(app: &mut App) {
 
 fn set_bluetooth(app: &mut App, on: bool) {
     app.svc.pult.bt_powered = on;
+    bt_power(app, on);
+    if on {
+        app.exec_detached(&["blueman-applet"]);
+    } else {
+        stop_scan(app);
+        app.exec_detached(&["sh", "-c", "killall blueman-applet blueman-tray 2>/dev/null || true"]);
+    }
+    app.mark_all_dirty();
+}
+
+/// btPowerProc.running = true with powerOn = `on` (PultWidget.qml:312-326).
+/// Clicked again while the chain still runs, Process runs it once more when
+/// it ends, with the last click's powerOn (targetRunning, quickshell
+/// process.cpp:274-287): a quick on-off ends with the radio off, as in QML.
+/// spawn() dropped the second run, so the radio stayed on while the switch
+/// said off and the applet had been killed.
+fn bt_power(app: &mut App, on: bool) {
+    if app.is_running("bt-power") {
+        app.svc.pult.bt_power_again = Some(on);
+        return;
+    }
     let cmd = if on {
         "sudo rfkill unblock bluetooth && sudo systemctl start bluetooth && sleep 0.5 && bluetoothctl power on"
     } else {
@@ -162,14 +187,10 @@ fn set_bluetooth(app: &mut App, on: bool) {
         bt_status(app);
         bt_connected(app);
         bt_devices(app);
+        if let Some(on) = app.svc.pult.bt_power_again.take() {
+            bt_power(app, on);
+        }
     });
-    if on {
-        app.exec_detached(&["blueman-applet"]);
-    } else {
-        stop_scan(app);
-        app.exec_detached(&["sh", "-c", "killall blueman-applet blueman-tray 2>/dev/null || true"]);
-    }
-    app.mark_all_dirty();
 }
 
 pub fn scanning(app: &App) -> bool {
@@ -250,9 +271,14 @@ fn set_profile(app: &mut App, profile: &str) {
     app.mark_all_dirty();
 }
 
+/// What NightLight.sh last wrote to its state file: "on" or not.
+fn night_file_on() -> bool {
+    std::fs::read_to_string(format!("{}/.cache/.nightlight_state", services::home())).map_or(false, |t| t.trim() == "on")
+}
+
 /// NightLight.qml: on = the state file says so and wlsunset is alive.
 fn read_night(app: &mut App) {
-    let on = std::fs::read_to_string(format!("{}/.cache/.nightlight_state", services::home())).map_or(false, |t| t.trim() == "on");
+    let on = night_file_on();
     app.svc.pult.night_on = on;
     if on {
         app.spawn("night-alive", &["sh", "-c", "pgrep -x wlsunset >/dev/null 2>&1 && echo yes || echo no"], |app, d| {
@@ -262,6 +288,26 @@ fn read_night(app: &mut App) {
             }
         });
     }
+}
+
+/// NightLight.toggle(): toggleProc.running = true (NightLight.qml:64-71). On
+/// a toggle still running, Process runs it once more after it (targetRunning),
+/// so a double click toggles twice, as in QML. Its end shows what the script
+/// wrote, as the state file's watch does (applyState, NightLight.qml:28-35):
+/// a fresh "on" is trusted - a pgrep right then can come before nohup has
+/// started wlsunset and turn the switch off.
+fn night_toggle(app: &mut App) {
+    if app.is_running("night-toggle") {
+        app.svc.pult.night_again = true;
+        return;
+    }
+    app.spawn("night-toggle", &["bash", "-c", "$HOME/.config/hypr/scripts/NightLight.sh toggle"], |app, _| {
+        app.svc.pult.night_on = night_file_on();
+        app.mark_all_dirty();
+        if std::mem::take(&mut app.svc.pult.night_again) {
+            night_toggle(app);
+        }
+    });
 }
 
 fn keep_awake_path() -> String {
@@ -611,12 +657,7 @@ pub fn activate(app: &mut App, code: u32) {
     let p = &app.svc.pult;
     match code {
         SW_BT => set_bluetooth(app, !p.bt_powered),
-        SW_NIGHT => {
-            app.spawn("night-toggle", &["bash", "-c", "$HOME/.config/hypr/scripts/NightLight.sh toggle"], |app, _| {
-                read_night(app);
-                app.mark_all_dirty();
-            });
-        }
+        SW_NIGHT => night_toggle(app),
         SW_AWAKE => set_keep_awake(app, !p.keep_awake),
         SW_STATS => set_stats_shown(app, !app.svc.stats.shown),
         SEARCH => {
