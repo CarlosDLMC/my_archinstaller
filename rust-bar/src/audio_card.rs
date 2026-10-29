@@ -41,15 +41,15 @@ pub fn lists(svc: &Services) -> Lists {
         return Lists { sink: Default::default(), source: Default::default(), sinks: vec![], sources: vec![], streams: vec![] };
     };
     let nodes = pw.nodes();
-    let sink = pw.sink();
-    let source = pw.source();
+    let sink = pw.default_node(true);
+    let source = pw.default_node(false);
     let mut sinks: Vec<NodeInfo> = nodes.iter().filter(|n| n.0.is_sink()).map(|n| n.0.clone()).collect();
     if let Some(s) = &sink.1 {
         if !sinks.iter().any(|n| n.id == s.id) {
             sinks.insert(0, s.clone());
         }
     }
-    let mut sources: Vec<NodeInfo> = nodes.iter().filter(|n| n.0.is_source() && n.0.name != "quickshell" && n.0.name != "mic_denoise").map(|n| n.0.clone()).collect();
+    let mut sources: Vec<NodeInfo> = nodes.iter().filter(|n| n.0.is_source()).map(|n| n.0.clone()).collect();
     if let Some(s) = &source.1 {
         if !sources.iter().any(|n| n.id == s.id) {
             sources.insert(0, s.clone());
@@ -459,7 +459,7 @@ pub fn meter_tick(app: &mut App) -> bool {
     if card.kind != crate::cards::CardKind::Audio {
         return false;
     }
-    let (audio, _) = app.svc.pw.as_ref().map(|p| p.source()).unwrap_or_default();
+    let audio = app.svc.pw.as_ref().map(|p| p.source_audio()).unwrap_or_default();
     let peak = app.svc.pw.as_ref().map_or(0.0, |p| p.peak());
     let target = if audio.muted || !audio.ready || !(peak > 0.0) {
         0.0
