@@ -248,39 +248,51 @@ fn close_session(app: &mut App) {
     }
 }
 
-/// g_strcompress: the helper escapes its lines like C strings.
-fn unescape(s: &str) -> String {
-    let mut out = String::new();
-    let mut it = s.chars().peekable();
-    while let Some(c) = it.next() {
-        if c != '\\' {
+/// g_strcompress: the helper escapes its lines like C strings (g_strescape),
+/// every byte outside printable ASCII as \ooo - the escapes are bytes, and a
+/// localized PAM prompt is UTF-8 again only once they are put back together.
+/// The result is a C string: a \000 ends it.
+fn unescape(s: &[u8]) -> String {
+    let mut out = Vec::with_capacity(s.len());
+    let mut i = 0;
+    while i < s.len() {
+        let c = s[i];
+        i += 1;
+        if c != b'\\' {
             out.push(c);
             continue;
         }
-        match it.next() {
-            Some('n') => out.push('\n'),
-            Some('t') => out.push('\t'),
-            Some('r') => out.push('\r'),
-            Some('b') => out.push('\u{8}'),
-            Some('f') => out.push('\u{c}'),
-            Some(d @ '0'..='7') => {
-                let mut v = d.to_digit(8).unwrap();
+        // A trailing backslash ends the string.
+        let Some(&e) = s.get(i) else { break };
+        i += 1;
+        match e {
+            b'0'..=b'7' => {
+                let mut v = e - b'0';
                 for _ in 0..2 {
-                    match it.peek().and_then(|c| c.to_digit(8)) {
-                        Some(n) => {
-                            v = v * 8 + n;
-                            it.next();
+                    match s.get(i) {
+                        Some(&d @ b'0'..=b'7') => {
+                            v = v.wrapping_mul(8).wrapping_add(d - b'0');
+                            i += 1;
                         }
-                        None => break,
+                        _ => break,
                     }
                 }
-                out.push(char::from_u32(v).unwrap_or('?'));
+                out.push(v);
             }
-            Some(o) => out.push(o),
-            None => {}
+            b'b' => out.push(0x08),
+            b'f' => out.push(0x0c),
+            b'n' => out.push(b'\n'),
+            b'r' => out.push(b'\r'),
+            b't' => out.push(b'\t'),
+            b'v' => out.push(0x0b),
+            // \" and \\ too.
+            o => out.push(o),
         }
     }
-    out
+    if let Some(n) = out.iter().position(|&b| b == 0) {
+        out.truncate(n);
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// io_watch_have_data(): the helper's lines.
@@ -305,7 +317,7 @@ fn helper_ready(app: &mut App) {
         }
         while let Some(p) = s.buf.iter().position(|&b| b == b'\n') {
             let l: Vec<u8> = s.buf.drain(..=p).collect();
-            lines.push(unescape(String::from_utf8_lossy(&l[..l.len() - 1]).as_ref()));
+            lines.push(unescape(&l[..l.len() - 1]));
         }
     } else {
         return;
