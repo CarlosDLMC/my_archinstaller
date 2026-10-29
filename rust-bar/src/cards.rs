@@ -734,6 +734,20 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
     let output = s.output.clone();
     let (screen_w, screen_h) = (s.screen_width as u32, s.screen_height as u32);
     let today = crate::cal::today();
+    // CardKeys.focusFirst() runs once, when the Loader has built the card
+    // (DropdownWidget.qml:184, Qt.callLater), before the process the opening
+    // starts has answered: the Wi-Fi networks (WifiWidget.qml:199,306) and
+    // the VPN configs (VpnWidget.qml:29,92) are the last opening's, none at
+    // the first, and the disconnect / off button shows only on a link
+    // (WifiWidget.qml:511, VpnWidget.qml:378). With nothing to focus the
+    // keys stay with the card's scope. The index below is resolved at the
+    // first draw, by when that process may have answered: its rows must not
+    // take the focus.
+    let first = match kind {
+        CardKind::Wifi => app.svc.wifi.connected || !app.svc.wifi_card.networks.is_empty(),
+        CardKind::Vpn => !app.svc.vpn.is_empty() || !app.svc.vpn_card.configs.is_empty(),
+        _ => true,
+    };
 
     let surface = app.compositor.create_surface(&app.qh);
     let layer = app.layer_shell.create_layer_surface(&app.qh, surface, Layer::Top, Some("quickshell:card"), Some(&output));
@@ -749,7 +763,7 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         hits: Vec::new(),
         pointer: None,
         shift: false,
-        focus: if keyboard { Some(0) } else { None },
+        focus: (keyboard && first).then_some(0),
         focus_codes: Vec::new(),
         focus_code: None,
         focus_seen: None,
