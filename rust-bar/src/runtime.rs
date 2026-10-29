@@ -42,6 +42,8 @@ impl App {
         cmd.args(&argv[1..]).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
         unsafe {
             cmd.pre_exec(|| {
+                // Its own process group, for kill().
+                libc::setpgid(0, 0);
                 libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM);
                 Ok(())
             });
@@ -79,10 +81,20 @@ impl App {
         });
     }
 
-    /// Process.running = false: SIGTERM to a helper started under `tag`.
+    /// Process.running = false: SIGTERM to a helper started under `tag`, and
+    /// to the children it left in its process group. A helper counts as
+    /// running until its stdout closes, and a grandchild holding that pipe
+    /// (the keep-awake inhibitor's `sleep 5`) kept the tag for seconds after
+    /// the helper died, so starting it again in that time did nothing;
+    /// QProcess reports the exit as soon as its child is gone.
     pub fn kill(&mut self, tag: &str) {
         if let Some((_, pid)) = self.running.get(tag) {
-            unsafe { libc::kill(*pid as i32, libc::SIGTERM) };
+            let pid = *pid as i32;
+            unsafe {
+                if libc::kill(-pid, libc::SIGTERM) != 0 {
+                    libc::kill(pid, libc::SIGTERM);
+                }
+            }
         }
     }
 
@@ -108,6 +120,8 @@ impl App {
         cmd.args(&argv[1..]).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(stderr);
         unsafe {
             cmd.pre_exec(|| {
+                // Its own process group, for kill().
+                libc::setpgid(0, 0);
                 libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM);
                 Ok(())
             });
