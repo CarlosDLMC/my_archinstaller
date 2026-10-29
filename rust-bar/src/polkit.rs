@@ -635,6 +635,16 @@ fn show_osd(app: &mut App) {
     blink(app);
 }
 
+/// The focused monitor changed while the dialog is up (osd::follow_focus,
+/// after the old screen's window went): PolkitOsd is a window per screen,
+/// shown on the focused one (PolkitOsd.qml:20-29). As the dialog moves,
+/// onShownChanged empties the field on both windows and the new one takes
+/// the focus (PolkitOsd.qml:54-64).
+pub(crate) fn refocus(app: &mut App) {
+    app.svc.polkit.field.clear();
+    show_osd(app);
+}
+
 /// The dialog on the focused screen.
 fn map_osd(app: &mut App) {
     let Some((_, sw, sh)) = osd::focused_output(app) else { return };

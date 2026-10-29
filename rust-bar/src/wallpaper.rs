@@ -472,7 +472,7 @@ pub fn open(app: &mut App) {
     let w = &mut app.svc.wall;
     w.open = true;
     w.pending = Pending::Current;
-    osd::show(app, OpenParams { kind: OsdKind::Wallpaper, size: (0, 0), panel: (0.0, 0.0, 0.0, 0.0), dim: None, keyboard: true, namespace: "quickshell:wallpaper", fade_ms: FADE_MS, min_scale: 1.0, fade_easing: Easing::Linear, pos: None, fill: true, output: None });
+    show_osd(app);
     // A new ListView takes its first model; reopen() reselects either way.
     // quickshell sizes a layer surface's window only at the compositor's
     // first configure, so the new ListView is 0x0 when it is made and has
@@ -483,6 +483,40 @@ pub fn open(app: &mut App) {
     }
     reselect(app);
     refresh(app);
+}
+
+/// The carousel's window on the focused screen (or its fade turned back).
+fn show_osd(app: &mut App) {
+    osd::show(app, OpenParams { kind: OsdKind::Wallpaper, size: (0, 0), panel: (0.0, 0.0, 0.0, 0.0), dim: None, keyboard: true, namespace: "quickshell:wallpaper", fade_ms: FADE_MS, min_scale: 1.0, fade_easing: Easing::Linear, pos: None, fill: true, output: None });
+}
+
+/// The focused monitor changed while the carousel is up (osd::follow_focus,
+/// after the old screen's window went): QML has a WallpaperOsd per screen,
+/// shown on the focused one (WallpaperOsd.qml:26-35), and the new screen's
+/// builds its Loader content - a new ListView and handlers, the tabs at
+/// contentX 0 - whose Component.onCompleted runs reopen(): the search line
+/// emptied, the current wallpaper centred (WallpaperOsd.qml:134-143). The
+/// folder and `navigated` are WallpaperState's and stay. (reopen()'s
+/// `search.text = ""` changes nothing on a new, empty field, so QML's strip
+/// stays filtered under an empty line; the port clears the search, as
+/// reopen() means to.)
+pub(crate) fn refocus(app: &mut App) {
+    let w = &mut app.svc.wall;
+    w.model = None;
+    w.list_index = -1;
+    w.reset_pre = None;
+    w.wheel_acc = 0.0;
+    w.tab_acc = 0.0;
+    w.tab_scroll = 0.0;
+    w.filter.clear();
+    w.cursor = 0;
+    w.pending = Pending::Current;
+    show_osd(app);
+    // As open(): the new ListView's first model makes no delegate to animate.
+    if sync_model(app) {
+        app.svc.wall.reset_pre = None;
+    }
+    reselect(app);
 }
 
 pub fn close(app: &mut App) {

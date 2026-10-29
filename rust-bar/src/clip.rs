@@ -230,6 +230,26 @@ fn show(app: &mut App) {
     }
 }
 
+/// The focused monitor changed while the picker is up (osd::follow_focus,
+/// after the old screen's window went): ClipboardOsd is a window per screen,
+/// shown on the focused one (ClipboardOsd.qml:33-45), and the new screen's
+/// builds its Loader content - the card pops in, a new ListView starts at
+/// its top and shows the selected entry (onCurrentIndexChanged:
+/// positionViewAtIndex(currentIndex, ListView.Contain)), and the new field
+/// takes the focus with its cursor blinking anew. ClipboardState's filter
+/// and selection stay. (QML's new field is empty while that filter still
+/// applies to the list; the port keeps showing the filter in effect.)
+pub(crate) fn refocus(app: &mut App) {
+    show(app);
+    let c = &mut app.svc.clip;
+    c.select_all = false;
+    c.scroll = 0.0;
+    c.glide = None;
+    c.blink_since = Some(Instant::now());
+    blink(app);
+    position_view(app);
+}
+
 /// The model was replaced: ListView makes every delegate anew.
 fn model_reset(app: &mut App) {
     if let Some(o) = app.osd_mut(OsdKind::Clipboard) {
