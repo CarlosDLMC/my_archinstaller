@@ -578,6 +578,18 @@ fn palette_changed(app: &mut App, name: &str) {
                 if app.theme.apply_json(&t) {
                     if let Some(c) = app.card.as_mut() {
                         c.invalidate_notch();
+                        // The meter's surface paints the card's plate itself.
+                        if let Some(m) = c.meter_win.as_mut() {
+                            m.dirty = true;
+                        }
+                    }
+                    // Theme's bindings reach every window: the overlays and
+                    // the wallpaper reveal too, not just strips and card.
+                    for o in &mut app.osds {
+                        o.win.dirty = true;
+                    }
+                    for r in &mut app.reveals {
+                        r.win.dirty = true;
                     }
                     app.mark_all_dirty();
                 }
