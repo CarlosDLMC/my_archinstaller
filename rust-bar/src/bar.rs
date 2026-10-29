@@ -68,6 +68,10 @@ pub enum Action {
     Hover(u32),
 }
 
+/// Action::Hover(TEXT_FIELD) over a TextInput: the I-beam cursor
+/// (QQuickTextInput's Qt::IBeamCursor) and no click of its own.
+pub const TEXT_FIELD: u32 = 0xFFFF_FFFE;
+
 #[derive(Clone, Debug)]
 pub struct Hit {
     pub x: f32,
@@ -90,6 +94,10 @@ pub struct Ctx<'a> {
     pub pointer: Option<(f32, f32)>,
     /// The card open on this strip, if any.
     pub open: Option<crate::cards::CardKind>,
+    /// The Wi-Fi connect running (or last run) is this bar's: every bar has
+    /// its own WifiWidget and wifiConnectProc (shell.qml), and only that
+    /// widget's icon blinks.
+    pub wifi_pulse: bool,
 }
 
 struct Painter<'a> {
@@ -336,8 +344,9 @@ pub fn draw(scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, svc: &Services,
             Slot::Wifi => {
                 let line = p.line(wifi_icon(svc), true, FONT_SIZE + 4.0);
                 let c = if svc.wifi.connected { theme.col_white } else { theme.col_grey };
-                // Blinks 1 -> .35 -> 1 (450 ms each, InOutQuad) while connecting.
-                let (o, running) = svc.wifi.pulse.value(p.now, 0.35, 450, crate::anim::Easing::InOutQuad);
+                // Blinks 1 -> .35 -> 1 (450 ms each, InOutQuad) while this
+                // bar's connect runs (WifiWidget.qml:414-424).
+                let (o, running) = if ctx.wifi_pulse { svc.wifi.pulse.value(p.now, 0.35, 450, crate::anim::Easing::InOutQuad) } else { (1.0, false) };
                 p.animating |= running;
                 p.scene.save();
                 p.scene.multiply_opacity(o);
@@ -378,12 +387,14 @@ fn volume_text(svc: &Services) -> String {
         "\u{f0581}"
     } else {
         let s = info.as_ref().map(|i| format!("{} {} {}", i.name, i.description, i.nick).to_lowercase()).unwrap_or_default();
+        // VolumeWidget.audioSink's order (VolumeWidget.qml:43-49): hdmi
+        // before bluetooth, for a sink whose name has both.
         if s.contains("headphone") || s.contains("headset") {
             "\u{f02cb}"
-        } else if s.contains("bluez") || s.contains("bluetooth") {
-            "\u{f00b0}"
         } else if s.contains("hdmi") || s.contains("displayport") {
             "\u{f0841}"
+        } else if s.contains("bluez") || s.contains("bluetooth") {
+            "\u{f00b0}"
         } else {
             "\u{f057e}"
         }
@@ -421,10 +432,16 @@ fn wifi_icon(svc: &Services) -> &'static str {
 }
 
 /// Math.ceil(max(boundingRect.width)) of the two VPN glyphs: their ink widths.
+/// The font and the size never change, so it is measured once, as VpnWidget's
+/// TextMetrics are (VpnWidget.qml:304, 327-328) - not with two hinted glyph
+/// loads twice per strip frame.
 fn vpn_slot_width(p: &mut Painter) -> f32 {
-    let a = p.fonts.ink_width(VPN_UP, theme::bar_font(true), FONT_SIZE + 4.0);
-    let b = p.fonts.ink_width(VPN_DOWN, theme::bar_font(true), FONT_SIZE + 4.0);
-    a.max(b).ceil()
+    static SLOT: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
+    *SLOT.get_or_init(|| {
+        let a = p.fonts.ink_width(VPN_UP, theme::bar_font(true), FONT_SIZE + 4.0);
+        let b = p.fonts.ink_width(VPN_DOWN, theme::bar_font(true), FONT_SIZE + 4.0);
+        a.max(b).ceil()
+    })
 }
 
 /// CenterInfo.getTempColor

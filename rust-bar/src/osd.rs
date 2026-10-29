@@ -509,7 +509,10 @@ pub fn key(app: &mut App, kind: OsdKind, sym: smithay_client_toolkit::seat::keyb
         OsdKind::Layout => {}
         OsdKind::Power => crate::power::key(app, sym, scan, shift),
         OsdKind::Shot | OsdKind::Record => crate::capture::key(app, kind, sym, scan),
-        OsdKind::Polkit => crate::polkit::key(app, sym, utf8),
+        // QInputControl::isAcceptableInput, as clip.rs's search applies it:
+        // what Ctrl or Ctrl+Shift types is no text for the field (Ctrl+1 puts
+        // no "1" in it); AltGr's (Ctrl+Alt) is.
+        OsdKind::Polkit => crate::polkit::key(app, sym, utf8.filter(|_| !(mods.ctrl && !mods.alt))),
         OsdKind::Clipboard => crate::clip::key(app, sym, mods, utf8),
         OsdKind::Wallpaper => crate::wallpaper::key(app, sym, mods, utf8),
         OsdKind::Overview(_) => crate::overview::key(app, sym),
@@ -524,9 +527,13 @@ pub fn raw_pointer(app: &mut App, kind: OsdKind, ev: &smithay_client_toolkit::se
         OsdKind::Overview(i) => crate::overview::pointer(app, i, ev, x, y),
         // Their MouseAreas keep acceptedButtons' default, Qt.LeftButton
         // (LayoutOsd.qml:216, PowerOsd.qml:123,263, BigButton.qml:88,
-        // ToggleRow.qml:94, ShotOsd.qml:219, RecordOsd.qml:232): a right,
-        // middle or side button neither presses nor clicks anything.
-        OsdKind::Layout | OsdKind::Power | OsdKind::Shot | OsdKind::Record => {
+        // ToggleRow.qml:94, ShotOsd.qml:219, RecordOsd.qml:232, the clipboard
+        // rows ClipboardOsd.qml:373, the wallpaper cards, tabs and dim
+        // WallpaperOsd.qml:426,555,98): a right, middle or side button neither
+        // presses nor clicks anything. (The two search TextInputs take the
+        // middle button for the primary selection's paste, which the port
+        // does not have.)
+        OsdKind::Layout | OsdKind::Power | OsdKind::Shot | OsdKind::Record | OsdKind::Clipboard | OsdKind::Wallpaper => {
             // A monitor tile's onDoubleClicked comes with the second press.
             if let (OsdKind::Shot | OsdKind::Record, P::Press { time, button, .. }) = (kind, ev) {
                 if crate::capture::press(app, kind, *button, *time, x, y) {

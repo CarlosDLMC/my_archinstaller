@@ -166,8 +166,11 @@ fn cards_toggle(app: &mut App, card: &str) {
         "battery" => (CardKind::Battery, Action::Battery),
         _ => return,
     };
+    // Each bar takes the request only when it names its screen (shell.qml:51-55):
+    // with no strip on the focused monitor (no snapshot yet, an unknown name)
+    // nothing opens.
     let focused = app.svc.mango.focused().map(|m| m.name.clone()).unwrap_or_default();
-    let Some(strip) = app.strips.iter().position(|s| s.name == focused).or(if app.strips.is_empty() { None } else { Some(0) }) else { return };
+    let Some(strip) = app.strips.iter().position(|s| s.name == focused) else { return };
     let Some(hit) = app.strips[strip].hits.iter().find(|h| h.action == action).cloned() else { return };
     crate::cards::toggle(app, strip, kind, &hit, true);
 }

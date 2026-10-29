@@ -19,8 +19,8 @@ use smithay_client_toolkit::{
     registry::{ProvidesRegistryState, RegistryState},
     registry_handlers,
     seat::{
-        keyboard::{KeyEvent, KeyboardData, KeyboardHandler, Keysym, Modifiers},
-        pointer::{cursor_shape::CursorShapeManager, PointerEvent, PointerEventKind, PointerHandler},
+        keyboard::{KeyEvent, KeyboardData, KeyboardHandler, Keymap, Keysym, Modifiers},
+        pointer::{cursor_shape::CursorShapeManager, AxisScroll, PointerEvent, PointerEventKind, PointerHandler},
         Capability, SeatHandler, SeatState,
     },
     shell::{
@@ -31,7 +31,7 @@ use smithay_client_toolkit::{
 };
 use wayland_client::{
     globals::{registry_queue_init, GlobalList},
-    protocol::{wl_keyboard::{self, WlKeyboard}, wl_output, wl_pointer::WlPointer, wl_seat::WlSeat, wl_surface},
+    protocol::{wl_keyboard::{self, WlKeyboard}, wl_output, wl_pointer::{self, WlPointer}, wl_seat::WlSeat, wl_surface},
     Connection, Dispatch, Proxy, QueueHandle,
 };
 
@@ -41,6 +41,11 @@ use crate::gpu::{Gpu, Scene};
 use crate::services::{Mango, Services};
 use crate::text::Fonts;
 use crate::theme::Theme;
+
+/// Linux input button codes (Qt's Left, Right and Middle buttons).
+const BTN_LEFT: u32 = 0x110;
+const BTN_RIGHT: u32 = 0x111;
+const BTN_MIDDLE: u32 = 0x112;
 
 /// A wgpu surface on a Wayland surface.
 fn raw_surface(conn: &Connection, instance: &wgpu::Instance, wl: &wl_surface::WlSurface) -> wgpu::Surface<'static> {
@@ -162,9 +167,12 @@ pub struct App {
     kbd_focus: Option<WinRef>,
     shift: bool,
     mods: Mods,
+    /// Ctrl shortcuts on a non-Latin layout (App::key).
+    latin: LatinKeys,
     /// Qt's event.isAutoRepeat: true while a held key's repeat is dispatched.
     pub key_repeat: bool,
-    hand: bool,
+    /// The cursor shape sent since the pointer last entered a surface.
+    cursor: Option<Shape>,
     /// The widget a button went down on: a click is a release on the same one.
     pressed: Option<(WinRef, u32, Action)>,
     pub instance: wgpu::Instance,
@@ -243,7 +251,7 @@ impl App {
             pointer: None,
             keyboard: None,
             enter_serial: 0,
-            hand: false,
+            cursor: None,
             pressed: None,
             instance: Gpu::new_instance(),
             gpu: None,
@@ -258,6 +266,7 @@ impl App {
             kbd_focus: None,
             shift: false,
             mods: Mods::default(),
+            latin: LatinKeys::default(),
             key_repeat: false,
             svc: Services::default(),
             running: HashMap::new(),
@@ -433,7 +442,14 @@ impl App {
             WinRef::Strip(i) => {
                 let mut memo = std::mem::take(&mut self.strips[i].texts);
                 let s = &self.strips[i];
-                let ctx = bar::Ctx { width: width as f32, screen_width: s.screen_width, name: &s.name, pointer: s.pointer, open: self.card.as_ref().filter(|c| c.strip == i).map(|c| c.kind) };
+                let ctx = bar::Ctx {
+                    width: width as f32,
+                    screen_width: s.screen_width,
+                    name: &s.name,
+                    pointer: s.pointer,
+                    open: self.card.as_ref().filter(|c| c.strip == i).map(|c| c.kind),
+                    wifi_pulse: self.svc.wifi_card.strip == Some(i),
+                };
                 // Theme.qml loads the wallust palette just after the QML bar's
                 // first frame, and to Qt that is a change: every strip text whose
                 // colour it moved is gray from then on (TextMemo). A silent pass
@@ -569,13 +585,25 @@ impl App {
         m.frame_pending = true;
     }
 
-    fn set_cursor(&mut self, hand: bool) {
-        if hand == self.hand {
+    fn set_cursor(&mut self, shape: Shape) {
+        if self.cursor == Some(shape) {
             return;
         }
-        self.hand = hand;
+        self.cursor = Some(shape);
         if let Some((_, Some(dev))) = &self.pointer {
-            dev.set_shape(self.enter_serial, if hand { Shape::Pointer } else { Shape::Default });
+            dev.set_shape(self.enter_serial, shape);
+        }
+    }
+
+    /// The cursor over a hit: QQuickTextInput's I-beam over a text field, the
+    /// hand of the MouseAreas' cursorShape over a control, else the arrow.
+    fn cursor_at(&self, w: WinRef, hit: Option<Action>) -> Shape {
+        match hit {
+            Some(Action::Hover(bar::TEXT_FIELD)) => Shape::Text,
+            // The Wi-Fi password TextInput is a control of the card's chain.
+            Some(Action::Card(crate::wifi_card::INPUT)) if w == WinRef::Card && self.card.as_ref().map_or(false, |c| c.kind == cards::CardKind::Wifi) => Shape::Text,
+            Some(Action::Hover(_)) | None => Shape::Default,
+            Some(_) => Shape::Pointer,
         }
     }
 
@@ -623,7 +651,16 @@ impl App {
 
     /// A key press, or a repeat of a held one (key_repeat): Keys.onPressed of
     /// the overlay holding the keyboard, else of the open card.
-    fn key(&mut self, event: KeyEvent) {
+    fn key(&mut self, mut event: KeyEvent) {
+        // QXkbCommon::keysymToQtKey: with Ctrl held, a key whose keysym is not
+        // Latin-1 is the Latin key it is in another layout - Ctrl+К on the ru
+        // layout is Ctrl+R (the carousel's random card), Ctrl+Ф Ctrl+A. The
+        // text stays as typed.
+        if self.mods.ctrl && !is_latin1(event.keysym.raw()) {
+            if let Some(sym) = self.latin.lookup(event.raw_code + 8) {
+                event.keysym = Keysym::new(sym);
+            }
+        }
         if let Some(WinRef::Osd(k)) = self.kbd_focus {
             if self.osd(k).is_some() {
                 // Qt's nativeScanCode is the XKB keycode: evdev + 8.
@@ -714,8 +751,8 @@ impl OutputHandler for App {
 
 impl App {
     /// A strip goes with its output: the card open on it closes, and the open
-    /// card and a held press keep pointing at their strips as the later
-    /// ones move down.
+    /// card, a held press and the Wi-Fi connect's bar keep pointing at their
+    /// strips as the later ones move down.
     fn remove_strip(&mut self, i: usize) {
         if self.card.as_ref().map_or(false, |c| c.strip == i) {
             cards::close(self);
@@ -724,6 +761,12 @@ impl App {
         if let Some(c) = self.card.as_mut().filter(|c| c.strip > i) {
             c.strip -= 1;
         }
+        let s = &mut self.svc.wifi_card.strip;
+        *s = match *s {
+            Some(j) if j == i => None,
+            Some(j) if j > i => Some(j - 1),
+            s => s,
+        };
         match self.pressed {
             Some((WinRef::Strip(j), ..)) if j == i => self.pressed = None,
             Some((WinRef::Strip(j), button, action)) if j > i => self.pressed = Some((WinRef::Strip(j - 1), button, action)),
@@ -836,6 +879,10 @@ impl KeyboardHandler for App {
             c.shift = m.shift;
         }
     }
+    fn update_keymap(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlKeyboard, keymap: Keymap<'_>) {
+        self.latin.keymap = std::ffi::CString::new(keymap.as_string()).ok();
+        self.latin.found.clear();
+    }
 }
 
 impl PointerHandler for App {
@@ -844,21 +891,23 @@ impl PointerHandler for App {
             if self.card.as_ref().map_or(false, |c| c.win.layer.wl_surface() == &e.surface) && self.pressed.is_none() {
                 // CardSurface: around the card, a press dismisses it and the
                 // wheel is eaten; the pointer is not over the card there. (A
-                // drag that started on the card keeps going.)
+                // drag that started on the card keeps going.) Its MouseArea
+                // takes the left, right and middle buttons (CardSurface.qml:47):
+                // a side button reaches nothing.
                 let (x, y) = (e.position.0 as f32, e.position.1 as f32);
                 if !matches!(e.kind, PointerEventKind::Leave { .. }) && !cards::inside(self, x, y) {
                     match e.kind {
-                        PointerEventKind::Press { .. } => cards::close(self),
+                        PointerEventKind::Press { button: BTN_LEFT | BTN_RIGHT | BTN_MIDDLE, .. } => cards::close(self),
                         PointerEventKind::Enter { serial } => {
                             self.enter_serial = serial;
-                            self.hand = true;
-                            self.set_cursor(false);
+                            self.cursor = None;
+                            self.set_cursor(Shape::Default);
                         }
                         PointerEventKind::Motion { .. } => {
                             if self.card.as_ref().map_or(false, |c| c.pointer.is_some()) {
                                 self.set_pointer(WinRef::Card, None);
                                 self.win_mut(WinRef::Card).unwrap().dirty = true;
-                                self.set_cursor(false);
+                                self.set_cursor(Shape::Default);
                             }
                         }
                         _ => {}
@@ -867,16 +916,19 @@ impl PointerHandler for App {
                 }
             }
             if let Some(k) = crate::osd::is_dim(self, &e.surface) {
-                // The dialog's dim: a click outside the panel.
+                // The dialog's dim: a click outside the panel. Every dim's
+                // MouseArea keeps acceptedButtons' default, the left button
+                // (PowerOsd.qml:88, ShotOsd.qml:72, RecordOsd.qml:80,
+                // ClipboardOsd.qml:121, PolkitOsd.qml:82): the others do nothing.
                 match e.kind {
                     PointerEventKind::Enter { serial } => {
                         self.enter_serial = serial;
-                        self.hand = true;
-                        self.set_cursor(false);
+                        self.cursor = None;
+                        self.set_cursor(Shape::Default);
                     }
-                    PointerEventKind::Press { button, .. } => self.pressed = Some((WinRef::Osd(k), button, Action::Hover(u32::MAX))),
-                    PointerEventKind::Release { button, .. } => {
-                        if self.pressed.take() == Some((WinRef::Osd(k), button, Action::Hover(u32::MAX))) {
+                    PointerEventKind::Press { button: BTN_LEFT, .. } => self.pressed = Some((WinRef::Osd(k), BTN_LEFT, Action::Hover(u32::MAX))),
+                    PointerEventKind::Release { button: BTN_LEFT, .. } => {
+                        if self.pressed.take() == Some((WinRef::Osd(k), BTN_LEFT, Action::Hover(u32::MAX))) {
                             crate::osd::dim_clicked(self, k);
                         }
                     }
@@ -913,12 +965,12 @@ impl PointerHandler for App {
                     self.enter_serial = serial;
                     self.set_pointer(w, Some((x, y)));
                     self.win_mut(w).unwrap().dirty = true;
-                    let hand = self.hit_at(w, x, y).map_or(false, |a| !matches!(a, Action::Hover(_)));
                     // wl_pointer.enter leaves the image to the client, and
                     // mango keeps the last app's (an I-beam) until one comes:
                     // send it every time, as Qt does - also over a Hover area.
-                    self.hand = !hand;
-                    self.set_cursor(hand);
+                    self.cursor = None;
+                    let shape = self.cursor_at(w, self.hit_at(w, x, y));
+                    self.set_cursor(shape);
                 }
                 PointerEventKind::Leave { .. } => {
                     if let WinRef::Osd(k) = w {
@@ -946,9 +998,28 @@ impl PointerHandler for App {
                             crate::osd::hovered(self, k, after);
                         }
                     }
-                    self.set_cursor(after.map_or(false, |a| !matches!(a, Action::Hover(_))));
+                    let shape = self.cursor_at(w, after);
+                    self.set_cursor(shape);
                 }
                 PointerEventKind::Press { button, .. } => {
+                    // The card's own MouseArea and its controls take the left
+                    // button only (DropdownWidget.qml:160): a right or middle
+                    // press falls through to CardSurface's, under the card,
+                    // and closes it - unless the control there takes that
+                    // button: a VolumeSlider the right one (its mute,
+                    // VolumeSlider.qml:104), the Wi-Fi password TextInput the
+                    // middle one (the primary selection's paste).
+                    if w == WinRef::Card && matches!(button, BTN_RIGHT | BTN_MIDDLE) {
+                        let takes = match (self.card.as_ref().map(|c| c.kind), self.hit_at(w, x, y)) {
+                            (Some(cards::CardKind::Audio), Some(Action::Card(c))) => button == BTN_RIGHT && crate::audio_card::is_slider(c),
+                            (Some(cards::CardKind::Wifi), Some(Action::Card(crate::wifi_card::INPUT))) => button == BTN_MIDDLE,
+                            _ => false,
+                        };
+                        if !takes {
+                            cards::close(self);
+                            continue;
+                        }
+                    }
                     self.pressed = self.hit_at(w, x, y).map(|a| (w, button, a));
                     if let (WinRef::Osd(k), Some(Action::Card(code))) = (w, self.hit_at(w, x, y)) {
                         if let Some(o) = self.osd_mut(k) {
@@ -960,9 +1031,34 @@ impl PointerHandler for App {
                         cards::press(self, a, x, button);
                     }
                 }
-                PointerEventKind::Axis { vertical, .. } => {
-                    // Qt's angleDelta: 120 per notch, positive away from the user.
-                    let delta = if vertical.discrete != 0 { -(vertical.discrete as f32) * 120.0 } else { -(vertical.absolute as f32) * 8.0 };
+                PointerEventKind::Axis { horizontal, vertical, source, .. } => {
+                    // Qt's angleDelta (QtWayland's FrameData::angleDelta), positive
+                    // away from the user: 120 a notch, else a continuous axis'
+                    // value times -12, rounded. A finger's scroll over a
+                    // Flickable - a card's body or list, the clipboard's list -
+                    // is a 1:1 drag in Qt instead (pixelDelta in ScrollUpdate
+                    // phases), which the port does not do: there it keeps the
+                    // x8 it had.
+                    let drag = source == Some(wl_pointer::AxisSource::Finger)
+                        && match w {
+                            WinRef::Card => self.card.as_ref().map_or(false, |c| c.kind != cards::CardKind::Calendar),
+                            WinRef::Osd(k) => k == crate::osd::OsdKind::Clipboard,
+                            _ => false,
+                        };
+                    let notches = vertical.discrete != 0 || horizontal.discrete != 0;
+                    let angle = |a: &AxisScroll| {
+                        if notches {
+                            -(a.discrete as f32) * 120.0
+                        } else if drag {
+                            -(a.absolute as f32) * 8.0
+                        } else {
+                            (-(a.absolute as f32) * 12.0 + 0.5).floor()
+                        }
+                    };
+                    // WallpaperOsd's two WheelHandlers take angleDelta.x when y
+                    // is 0 (WallpaperOsd.qml:295,496), the only ones that do.
+                    let dy = angle(&vertical);
+                    let delta = if dy == 0.0 && w == WinRef::Osd(crate::osd::OsdKind::Wallpaper) { angle(&horizontal) } else { dy };
                     if delta != 0.0 {
                         match w {
                             WinRef::Card => cards::wheel(self, delta),
@@ -1017,15 +1113,114 @@ impl ProvidesRegistryState for App {
 /// delegate_keyboard!, except for one event. sctk 0.19 drops every press of a
 /// repeating key while the compositor has repeat turned off (repeat_rate 0:
 /// its key handler returns before press_key), where QtWayland just does not
-/// repeat. Off becomes a delay of 24 days, so the presses come through.
+/// repeat. Off becomes a delay of 24 days, so the presses come through. The
+/// raw modifier state is noted for LatinKeys on the way.
 impl Dispatch<WlKeyboard, KeyboardData<App>> for App {
     fn event(app: &mut App, kbd: &WlKeyboard, event: wl_keyboard::Event, data: &KeyboardData<App>, conn: &Connection, qh: &QueueHandle<App>) {
         let event = match event {
             wl_keyboard::Event::RepeatInfo { rate: 0, .. } => wl_keyboard::Event::RepeatInfo { rate: 1, delay: i32::MAX },
             e => e,
         };
+        if let wl_keyboard::Event::Modifiers { mods_depressed, mods_latched, mods_locked, group, .. } = event {
+            app.latin.mods = [mods_depressed, mods_latched, mods_locked, group];
+        }
         <SeatState as Dispatch<WlKeyboard, KeyboardData<App>, App>>::event(app, kbd, event, data, conn, qh)
     }
+}
+
+/// QXkbCommon::lookupLatinKeysym, for the Ctrl shortcuts of App::key: the
+/// first Latin-1 keysym the key has in the other layouts, in their order, at
+/// the level the modifiers give - unless a key of a layout before that one
+/// gives the same keysym. It needs the keymap and the modifier state, which
+/// sctk keeps to itself: the keymap's text is kept (41 KB for us,es,ru) and
+/// compiled only to answer (0.7 ms; compiled it holds 180 KB), and the
+/// answers are kept until the next keymap.
+#[derive(Default)]
+struct LatinKeys {
+    keymap: Option<std::ffi::CString>,
+    /// wl_keyboard.modifiers: depressed, latched, locked, the layout.
+    mods: [u32; 4],
+    found: HashMap<(u32, [u32; 4]), Option<u32>>,
+}
+
+impl LatinKeys {
+    fn lookup(&mut self, keycode: u32) -> Option<u32> {
+        let text = self.keymap.as_ref()?;
+        if self.found.len() >= 64 {
+            self.found.clear();
+        }
+        let mods = self.mods;
+        *self.found.entry((keycode, mods)).or_insert_with(|| unsafe { latin_keysym(text, keycode, mods) })
+    }
+}
+
+/// QXkbCommon's isLatin1.
+fn is_latin1(sym: u32) -> bool {
+    (0x20..=0xff).contains(&sym)
+}
+
+#[link(name = "xkbcommon")]
+extern "C" {
+    fn xkb_context_new(flags: std::ffi::c_int) -> *mut std::ffi::c_void;
+    fn xkb_context_unref(context: *mut std::ffi::c_void);
+    fn xkb_keymap_new_from_string(context: *mut std::ffi::c_void, string: *const std::ffi::c_char, format: std::ffi::c_int, flags: std::ffi::c_int) -> *mut std::ffi::c_void;
+    fn xkb_keymap_unref(keymap: *mut std::ffi::c_void);
+    fn xkb_keymap_num_layouts_for_key(keymap: *mut std::ffi::c_void, key: u32) -> u32;
+    fn xkb_keymap_key_get_syms_by_level(keymap: *mut std::ffi::c_void, key: u32, layout: u32, level: u32, syms_out: *mut *const u32) -> std::ffi::c_int;
+    fn xkb_keymap_min_keycode(keymap: *mut std::ffi::c_void) -> u32;
+    fn xkb_keymap_max_keycode(keymap: *mut std::ffi::c_void) -> u32;
+    fn xkb_state_new(keymap: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+    fn xkb_state_unref(state: *mut std::ffi::c_void);
+    fn xkb_state_update_mask(state: *mut std::ffi::c_void, depressed: u32, latched: u32, locked: u32, depressed_layout: u32, latched_layout: u32, locked_layout: u32) -> std::ffi::c_int;
+    fn xkb_state_key_get_one_sym(state: *mut std::ffi::c_void, key: u32) -> u32;
+    fn xkb_state_key_get_layout(state: *mut std::ffi::c_void, key: u32) -> u32;
+    fn xkb_state_key_get_level(state: *mut std::ffi::c_void, key: u32, layout: u32) -> u32;
+}
+
+/// The lookup itself, on a keymap compiled from the compositor's text (it
+/// includes nothing: no include paths, no environment names).
+unsafe fn latin_keysym(text: &std::ffi::CStr, keycode: u32, [depressed, latched, locked, layout_now]: [u32; 4]) -> Option<u32> {
+    const NO_DEFAULT_INCLUDES_OR_ENVIRONMENT: std::ffi::c_int = 3;
+    const KEYMAP_FORMAT_TEXT_V1: std::ffi::c_int = 1;
+    let context = xkb_context_new(NO_DEFAULT_INCLUDES_OR_ENVIRONMENT);
+    if context.is_null() {
+        return None;
+    }
+    let keymap = xkb_keymap_new_from_string(context, text.as_ptr(), KEYMAP_FORMAT_TEXT_V1, 0);
+    xkb_context_unref(context);
+    if keymap.is_null() {
+        return None;
+    }
+    let (state, query) = (xkb_state_new(keymap), xkb_state_new(keymap));
+    let mut found = None;
+    if !state.is_null() && !query.is_null() {
+        xkb_state_update_mask(state, depressed, latched, locked, 0, 0, layout_now);
+        let current = xkb_state_key_get_layout(state, keycode);
+        for layout in (0..xkb_keymap_num_layouts_for_key(keymap, keycode)).filter(|&l| l != current) {
+            let level = xkb_state_key_get_level(state, keycode, layout);
+            let mut syms: *const u32 = std::ptr::null();
+            if xkb_keymap_key_get_syms_by_level(keymap, keycode, layout, level, &mut syms) == 1 && is_latin1(*syms) {
+                found = Some((layout, *syms));
+                break;
+            }
+        }
+        // Unique: no key gives it in a layout before that one (with the
+        // latched and locked modifiers only), as Qt checks.
+        if let Some((layout, sym)) = found {
+            let (min, max) = (xkb_keymap_min_keycode(keymap), xkb_keymap_max_keycode(keymap));
+            let taken = (0..layout).any(|before| {
+                xkb_state_update_mask(query, 0, latched, locked, 0, 0, before);
+                (min..max).any(|code| xkb_state_key_get_one_sym(query, code) == sym)
+            });
+            if taken {
+                found = None;
+            }
+        }
+    }
+    xkb_state_unref(state);
+    xkb_state_unref(query);
+    xkb_keymap_unref(keymap);
+    found.map(|(_, sym)| sym)
 }
 
 delegate_compositor!(App);
