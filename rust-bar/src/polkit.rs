@@ -924,8 +924,8 @@ fn edit(p: &mut Polkit, sym: Keysym, mods: crate::app::Mods, utf8: Option<&str>,
     };
     let (ctrl, shift, alt) = (mods.ctrl, mods.shift, mods.alt);
     let len = p.field.len();
-    let word_back = |p: &Polkit| if visible { word_left(&p.field, p.cursor) } else { 0 };
-    let word_fwd = |p: &Polkit| if visible { word_right(&p.field, p.cursor) } else { len };
+    let word_back = |p: &Polkit| if visible { crate::text::word_left(&p.field, p.cursor) } else { 0 };
+    let word_fwd = |p: &Polkit| if visible { crate::text::word_right(&p.field, p.cursor) } else { len };
     match sym {
         Keysym::a | Keysym::A if ctrl && !shift && !alt => select_all(p),
         Keysym::u | Keysym::U if ctrl && !shift && !alt => {
@@ -1045,56 +1045,4 @@ fn prev_char(s: &str, i: usize) -> usize {
 
 fn next_char(s: &str, i: usize) -> usize {
     s.get(i..).and_then(|r| r.chars().next()).map_or(s.len().min(i), |c| i + c.len_utf8())
-}
-
-/// QTextEngine::atWordSeparator.
-fn separator(c: char) -> bool {
-    ".,?!@#$:;-<>[](){}=/+%&^*'\"`~|\\".contains(c)
-}
-
-/// A word's start (QCharAttributes::wordStart): a letter or digit after
-/// something that is not one.
-fn word_start(chars: &[char], k: usize) -> bool {
-    let word = |c: char| c.is_alphanumeric() || c == '_';
-    chars.get(k).map_or(false, |&c| word(c)) && (k == 0 || !word(chars[k - 1]))
-}
-
-/// QTextLayout::previousCursorPosition(SkipWords) over the text: a byte index.
-fn word_left(s: &str, i: usize) -> usize {
-    let (bytes, chars): (Vec<usize>, Vec<char>) = s.char_indices().unzip();
-    let mut k = bytes.iter().position(|&b| b >= i).unwrap_or(chars.len());
-    while k > 0 && chars[k - 1].is_whitespace() {
-        k -= 1;
-    }
-    if k > 0 && separator(chars[k - 1]) {
-        k -= 1;
-        while k > 0 && separator(chars[k - 1]) {
-            k -= 1;
-        }
-    } else {
-        while k > 0 && !word_start(&chars, k) && !separator(chars[k - 1]) {
-            k -= 1;
-        }
-    }
-    bytes.get(k).copied().unwrap_or(s.len())
-}
-
-/// QTextLayout::nextCursorPosition(SkipWords) over the text: a byte index.
-fn word_right(s: &str, i: usize) -> usize {
-    let (bytes, chars): (Vec<usize>, Vec<char>) = s.char_indices().unzip();
-    let n = chars.len();
-    let mut k = bytes.iter().position(|&b| b >= i).unwrap_or(n);
-    if k < n && separator(chars[k]) {
-        while k < n && separator(chars[k]) {
-            k += 1;
-        }
-    } else {
-        while k < n && !chars[k].is_whitespace() && !separator(chars[k]) {
-            k += 1;
-        }
-    }
-    while k < n && chars[k].is_whitespace() {
-        k += 1;
-    }
-    bytes.get(k).copied().unwrap_or(s.len())
 }
