@@ -114,16 +114,16 @@ pub fn opened(app: &mut App) {
     });
 }
 
-/// compact(): 1.2B / 3.4M / 56k / 7.
+/// compact(): 1.2B / 3.4M / 56k / 7, toFixed's ties going up (2,500 is 3k).
 fn compact(n: f64) -> String {
     if n.is_nan() {
         "—".into()
     } else if n >= 1e9 {
-        format!("{:.1}B", n / 1e9)
+        format!("{}B", services::to_fixed(n / 1e9, 1))
     } else if n >= 1e6 {
-        format!("{:.1}M", n / 1e6)
+        format!("{}M", services::to_fixed(n / 1e6, 1))
     } else if n >= 1e3 {
-        format!("{:.0}k", n / 1e3)
+        format!("{}k", services::to_fixed(n / 1e3, 0))
     } else {
         format!("{}", n.round())
     }
