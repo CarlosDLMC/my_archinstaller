@@ -138,7 +138,8 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, busy: (bool, bool)) {
         let list = ui.list_begin(ROW, x0 + 4.0, y + 4.0, cw - 8.0, n, configs.len(), m.row, 2.0, crate::cards::model_sig(configs), pickable);
         for (i, name) in configs.iter().enumerate() {
             let lit = *name == svc.vpn;
-            crate::cards::console_row(ui, ROW + i as u32, x0 + 4.0, list.row_y(i), cw - 8.0, m.row, "", name, lit, !lit, None, Some(flag(name)).filter(|f| !f.is_empty()));
+            // The flag Text is there for every config, empty for an unknown country.
+            crate::cards::console_row(ui, ROW + i as u32, x0 + 4.0, list.row_y(i), cw - 8.0, m.row, "", name, lit, !lit, None, Some(flag(name)));
         }
         ui.view_end(list);
     }

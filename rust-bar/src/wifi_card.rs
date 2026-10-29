@@ -322,7 +322,8 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, busy: bool) {
             true,
             tint,
             Some(("подключение…", t.col_alert)).filter(|_| is_connecting),
-            if security.is_empty() { None } else { Some(("\u{f033e}", t.col_grey)) },
+            // The lock Text is there for open networks too, empty.
+            Some((if security.is_empty() { "" } else { "\u{f033e}" }, t.col_grey)),
         );
     }
     ui.view_end(list);

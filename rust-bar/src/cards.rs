@@ -1178,19 +1178,22 @@ fn console_row_inner<S: UiState>(ui: &mut Ui<S>, code: u32, x: f32, y: f32, w: f
         ui.text_of(code, 0xC1, &il, cx + (font + 2.0 - il.adv) / 2.0, y + qround((h - il.height()) / 2.0), fg);
         cx += font + 2.0 + 8.0;
     }
+    // The RowLayout's fixed cells are qCeil(implicitWidth) wide, on whole
+    // pixels from the right edge; each Text starts at its cell. The trailing
+    // Row is a cell (and a spacing) even when its Text is empty.
     let mut right = x + w - 6.0;
     match trailing {
         // The VPN card's flag: a Text with the app font at fontSize + 2.
         Some((tr, None)) => {
             let tl = ui.fonts.layout(tr, theme::FontKey { family: "Fira Code:medium", bold: false, plain: false }, FONT_SIZE + 2.0, 0.0);
-            right -= tl.width;
+            right -= tl.width.ceil();
             ui.text_of(code, 0xC2, &tl, right, y + qround((h - tl.height()) / 2.0), t.col_white);
             right -= 8.0;
         }
         // The Wi-Fi lock: Terminess at fontSize - 4.
         Some((tr, Some(col))) => {
             let tl = ui.fonts.layout(tr, theme::bar_font(false), FONT_SIZE - 4.0, 0.0);
-            right -= tl.width;
+            right -= tl.width.ceil();
             ui.text_of(code, 0xC2, &tl, right, y + qround((h - tl.height()) / 2.0), col);
             right -= 8.0;
         }
@@ -1198,7 +1201,7 @@ fn console_row_inner<S: UiState>(ui: &mut Ui<S>, code: u32, x: f32, y: f32, w: f
     }
     if let Some((d, dc)) = detail.filter(|d| !d.0.is_empty()) {
         let dl = ui.fonts.layout(d, theme::bar_font(false), font - 2.0, 0.0);
-        right -= dl.width;
+        right -= dl.width.ceil();
         ui.text_of(code, 0xC3, &dl, right, y + qround((h - dl.height()) / 2.0), dc);
         right -= 8.0;
     }
