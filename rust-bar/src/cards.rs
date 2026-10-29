@@ -1406,10 +1406,18 @@ pub(crate) fn info_grid_height(fonts: &mut Fonts, rows: usize) -> f32 {
     rows as f32 * grid_row_h(fonts) + rows.saturating_sub(1) as f32 * 4.0
 }
 
+/// A card's only InfoGrid (the battery card's): see info_grid_of.
+pub(crate) fn info_grid<S: UiState>(ui: &mut Ui<S>, x: f32, y: f32, w: f32, rows: &[Vec<GridPair>]) {
+    info_grid_of(ui, 0, x, y, w, rows);
+}
+
 /// InfoGrid: four columns (label, value, label, value), spacing 14 x 4; the
 /// values (preferredWidth 0, fillWidth) share what the labels leave and are
 /// right-aligned, elided. A row of one pair spans its value over the rest.
-pub(crate) fn info_grid<S: UiState>(ui: &mut Ui<S>, x: f32, y: f32, w: f32, rows: &[Vec<GridPair>]) {
+/// Each GLabel and GValue is an item of its own (NetworkPanel.qml:469-489),
+/// so their texts are keyed by the grid, `id` (a card's grids 0x100 apart),
+/// and the cell: a grid in one view never takes over another view's texts.
+pub(crate) fn info_grid_of<S: UiState>(ui: &mut Ui<S>, id: u32, x: f32, y: f32, w: f32, rows: &[Vec<GridPair>]) {
     let t = ui.theme;
     let lkey = theme::bar_font(false);
     let vkey = theme::bar_font(true);
@@ -1423,19 +1431,23 @@ pub(crate) fn info_grid<S: UiState>(ui: &mut Ui<S>, x: f32, y: f32, w: f32, rows
     let (cx, cw) = snap_columns([label_w[0], value_w, label_w[1], value_w], 14.0, w, [label_w[0], 0.0, label_w[1], 0.0]);
     let row_h = grid_row_h(ui.fonts);
     let mut ry = y;
-    for row in rows {
+    for (r, row) in rows.iter().enumerate() {
         for (c, (label, value, vc)) in row.iter().enumerate().take(2) {
+            let cell = id + (r * 2 + c) as u32;
             let l = ui.fonts.layout(label, lkey, GRID_LABEL, 1.0);
-            ui.text(&l, x + cx[2 * c], ry + ac(row_h, l.height()), t.col_dim, TextStyle::Normal);
+            ui.text_of(cell, GRID_TEXTS[0], &l, x + cx[2 * c], ry + ac(row_h, l.height()), t.col_dim);
             // A lone pair's value spans columns 1-3.
             let (vx, vw) = if row.len() == 1 { (cx[1], cx[3] + cw[3] - cx[1]) } else { (cx[2 * c + 1], cw[2 * c + 1]) };
             let full = ui.fonts.layout(value, vkey, GRID_VALUE, 0.0);
             let v = ui.fonts.elide_right(&full, value, vkey, vw, 0.0);
-            ui.text(&v, x + vx + vw - v.adv, ry + ac(row_h, v.height()), *vc, TextStyle::Normal);
+            ui.text_of(cell, GRID_TEXTS[1], &v, x + vx + vw - v.adv, ry + ac(row_h, v.height()), *vc);
         }
         ry += row_h + 4.0;
     }
 }
+
+/// The text_of parts of an InfoGrid's GLabel and GValue.
+const GRID_TEXTS: [u64; 2] = [0xD5, 0xD6];
 
 /// QGridLayoutRowData::calculateGeometries with snapToPixelGrid: each cell's
 /// start is qRound()ed, its neighbours absorb the difference, the last one
