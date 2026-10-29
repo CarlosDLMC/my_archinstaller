@@ -153,7 +153,12 @@ pub fn activate(app: &mut App, code: u32) {
             let cmd = format!("{}/vpn-reset.sh all --forget", scripts());
             app.spawn("vpn-action", &["sudo", "wg-quick", "down", &active], |app, _| {
                 app.svc.vpn_card.connecting = false;
-                app.svc.vpn.clear();
+                // isDisconnect: activeVpn = "" (VpnWidget.qml:121-123) - the
+                // strip's icon goes grey now; the check below finds "" == "".
+                if !app.svc.vpn.is_empty() {
+                    app.svc.vpn.clear();
+                    app.mark_all_dirty();
+                }
                 app.after(Duration::from_millis(500), |app| {
                     services::vpn_check(app);
                 });
