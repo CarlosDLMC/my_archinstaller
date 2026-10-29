@@ -324,10 +324,11 @@ fn load_textures(app: &mut App) {
             }
         }
     }
+    let max = app.gpu.as_ref().map_or(4096, |g| g.device.limits().max_texture_dimension_2d);
     for (id, path, preview) in jobs {
         app.svc.clip.loading_tex.push(format!("{}{id}", if preview { 'p' } else { 't' }));
         app.background(
-            move || (id.clone(), preview, decode(&path, if preview { (900, 700) } else { (96, 96) }, !preview)),
+            move || (id.clone(), preview, decode(&path, if preview { (900, 700) } else { (96, 96) }, !preview, max)),
             |app, (id, preview, img)| {
                 let c = &mut app.svc.clip;
                 c.loading_tex.retain(|k| *k != format!("{}{id}", if preview { 'p' } else { 't' }));
@@ -351,20 +352,30 @@ fn load_textures(app: &mut App) {
     }
 }
 
-/// QQuickImage's load at sourceSize: scaled down (never up) so it covers
-/// (crop) or fits (fit) the requested box, smooth, premultiplied RGBA.
-fn decode(path: &str, req: (u32, u32), crop: bool) -> Option<(u32, u32, Vec<u8>)> {
+/// QQuickImage's load at sourceSize - QQuickImageProviderWithOptions::loadSize,
+/// the same for PreserveAspectCrop and PreserveAspectFit: one scale, the
+/// LARGER of the two ratios, down or up, so the picture covers the box (the
+/// crop or fit happens when it is drawn). Smooth, premultiplied RGBA.
+/// `max` is the GPU's largest texture side: a thin strip of a picture can
+/// ask for more, and wgpu aborts on a texture that big.
+fn decode(path: &str, req: (u32, u32), crop: bool, max: u32) -> Option<(u32, u32, Vec<u8>)> {
     // The thumbnails are "<id>.img": the format comes from the bytes.
-    let img = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?.decode().ok()?.to_rgba8();
+    let mut img = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?.decode().ok()?.to_rgba8();
     let (w, h) = img.dimensions();
-    let (sx, sy) = (req.0 as f32 / w as f32, req.1 as f32 / h as f32);
-    let ratio = if crop { sx.max(sy) } else { sx.min(sy) };
-    let img = if ratio < 1.0 {
-        let (nw, nh) = (((w as f32 * ratio).round() as u32).max(1), ((h as f32 * ratio).round() as u32).max(1));
-        crate::gpu::scale(img, nw, nh)
-    } else {
-        img
-    };
+    let ratio = (req.0 as f64 / w as f64).max(req.1 as f64 / h as f64);
+    let size = |w: u32, h: u32, r: f64| (((w as f64 * r).round() as u32).max(1), ((h as f64 * r).round() as u32).max(1));
+    let (mut nw, mut nh) = size(w, h, ratio);
+    if nw.max(nh) > max {
+        if crop {
+            // A thumbnail's box is square: only the middle square shows.
+            let s = w.min(h);
+            img = image::imageops::crop_imm(&img, (w - s) / 2, (h - s) / 2, s, s).to_image();
+            (nw, nh) = size(s, s, ratio);
+        } else {
+            (nw, nh) = size(w, h, max as f64 / w.max(h) as f64);
+        }
+    }
+    let img = crate::gpu::scale(img, nw.min(max), nh.min(max));
     let (w, h) = img.dimensions();
     Some((w, h, crate::gpu::premultiply(img.into_raw())))
 }
