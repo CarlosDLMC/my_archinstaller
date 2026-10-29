@@ -297,7 +297,10 @@ impl App {
             });
         }
         if let Ok(mut c) = cmd.spawn() {
-            std::thread::spawn(move || {
+            // Builder, not thread::spawn: that one panics - an abort here - when
+            // the system cannot start a thread; then the child stays a zombie
+            // until the bar exits instead.
+            let _ = std::thread::Builder::new().spawn(move || {
                 let _ = c.wait();
             });
         }
