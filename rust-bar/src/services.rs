@@ -272,16 +272,31 @@ fn parse_monitors(v: &Value) -> Option<Vec<Monitor>> {
     )
 }
 
+/// Whether the strips draw two snapshots the same: per monitor its name, its
+/// tags' index and client count and its first active tag (WorkspaceBar), and
+/// the focused window's title (WindowInfo) - all bar.rs reads of them.
+fn same_on_strips(a: &[Monitor], b: &[Monitor]) -> bool {
+    let tags = |m: &Monitor| m.tags.iter().map(|t| (t.index, t.client_count)).collect::<Vec<_>>();
+    let title = |ms: &[Monitor]| ms.iter().find(|m| m.active).filter(|m| m.client_id.is_some()).map(|m| m.client_title.clone()).unwrap_or_default();
+    a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.name == y.name && x.active_tags.first() == y.active_tags.first() && tags(x) == tags(y)) && title(a) == title(b)
+}
+
 fn on_monitors(app: &mut App, line: &str) {
     let Ok(v) = serde_json::from_str::<Value>(line) else { return };
     let Some(mons) = parse_monitors(&v) else { return };
     let before = app.svc.mango.focused().and_then(|m| m.client_id);
+    // mango sends 2-4 snapshots per action, and more for what no strip shows
+    // (geometry, layout symbol, keymode, urgency). Mango.qml takes each one,
+    // but a binding that comes out the same changes nothing on screen.
+    let same = same_on_strips(&app.svc.mango.monitors, &mons);
     app.svc.mango.monitors = mons;
     let after = app.svc.mango.focused().and_then(|m| m.client_id);
     if before != after {
         crate::bar::close_all_popups(app);
     }
-    app.mark_all_dirty();
+    if !same {
+        app.mark_all_dirty();
+    }
 }
 
 fn on_layout(app: &mut App, line: &str) {
