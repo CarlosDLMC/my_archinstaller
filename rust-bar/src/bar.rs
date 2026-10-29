@@ -428,10 +428,16 @@ fn wifi_icon(svc: &Services) -> &'static str {
 }
 
 /// Math.ceil(max(boundingRect.width)) of the two VPN glyphs: their ink widths.
+/// The font and the size never change, so it is measured once, as VpnWidget's
+/// TextMetrics are (VpnWidget.qml:304, 327-328) - not with two hinted glyph
+/// loads twice per strip frame.
 fn vpn_slot_width(p: &mut Painter) -> f32 {
-    let a = p.fonts.ink_width(VPN_UP, theme::bar_font(true), FONT_SIZE + 4.0);
-    let b = p.fonts.ink_width(VPN_DOWN, theme::bar_font(true), FONT_SIZE + 4.0);
-    a.max(b).ceil()
+    static SLOT: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
+    *SLOT.get_or_init(|| {
+        let a = p.fonts.ink_width(VPN_UP, theme::bar_font(true), FONT_SIZE + 4.0);
+        let b = p.fonts.ink_width(VPN_DOWN, theme::bar_font(true), FONT_SIZE + 4.0);
+        a.max(b).ceil()
+    })
 }
 
 /// CenterInfo.getTempColor
