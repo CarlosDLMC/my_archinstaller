@@ -621,13 +621,14 @@ impl App {
         }
     }
 
-    /// The cursor over a hit: QQuickTextInput's I-beam over a text field, the
-    /// hand of the MouseAreas' cursorShape over a control, else the arrow.
+    /// The cursor over a hit: the hand of the MouseAreas' cursorShape over a
+    /// control, else the arrow - over the text fields too: Qt 6.12's
+    /// QQuickTextInput sets no cursor (only TextEdit takes the I-beam), and
+    /// no item under the bar's fields sets one.
     fn cursor_at(&self, w: WinRef, hit: Option<Action>) -> Shape {
         match hit {
-            Some(Action::Hover(bar::TEXT_FIELD)) => Shape::Text,
             // The Wi-Fi password TextInput is a control of the card's chain.
-            Some(Action::Card(crate::wifi_card::INPUT)) if w == WinRef::Card && self.card.as_ref().map_or(false, |c| c.kind == cards::CardKind::Wifi) => Shape::Text,
+            Some(Action::Card(crate::wifi_card::INPUT)) if w == WinRef::Card && self.card.as_ref().map_or(false, |c| c.kind == cards::CardKind::Wifi) => Shape::Default,
             Some(Action::Hover(_)) | None => Shape::Default,
             Some(_) => Shape::Pointer,
         }

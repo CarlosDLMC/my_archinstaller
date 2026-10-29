@@ -842,9 +842,9 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
         kx += ll.width;
     }
     ui.hits.push(Hit { x: x0, y: y0, w, h, action: Action::Hover(0) });
-    // QQuickTextInput's I-beam over the TextInput - the plate less gap on
+    // The TextInput's own rect (the arrow over it) - the plate less gap on
     // each side, its full height (PolkitOsd.qml:163-166) - while it takes
-    // input: a disabled one shows none.
+    // input: a disabled one takes no press.
     if enabled {
         ui.hits.push(Hit { x: fx, y: field_y, w: fw, h: m.field_h, action: Action::Hover(crate::bar::TEXT_FIELD) });
     }
