@@ -1,7 +1,8 @@
 //! The volume widget's card (AudioPanel.qml): output and input with their
 //! faders and device lists, the live mic meter, per-application faders.
 
-use std::time::Instant;
+use std::cell::Cell;
+use std::time::{Duration, Instant};
 
 use crate::app::App;
 use crate::bar::{ac, Action, Hit};
@@ -18,10 +19,22 @@ pub const OUT_MUTE: u32 = 1;
 pub const OUT_SLIDER: u32 = 2;
 pub const IN_MUTE: u32 = 3;
 pub const IN_SLIDER: u32 = 4;
-pub const SINK_ROW: u32 = 0x100;
-pub const SOURCE_ROW: u32 = 0x200;
-pub const STREAM_MUTE: u32 = 0x300;
-pub const STREAM_SLIDER: u32 = 0x400;
+/// A device row or an app's controls carry their node (slot()), not their
+/// place in the list: a QML delegate belongs to its node, so a click or a
+/// drag never lands on the next one when a node before it goes, and
+/// colours and texts do not pass to whatever moves up. Every code stays
+/// under 0x1_0000, so the keys made from codes (0x2_0000 + code, ...,
+/// 0x100_0000 + code * 64) keep their ranges apart.
+const SLOTS: u32 = 0x3C00;
+pub const SINK_ROW: u32 = 0x400;
+pub const SOURCE_ROW: u32 = 0x4000;
+pub const STREAM_MUTE: u32 = 0x8000;
+pub const STREAM_SLIDER: u32 = 0xC000;
+
+/// A node's slot in its code range (PipeWire's ids stay far below).
+fn slot(id: u32) -> u32 {
+    id % SLOTS
+}
 
 const LABEL: f32 = FONT_SIZE - 2.0;
 const HEADER: f32 = FONT_SIZE - 4.0;
@@ -40,22 +53,32 @@ pub fn lists(svc: &Services) -> Lists {
     let Some(pw) = svc.pw.as_ref() else {
         return Lists { sink: Default::default(), source: Default::default(), sinks: vec![], sources: vec![], streams: vec![] };
     };
-    let nodes = pw.nodes();
-    let sink = pw.sink();
-    let source = pw.source();
-    let mut sinks: Vec<NodeInfo> = nodes.iter().filter(|n| n.0.is_sink()).map(|n| n.0.clone()).collect();
+    let sink = pw.default_node(true);
+    let source = pw.default_node(false);
+    let (mut sinks, mut sources, mut streams) = (Vec::new(), Vec::new(), Vec::new());
+    // The three kinds are apart: each node moves into its list.
+    for (n, a) in pw.nodes() {
+        if n.is_sink() {
+            sinks.push(n);
+        } else if n.is_source() {
+            sources.push(n);
+        } else if n.is_playback_stream() && a.ready {
+            // Once its volume is known: QML's rows come 75 ms after the list
+            // changed (VolumeWidget.qml:208-217), by then with their level, and
+            // a row drawn before it filled its fader from 0 over 200 ms.
+            streams.push((n, a));
+        }
+    }
     if let Some(s) = &sink.1 {
         if !sinks.iter().any(|n| n.id == s.id) {
             sinks.insert(0, s.clone());
         }
     }
-    let mut sources: Vec<NodeInfo> = nodes.iter().filter(|n| n.0.is_source() && n.0.name != "quickshell" && n.0.name != "mic_denoise").map(|n| n.0.clone()).collect();
     if let Some(s) = &source.1 {
         if !sources.iter().any(|n| n.id == s.id) {
             sources.insert(0, s.clone());
         }
     }
-    let streams = nodes.into_iter().filter(|n| n.0.is_playback_stream() && n.1.ready).collect();
     Lists { sink, source, sinks, sources, streams }
 }
 
@@ -147,10 +170,6 @@ pub fn content_height(fonts: &mut crate::text::Fonts, svc: &Services) -> f32 {
     parts.iter().sum::<f32>() + 8.0 * (parts.len().saturating_sub(1)) as f32
 }
 
-fn qround(v: f32) -> f32 {
-    (v + 0.5).floor()
-}
-
 fn section_header(ui: &mut Ui, x: f32, y: f32, w: f32, h: f32, label: &str, detail: &str) {
     let t = ui.theme;
     let cap = ui.fonts.layout(label, theme::bar_font(true), FONT_SIZE - 5.0, 1.0);
@@ -207,50 +226,23 @@ fn slider(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, value: f32, max: f32, 
     }
 }
 
-/// ConsoleLamp, centred in its 10 x 10 slot at (x, y).
-fn lamp(ui: &mut Ui, id: u32, x: f32, y: f32, lit: bool) {
-    let t = ui.theme;
-    let (halo, r1) = ui.card.number(0x3_0000 + id, if lit { 0.22 } else { 0.0 }, 160, ui.now);
-    let (dot, r2) = ui.card.color(0x4_0000 + id, if lit { t.col_accent } else { t.col_plate.darker(1.3) }, 160, ui.now);
-    ui.animating |= r1 || r2;
-    if halo > 0.0 {
-        ui.scene.save();
-        ui.scene.multiply_opacity(halo);
-        ui.scene.rect(x - 4.0, y - 4.0, 18.0, 18.0, t.col_accent, 9.0, 0.0, Color::TRANSPARENT, true);
-        ui.scene.restore();
-    }
-    let border = if lit { t.col_accent.lighter(1.25) } else { Color::qt_rgba(1.0, 1.0, 1.0, 0.12) };
-    ui.scene.rect(x + 1.0, y + 1.0, 9.0, 9.0, dot, 4.5, 1.0, border, true);
-}
-
-/// ConsoleRow: lamp, icon, label; hot while hovered or focused.
+/// ConsoleRow (AudioPanel's device rows: interactive: !lit): the shared
+/// one, whose lamp dot sits where Qt's anchors.centerIn puts it.
 fn console_row(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32, icon: &str, label: &str, lit: bool) {
-    let t = ui.theme;
-    let interactive = !lit;
-    let focused = if interactive { ui.focusable(code) } else { false };
-    let hot = (interactive && ui.hovered(x, y, w, h)) || focused;
-    let (bg, run) = ui.card.color(0x5_0000 + code, if hot { t.col_plate.lighter(1.6) } else { Color::TRANSPARENT }, 110, ui.now);
-    ui.animating |= run;
-    ui.scene.rect(x, y, w, h, bg, 4.0, if focused { 2.0 } else { 0.0 }, t.col_white, true);
-    let lx = x + 6.0;
-    lamp(ui, code, lx, y + qround((h - 10.0) / 2.0), lit);
-    let fg = if lit || hot { t.col_white } else { t.col_grey };
-    let icon_w = ROW_FONT + 2.0;
-    let ix = lx + 10.0 + 8.0;
-    let il = ui.fonts.layout(icon, theme::bar_font(false), ROW_FONT, 0.0);
-    ui.text(&il, ix + (icon_w - il.adv) / 2.0, y + qround((h - il.height()) / 2.0), fg, TextStyle::Normal);
-    let tx = ix + icon_w + 8.0;
-    let tw = x + w - 6.0 - tx;
-    let key = theme::bar_font(lit);
-    let full = ui.fonts.layout(label, key, ROW_FONT, 0.0);
-    let line = ui.fonts.elide_right(&full, label, key, tw, 0.0);
-    ui.text(&line, tx, y + qround((h - line.height()) / 2.0), fg, TextStyle::Normal);
-    if interactive {
-        ui.hits.push(Hit { x, y, w, h, action: Action::Card(code) });
-    }
+    crate::cards::console_row(ui, code, x, y, w, h, icon, label, lit, !lit, None, None);
 }
 
 pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
+    // The meter's place is this draw's: none if the ВХОД plate went away
+    // (its LevelMeter goes with it), or the meter surface stayed live there.
+    ui.card.meter_at = None;
+    ui.card.meter_node = false;
+    // The Flickable clips input as well as paint (AudioPanel.qml:47-51, clip:
+    // true): a control scrolled out of view takes neither hover nor clicks.
+    let view = (8.0, crate::cards::STEM_H + 8.0, w - 16.0, ui.card.card_height() - 28.0);
+    let pointer = ui.card.pointer;
+    ui.card.pointer = pointer.filter(|&(px, py)| px >= view.0 && px < view.0 + view.2 && py >= view.1 && py < view.1 + view.3);
+    let first_hit = ui.hits.len();
     let t = ui.theme;
     let l = lists(svc);
     let m = metrics(ui.fonts);
@@ -272,10 +264,10 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
     ui.card.tint_alert = false;
     slider(ui, OUT_SLIDER, ix + m.btn_w + 10.0, cy + ac(m.btn_h, 20.0), iw - m.btn_w - 10.0, l.sink.0.volume, 1.0, muted, l.sink.0.ready);
     cy += m.btn_h;
-    for (i, n) in l.sinks.iter().enumerate() {
+    for n in &l.sinks {
         cy += 6.0;
         let lit = l.sink.1.as_ref().map_or(false, |s| s.id == n.id);
-        console_row(ui, SINK_ROW + i as u32, ix, cy, iw, m.row_h, sink_glyph(n), &node_label(n), lit);
+        console_row(ui, SINK_ROW + slot(n.id), ix, cy, iw, m.row_h, sink_glyph(n), &node_label(n), lit);
         cy += m.row_h;
     }
     y += out_h + 8.0;
@@ -295,10 +287,10 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
         cy += m.btn_h + 6.0;
         level_meter(ui, ix + m.btn_w + 10.0, cy, iw - m.btn_w - 10.0, l.source.0.ready);
         cy += 6.0;
-        for (i, n) in l.sources.iter().enumerate() {
+        for n in &l.sources {
             cy += 6.0;
             let lit = l.source.1.as_ref().map_or(false, |s| s.id == n.id);
-            console_row(ui, SOURCE_ROW + i as u32, ix, cy, iw, m.row_h, source_glyph(n), &node_label(n), lit);
+            console_row(ui, SOURCE_ROW + slot(n.id), ix, cy, iw, m.row_h, source_glyph(n), &node_label(n), lit);
             cy += m.row_h;
         }
         y += in_h + 8.0;
@@ -312,9 +304,9 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
         let mut cy = y + 10.0;
         section_header(ui, ix, cy, iw, m.cap_h, "ПРИЛОЖЕНИЯ", "");
         cy += m.cap_h;
-        for (i, (n, a)) in l.streams.iter().enumerate() {
+        for (n, a) in &l.streams {
             cy += 8.0;
-            let i = i as u32;
+            let i = slot(n.id);
             ui.card.tint_alert = true;
             ui.console_button_sized(STREAM_MUTE + i, ix, cy + ac(row, m.btn_h), m.btn_w, font, mute_icon(a.muted), t.col_grey, "", a.muted);
             ui.card.tint_alert = false;
@@ -322,12 +314,12 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
             let colw = iw - m.btn_w - 10.0;
             let col_y = cy + ac(row, (m.name_h + 2.0 + 20.0));
             let pl = ui.fonts.layout(&format!("{}%", (a.volume * 100.0).round() as i64), theme::bar_font(true), HEADER + 1.0, 0.0);
-            ui.text(&pl, colx + colw - pl.width, col_y, t.col_white, TextStyle::Normal);
+            ui.text_of(STREAM_SLIDER + i, 0xA1, &pl, colx + colw - pl.width, col_y, t.col_white);
             let name = stream_label(n);
             let nk = theme::bar_font(false);
             let full = ui.fonts.layout(&name, nk, HEADER + 1.0, 0.0);
             let line: Line = ui.fonts.elide_right(&full, &name, nk, colw - pl.width - 8.0, 0.0);
-            ui.text(&line, colx, col_y, t.col_grey, TextStyle::Normal);
+            ui.text_of(STREAM_SLIDER + i, 0xA2, &line, colx, col_y, t.col_grey);
             slider(ui, STREAM_SLIDER + i, colx, col_y + m.name_h + 2.0, colw, a.volume, 1.5, a.muted, true);
             cy += row;
         }
@@ -337,6 +329,15 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
         let e = ui.fonts.layout("Нет аудиоустройств", theme::bar_font(false), LABEL, 0.0);
         ui.text(&e, x0 + (cw - e.adv) / 2.0, y, t.col_grey, TextStyle::Normal);
     }
+    ui.card.pointer = pointer;
+    let mut hits = ui.hits.split_off(first_hit);
+    hits.retain_mut(|h| {
+        let (x, y) = (h.x.max(view.0), h.y.max(view.1));
+        let (r, b) = ((h.x + h.w).min(view.0 + view.2), (h.y + h.h).min(view.1 + view.3));
+        (h.x, h.y, h.w, h.h) = (x, y, r - x, b - y);
+        r > x && b > y
+    });
+    ui.hits.append(&mut hits);
 }
 
 /// The meter on a surface of its own, redrawn alone while only the level
@@ -358,43 +359,83 @@ pub struct MeterWin {
     pub width: f32,
     /// The card leaves the segments to this surface.
     pub live: bool,
+    /// What its last frame was painted with besides the level (meter_look).
+    pub look: Option<MeterLook>,
+    /// Synchronized (wl_subsurface.set_sync): its frames wait for the card's
+    /// commit - while it takes a place, see place().
+    sync: bool,
     pub dirty: bool,
     pub frame_pending: bool,
+}
+
+/// The palette a meter frame paints (plate, accent, alert, white) and
+/// whether the meter had a node.
+pub type MeterLook = (Color, Color, Color, Color, bool);
+
+pub fn meter_look(t: &Theme, node: bool) -> MeterLook {
+    (t.col_plate, t.col_accent, t.col_alert, t.col_white, node)
 }
 
 impl MeterWin {
     pub fn new(app: &App, parent: &WlSurface) -> Option<MeterWin> {
         let (sub, surface) = app.subcompositor.as_ref()?.create_subsurface(parent.clone(), &app.qh);
         sub.place_below(parent);
-        sub.set_desync();
         if let Ok(region) = smithay_client_toolkit::compositor::Region::new(&app.compositor) {
             surface.set_input_region(Some(region.wl_region()));
         }
         surface.commit();
-        Some(MeterWin { surface, sub, gpu: None, pos: (i32::MIN, i32::MIN), frac: (0.0, 0.0), size: (0, 0), width: 0.0, live: false, dirty: true, frame_pending: false })
+        // A new subsurface is synchronized; place() lets it go once placed.
+        Some(MeterWin { surface, sub, gpu: None, pos: (i32::MIN, i32::MIN), frac: (0.0, 0.0), size: (0, 0), width: 0.0, live: false, look: None, sync: true, dirty: true, frame_pending: false })
+    }
+
+    /// Puts the surface's corner at the whole pixel under (x, y) of the
+    /// card's surface; it takes effect with the card's next commit. True if
+    /// it moved.
+    pub fn move_to(&mut self, x: f32, y: f32) -> bool {
+        let pos = (x.floor() as i32, y.floor() as i32);
+        if self.pos == pos {
+            return false;
+        }
+        self.pos = pos;
+        self.sub.set_position(pos.0, pos.1);
+        true
     }
 
     /// Follows the card's last draw: the meter at (x, y), w wide on the card's
     /// surface, or out of view. True when the card must be drawn again (the
     /// segments move between the two surfaces, or the new place needs the
-    /// card's next commit).
+    /// card's next commit). Its own frame is redrawn only if it changes.
     pub fn place(&mut self, at: Option<(f32, f32, f32)>) -> bool {
+        // This follows a card commit: a place taken before it has shown, and
+        // the meter's own frames go out at once again (set_desync).
+        if self.sync {
+            self.sub.set_desync();
+            self.sync = false;
+        }
         let Some((x, y, w)) = at else {
             let was = self.live;
             self.live = false;
-            self.dirty = true;
+            self.dirty |= was;
             return was;
         };
         let (ix, iy) = (x.floor(), y.floor());
         let frac = (x - ix, y - iy);
         let size = ((w + frac.0).ceil() as u32, (6.0 + frac.1).ceil() as u32);
-        let mut card = !self.live;
-        if self.pos != (ix as i32, iy as i32) {
-            self.pos = (ix as i32, iy as i32);
-            self.sub.set_position(self.pos.0, self.pos.1);
-            card = true;
+        let moved = self.move_to(x, y);
+        let card = !self.live || moved;
+        if !self.live {
+            // Taking its place: the first frame there waits for the card's
+            // next commit, which also moves the surface and cuts the hole. A
+            // position is the parent's state, so a frame shown at once stood
+            // at the old place for a frame - after the card opened, the
+            // surface's corner: the top left of the screen.
+            self.sub.set_sync();
+            self.sync = true;
         }
-        (self.frac, self.size, self.width, self.live, self.dirty) = (frac, size, w, true, true);
+        if (frac, size, w, true) != (self.frac, self.size, self.width, self.live) {
+            (self.frac, self.size, self.width, self.live) = (frac, size, w, true);
+            self.dirty = true;
+        }
         card
     }
 }
@@ -440,7 +481,11 @@ fn level_meter(ui: &mut Ui, x: f32, y: f32, w: f32, has_node: bool) {
     let inside = y >= crate::cards::STEM_H + 8.0 && y + 6.0 <= ui.card.card_height() - 8.0;
     let (ox, oy) = ui.card.origin();
     ui.card.meter_at = inside.then_some((ox + x, oy + y, w));
-    if inside && ui.card.meter_win.as_ref().map_or(false, |m| m.live) {
+    if let Some(m) = ui.card.meter_win.as_mut().filter(|m| inside && m.live) {
+        // Moved now, so the card's commit that cuts the hole at the new place
+        // also brings the meter there - moved after it, the hole showed what
+        // is behind the card for a frame.
+        m.move_to(ox + x, oy + y);
         // The whole pixels MeterWin covers (see place()).
         let (hx, hy) = (x.floor(), y.floor());
         ui.scene.hole(hx, hy, (x + w).ceil() - hx, (y + 6.0).ceil() - hy);
@@ -450,16 +495,45 @@ fn level_meter(ui: &mut Ui, x: f32, y: f32, w: f32, has_node: bool) {
     meter_cells(ui.scene, t, x, y, w, level, hold);
 }
 
+const METER_PERIOD: Duration = Duration::from_millis(33);
+
+thread_local! {
+    /// When the meter's clock last moved (started or ticked); None while it
+    /// is stopped. LevelMeter has one Timer.
+    static METER_CLOCK: Cell<Option<Instant>> = const { Cell::new(None) };
+}
+
+/// LevelMeter's Timer runs while the meter has a node (LevelMeter.qml:58-61,
+/// running: meter.visible && !!meter.node): the card's draw starts it when
+/// no clock runs, so an input that appears with the card open starts it again.
+pub fn start_meter(app: &App) {
+    // A running clock moved within the period (three, for a slow frame).
+    if METER_CLOCK.get().map_or(true, |t| t.elapsed() > METER_PERIOD * 3) {
+        METER_CLOCK.set(Some(Instant::now()));
+        app.every(METER_PERIOD, meter_tick);
+    }
+}
+
 /// The meter's 33 ms tick: level falls 0.025 a tick, the hold stays 30 ticks
 /// then falls 0.02 a tick. The card is redrawn only when that moves a lit
 /// segment or the hold marker - Qt repaints only what changed, and a silent
 /// mic redrew the card (and mango re-composited it) 30 times a second.
 pub fn meter_tick(app: &mut App) -> bool {
-    let Some(card) = app.card.as_mut() else { return false };
-    if card.kind != crate::cards::CardKind::Audio {
+    let now = Instant::now();
+    // One clock: a timer ticks again a whole period after its own tick
+    // ended, so a tick sooner than that is a second timer's (the card closed
+    // and opened again, on another screen, before the first saw it close) -
+    // with two, the level fell twice as fast.
+    if METER_CLOCK.get().map_or(false, |t| now.duration_since(t) < METER_PERIOD - Duration::from_millis(3)) {
         return false;
     }
-    let (audio, _) = app.svc.pw.as_ref().map(|p| p.source()).unwrap_or_default();
+    // It stops with the card, and while the meter has no node.
+    let Some(card) = app.card.as_mut().filter(|c| c.kind == crate::cards::CardKind::Audio && c.meter_node) else {
+        METER_CLOCK.set(None);
+        return false;
+    };
+    METER_CLOCK.set(Some(now));
+    let audio = app.svc.pw.as_ref().map(|p| p.source_audio()).unwrap_or_default();
     let peak = app.svc.pw.as_ref().map_or(0.0, |p| p.peak());
     let target = if audio.muted || !audio.ready || !(peak > 0.0) {
         0.0
@@ -498,13 +572,16 @@ pub fn slider_to(app: &mut App, code: u32, x: f32) {
     set_volume(app, code, v);
 }
 
+/// The node a control acts on, as the lists are now: an app's control whose
+/// stream is gone acts on nothing (its QML delegate went with it). Looked up
+/// without copying the lists: a fader drag asks on every pointer motion.
 fn target_of(app: &App, code: u32) -> Option<(u32, Audio)> {
-    let l = lists(&app.svc);
+    let pw = app.svc.pw.as_ref()?;
     match code {
-        OUT_SLIDER | OUT_MUTE => l.sink.1.map(|n| (n.id, l.sink.0.clone())),
-        IN_SLIDER | IN_MUTE => l.source.1.map(|n| (n.id, l.source.0.clone())),
-        c if (STREAM_MUTE..STREAM_MUTE + 0x100).contains(&c) => l.streams.get((c - STREAM_MUTE) as usize).map(|(n, a)| (n.id, a.clone())),
-        c if (STREAM_SLIDER..STREAM_SLIDER + 0x100).contains(&c) => l.streams.get((c - STREAM_SLIDER) as usize).map(|(n, a)| (n.id, a.clone())),
+        OUT_SLIDER | OUT_MUTE => pw.default_audio(true),
+        IN_SLIDER | IN_MUTE => pw.default_audio(false),
+        c if (STREAM_MUTE..STREAM_MUTE + SLOTS).contains(&c) => pw.stream_audio(|id| STREAM_MUTE + slot(id) == c),
+        c if (STREAM_SLIDER..STREAM_SLIDER + SLOTS).contains(&c) => pw.stream_audio(|id| STREAM_SLIDER + slot(id) == c),
         _ => None,
     }
 }
@@ -523,24 +600,24 @@ fn toggle_mute(app: &mut App, code: u32) {
 }
 
 pub fn is_slider(code: u32) -> bool {
-    code == OUT_SLIDER || code == IN_SLIDER || (STREAM_SLIDER..STREAM_SLIDER + 0x100).contains(&code)
+    code == OUT_SLIDER || code == IN_SLIDER || (STREAM_SLIDER..STREAM_SLIDER + SLOTS).contains(&code)
 }
 
 pub fn activate(app: &mut App, code: u32) {
     let l = lists(&app.svc);
     match code {
         OUT_MUTE | IN_MUTE => toggle_mute(app, code),
-        c if (SINK_ROW..SINK_ROW + 0x100).contains(&c) => {
-            if let (Some(n), Some(pw)) = (l.sinks.get((c - SINK_ROW) as usize), app.svc.pw.as_ref()) {
+        c if (SINK_ROW..SINK_ROW + SLOTS).contains(&c) => {
+            if let (Some(n), Some(pw)) = (l.sinks.iter().find(|n| SINK_ROW + slot(n.id) == c), app.svc.pw.as_ref()) {
                 pw.set_default(true, &n.name);
             }
         }
-        c if (SOURCE_ROW..SOURCE_ROW + 0x100).contains(&c) => {
-            if let (Some(n), Some(pw)) = (l.sources.get((c - SOURCE_ROW) as usize), app.svc.pw.as_ref()) {
+        c if (SOURCE_ROW..SOURCE_ROW + SLOTS).contains(&c) => {
+            if let (Some(n), Some(pw)) = (l.sources.iter().find(|n| SOURCE_ROW + slot(n.id) == c), app.svc.pw.as_ref()) {
                 pw.set_default(false, &n.name);
             }
         }
-        c if (STREAM_MUTE..STREAM_MUTE + 0x100).contains(&c) => toggle_mute(app, c),
+        c if (STREAM_MUTE..STREAM_MUTE + SLOTS).contains(&c) => toggle_mute(app, c),
         c if is_slider(c) => {}
         _ => {}
     }
