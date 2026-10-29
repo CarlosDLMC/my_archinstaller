@@ -70,6 +70,7 @@ pub struct Item {
 #[derive(Clone, Copy)]
 struct Tex {
     id: u32,
+    /// The picture's size as the Image has it (the texture may be smaller).
     w: u32,
     h: u32,
 }
@@ -1122,7 +1123,7 @@ fn load_visible(app: &mut App) {
         app.svc.wall.loading.insert(id.clone(), cancel.clone());
         app.background(
             move || {
-                let img = if cancel.load(Ordering::Relaxed) { None } else { decode_height(&path, target_h, max).map(|(w, h, rgba)| crate::gpu::mip_levels(w, h, rgba, true)) };
+                let img = if cancel.load(Ordering::Relaxed) { None } else { decode_height(&path, target_h, max).map(|(w, h, rgba, size)| (crate::gpu::mip_levels(w, h, rgba, true), size)) };
                 (id, cancel, img)
             },
             |app, (id, cancel, img)| {
@@ -1132,9 +1133,8 @@ fn load_visible(app: &mut App) {
                     return;
                 }
                 app.svc.wall.loading.remove(&id);
-                let Some(levels) = img else { return };
+                let Some((levels, (w, h))) = img else { return };
                 let Some(gpu) = app.gpu.as_mut() else { return };
-                let (w, h) = (levels[0].0, levels[0].1);
                 let t = Tex { id: gpu.add_levels(levels), w, h };
                 if let Some(old) = app.svc.wall.textures.insert(id, t) {
                     gpu.drop_image(old.id);
@@ -1153,18 +1153,24 @@ fn max_texture(app: &App) -> u32 {
     app.gpu.as_ref().map_or(8192, |g| g.device.limits().max_texture_dimension_2d)
 }
 
+/// A decoded picture: the texture's pixels (width, height, premultiplied
+/// RGBA) and the size the Image has, which the crop is worked out from.
+type Decoded = (u32, u32, Vec<u8>, (u32, u32));
+
 /// Each side cut down to the GPU's limit: a texture past it is a wgpu
-/// validation error, which aborts the bar (panic = "abort") where Qt carries on.
-fn fit_texture(img: image::RgbaImage, max: u32) -> image::RgbaImage {
+/// validation error, which aborts the bar (panic = "abort") where Qt carries
+/// on. Qt cuts each side alone too (QSGPlainTexture, IgnoreAspectRatio) but
+/// the Image keeps the picture's size, so the crop - in texture coordinates -
+/// still comes from that and nothing looks squashed.
+fn fit_texture(img: image::RgbaImage, max: u32) -> Decoded {
+    let size = img.dimensions();
+    let img = if size.0 <= max && size.1 <= max { img } else { crate::gpu::scale(img, size.0.min(max), size.1.min(max)) };
     let (w, h) = img.dimensions();
-    if w <= max && h <= max {
-        return img;
-    }
-    crate::gpu::scale(img, w.min(max), h.min(max))
+    (w, h, crate::gpu::premultiply(img.into_raw()), size)
 }
 
 /// sourceSize.height only: scaled down (never up) to that height.
-fn decode_height(path: &std::path::Path, h: u32, max: u32) -> Option<(u32, u32, Vec<u8>)> {
+fn decode_height(path: &std::path::Path, h: u32, max: u32) -> Option<Decoded> {
     let img = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?.decode().ok()?.to_rgba8();
     let (iw, ih) = img.dimensions();
     let img = if ih > h {
@@ -1173,13 +1179,11 @@ fn decode_height(path: &std::path::Path, h: u32, max: u32) -> Option<(u32, u32, 
     } else {
         img
     };
-    let img = fit_texture(img, max);
-    let (w, hh) = img.dimensions();
-    Some((w, hh, crate::gpu::premultiply(img.into_raw())))
+    Some(fit_texture(img, max))
 }
 
 /// sourceSize width and height with PreserveAspectCrop: scaled to cover.
-fn decode_cover(path: &std::path::Path, w: u32, h: u32, max: u32) -> Option<(u32, u32, Vec<u8>)> {
+fn decode_cover(path: &std::path::Path, w: u32, h: u32, max: u32) -> Option<Decoded> {
     let img = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?.decode().ok()?.to_rgba8();
     let (iw, ih) = img.dimensions();
     let s = (w as f32 / iw as f32).max(h as f32 / ih as f32);
@@ -1188,9 +1192,7 @@ fn decode_cover(path: &std::path::Path, w: u32, h: u32, max: u32) -> Option<(u32
     } else {
         img
     };
-    let img = fit_texture(img, max);
-    let (ow, oh) = img.dimensions();
-    Some((ow, oh, crate::gpu::premultiply(img.into_raw())))
+    Some(fit_texture(img, max))
 }
 
 /// PreserveAspectCrop of a texture into (w, h): the uv window.
@@ -1512,8 +1514,8 @@ fn start_reveal(app: &mut App, it: Item) {
                     return;
                 }
                 let Some(r) = app.reveals.get_mut(i) else { return };
-                if let (Some((w, h, rgba)), Some(gpu)) = (img, app.gpu.as_mut()) {
-                    r.tex = Some(Tex { id: gpu.add_image(w, h, rgba, false), w, h });
+                if let (Some((w, h, rgba, (iw, ih))), Some(gpu)) = (img, app.gpu.as_mut()) {
+                    r.tex = Some(Tex { id: gpu.add_image(w, h, rgba, false), w: iw, h: ih });
                 }
                 if !r.reported {
                     r.reported = true;
