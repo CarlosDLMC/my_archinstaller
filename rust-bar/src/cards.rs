@@ -182,7 +182,7 @@ impl OpenCard {
         let i = match self.flicks.iter().position(|f| f.id == id) {
             Some(i) => i,
             None => {
-                self.flicks.push(Flick { id, glide: Animated::new(0.0, 300, Easing::OutExpo), rest: 0.0, max: 0.0, sig, rect: None });
+                self.flicks.push(Flick { id, glide: Animated::new(0.0, 300, Easing::OutExpo), rest: 0.0, max: 0.0, content: 0.0, height: 0.0, sig, rect: None });
                 self.flicks.len() - 1
             }
         };
@@ -234,6 +234,9 @@ struct Flick {
     rest: f32,
     /// contentHeight - height at the last draw.
     max: f32,
+    /// contentHeight and height at the last draw.
+    content: f32,
+    height: f32,
     /// A ListView's model at the last draw (see model_sig).
     sig: u64,
     /// The viewport in the card's coordinates, if the last draw showed it.
@@ -267,20 +270,61 @@ impl Flick {
         self.glide.snap(y);
         self.glide.set(to, now);
         // fixup() when the glide ends: between the bounds, contentY goes to a
-        // whole pixel - the nearest within a quarter, else back against the
-        // motion (the sign of smoothVelocity). A glide started mid-glide ends
-        // off the pixel grid.
-        self.rest = if to <= 0.0 || to >= self.max || to.fract() == 0.0 {
-            to
-        } else if (to.round() - to).abs() < 0.25 {
-            to.round()
-        } else if step > 0.0 {
-            to.floor()
-        } else {
-            to.ceil()
-        };
+        // whole pixel. A glide started mid-glide ends off the pixel grid.
+        self.rest = if to <= 0.0 || to >= self.max { to } else { pixel(to, step > 0.0) };
         self.rest = self.rest.clamp(0.0, self.max);
         true
+    }
+
+    /// A new contentHeight or height (QQuickFlickable::setContentHeight /
+    /// geometryChange): back inside the bounds and onto a whole pixel.
+    /// At rest that is at once (fixupMode Immediate). During the wheel's
+    /// glide only a new contentHeight counts (ExtentChanged): past a bound
+    /// it glides there (300 ms OutExpo from here), between them it stops
+    /// on a pixel, exactly on one it runs on; a new height waits for the
+    /// glide's end, which puts it inside.
+    fn resized(&mut self, content_changed: bool, now: Instant) {
+        if !self.glide.running(now) {
+            let y = self.rest;
+            let to = if y <= 0.0 || self.max <= 0.0 {
+                0.0
+            } else if y >= self.max {
+                self.max
+            } else {
+                // No velocity at rest: the nearest pixel.
+                y.round()
+            };
+            if to != y {
+                self.jump(to);
+            }
+            return;
+        }
+        if !content_changed {
+            return;
+        }
+        let y = self.glide.get(now);
+        if y <= 0.0 || self.max <= 0.0 || y >= self.max {
+            let to = if y <= 0.0 || self.max <= 0.0 { 0.0 } else { self.max };
+            self.glide.snap(y);
+            self.glide.set(to, now);
+            self.rest = to;
+        } else if y.fract() != 0.0 {
+            let down = self.glide.target() > y;
+            self.jump(pixel(y, down));
+        }
+    }
+}
+
+/// QQuickFlickablePrivate::fixup between the bounds, a contentY off the
+/// pixel grid: the nearest pixel within a quarter, else back against the
+/// motion (smoothVelocity's sign; `down` = contentY growing).
+fn pixel(y: f32, down: bool) -> f32 {
+    if y.fract() == 0.0 || (y.round() - y).abs() < 0.25 {
+        y.round()
+    } else if down {
+        y.floor()
+    } else {
+        y.ceil()
     }
 }
 
@@ -983,18 +1027,13 @@ impl Ui<'_, OpenCard> {
     pub fn view_begin(&mut self, id: u32, x: f32, y: f32, w: f32, h: f32, content_h: f32) -> View {
         let now = self.now;
         let f = self.card.flick(id, 0);
+        let (content_changed, height_changed) = (f.content != content_h, f.height != h);
+        (f.content, f.height) = (content_h, h);
         f.max = (content_h - h).max(0.0);
-        // A content or view size change puts it back inside: at once when it
-        // rests (fixupMode Immediate), and a running glide ends at the new
-        // bound (ExtentChanged).
-        if f.glide.running(now) {
-            if f.glide.target() > f.max {
-                let y = f.glide.get(now);
-                f.glide.snap(y);
-                f.glide.set(f.max, now);
-                f.rest = f.max;
-            }
-        } else if f.rest > f.max {
+        if content_changed || height_changed {
+            f.resized(content_changed, now);
+        } else if !f.glide.running(now) && f.rest > f.max {
+            // A glide that ended past a bound which moved under it.
             f.jump(f.max);
         }
         f.rect = Some([x, y, w, h]);
