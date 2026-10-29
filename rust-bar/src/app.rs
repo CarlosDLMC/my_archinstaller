@@ -42,6 +42,9 @@ use crate::services::{Mango, Services};
 use crate::text::Fonts;
 use crate::theme::Theme;
 
+/// Linux input button codes (Qt's Left, Right and Middle buttons).
+const BTN_LEFT: u32 = 0x110;
+
 /// A wgpu surface on a Wayland surface.
 fn raw_surface(conn: &Connection, instance: &wgpu::Instance, wl: &wl_surface::WlSurface) -> wgpu::Surface<'static> {
     let dpy = NonNull::new(conn.backend().display_ptr() as *mut _).unwrap();
@@ -867,16 +870,19 @@ impl PointerHandler for App {
                 }
             }
             if let Some(k) = crate::osd::is_dim(self, &e.surface) {
-                // The dialog's dim: a click outside the panel.
+                // The dialog's dim: a click outside the panel. Every dim's
+                // MouseArea keeps acceptedButtons' default, the left button
+                // (PowerOsd.qml:88, ShotOsd.qml:72, RecordOsd.qml:80,
+                // ClipboardOsd.qml:121, PolkitOsd.qml:82): the others do nothing.
                 match e.kind {
                     PointerEventKind::Enter { serial } => {
                         self.enter_serial = serial;
                         self.hand = true;
                         self.set_cursor(false);
                     }
-                    PointerEventKind::Press { button, .. } => self.pressed = Some((WinRef::Osd(k), button, Action::Hover(u32::MAX))),
-                    PointerEventKind::Release { button, .. } => {
-                        if self.pressed.take() == Some((WinRef::Osd(k), button, Action::Hover(u32::MAX))) {
+                    PointerEventKind::Press { button: BTN_LEFT, .. } => self.pressed = Some((WinRef::Osd(k), BTN_LEFT, Action::Hover(u32::MAX))),
+                    PointerEventKind::Release { button: BTN_LEFT, .. } => {
+                        if self.pressed.take() == Some((WinRef::Osd(k), BTN_LEFT, Action::Hover(u32::MAX))) {
                             crate::osd::dim_clicked(self, k);
                         }
                     }
