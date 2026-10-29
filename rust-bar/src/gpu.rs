@@ -843,6 +843,16 @@ impl Gpu {
             }
         }
         self.queue.submit([enc.finish()]);
+        // Between frames no scene refers to atlas places: the time for an
+        // atlas grown past what it keeps to start over (strip-6). Its
+        // texture goes too; wgpu keeps it until this frame is done with it.
+        let (gray, colour) = fonts.restart_full_atlases();
+        if gray {
+            self.atlas = None;
+        }
+        if colour {
+            self.color_atlas = None;
+        }
     }
 
     /// Renders offscreen and returns straight-alpha RGBA8 rows (tests and references).

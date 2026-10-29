@@ -305,25 +305,53 @@ pub struct Atlas {
     pub fresh: bool,
 }
 
+/// The most rows an atlas grows to within a frame. wgpu turns a texture
+/// past the device's limit into a panic (and panic = abort); every Vulkan
+/// driver here takes 8192 (radv, anv, lavapipe: 16384).
+const ATLAS_MAX_ROWS: u32 = 8192;
+/// The most rows an atlas keeps from one frame to the next (4 MiB): one
+/// that grew past them starts over (Fonts::restart_full_atlases).
+const ATLAS_KEEP_ROWS: u32 = 4096;
+
 impl Atlas {
     fn new(bpp: u32, width: u32, height: u32) -> Atlas {
         Atlas { bpp, width, height, shelf_x: 0, shelf_y: 0, shelf_h: 0, pending: vec![], resized: true, fresh: true }
     }
 
-    fn alloc(&mut self, w: u32, h: u32) -> (u32, u32) {
-        if self.shelf_x + w > self.width {
-            self.shelf_y += self.shelf_h + 1;
-            self.shelf_x = 0;
-            self.shelf_h = 0;
+    /// The distance fields' and native glyphs' atlas, as it starts.
+    fn gray() -> Atlas {
+        Atlas::new(1, 1024, 256)
+    }
+
+    /// The colour glyphs' atlas, as it starts.
+    fn colour() -> Atlas {
+        Atlas::new(4, 256, 64)
+    }
+
+    /// Room for a w x h bitmap: next on the shelf, on a new shelf when the
+    /// row is full, the atlas twice as tall when that is. None for a bitmap
+    /// wider than the atlas or one that would take it past ATLAS_MAX_ROWS.
+    fn alloc(&mut self, w: u32, h: u32) -> Option<(u32, u32)> {
+        if w > self.width {
+            return None;
         }
-        while self.shelf_y + h > self.height {
+        let (mut x, mut y, mut shelf_h) = (self.shelf_x, self.shelf_y, self.shelf_h);
+        if x + w > self.width {
+            y += shelf_h + 1;
+            x = 0;
+            shelf_h = 0;
+        }
+        if y + h > ATLAS_MAX_ROWS {
+            return None;
+        }
+        while y + h > self.height {
             self.height *= 2;
             self.resized = true;
         }
-        let at = (self.shelf_x, self.shelf_y);
-        self.shelf_x += w + 1;
-        self.shelf_h = self.shelf_h.max(h);
-        at
+        self.shelf_x = x + w + 1;
+        self.shelf_y = y;
+        self.shelf_h = shelf_h.max(h);
+        Some((x, y))
     }
 }
 
@@ -474,8 +502,8 @@ impl Fonts {
                 lib
             },
             scale: ScaleContext::new(),
-            atlas: Atlas::new(1, 1024, 256),
-            color_atlas: Atlas::new(4, 256, 64),
+            atlas: Atlas::gray(),
+            color_atlas: Atlas::colour(),
             colors: HashMap::new(),
             emoji: None,
             lines: HashMap::new(),
@@ -755,7 +783,7 @@ impl Fonts {
                 }
             }
         }
-        let (ax, ay) = self.color_atlas.alloc(dw as u32, dh as u32);
+        let (ax, ay) = self.color_atlas.alloc(dw as u32, dh as u32)?;
         self.color_atlas.pending.push((ax, ay, dw as u32, dh as u32, out));
         Some(ColorGlyph { ax, ay, w: dw as u32, h: dh as u32, left: (*slot).bitmap_left as f32 * f, top: (*slot).bitmap_top as f32 * f })
     }
@@ -970,7 +998,7 @@ impl Fonts {
         if w == 0 || h == 0 {
             return Some(NativeGlyph { ax: 0, ay: 0, w: 0, h: 0, left, top });
         }
-        let (ax, ay) = self.atlas.alloc(w + 4, h + 4);
+        let (ax, ay) = self.atlas.alloc(w + 4, h + 4)?;
         // The coverage inside two zero texels on every side.
         let pw = w + 4;
         let mut px = vec![0u8; (pw * (h + 4)) as usize];
@@ -1000,6 +1028,29 @@ impl Fonts {
         let g = self.make_df(face, gid, bold);
         self.glyphs.insert((face, gid, bold), g);
         g
+    }
+
+    /// After a frame is submitted (Gpu::render): an atlas that grew past
+    /// ATLAS_KEEP_ROWS starts over, its glyph cache with it. Nothing ever
+    /// left an atlas, so the glyphs of everything a long session showed -
+    /// window titles and clipboard text in every script - piled up until
+    /// the texture limit aborted the bar; now the next frames make again
+    /// only what they draw. (Qt's distance-field cache is bounded too: it
+    /// reuses the room of glyphs no longer drawn.) Returns which restarted:
+    /// (distance fields and native glyphs, colour glyphs).
+    pub fn restart_full_atlases(&mut self) -> (bool, bool) {
+        let gray = self.atlas.height > ATLAS_KEEP_ROWS;
+        if gray {
+            self.atlas = Atlas::gray();
+            self.glyphs.clear();
+            self.native.clear();
+        }
+        let colour = self.color_atlas.height > ATLAS_KEEP_ROWS;
+        if colour {
+            self.color_atlas = Atlas::colour();
+            self.colors.clear();
+        }
+        (gray, colour)
     }
 
     fn ft_face(&mut self, face: u16) -> Option<ft::FT_Face> {
@@ -1086,7 +1137,7 @@ impl Fonts {
                 bits[(j * w + i) as usize] = (v * 255.0).round() as u8;
             }
         }
-        let (ax, ay) = self.atlas.alloc(w, h);
+        let (ax, ay) = self.atlas.alloc(w, h)?;
         self.atlas.pending.push((ax, ay, w, h, bits));
         Some(DfGlyph { ax, ay, w, h, x0: x0 as f32, y0: y0 as f32 })
     }
