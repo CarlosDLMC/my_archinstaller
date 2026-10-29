@@ -1006,9 +1006,11 @@ fn wifi_status(app: &mut App) {
 
 /// VpnWidget's side effects: a VPN that went down, or none at start with a
 /// city still cached from one, resets the time/weather sync (vpn-reset.sh).
-/// vpnResetProc.running = true during a reset runs it again after it, as
-/// Process does: a tunnel that came up and went down meanwhile is reset too.
-fn vpn_reset(app: &mut App) {
+/// The card's ВЫКЛ starts the same vpnResetProc (VpnWidget.qml:249-262,
+/// 384-393). vpnResetProc.running = true during a reset runs it again after
+/// it, as Process does: a tunnel that came up and went down meanwhile is
+/// reset too, and ВЫКЛ during a reset does not run a second one beside it.
+pub fn vpn_reset(app: &mut App) {
     if app.is_running("vpn-reset") {
         app.svc.vpn_reset_again = true;
         return;
@@ -1023,6 +1025,8 @@ fn vpn_reset(app: &mut App) {
         if std::mem::take(&mut app.svc.vpn_reset_again) {
             vpn_reset(app);
         }
+        // ...and updateVpnStatus(), whose answer QML gets after the above.
+        vpn_poll(app);
     });
 }
 

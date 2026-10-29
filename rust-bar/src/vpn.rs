@@ -154,10 +154,9 @@ pub fn activate(app: &mut App, code: u32) {
         OFF => {
             app.svc.vpn_card.connecting = true;
             tunnel(app, None);
-            let cmd = format!("{}/vpn-reset.sh all --forget", scripts());
-            app.spawn("vpn-reset-card", &["sh", "-c", &cmd], |app, _| {
-                services::vpn_check(app);
-            });
+            // vpnResetProc.running = true: the dropped-tunnel check's reset,
+            // so one asked during another runs after it, not beside it.
+            services::vpn_reset(app);
             crate::cards::close(app);
         }
         TIME => {
