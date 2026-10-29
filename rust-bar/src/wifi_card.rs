@@ -24,6 +24,8 @@ pub struct WifiCard {
     pub failed: bool,
     /// When the password field took focus (the cursor blinks from there).
     pub input_since: Option<Instant>,
+    /// wifiConnectProc.output: its stdout and stderr lines as they come.
+    connect_out: String,
 }
 
 pub const DISCONNECT: u32 = 1;
@@ -83,34 +85,53 @@ fn cancel_password(app: &mut App) {
     app.mark_all_dirty();
 }
 
+/// wifiConnectProc (WifiWidget.qml:330-369). Process.running = true on a
+/// Process that runs already does nothing.
 fn run_connect(app: &mut App, argv: &[&str]) {
-    app.spawn("wifi-connect", argv, |app, d| {
-        app.debounce("wifi-watchdog", Duration::from_secs(3600), |_| {});
-        crate::services::wifi_refresh(app);
-        let out = d.stdout.to_lowercase();
-        let failed = out.contains("error") || out.contains("secrets were required") || out.contains("no suitable connection") || out.contains("failed");
-        let w = &mut app.svc.wifi_card;
-        if failed && !w.selected_ssid.is_empty() && !w.selected_security.is_empty() && !w.password_mode {
-            w.failed = true;
-            enter_password(app);
-        } else if !failed && !app.svc.wifi_card.selected_ssid.is_empty() {
-            crate::cards::close(app);
-            cancel_password(app);
-        }
-        app.mark_all_dirty();
-    });
-    // The 8 s watchdog: a stalled attempt falls back to the password view.
-    app.debounce("wifi-watchdog", Duration::from_secs(8), |app| {
-        if connecting(app) {
-            app.kill("wifi-connect");
-            let w = &app.svc.wifi_card;
-            if !w.selected_ssid.is_empty() && !w.selected_security.is_empty() {
-                app.svc.wifi_card.failed = true;
-                enter_password(app);
-            }
-        }
-    });
+    if connecting(app) {
+        return;
+    }
+    app.svc.wifi_card.connect_out.clear();
+    app.spawn_stream("wifi-connect", argv, connect_line, Some(connect_line), Some(connect_done));
     app.mark_all_dirty();
+}
+
+/// The SplitParsers on stdout and stderr: `output += data`. nmcli says why a
+/// connect failed on stderr only.
+fn connect_line(app: &mut App, data: &str) {
+    app.svc.wifi_card.connect_out.push_str(data);
+}
+
+/// onRunningChanged, not running: the watchdog stops and the status is read
+/// again; a failure on a secured network brings up the password view, a
+/// success closes the card.
+fn connect_done(app: &mut App) {
+    app.cancel_timer("wifi-watchdog");
+    crate::services::wifi_refresh(app);
+    let out = std::mem::take(&mut app.svc.wifi_card.connect_out).to_lowercase();
+    let failed = out.contains("error") || out.contains("secrets were required") || out.contains("no suitable connection") || out.contains("failed");
+    let w = &mut app.svc.wifi_card;
+    if failed && !w.selected_ssid.is_empty() && !w.selected_security.is_empty() && !w.password_mode {
+        w.failed = true;
+        enter_password(app);
+    } else if !failed && !app.svc.wifi_card.selected_ssid.is_empty() {
+        crate::cards::close(app);
+        cancel_password(app);
+    }
+    app.mark_all_dirty();
+}
+
+/// connectWatchdog (WifiWidget.qml:314-327): nmcli still connecting after 8 s
+/// is stopped, and on a secured network the password view comes up.
+fn watchdog(app: &mut App) {
+    if connecting(app) {
+        app.kill("wifi-connect");
+        let w = &app.svc.wifi_card;
+        if !w.selected_ssid.is_empty() && !w.selected_security.is_empty() {
+            app.svc.wifi_card.failed = true;
+            enter_password(app);
+        }
+    }
 }
 
 fn enter_password(app: &mut App) {
@@ -133,6 +154,9 @@ fn try_connect(app: &mut App, ssid: &str, security: &str) {
         return;
     }
     run_connect(app, &["nmcli", "device", "wifi", "connect", ssid]);
+    // Only this connect is watched (connectWatchdog.restart() in tryConnect):
+    // connectWithPassword starts none.
+    app.debounce("wifi-watchdog", Duration::from_secs(8), watchdog);
 }
 
 fn connect_with_password(app: &mut App) {
