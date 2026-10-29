@@ -202,6 +202,9 @@ pub struct Wall {
     pub reveal_phase: &'static str,
     reveal_start: Option<Instant>,
     reveal_ready: usize,
+    /// This reveal's decodes: one still running for an earlier pick must not
+    /// land in its windows (they are found by index).
+    reveal_cancel: Option<Cancel>,
 }
 
 pub struct Folder {
@@ -1135,7 +1138,9 @@ fn draw_tabs(ui: &mut Ui<OsdState>, w: &Wall, x0: f32, y0: f32, width: f32, h: f
 /// startReveal(): load the picture on every screen first.
 fn start_reveal(app: &mut App, it: Item) {
     end_reveal_windows(app);
+    let cancel = Cancel::default();
     let w = &mut app.svc.wall;
+    w.reveal_cancel = Some(cancel.clone());
     w.reveal_item = Some(it.clone());
     w.reveal_phase = "loading";
     w.reveal_ready = 0;
@@ -1156,19 +1161,30 @@ fn start_reveal(app: &mut App, it: Item) {
         app.reveals.push(RevealWin { output, win: Win::new(layer, sw as u32, sh as u32), tex: None, reported: false });
         let path = path_of(&it.src);
         let (w, h) = (sw as u32, sh as u32);
-        app.background(move || (i, decode_cover(&path, w, h, max)), |app, (i, img)| {
-            let Some(r) = app.reveals.get_mut(i) else { return };
-            if let (Some((w, h, rgba)), Some(gpu)) = (img, app.gpu.as_mut()) {
-                r.tex = Some(Tex { id: gpu.add_image(w, h, rgba, false), w, h });
-            }
-            if !r.reported {
-                r.reported = true;
-                app.svc.wall.reveal_ready += 1;
-                if app.svc.wall.reveal_phase == "loading" && app.svc.wall.reveal_ready >= app.reveals.len() {
-                    open_reveal(app);
+        let cancel = cancel.clone();
+        app.background(
+            move || {
+                let img = if cancel.load(Ordering::Relaxed) { None } else { decode_cover(&path, w, h, max) };
+                (i, cancel, img)
+            },
+            |app, (i, cancel, img)| {
+                // An earlier pick's picture goes nowhere.
+                if !app.svc.wall.reveal_cancel.as_ref().is_some_and(|c| Arc::ptr_eq(c, &cancel)) {
+                    return;
                 }
-            }
-        });
+                let Some(r) = app.reveals.get_mut(i) else { return };
+                if let (Some((w, h, rgba)), Some(gpu)) = (img, app.gpu.as_mut()) {
+                    r.tex = Some(Tex { id: gpu.add_image(w, h, rgba, false), w, h });
+                }
+                if !r.reported {
+                    r.reported = true;
+                    app.svc.wall.reveal_ready += 1;
+                    if app.svc.wall.reveal_phase == "loading" && app.svc.wall.reveal_ready >= app.reveals.len() {
+                        open_reveal(app);
+                    }
+                }
+            },
+        );
     }
     app.debounce("wall-reveal-load", Duration::from_millis(1500), open_reveal);
 }
@@ -1205,6 +1221,9 @@ fn end_reveal(app: &mut App) {
 }
 
 fn end_reveal_windows(app: &mut App) {
+    if let Some(c) = app.svc.wall.reveal_cancel.take() {
+        c.store(true, Ordering::Relaxed);
+    }
     let ids: Vec<u32> = app.reveals.drain(..).filter_map(|r| r.tex.map(|t| t.id)).collect();
     if let Some(gpu) = app.gpu.as_mut() {
         for id in ids {
