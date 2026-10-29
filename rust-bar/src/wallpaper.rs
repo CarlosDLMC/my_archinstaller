@@ -650,15 +650,16 @@ pub fn key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Keysym, m
                 close(app);
             }
         }
-        Keysym::Left => step(app, -1),
-        Keysym::Right => step(app, 1),
-        Keysym::Up | Keysym::ISO_Left_Tab => step_folder(app, -1),
+        // Qt gives the keypad's keys (NumLock off) the plain keys' codes.
+        Keysym::Left | Keysym::KP_Left => step(app, -1),
+        Keysym::Right | Keysym::KP_Right => step(app, 1),
+        Keysym::Up | Keysym::KP_Up | Keysym::ISO_Left_Tab => step_folder(app, -1),
         Keysym::Tab if mods.shift => step_folder(app, -1),
-        Keysym::Down | Keysym::Tab => step_folder(app, 1),
-        Keysym::Home => go_to(app, 0),
-        Keysym::End => go_to(app, app.svc.wall.strip().len() as i64 - 1),
-        Keysym::Prior => go_to(app, app.svc.wall.index as i64 - 5),
-        Keysym::Next => go_to(app, app.svc.wall.index as i64 + 5),
+        Keysym::Down | Keysym::KP_Down | Keysym::Tab => step_folder(app, 1),
+        Keysym::Home | Keysym::KP_Home => go_to(app, 0),
+        Keysym::End | Keysym::KP_End => go_to(app, app.svc.wall.strip().len() as i64 - 1),
+        Keysym::Prior | Keysym::KP_Prior => go_to(app, app.svc.wall.index as i64 - 5),
+        Keysym::Next | Keysym::KP_Next => go_to(app, app.svc.wall.index as i64 + 5),
         Keysym::Return | Keysym::KP_Enter => pick(app),
         Keysym::r | Keysym::R if mods.ctrl => random(app),
         Keysym::BackSpace => {
@@ -685,8 +686,12 @@ pub fn key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Keysym, m
 }
 
 /// onFilterChanged: the first match is centred; clearing it goes back home.
+/// Only on a change: Backspace in an empty field is no signal at all.
 fn set_filter(app: &mut App, f: String) {
     let w = &mut app.svc.wall;
+    if f == w.filter {
+        return;
+    }
     if f.is_empty() {
         w.cursor = 0;
     }
@@ -735,6 +740,11 @@ pub fn click(app: &mut App, action: Action) {
     if code >= TAB {
         let w = &mut app.svc.wall;
         w.navigated = true;
+        // The chosen tab again: folderIndex keeps its value, nothing moves.
+        // (Tabs take clicks only while nothing is searched.)
+        if (code - TAB) as usize == w.folder_index {
+            return;
+        }
         w.filter.clear();
         w.cursor = 0;
         w.folder_index = (code - TAB) as usize;
