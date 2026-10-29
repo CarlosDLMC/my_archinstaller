@@ -14,7 +14,7 @@ use smithay_client_toolkit::seat::pointer::PointerEventKind;
 
 use crate::anim::Easing;
 use crate::app::App;
-use crate::bar::{ac, Action};
+use crate::bar::ac;
 use crate::cards::Ui;
 use crate::color::Color;
 use crate::gpu::TextStyle;
@@ -617,7 +617,6 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, screen: u8, _panel: (f32, f32, f32, f32),
             ui.scene.rect(x, y, g.cell_w, g.cell_h, fill, 0.0, 2.0, if drop { wa(0.4) } else { Color::TRANSPARENT }, false);
             let num = ui.fonts.layout(&value.to_string(), NUMBER, (250.0 * m.scale * SCALE).round(), 0.0);
             ui.text(&num, x + (g.cell_w - num.adv) / 2.0, y + (g.cell_h - num.height()) / 2.0, wa(0.2), TextStyle::Native(1));
-            ui.hits.push(crate::bar::Hit { x, y, w: g.cell_w, h: g.cell_h, action: Action::Card(WS + value as u32) });
         }
     }
     // The windows, then the frame on the active workspace.
@@ -662,7 +661,6 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, screen: u8, _panel: (f32, f32, f32, f32),
             ui.scene.image(tex.id, x + ac(w, s), y + ac(h, s), s, s, [0.0, 0.0, 1.0, 1.0]);
         }
         ui.scene.restore();
-        ui.hits.push(crate::bar::Hit { x, y, w, h, action: Action::Card(WIN + i as u32) });
         if i == 0 {
             draw_indicator(ui, m, &g, white);
         }
@@ -697,9 +695,6 @@ fn draw_indicator(ui: &mut Ui<OsdState>, m: &Monitor, g: &Geo, white: Color) {
     ui.animating |= r1 || r2;
     ui.scene.rect(gx + fx, gy + fy, g.ws_w, g.ws_h, Color::TRANSPARENT, 0.0, 2.0, white, false);
 }
-
-pub const WS: u32 = 0x1000;
-pub const WIN: u32 = 0x2000;
 
 // ---- input ----
 
@@ -748,7 +743,9 @@ pub fn pointer(app: &mut App, screen: u8, ev: &PointerEventKind, x: f32, y: f32)
                     redraw(app);
                 }
             }
-            true
+            // An enter goes on to app.rs, which shows the arrow: QtWayland sets
+            // the window's cursor on every enter, and nothing here has a hand.
+            !matches!(ev, PointerEventKind::Enter { .. })
         }
         PointerEventKind::Leave { .. } => {
             app.svc.overview.hovered = None;
