@@ -1048,6 +1048,14 @@ fn vpn_poll(app: &mut App) {
         }
     }
     let was_active = !app.svc.vpn.is_empty();
+    // vpn-switch.sh takes the old tunnel down before it brings the new one
+    // up: no tunnel while the card's action still runs is no drop yet. Its
+    // end looks again (vpn.rs tunnel_done, 500 ms later) and resets then if
+    // none came up. QML's 5 s check can land in that gap and send the clock
+    // and weather home mid-switch, forgetting the saved home zone.
+    if active.is_empty() && was_active && app.is_running("vpn-action") {
+        return;
+    }
     if active.is_empty() {
         if was_active {
             vpn_reset(app);
