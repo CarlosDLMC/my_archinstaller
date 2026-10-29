@@ -655,7 +655,7 @@ fn monitor_of<'a>(svc: &'a Services, screen: &str) -> Option<&'a Monitor> {
 
 // ---- drawing ----
 
-pub fn draw_osd(ui: &mut Ui<OsdState>, screen: u8, _panel: (f32, f32, f32, f32), svc: &Services) {
+pub fn draw_osd(ui: &mut Ui<OsdState>, screen: u8, panel: (f32, f32, f32, f32), svc: &Services) {
     let Some(name) = svc.overview_screens.get(screen as usize) else { return };
     let Some(m) = monitor_of(svc, name) else { return };
     let o = &svc.overview;
@@ -742,20 +742,54 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, screen: u8, _panel: (f32, f32, f32, f32),
             draw_indicator(ui, m, &g, white);
         }
     }
-    // The hovered window's tooltip, above it: title, then [appid].
-    if let Some((_, (c, (tx, ty, tw, _)))) = wins.iter().enumerate().find(|(_, (c, _))| o.hovered == Some((screen, c.id)) && o.press.as_ref().map_or(true, |p| !p.dragging)) {
-        let text = format!("{}\n[{}] {}", if c.title.is_empty() { "Unknown" } else { &c.title }, if c.appid.is_empty() { "unknown" } else { &c.appid }, if c.xwayland { "[XWayland] " } else { "" });
-        let lines: Vec<_> = text.lines().map(|l| ui.fonts.layout(l, MAIN, 12.0, 0.0)).collect();
+    // The hovered window's tooltip (StyledToolTip, a Basic ToolTip), shown
+    // while the pointer is in the tile and no button is held (Drag.active
+    // goes up on the press). Each show grows the plate from its bottom
+    // centre and fades it in (elementMoveFast); a hide is at once.
+    let tip = if o.press.is_none() { o.hovered.filter(|h| h.0 == screen).and_then(|h| wins.iter().position(|(c, _)| c.id == h.1)) } else { None };
+    let mut prog = 0.0;
+    for (i, (c, _)) in wins.iter().enumerate() {
+        let key = 0x4000_0000 | (c.id as u32 & 0x3FFF_FFFF);
+        if ui.card.number_peek(key, now).is_none() {
+            ui.card.number_e(key, 0.0, 200, FAST, now);
+        }
+        let (v, run) = ui.card.number_e(key, if tip == Some(i) { 1.0 } else { 0.0 }, 200, FAST, now);
+        if tip == Some(i) {
+            prog = v;
+            ui.animating |= run;
+        }
+    }
+    if let Some(i) = tip {
+        let (c, (_, _, tw, _)) = &wins[i];
+        let (x, y) = (gx + at[i].0, gy + at[i].1);
+        // `?? "Unknown"` only catches null, and mango always sends strings.
+        let text = format!("{}\n[{}] {}", c.title, c.appid, if c.xwayland { "[XWayland] " } else { "" });
+        // One left-aligned Text; a line's trailing spaces take no width.
+        let lines: Vec<_> = text.lines().map(|l| ui.fonts.layout(l.trim_end(), MAIN, 12.0, 0.0)).collect();
         let tw_ = lines.iter().map(|l| l.width).fold(0.0, f32::max);
         let th_: f32 = lines.iter().map(|l| l.height()).sum();
+        // The plate is the content item: text + 10/5 padding. The popup pads
+        // it once more: x = (tile w - implicitWidth) / 2, y = -implicitHeight
+        // - 3, kept 6 px inside the window (margins: 6).
         let (pw, ph) = (tw_ + 20.0, th_ + 10.0);
-        let (px, py) = (gx + tx + (tw - pw) / 2.0, gy + ty - ph - 3.0);
-        ui.scene.rect(px, py, pw, ph, t.pal_bg, 0.0, 1.0, wa(0.14), false);
-        let mut ly = py + 5.0;
+        let (ow, oh) = (pw + 20.0, ph + 10.0);
+        let mut ox = x + (tw - ow) / 2.0;
+        if panel.2 - 12.0 >= ow {
+            ox = ox.max(6.0).min(panel.2 - 6.0 - ow);
+        }
+        let (cx, cy) = (ox + 10.0, y - oh - 3.0 + 5.0);
+        let (bw, bh) = (pw * prog, ph * prog);
+        let (bx, by) = (cx + ac(pw, bw), cy + ph - bh);
+        ui.scene.save();
+        ui.scene.multiply_opacity(prog);
+        ui.scene.rect(bx, by, bw, bh, t.pal_bg, 0.0, 1.0, wa(0.14), false);
+        ui.scene.clip_rect(bx, by, bw, bh);
+        let (lx, mut ly) = (bx + ac(bw, tw_), by + ac(bh, th_));
         for l in &lines {
-            ui.text(l, px + (pw - l.adv) / 2.0, ly, white, TextStyle::Native(2));
+            ui.text(l, lx, ly, white, TextStyle::Native(2));
             ly += l.height();
         }
+        ui.scene.restore();
     }
 }
 
