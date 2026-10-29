@@ -8,7 +8,6 @@ use crate::app::{App, ProcDone};
 use crate::bar::{ac, Action, Hit};
 use crate::cards::{plate, Ui};
 use crate::color::Color;
-use crate::gpu::TextStyle;
 use crate::services::{self, Services};
 use crate::theme::{self, FONT_SIZE};
 
@@ -99,6 +98,23 @@ fn bt_connected(app: &mut App) {
     });
 }
 
+/// btDevices / foundDevices = a list. A different one is a new model for its
+/// ListView, which makes the rows anew (setModel compares the values): their
+/// texts start fresh (subpixel) - this list's only, so each list has its own
+/// text parts (the framework's list_replaced forgets ConsoleRow's 0xC1-0xC4,
+/// card-wide, which these rows do not use).
+fn set_list(app: &mut App, found: bool, list: Vec<(String, String)>) {
+    let p = &mut app.svc.pult;
+    let (old, texts) = if found { (&mut p.found, FOUND_TEXTS) } else { (&mut p.bt_devices, PAIRED_TEXTS) };
+    if *old == list {
+        return;
+    }
+    *old = list;
+    if let Some(c) = app.card.as_mut().filter(|c| c.kind == crate::cards::CardKind::Pult) {
+        c.texts.forget_parts(&[texts + 1, texts + 3, texts + 4]);
+    }
+}
+
 /// "Device <MAC> <name>" lines.
 fn parse_devices(out: &str) -> Vec<(String, String)> {
     out.lines()
@@ -113,18 +129,19 @@ fn parse_devices(out: &str) -> Vec<(String, String)> {
 
 fn bt_devices(app: &mut App) {
     app.spawn("bt-devices", &["sh", "-c", "bluetoothctl devices Paired"], |app, d| {
-        app.svc.pult.bt_devices = parse_devices(&d.stdout);
+        set_list(app, false, parse_devices(&d.stdout));
         app.mark_all_dirty();
     });
 }
 
 fn bt_found(app: &mut App) {
     app.spawn("bt-found", &["bluetoothctl", "devices"], |app, d| {
-        let p = &mut app.svc.pult;
+        let p = &app.svc.pult;
         let paired: Vec<&String> = p.bt_devices.iter().map(|d| &d.0).collect();
         // Unnamed devices show their MAC (with dashes) as the name: skip those.
         let is_mac_name = |n: &str| n.len() == 17 && n.split('-').count() == 6 && n.chars().all(|c| c.is_ascii_hexdigit() || c == '-');
-        p.found = parse_devices(&d.stdout).into_iter().filter(|(m, n)| !paired.contains(&m) && !is_mac_name(n)).collect();
+        let found = parse_devices(&d.stdout).into_iter().filter(|(m, n)| !paired.contains(&m) && !is_mac_name(n)).collect();
+        set_list(app, true, found);
         app.mark_all_dirty();
     });
 }
@@ -155,8 +172,8 @@ pub fn scanning(app: &App) -> bool {
 }
 
 fn start_scan(app: &mut App) {
+    set_list(app, true, Vec::new());
     let p = &mut app.svc.pult;
-    p.found.clear();
     p.scan_done = false;
     p.pair_failed_mac.clear();
     app.spawn("bt-scan", &["bluetoothctl", "--timeout", "30", "scan", "on"], |app, _| {
@@ -191,7 +208,8 @@ fn pair(app: &mut App, mac: &str) {
         if d.stdout.trim() == "fail" {
             p.pair_failed_mac = mac;
         } else {
-            p.found.retain(|f| f.0 != mac);
+            let rest = p.found.iter().filter(|f| f.0 != mac).cloned().collect();
+            set_list(app, true, rest);
         }
         bt_devices(app);
         bt_connected(app);
@@ -268,8 +286,8 @@ fn set_stats_shown(app: &mut App, on: bool) {
 
 /// The card opened: fresh readings, the D-Bus watchers on while it stays open.
 pub fn opened(app: &mut App) {
+    set_list(app, true, Vec::new());
     let p = &mut app.svc.pult;
-    p.found.clear();
     p.scan_done = false;
     p.pair_failed_mac.clear();
     refresh(app);
@@ -370,9 +388,24 @@ pub fn card_height(fonts: &mut crate::text::Fonts, svc: &Services, scanning: boo
     h.ceil() + 28.0
 }
 
-fn caption(ui: &mut Ui, text: &str, x: f32, y: f32) {
-    let l = ui.fonts.layout(text, theme::bar_font(true), FONT_SIZE - 5.0, 1.0);
-    ui.text(&l, x, y, ui.theme.col_dim, TextStyle::Normal);
+// The card's Texts, keyed for TextMemo (text_of) by the item they are, not by
+// the order a frame draws them in: a caption or note that appears (НАЙДЕНО at
+// a search) or a switch that does (BLUETOOTH) took the place of the next one
+// and grayed it, where Qt makes the new item's node fresh (subpixel) and
+// leaves the others alone. Captions and notes: part NOTE, id = their kind in
+// children(); a switch: parts SWITCH + 1..3 (glyph, label, detail), id = its
+// code (its key's caption is ConsoleButton's 0xB2); a device row: its list's
+// parts + 1 (icon), + 3 (detail), + 4 (label), id = its code.
+const NOTE: u64 = 0xA0;
+const SWITCH: u64 = 0xA4;
+const PAIRED_TEXTS: u64 = 0xD0;
+const FOUND_TEXTS: u64 = 0xE0;
+
+/// ConsoleCaption: bold, fontSize - 5, letterSpacing 1, colDim.
+fn caption(ui: &mut Ui, kind: u8, text: &str, x: f32, y: f32) {
+    let l = crate::cards::caption(ui.fonts, text);
+    let c = ui.theme.col_dim;
+    ui.text_of(kind as u32, NOTE, &l, x, y, c);
 }
 
 /// PultSwitch: lamp, glyph, bold label, detail, and the ВКЛ/ВЫКЛ key.
@@ -384,10 +417,10 @@ fn switch(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32, icon: &str, la
     let gw = FONT_SIZE - 2.0;
     let gx = x + 4.0 + 10.0 + 10.0;
     let g = ui.fonts.layout(icon, theme::bar_font(false), FONT_SIZE - 4.0, 0.0);
-    ui.text(&g, gx + (gw - g.adv) / 2.0, y + ac(h, g.height()), fg, TextStyle::Normal);
+    ui.text_of(code, SWITCH + 1, &g, gx + (gw - g.adv) / 2.0, y + ac(h, g.height()), fg);
     let lx = gx + gw + 8.0;
     let l = ui.fonts.layout(label, theme::bar_font(true), FONT_SIZE - 7.0, 1.0);
-    ui.text(&l, lx, y + ac(h, l.height()), fg, TextStyle::Normal);
+    ui.text_of(code, SWITCH + 2, &l, lx, y + ac(h, l.height()), fg);
     let font = FONT_SIZE - 6.0;
     let bw = ui.console_button_width(font, "", if on { "ВКЛ" } else { "ВЫКЛ" }, 72.0);
     let bh = (font * 2.1).round();
@@ -398,14 +431,16 @@ fn switch(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32, icon: &str, la
         let key = theme::bar_font(false);
         let full = ui.fonts.layout(detail, key, FONT_SIZE - 7.0, 0.0);
         let d = ui.fonts.elide_right(&full, detail, key, dw, 0.0);
-        ui.text(&d, dx, y + ac(h, d.height()), t.col_dim, TextStyle::Normal);
+        ui.text_of(code, SWITCH + 3, &d, dx, y + ac(h, d.height()), t.col_dim);
     }
     ui.console_button_sized(code, bx, y + ac(h, bh), bw, font, "", t.col_grey, if on { "ВКЛ" } else { "ВЫКЛ" }, on);
 }
 
-/// A device row (ConsoleRow) with an optional detail and a spinner.
+/// A device row: ConsoleRow (as cards::console_row draws it) with the icon
+/// 󰂯, a detail, and on the found list the trailing Row with its Spinner
+/// (`spinner_cell`: Some(pairing)). `texts` is the list's text parts.
 #[allow(clippy::too_many_arguments)]
-fn device_row(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32, label: &str, lit: bool, detail: &str, detail_color: Color, spinning: bool) {
+fn device_row(ui: &mut Ui, code: u32, texts: u64, x: f32, y: f32, w: f32, h: f32, label: &str, lit: bool, detail: &str, detail_color: Color, spinner_cell: Option<bool>) {
     let t = ui.theme;
     let font = FONT_SIZE - 3.0;
     let focused = ui.focusable(code);
@@ -417,25 +452,32 @@ fn device_row(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32, label: &st
     let fg = if lit || hot { t.col_white } else { t.col_grey };
     let ix = x + 6.0 + 10.0 + 8.0;
     let il = ui.fonts.layout("\u{f00af}", theme::bar_font(false), font, 0.0);
-    ui.text(&il, ix + (font + 2.0 - il.adv) / 2.0, y + qround((h - il.height()) / 2.0), fg, TextStyle::Normal);
+    ui.text_of(code, texts + 1, &il, ix + (font + 2.0 - il.adv) / 2.0, y + qround((h - il.height()) / 2.0), fg);
     let tx = ix + font + 2.0 + 8.0;
+    // ConsoleRow's RowLayout (ConsoleRow.qml:117-171): the detail and the
+    // trailing Row are cells of qCeil(implicitWidth) on whole pixels from the
+    // right edge, 8 apart, each Text at its cell's start; the label fills
+    // what is left. The found rows' Row always holds the Spinner, so it is a
+    // cell with its spacing even while the Spinner is hidden (zero wide).
     let mut right = x + w - 6.0;
-    if spinning {
-        let s = FONT_SIZE - 8.0;
-        right -= s;
-        spinner(ui, right, y + qround((h - s) / 2.0), s, t.col_white);
+    if let Some(spinning) = spinner_cell {
+        if spinning {
+            let s = FONT_SIZE - 8.0;
+            right -= s;
+            spinner(ui, right, y + qround((h - s) / 2.0), s, t.col_white);
+        }
         right -= 8.0;
     }
     if !detail.is_empty() {
         let d = ui.fonts.layout(detail, theme::bar_font(false), font - 2.0, 0.0);
-        right -= d.width;
-        ui.text(&d, right, y + qround((h - d.height()) / 2.0), detail_color, TextStyle::Normal);
+        right -= d.width.ceil();
+        ui.text_of(code, texts + 3, &d, right, y + qround((h - d.height()) / 2.0), detail_color);
         right -= 8.0;
     }
     let key = theme::bar_font(lit);
     let full = ui.fonts.layout(label, key, font, 0.0);
     let line = ui.fonts.elide_right(&full, label, key, right - tx, 0.0);
-    ui.text(&line, tx, y + qround((h - line.height()) / 2.0), fg, TextStyle::Normal);
+    ui.text_of(code, texts + 4, &line, tx, y + qround((h - line.height()) / 2.0), fg);
     ui.hits.push(Hit { x, y, w, h, action: Action::Card(code) });
 }
 
@@ -468,7 +510,7 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, scanning: bool) {
     let mut y = 12.0 + 8.0;
     for (kind, h) in children(ui.fonts, svc, scanning) {
         match kind {
-            0 => caption(ui, "НАСТРОЙКИ", x0, y),
+            0 => caption(ui, kind, "НАСТРОЙКИ", x0, y),
             1 => {
                 plate(ui, x0, y, cw, h);
                 let (ix, iw) = (x0 + 6.0, cw - 12.0);
@@ -488,8 +530,8 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, scanning: bool) {
                 }
             }
             2 => {
-                let cl = ui.fonts.layout("СОПРЯЖЁННЫЕ УСТРОЙСТВА", theme::bar_font(true), FONT_SIZE - 5.0, 1.0);
-                ui.text(&cl, x0, y + ac(h, cl.height()), t.col_dim, TextStyle::Normal);
+                let cl = crate::cards::caption(ui.fonts, "СОПРЯЖЁННЫЕ УСТРОЙСТВА");
+                ui.text_of(kind as u32, NOTE, &cl, x0, y + ac(h, cl.height()), t.col_dim);
                 let font = FONT_SIZE - 6.0;
                 let label = if scanning { "СТОП" } else { "ПОИСК" };
                 let bw = ui.console_button_width(font, "\u{f0349}", label, 58.0);
@@ -507,22 +549,23 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, scanning: bool) {
                     let ry = lv.row_y(i);
                     if kind == 3 {
                         let connected = *name == p.bt_connected_device;
-                        device_row(ui, PAIRED_ROW + i as u32, x0 + 4.0, ry, cw - 8.0, m.row_h, name, connected, if connected { "ПОДКЛЮЧЕНО" } else { "" }, t.col_dim, false);
+                        device_row(ui, PAIRED_ROW + i as u32, PAIRED_TEXTS, x0 + 4.0, ry, cw - 8.0, m.row_h, name, connected, if connected { "ПОДКЛЮЧЕНО" } else { "" }, t.col_dim, None);
                     } else {
                         let pairing = *mac == p.pairing_mac;
                         let failed = *mac == p.pair_failed_mac;
-                        device_row(ui, FOUND_ROW + i as u32, x0 + 4.0, ry, cw - 8.0, m.row_h, name, false, if pairing { "СОПРЯЖЕНИЕ…" } else if failed { "ОШИБКА" } else { "" }, if failed { t.col_alert } else { t.col_dim }, pairing);
+                        device_row(ui, FOUND_ROW + i as u32, FOUND_TEXTS, x0 + 4.0, ry, cw - 8.0, m.row_h, name, false, if pairing { "СОПРЯЖЕНИЕ…" } else if failed { "ОШИБКА" } else { "" }, if failed { t.col_alert } else { t.col_dim }, Some(pairing));
                     }
                 }
                 ui.view_end(lv);
             }
+            // Two Texts in QML: "Нет сопряжённых…" and the search's note.
             4 | 7 => {
                 let text = if kind == 4 { "Нет сопряжённых устройств" } else if scanning { "Поиск устройств…" } else { "Ничего не найдено" };
                 let l = ui.fonts.layout(text, theme::bar_font(false), FONT_SIZE - 4.0, 0.0);
-                ui.text(&l, x0 + (cw - l.adv) / 2.0, y, t.col_grey, TextStyle::Normal);
+                ui.text_of(kind as u32, NOTE, &l, x0 + (cw - l.adv) / 2.0, y, t.col_grey);
             }
-            5 => caption(ui, "НАЙДЕНО", x0, y),
-            8 => caption(ui, "РЕЖИМ ПИТАНИЯ", x0, y),
+            5 => caption(ui, kind, "НАЙДЕНО", x0, y),
+            8 => caption(ui, kind, "РЕЖИМ ПИТАНИЯ", x0, y),
             9 => {
                 let bw = (cw - 12.0) / 3.0;
                 for (i, prof) in PROFILES.iter().enumerate() {
