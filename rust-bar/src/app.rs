@@ -862,10 +862,13 @@ impl PointerHandler for App {
                         crate::osd::hover_changed(self, k, true);
                     }
                     self.enter_serial = serial;
-                    self.hand = !self.hit_at(w, x, y).is_some();
                     self.set_pointer(w, Some((x, y)));
                     self.win_mut(w).unwrap().dirty = true;
                     let hand = self.hit_at(w, x, y).map_or(false, |a| !matches!(a, Action::Hover(_)));
+                    // wl_pointer.enter leaves the image to the client, and
+                    // mango keeps the last app's (an I-beam) until one comes:
+                    // send it every time, as Qt does - also over a Hover area.
+                    self.hand = !hand;
                     self.set_cursor(hand);
                 }
                 PointerEventKind::Leave { .. } => {
