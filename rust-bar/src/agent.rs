@@ -104,7 +104,23 @@ fn apply(app: &mut App, text: &str) {
 
 pub fn run(app: &mut App, mode: &str) {
     let cmd = format!("{}/.config/quickshell/bar/scripts/agent-usage.py {mode}", services::home());
-    app.spawn("agent-usage", &["sh", "-c", &cmd], |app, d| apply(app, &d.stdout));
+    app.spawn("agent-usage", &["sh", "-c", &cmd], |app, d| {
+        apply(app, &d.stdout);
+        busy_changed(app);
+    });
+    busy_changed(app);
+}
+
+/// AgentUsage.busy follows the process, whatever it prints (onRunningChanged,
+/// AgentUsage.qml:111-115), and the open card's no-data text follows busy.
+fn busy_changed(app: &mut App) {
+    let u = &app.svc.agent;
+    if !(u.by_day.is_empty() && u.limits.is_empty()) {
+        return;
+    }
+    if let Some(c) = app.card.as_mut().filter(|c| c.kind == CardKind::Agent) {
+        c.win.dirty = true;
+    }
 }
 
 /// cardOpen: a full probe if the last one is over two minutes old, then the
