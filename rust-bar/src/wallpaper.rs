@@ -23,7 +23,7 @@ use crate::color::Color;
 use crate::gpu::{Gpu, Scene, TextStyle, Xf};
 use crate::osd::{self, OpenParams, OsdKind, OsdState};
 use crate::services::{self, Services};
-use crate::text::FontKey;
+use crate::text::{FontKey, Fonts, Line};
 use crate::theme;
 
 const FADE_MS: u64 = 160;
@@ -396,6 +396,9 @@ pub fn open(app: &mut App) {
     w.cursor = 0;
     w.picked_id.clear();
     w.navigated = false;
+    // The handlers' wheel sums belong to the Loader's content, new each open.
+    w.wheel_acc = 0.0;
+    w.tab_acc = 0.0;
     w.folder_index = w.folder_of(&w.current_id.clone());
     w.open = true;
     w.pending = Pending::Current;
@@ -461,6 +464,35 @@ fn geo(w: f32, h: f32) -> Geo {
     let card_w = (card_h * 0.72).round();
     let list_h = (card_h * 1.4).round();
     Geo { w, h, card_w, card_h, spacing: (card_w * 0.05).round(), list_h, list_y: ac(h, list_h), begin: w / 2.0 - card_w / 2.0 }
+}
+
+/// WallpaperOsd's `top` item, where the tabs or the search line sit: a gap
+/// above the centred card's band, a gap in from each side (x, y, w, h).
+fn tab_row(g: &Geo) -> (f32, f32, f32, f32) {
+    let gap = px(22.0);
+    let h = (24.0f32 * 2.2).round();
+    let band_y = ac(g.h, g.card_h * CENTRE_SCALE);
+    (gap, band_y - gap - h, g.w - 2.0 * gap, h)
+}
+
+/// The tabs' Row: per folder its label, its count, whether it is the chosen
+/// one and the tab's width; then the Row's width.
+fn tab_cells(fonts: &mut Fonts, w: &Wall) -> (Vec<(Line, Line, bool, f32)>, f32) {
+    let (sp, inner) = (px(26.0), px(6.0));
+    let cells: Vec<(Line, Line, bool, f32)> = w
+        .folders()
+        .iter()
+        .enumerate()
+        .map(|(i, f)| {
+            let chosen = i == w.folder_index;
+            let label = fonts.layout(&f.label.to_uppercase(), theme::bar_font(chosen), 24.0, 2.0);
+            let count = fonts.layout(&f.count.to_string(), theme::bar_font(false), (24.0f32 * 0.75).round(), 0.0);
+            let width = label.width + inner + count.width;
+            (label, count, chosen, width)
+        })
+        .collect();
+    let total = cells.iter().map(|c| c.3).sum::<f32>() + sp * cells.len().saturating_sub(1) as f32;
+    (cells, total)
 }
 
 fn screen() -> (f32, f32) {
@@ -701,14 +733,19 @@ fn set_filter(app: &mut App, f: String) {
 }
 
 pub fn wheel(app: &mut App, delta: f32) {
-    // Over the tabs the wheel walks the folders; elsewhere, the cards.
-    let over_tabs = app.osd(OsdKind::Wallpaper).and_then(|o| o.st.pointer).map_or(false, |(_, y)| {
-        let (sw, sh) = screen_of(app);
-        let g = geo(sw, sh);
-        let band_top = ac(sh, g.card_h * CENTRE_SCALE);
-        let top_h = (24.0f32 * 2.2).round();
-        y >= band_top - px(22.0) - top_h && y < band_top - px(22.0)
-    });
+    let Some((x, y)) = app.osd(OsdKind::Wallpaper).and_then(|o| o.st.pointer) else { return };
+    let (sw, sh) = screen_of(app);
+    let g = geo(sw, sh);
+    // The tabs' WheelHandler walks the folders, inside their Flickable only:
+    // it is there with folders and enabled while nothing is searched.
+    let (x0, y0, width, h) = tab_row(&g);
+    let w = &app.svc.wall;
+    let over_tabs = w.filter.is_empty() && w.has_folders() && y >= y0 && y < y0 + h && {
+        let (_, total) = tab_cells(&mut app.fonts, w);
+        let vw = total.min(width);
+        let fx = x0 + ac(width, vw);
+        x >= fx && x < fx + vw
+    };
     if over_tabs {
         app.svc.wall.tab_acc += delta;
         while app.svc.wall.tab_acc >= 120.0 {
@@ -719,6 +756,10 @@ pub fn wheel(app: &mut App, delta: f32) {
             app.svc.wall.tab_acc += 120.0;
             step_folder(app, 1);
         }
+        return;
+    }
+    // The ListView's walks the cards, over the strip's own height only.
+    if y < g.list_y || y >= g.list_y + g.list_h {
         return;
     }
     app.svc.wall.wheel_acc += delta;
@@ -1018,9 +1059,7 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, panel: (f32, f32, f32, f32), svc: &Servic
 
     // Above: the folder tabs, or the search line.
     let gap = px(22.0);
-    let top_h = (24.0f32 * 2.2).round();
-    let top_y = band_y - gap - top_h;
-    let top_w = sw - 2.0 * gap;
+    let (_, top_y, top_w, top_h) = tab_row(&g);
     if w.filter.is_empty() && w.has_folders() {
         draw_tabs(ui, w, gap, top_y, top_w, top_h);
     }
@@ -1111,25 +1150,15 @@ fn invert(m: &Xf, x: f32, y: f32) -> Option<(f32, f32)> {
 
 fn draw_tabs(ui: &mut Ui<OsdState>, w: &Wall, x0: f32, y0: f32, width: f32, h: f32) {
     let t = ui.theme;
-    let folders = w.folders();
-    let sp = px(26.0);
-    let inner = px(6.0);
-    let mut cells = Vec::new();
-    for (i, f) in folders.iter().enumerate() {
-        let chosen = i == w.folder_index;
-        let label = ui.fonts.layout(&f.label.to_uppercase(), theme::bar_font(chosen), 24.0, 2.0);
-        let count = ui.fonts.layout(&f.count.to_string(), theme::bar_font(false), (24.0f32 * 0.75).round(), 0.0);
-        cells.push((label, count, chosen));
-    }
-    let widths: Vec<f32> = cells.iter().map(|(l, c, _)| l.width + inner + c.width).collect();
-    let total = widths.iter().sum::<f32>() + sp * (widths.len().saturating_sub(1)) as f32;
+    let (sp, inner) = (px(26.0), px(6.0));
+    let (cells, total) = tab_cells(ui.fonts, w);
     let vw = total.min(width);
     let fx = x0 + ac(width, vw);
     ui.scene.save();
     ui.scene.clip_rect(fx, y0, vw, h);
     let mut tx = fx - w.tab_scroll;
-    for (i, (label, count, chosen)) in cells.iter().enumerate() {
-        let tw = widths[i];
+    for (i, (label, count, chosen, tw)) in cells.iter().enumerate() {
+        let tw = *tw;
         let hot = ui.hovered(tx, y0, tw, h);
         let row_h = label.height().max(count.height());
         let ry = y0 + ac(h, row_h);
