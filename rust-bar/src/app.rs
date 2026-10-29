@@ -88,8 +88,10 @@ fn gpu_surface(conn: &Connection, instance: &wgpu::Instance, gpu: &Gpu, wl: &wl_
 
 /// A layer surface drawn with the GPU.
 pub struct Win {
-    pub layer: LayerSurface,
+    /// First: fields drop in order, and the swapchain goes before the
+    /// wl_surface it presents to (create_surface_unsafe's contract).
     gpu: Option<(wgpu::Surface<'static>, wgpu::SurfaceConfiguration)>,
+    pub layer: LayerSurface,
     pub width: u32,
     pub height: u32,
     pub configured: bool,
