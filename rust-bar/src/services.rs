@@ -589,6 +589,21 @@ fn cache_changed(app: &mut App, name: &str) {
     }
 }
 
+/// ~/.cache changed: NightLight.qml's FileView on .nightlight_state
+/// (watchChanges, NightLight.qml:28-62), so SUPER+N moves the ПУЛЬТ switch at
+/// once. applyState(): the file is the intent, and a fresh "on" is trusted -
+/// wlsunset may not have started yet; the pgrep is for later checks.
+fn home_cache_changed(app: &mut App, name: &str) {
+    if name != ".nightlight_state" {
+        return;
+    }
+    let on = std::fs::read_to_string(format!("{}/.cache/.nightlight_state", home())).map_or(false, |t| t.trim() == "on");
+    if on != app.svc.pult.night_on {
+        app.svc.pult.night_on = on;
+        app.mark_all_dirty();
+    }
+}
+
 /// Theme.qml's FileView on wallust-colors.json, debounced 80 ms (wallust
 /// rewrites it in place).
 fn palette_changed(app: &mut App, name: &str) {
@@ -658,6 +673,7 @@ pub fn start(app: &mut App) {
     app.svc.weather.city = read_cache("weather_city");
     let _ = std::fs::create_dir_all(cache_dir());
     app.watch_dir(&cache_dir(), cache_changed);
+    app.watch_dir(&format!("{}/.cache", home()), home_cache_changed);
     app.watch_dir(&format!("{}/.config/quickshell/bar", home()), palette_changed);
     update_clock(app, true);
     app.svc.last_tick = Some((wall_ms(), Instant::now()));
