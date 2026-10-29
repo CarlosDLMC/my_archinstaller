@@ -146,7 +146,6 @@ fn watchdog(app: &mut App) {
 
 fn enter_password(app: &mut App) {
     app.svc.wifi_card.password_mode = true;
-    app.svc.wifi_card.input_since = Some(Instant::now());
     // forceActiveFocus on the field, the first control in password mode - a
     // field only the Wi-Fi card has (passwordMode is the widget's state; any
     // other card open by now keeps its focus).
@@ -154,6 +153,29 @@ fn enter_password(app: &mut App) {
         c.focus = Some(0);
         c.win.dirty = true;
     }
+    blink_restart(app);
+}
+
+/// The cursor shows again and blinks from now (QQuickTextInput's
+/// updateCursorBlinking: on focus in, on every key it takes).
+fn blink_restart(app: &mut App) {
+    app.svc.wifi_card.input_since = Some(Instant::now());
+    app.debounce("wifi-blink", Duration::from_millis(500), blink);
+}
+
+/// TextInput's cursor blink (cursorFlashTime 1000: 500 ms on, 500 ms off):
+/// the card redraws at each flip only, while the password view is up and
+/// the field has the focus.
+fn blink(app: &mut App) {
+    if !app.svc.wifi_card.password_mode {
+        return;
+    }
+    let Some(c) = app.card.as_mut().filter(|c| c.kind == CardKind::Wifi) else { return };
+    if c.focus.and_then(|f| c.focus_codes.get(f)) == Some(&INPUT) {
+        c.win.dirty = true;
+    }
+    let since = app.svc.wifi_card.input_since.map_or(0, |s| s.elapsed().as_millis() as u64);
+    app.debounce("wifi-blink", Duration::from_millis(500 - since % 500), blink);
 }
 
 fn try_connect(app: &mut App, ssid: &str, security: &str) {
@@ -316,12 +338,12 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, busy: bool) {
         ui.scene.clip_rect(x0 + 8.0, y + 8.0, cw - 16.0, 20.0);
         ui.text(&fl, x0 + 8.0, ty, t.col_white, TextStyle::Normal);
         if focused {
-            // TextInput's cursor: 1 px, the text colour, 500 ms on / 500 ms off.
+            // TextInput's cursor: 1 px, the text colour, 500 ms on / 500 ms
+            // off; blink() redraws the card at each flip.
             let on = wc.input_since.map_or(true, |s| (s.elapsed().as_millis() / 500) % 2 == 0);
             if on {
                 ui.scene.fill(x0 + 8.0 + fl.adv, ty, 1.0, fl.height(), t.col_white);
             }
-            ui.animating = true;
         }
         ui.scene.restore();
         ui.hits.push(Hit { x: x0, y, w: cw, h: 36.0, action: Action::Card(INPUT) });
@@ -377,8 +399,14 @@ pub fn activate(app: &mut App, code: u32) {
             run_connect(app, &["sh", "-c", "nmcli -t -f DEVICE,TYPE,STATE device | awk -F: '$2 == \"wifi\" && $3 == \"connected\" { print $1 }' | while IFS= read -r d; do nmcli device disconnect \"$d\"; done"]);
         }
         INPUT => {
-            if let Some(c) = app.card.as_mut() {
-                c.focus = c.focus_codes.iter().position(|x| *x == INPUT);
+            // A press gives the field the focus; coming in, its cursor shows
+            // and blinks anew (focusInEvent).
+            let Some(c) = app.card.as_mut() else { return };
+            let had = c.focus.and_then(|f| c.focus_codes.get(f)) == Some(&INPUT);
+            c.focus = c.focus_codes.iter().position(|x| *x == INPUT);
+            c.win.dirty = true;
+            if !had {
+                blink_restart(app);
             }
         }
         CANCEL => cancel_password(app),
@@ -413,7 +441,7 @@ pub fn input_key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Key
             _ => return false,
         },
     }
-    app.svc.wifi_card.input_since = Some(Instant::now());
+    blink_restart(app);
     if let Some(c) = app.card.as_mut() {
         c.win.dirty = true;
     }
