@@ -1081,7 +1081,10 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, panel: (f32, f32, f32, f32), svc: &Servic
             format!("No wallpapers in {}", wall_dir().replace(&home, "~"))
         };
         let l = ui.fonts.layout(&text, CONTENT, px(13.0), 0.0);
-        ui.text(&l, band_x + (band_w - l.adv) / 2.0, band_y + ac(band_h, l.height()), t.col_grey, TextStyle::Normal);
+        // anchors.centerIn: band (whole pixels), then AlignHCenter centres
+        // the advance inside the Text's own width.
+        let lx = band_x + ac(band_w, l.width) + (l.width - l.adv) / 2.0;
+        ui.text(&l, lx, band_y + ac(band_h, l.height()), t.col_grey, TextStyle::Normal);
     }
 
     // Above: the folder tabs, or the search line.
@@ -1110,15 +1113,15 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, panel: (f32, f32, f32, f32), svc: &Servic
     }
 
     // Below: the centred card's folder, name, position and whether it is on.
+    let probe = ui.fonts.layout("Н", CONTENT, 24.0, 0.0);
+    let cap_h = (probe.ascent + probe.descent).ceil();
+    let cap_y = band_y + band_h + gap;
     if let Some(c) = strip.get(w.index) {
         let fm_ch = ui.fonts.average_char_width(CONTENT, 24.0);
         let (dir_cols, pos_cols, stamp_cols) = (26.0, 13.0, 16.0);
         let name_cols = 16f32.max(40f32.min(((sw - 2.0 * gap) / fm_ch).floor() - dir_cols - pos_cols - stamp_cols));
         let cap_w = (fm_ch * (dir_cols + name_cols + pos_cols + stamp_cols)).round();
-        let probe = ui.fonts.layout("Н", CONTENT, 24.0, 0.0);
-        let cap_h = (probe.ascent + probe.descent).ceil();
         let cap_x = ac(sw, cap_w);
-        let cap_y = band_y + band_h + gap;
         let dir_w = (fm_ch * dir_cols).round();
         let name_w = (fm_ch * name_cols).round();
         let pos_w = (fm_ch * pos_cols).round();
@@ -1136,10 +1139,12 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, panel: (f32, f32, f32, f32), svc: &Servic
             let sl = ui.fonts.layout("  ·  УСТАНОВЛЕНО", CONTENT, 24.0, 0.0);
             ui.text(&sl, cap_x + dir_w + name_w + pos_w, cap_y, t.col_grey, TextStyle::Normal);
         }
-        let keys = format!("←→ ЛИСТАТЬ{}    ENTER УСТАНОВИТЬ    CTRL+R НАУГАД    ПОИСК ПРИ НАБОРЕ    ESC ОТМЕНА", if w.has_folders() { "    ↑↓ КАТАЛОГ" } else { "" });
-        let kl = ui.fonts.layout(&keys, theme::bar_font(false), 20.0, 1.0);
-        ui.text(&kl, ac(sw, kl.width), cap_y + cap_h + (gap * 0.7).round(), t.col_grey, TextStyle::Normal);
     }
+    // The key line hangs under the caption, which is only hidden (no card
+    // centred: no match, an empty folder) - the line itself always shows.
+    let keys = format!("←→ ЛИСТАТЬ{}    ENTER УСТАНОВИТЬ    CTRL+R НАУГАД    ПОИСК ПРИ НАБОРЕ    ESC ОТМЕНА", if w.has_folders() { "    ↑↓ КАТАЛОГ" } else { "" });
+    let kl = ui.fonts.layout(&keys, theme::bar_font(false), 20.0, 1.0);
+    ui.text(&kl, ac(sw, kl.width), cap_y + cap_h + (gap * 0.7).round(), t.col_grey, TextStyle::Normal);
 }
 
 /// Text.ElideLeft: "…" and as much of the end as fits.
