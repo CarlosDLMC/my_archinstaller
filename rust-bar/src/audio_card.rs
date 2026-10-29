@@ -361,6 +361,9 @@ pub struct MeterWin {
     pub live: bool,
     /// What its last frame was painted with besides the level (meter_look).
     pub look: Option<MeterLook>,
+    /// Synchronized (wl_subsurface.set_sync): its frames wait for the card's
+    /// commit - while it takes a place, see place().
+    sync: bool,
     pub dirty: bool,
     pub frame_pending: bool,
 }
@@ -377,12 +380,12 @@ impl MeterWin {
     pub fn new(app: &App, parent: &WlSurface) -> Option<MeterWin> {
         let (sub, surface) = app.subcompositor.as_ref()?.create_subsurface(parent.clone(), &app.qh);
         sub.place_below(parent);
-        sub.set_desync();
         if let Ok(region) = smithay_client_toolkit::compositor::Region::new(&app.compositor) {
             surface.set_input_region(Some(region.wl_region()));
         }
         surface.commit();
-        Some(MeterWin { surface, sub, gpu: None, pos: (i32::MIN, i32::MIN), frac: (0.0, 0.0), size: (0, 0), width: 0.0, live: false, look: None, dirty: true, frame_pending: false })
+        // A new subsurface is synchronized; place() lets it go once placed.
+        Some(MeterWin { surface, sub, gpu: None, pos: (i32::MIN, i32::MIN), frac: (0.0, 0.0), size: (0, 0), width: 0.0, live: false, look: None, sync: true, dirty: true, frame_pending: false })
     }
 
     /// Puts the surface's corner at the whole pixel under (x, y) of the
@@ -403,6 +406,12 @@ impl MeterWin {
     /// segments move between the two surfaces, or the new place needs the
     /// card's next commit). Its own frame is redrawn only if it changes.
     pub fn place(&mut self, at: Option<(f32, f32, f32)>) -> bool {
+        // This follows a card commit: a place taken before it has shown, and
+        // the meter's own frames go out at once again (set_desync).
+        if self.sync {
+            self.sub.set_desync();
+            self.sync = false;
+        }
         let Some((x, y, w)) = at else {
             let was = self.live;
             self.live = false;
@@ -414,6 +423,15 @@ impl MeterWin {
         let size = ((w + frac.0).ceil() as u32, (6.0 + frac.1).ceil() as u32);
         let moved = self.move_to(x, y);
         let card = !self.live || moved;
+        if !self.live {
+            // Taking its place: the first frame there waits for the card's
+            // next commit, which also moves the surface and cuts the hole. A
+            // position is the parent's state, so a frame shown at once stood
+            // at the old place for a frame - after the card opened, the
+            // surface's corner: the top left of the screen.
+            self.sub.set_sync();
+            self.sync = true;
+        }
         if (frac, size, w, true) != (self.frac, self.size, self.width, self.live) {
             (self.frac, self.size, self.width, self.live) = (frac, size, w, true);
             self.dirty = true;
