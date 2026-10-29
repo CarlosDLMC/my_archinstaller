@@ -1471,6 +1471,12 @@ fn draw_tabs(ui: &mut Ui<OsdState>, w: &Wall, x0: f32, y0: f32, width: f32, h: f
 /// startReveal(): load the picture on every screen first.
 fn start_reveal(app: &mut App, it: Item) {
     end_reveal_windows(app);
+    // The last reveal's hold is over with its windows: its wallust drop
+    // (250 ms) or 6 s timeout firing now would end this reveal before it
+    // opens, and this pick would never be applied. (WallpaperState's
+    // startReveal() leaves revealDrop and revealHoldTimeout running.)
+    app.cancel_timer("wall-reveal-drop");
+    app.cancel_timer("wall-reveal-hold");
     let cancel = Cancel::default();
     let w = &mut app.svc.wall;
     w.reveal_cancel = Some(cancel.clone());
