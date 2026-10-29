@@ -499,7 +499,9 @@ fn edit_line(c: &mut Clip, sym: smithay_client_toolkit::seat::keyboard::Keysym, 
     let next = |s: &str, i: usize| s[i..].chars().next().map_or(i, |ch| i + ch.len_utf8());
     let word_left = |s: &str, i: usize| {
         let t = s[..i].trim_end_matches(char::is_whitespace);
-        t.rfind(char::is_whitespace).map_or(0, |p| p + 1)
+        // Past the blank, whatever its length: a no-break space is 2 bytes,
+        // and an index inside it panics in replace_range / the slicing.
+        t.char_indices().rev().find(|(_, ch)| ch.is_whitespace()).map_or(0, |(p, ch)| p + ch.len_utf8())
     };
     let word_right = |s: &str, i: usize| {
         let rest = &s[i..];
