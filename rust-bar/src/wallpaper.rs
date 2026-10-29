@@ -567,11 +567,15 @@ fn random(app: &mut App) {
         return;
     }
     let cur = app.svc.wall.index;
-    let mut seed = Instant::now().elapsed().as_nanos() as usize ^ std::process::id() as usize;
+    // Math.random(): every RandomState gets new keys from the ones the OS
+    // seeded, so hashing nothing is a fresh number each time.
+    let rand = || {
+        use std::hash::{BuildHasher, Hasher};
+        std::collections::hash_map::RandomState::new().build_hasher().finish()
+    };
     let mut i = cur;
     while i == cur {
-        seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-        i = (seed >> 33) % n;
+        i = (rand() % n as u64) as usize;
     }
     go_to(app, i as i64);
 }
