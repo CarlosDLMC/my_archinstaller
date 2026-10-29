@@ -69,7 +69,8 @@ fn script() -> String {
 }
 
 fn thumb_dir() -> String {
-    let cache = std::env::var("XDG_CACHE_HOME").unwrap_or_else(|_| format!("{}/.cache", services::home()));
+    // Quickshell.env("XDG_CACHE_HOME") || HOME + "/.cache": empty counts as unset.
+    let cache = std::env::var("XDG_CACHE_HOME").ok().filter(|v| !v.is_empty()).unwrap_or_else(|| format!("{}/.cache", services::home()));
     format!("{cache}/quickshell/clip-thumbs")
 }
 
@@ -313,7 +314,12 @@ fn pump(app: &mut App) {
     app.spawn("clip-thumb", &["sh", "-c", &cmd], |app, d| {
         let c = &mut app.svc.clip;
         if let Some(id) = c.decoding.take() {
-            if d.ok {
+            // Only while open. close() has emptied the map and thumbclean
+            // deletes the file 400 ms later: recorded after close, the entry
+            // pointed at nothing, and the next open never asked for that
+            // picture again - a row (and its preview) left on the glyph.
+            // QML's onExited records it all the same; this keeps its intent.
+            if d.ok && c.open {
                 c.thumbs.insert(id.clone(), format!("{}/{id}.img", thumb_dir()));
             }
         }
