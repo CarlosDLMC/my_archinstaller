@@ -581,12 +581,17 @@ fn card_h(fonts: &mut crate::text::Fonts, svc: &Services) -> f32 {
 }
 
 fn show_osd(app: &mut App) {
+    map_osd(app);
+    app.svc.polkit.blink_since = Some(std::time::Instant::now());
+    blink(app);
+}
+
+/// The dialog on the focused screen.
+fn map_osd(app: &mut App) {
     let Some((_, sw, sh)) = osd::focused_output(app) else { return };
     let m = met();
     let h = card_h(&mut app.fonts, &app.svc);
     osd::show(app, OpenParams { kind: OsdKind::Polkit, size: (m.card_w as u32, h.ceil() as u32), panel: (0.0, 0.0, m.card_w, h), dim: Some(Color::qt_rgba(0.0, 0.0, 0.0, 0.45)), keyboard: true, namespace: "quickshell", fade_ms: FADE_MS, min_scale: 0.96, fade_easing: crate::anim::Easing::OutCubic, pos: Some((ac(sw, m.card_w) as i32, ac(sh, h) as i32)), fill: false, output: None });
-    app.svc.polkit.blink_since = Some(std::time::Instant::now());
-    blink(app);
 }
 
 /// The card's height follows its texts (the error line comes and goes).
@@ -613,6 +618,14 @@ fn reshow(app: &mut App) {
 fn blink(app: &mut App) {
     if app.svc.polkit.flow.is_none() {
         return;
+    }
+    // mango closes the layer surfaces of a screen that goes away, and a
+    // request can come while there is no screen at all. PolkitOsd is a window
+    // per screen, shown on the focused one, so QML shows the dialog again
+    // there; without it here the flow would wait for a dialog nobody sees,
+    // polkitd with it, and every later request behind it.
+    if app.osd(OsdKind::Polkit).is_none() {
+        map_osd(app);
     }
     if let Some(o) = app.osd_mut(OsdKind::Polkit) {
         o.win.dirty = true;
