@@ -26,6 +26,9 @@ pub struct Pult {
     pub current_profile: String,
     pub night_on: bool,
     pub keep_awake: bool,
+    /// Which opening of the card this is: its D-Bus watchers run under tags
+    /// that carry it (watch()).
+    opening: u32,
 }
 
 const PROFILES: [&str; 3] = ["performance", "balanced", "power-saver"];
@@ -60,6 +63,7 @@ pub fn refresh(app: &mut App) {
             bt_status(app);
             bt_connected(app);
             bt_devices(app);
+            watch(app);
         }
         app.mark_all_dirty();
     });
@@ -69,6 +73,7 @@ pub fn refresh(app: &mut App) {
         if let Some(p) = d.stdout.split('"').nth(1) {
             app.svc.pult.current_profile = p.to_string();
             app.svc.pult.has_profiles = true;
+            watch(app);
             app.mark_all_dirty();
         }
     });
@@ -286,13 +291,28 @@ fn set_stats_shown(app: &mut App, on: bool) {
 
 /// The card opened: fresh readings, the D-Bus watchers on while it stays open.
 pub fn opened(app: &mut App) {
+    app.svc.pult.opening = app.svc.pult.opening.wrapping_add(1);
     set_list(app, true, Vec::new());
     let p = &mut app.svc.pult;
     p.scan_done = false;
     p.pair_failed_mac.clear();
     refresh(app);
+    watch(app);
+}
+
+/// btMonitor / profileMonitor (PultWidget.qml:338-397): `running:
+/// pult.dropdownOpen && pult.hasAdapter` (hasProfiles) - started whenever
+/// both hold, so also when the adapter or the daemon answers after the card
+/// opened. The tags carry the opening: the last opening's watcher, killed by
+/// closed() but holding its tag until its pipe closes, made another bar's ⚙
+/// (a close and an open in one go) start none.
+fn watch(app: &mut App) {
+    if app.card.as_ref().map(|c| c.kind) != Some(crate::cards::CardKind::Pult) {
+        return;
+    }
+    let n = app.svc.pult.opening;
     if app.svc.pult.has_adapter {
-        app.spawn_lines_tagged("bt-monitor", &["dbus-monitor", "--system", "type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path_namespace='/org/bluez'"], |app, _| {
+        app.spawn_lines_tagged(&format!("bt-monitor-{n}"), &["dbus-monitor", "--system", "type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path_namespace='/org/bluez'"], |app, _| {
             app.debounce("bt-settle", Duration::from_millis(400), |app| {
                 bt_status(app);
                 bt_connected(app);
@@ -300,7 +320,7 @@ pub fn opened(app: &mut App) {
         });
     }
     if app.svc.pult.has_profiles {
-        app.spawn_lines_tagged("profile-monitor", &["dbus-monitor", "--system", "type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path='/net/hadess/PowerProfiles'"], |app, _| {
+        app.spawn_lines_tagged(&format!("profile-monitor-{n}"), &["dbus-monitor", "--system", "type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path='/net/hadess/PowerProfiles'"], |app, _| {
             let mut argv = vec!["busctl", "--system", "get-property"];
             argv.extend(PPD);
             app.spawn("profile-get", &argv, |app, d| {
@@ -315,8 +335,9 @@ pub fn opened(app: &mut App) {
 
 pub fn closed(app: &mut App) {
     stop_scan(app);
-    app.kill("bt-monitor");
-    app.kill("profile-monitor");
+    let n = app.svc.pult.opening;
+    app.kill(&format!("bt-monitor-{n}"));
+    app.kill(&format!("profile-monitor-{n}"));
 }
 
 // ---- the card ----
