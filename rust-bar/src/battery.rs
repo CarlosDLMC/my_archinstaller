@@ -307,6 +307,11 @@ const LABEL: f32 = FONT_SIZE - 3.0;
 const PRESETS: [(i64, &str, &str); 3] = [(60, "60%", "Всегда от сети"), (80, "80%", "Смешанный режим"), (100, "100%", "Без ограничения")];
 pub const LIMIT: u32 = 0x10;
 
+/// TextMemo parts of the wrapped Texts: one Text each, one verdict for all
+/// its lines (BatteryPanel.qml:355-378, 382-391).
+const NOTE_TEXT: u64 = 0xAC;
+const WARN_TEXT: u64 = 0xAD;
+
 fn fmt_duration(seconds: f64) -> String {
     if seconds < 0.0 || !seconds.is_finite() {
         return "—".into();
@@ -503,18 +508,16 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
                 }
             }
             Block::Note(lines) => {
+                // text_block, with each line right-aligned (AlignRight).
+                let style = ui.card.texts.style_lines((NOTE_TEXT, 0), &lines, t.col_muted, TextStyle::Normal);
                 let mut ly = y;
                 for l in &lines {
-                    ui.text(l, x0 + cw - l.adv, ly, t.col_muted, TextStyle::Normal);
+                    ui.scene.text(ui.fonts, l, x0 + cw - l.adv, ly + l.ascent, t.col_muted, style);
                     ly += l.height();
                 }
             }
             Block::Warn(lines) => {
-                let mut ly = y;
-                for l in &lines {
-                    ui.text(l, x0, ly, t.col_warn, TextStyle::Normal);
-                    ly += l.height();
-                }
+                ui.text_block(0, WARN_TEXT, &lines, x0, y, t.col_warn);
             }
         }
         y += h + 8.0;

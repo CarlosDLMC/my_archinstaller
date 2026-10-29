@@ -262,6 +262,11 @@ fn since_label(oldest_hour: f64) -> String {
 const LABEL: f32 = FONT_SIZE - 3.0;
 const HEADER: f32 = FONT_SIZE - 5.0;
 
+/// TextMemo parts of the wrapped Texts: one Text each, one verdict for all
+/// its lines (AgentPanel.qml:283-297, 319-335).
+const ERROR_TEXT: u64 = 0xA7;
+const RESET_TEXT: u64 = 0xA8;
+
 fn meter_color(sev: &str, pct: f64, t: &theme::Theme) -> Color {
     let s = sev.to_lowercase();
     if !s.is_empty() && s != "normal" || pct >= 80.0 {
@@ -396,10 +401,8 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, busy: bool, top: f32) {
                 cy += cap.height();
                 if !u.limits_error.is_empty() {
                     cy += 6.0;
-                    for l in ui.fonts.wrap(&limits_error_text(u), theme::bar_font(false), HEADER, 0.0, iw) {
-                        ui.text(&l, ix, cy, t.col_alert, TextStyle::Normal);
-                        cy += l.height();
-                    }
+                    let lines = ui.fonts.wrap(&limits_error_text(u), theme::bar_font(false), HEADER, 0.0, iw);
+                    cy += ui.text_block(0, ERROR_TEXT, &lines, ix, cy, t.col_alert);
                 }
                 for (i, l) in u.limits.iter().enumerate() {
                     cy += 6.0;
@@ -417,10 +420,8 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, busy: bool, top: f32) {
                 }
                 if let Some(s) = session_text(u) {
                     cy += 6.0;
-                    for l in ui.fonts.wrap(&s, theme::bar_font(false), HEADER, 0.0, iw) {
-                        ui.text(&l, ix, cy, t.col_grey, TextStyle::Normal);
-                        cy += l.height();
-                    }
+                    let lines = ui.fonts.wrap(&s, theme::bar_font(false), HEADER, 0.0, iw);
+                    ui.text_block(0, RESET_TEXT, &lines, ix, cy, t.col_grey);
                 }
             }
             2 => {
