@@ -61,16 +61,13 @@ pub fn start(app: &mut App) {
 }
 
 pub fn refresh(app: &mut App) {
-    app.spawn("bt-presence", &["sh", "-c", "ls -d /sys/class/bluetooth/hci* >/dev/null 2>&1 && echo yes && exit 0; rfkill -n -o TYPE list bluetooth 2>/dev/null | grep -q bluetooth && echo yes || echo no"], |app, d| {
-        app.svc.pult.has_adapter = d.stdout.trim() == "yes";
-        if app.svc.pult.has_adapter {
-            bt_status(app);
-            bt_connected(app);
-            bt_devices(app);
-            watch(app);
-        }
-        app.mark_all_dirty();
-    });
+    app.svc.pult.has_adapter = has_bluetooth();
+    if app.svc.pult.has_adapter {
+        bt_status(app);
+        bt_connected(app);
+        bt_devices(app);
+        watch(app);
+    }
     let mut argv = vec!["busctl", "--system", "get-property"];
     argv.extend(PPD);
     app.spawn("profile-get", &argv, |app, d| {
@@ -82,21 +79,37 @@ pub fn refresh(app: &mut App) {
         }
     });
     read_night(app);
+    app.mark_all_dirty();
 }
 
+/// btPresenceProc (PultWidget.qml:28-32, 129-145): `ls -d
+/// /sys/class/bluetooth/hci*`, else `rfkill -n -o TYPE list bluetooth | grep -q
+/// bluetooth` - a blocked radio empties the class but keeps its rfkill
+/// switch. Read here rather than through sh, ls, rfkill and grep.
+fn has_bluetooth() -> bool {
+    let any = |dir: &str, f: &dyn Fn(&std::fs::DirEntry) -> bool| std::fs::read_dir(dir).map_or(false, |d| d.flatten().any(|e| f(&e)));
+    any("/sys/class/bluetooth", &|e| e.file_name().to_string_lossy().starts_with("hci"))
+        || any("/sys/class/rfkill", &|e| std::fs::read_to_string(e.path().join("type")).map_or(false, |t| t.trim() == "bluetooth"))
+}
+
+/// btStatusProc: `bluetoothctl show | grep -E 'Powered|Name'`, then "Powered:
+/// yes" anywhere in it - the same as in the whole output, so no shell or grep.
 fn bt_status(app: &mut App) {
-    app.spawn("bt-status", &["sh", "-c", "bluetoothctl show | grep -E 'Powered|Name'"], |app, d| {
+    app.spawn("bt-status", &["bluetoothctl", "show"], |app, d| {
         app.svc.pult.bt_powered = d.stdout.contains("Powered: yes");
         app.mark_all_dirty();
     });
 }
 
+/// btConnectedProc: `bluetoothctl info 2>/dev/null | grep -E 'Name|Connected'
+/// | head -2`, the filter done here.
 fn bt_connected(app: &mut App) {
-    app.spawn("bt-connected", &["sh", "-c", "bluetoothctl info 2>/dev/null | grep -E 'Name|Connected' | head -2"], |app, d| {
+    app.spawn("bt-connected", &["bluetoothctl", "info"], |app, d| {
+        let out: Vec<&str> = d.stdout.lines().filter(|l| l.contains("Name") || l.contains("Connected")).take(2).collect();
         let p = &mut app.svc.pult;
-        if d.stdout.contains("Connected: yes") {
+        if out.iter().any(|l| l.contains("Connected: yes")) {
             p.bt_connected = true;
-            if let Some(n) = d.stdout.lines().find_map(|l| l.trim().strip_prefix("Name:")) {
+            if let Some(n) = out.iter().find_map(|l| l.trim().strip_prefix("Name:")) {
                 p.bt_connected_device = n.trim().to_string();
             }
         } else {
@@ -137,7 +150,7 @@ fn parse_devices(out: &str) -> Vec<(String, String)> {
 }
 
 fn bt_devices(app: &mut App) {
-    app.spawn("bt-devices", &["sh", "-c", "bluetoothctl devices Paired"], |app, d| {
+    app.spawn("bt-devices", &["bluetoothctl", "devices", "Paired"], |app, d| {
         set_list(app, false, parse_devices(&d.stdout));
         app.mark_all_dirty();
     });
@@ -276,18 +289,20 @@ fn night_file_on() -> bool {
     std::fs::read_to_string(format!("{}/.cache/.nightlight_state", services::home())).map_or(false, |t| t.trim() == "on")
 }
 
-/// NightLight.qml: on = the state file says so and wlsunset is alive.
+/// NightLight.qml: on = the state file says so and wlsunset is alive
+/// (aliveProc's `pgrep -x wlsunset`, read here from /proc - refresh()
+/// redraws).
 fn read_night(app: &mut App) {
-    let on = night_file_on();
-    app.svc.pult.night_on = on;
-    if on {
-        app.spawn("night-alive", &["sh", "-c", "pgrep -x wlsunset >/dev/null 2>&1 && echo yes || echo no"], |app, d| {
-            if d.stdout.trim() == "no" {
-                app.svc.pult.night_on = false;
-                app.mark_all_dirty();
-            }
-        });
-    }
+    app.svc.pult.night_on = night_file_on() && wlsunset_alive();
+}
+
+/// `pgrep -x wlsunset`: a process whose name (/proc/<pid>/comm) is wlsunset.
+fn wlsunset_alive() -> bool {
+    let Ok(dir) = std::fs::read_dir("/proc") else { return false };
+    dir.flatten().any(|e| {
+        let pid = e.file_name().to_str().map_or(false, |n| n.bytes().all(|b| b.is_ascii_digit()));
+        pid && std::fs::read(e.path().join("comm")).map_or(false, |c| c == b"wlsunset\n")
+    })
 }
 
 /// NightLight.toggle(): toggleProc.running = true (NightLight.qml:64-71). On
@@ -365,7 +380,11 @@ fn watch(app: &mut App) {
     }
     let n = app.svc.pult.opening;
     if app.svc.pult.has_adapter {
-        app.spawn_lines_tagged(&format!("bt-monitor-{n}"), &["dbus-monitor", "--system", "type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path_namespace='/org/bluez'"], |app, _| {
+        // --profile: one line per signal (QML's `while read line` turns each
+        // of the default format's 8-10 lines into a line), so a search's RSSI
+        // stream restarts the 400 ms settle once per signal; the output is
+        // only ever a trigger.
+        app.spawn_lines_tagged(&format!("bt-monitor-{n}"), &["dbus-monitor", "--system", "--profile", "type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path_namespace='/org/bluez'"], |app, _| {
             app.debounce("bt-settle", Duration::from_millis(400), |app| {
                 bt_status(app);
                 bt_connected(app);
@@ -373,7 +392,7 @@ fn watch(app: &mut App) {
         });
     }
     if app.svc.pult.has_profiles {
-        app.spawn_lines_tagged(&format!("profile-monitor-{n}"), &["dbus-monitor", "--system", "type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path='/net/hadess/PowerProfiles'"], |app, _| {
+        app.spawn_lines_tagged(&format!("profile-monitor-{n}"), &["dbus-monitor", "--system", "--profile", "type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path='/net/hadess/PowerProfiles'"], |app, _| {
             let mut argv = vec!["busctl", "--system", "get-property"];
             argv.extend(PPD);
             app.spawn("profile-get", &argv, |app, d| {
