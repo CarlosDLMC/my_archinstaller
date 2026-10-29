@@ -49,6 +49,7 @@ const TAB_LABEL: u64 = 0xB1;
 const TAB_COUNT: u64 = 0xB2;
 const SEARCH_CAP: u64 = 0xC1;
 const SEARCH_COUNT: u64 = 0xC2;
+const SEARCH_TEXT: u64 = 0xC3;
 
 fn px(v: f32) -> f32 {
     (v * UI).round()
@@ -1454,6 +1455,10 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, panel: (f32, f32, f32, f32), svc: &Servic
     if w.filter.is_empty() {
         ui.card.texts.style_keyed((SEARCH_CAP, 0), &cap, t.col_grey, TextStyle::Normal);
         ui.card.texts.style_keyed((SEARCH_COUNT, 0), &cnt, t.col_grey, TextStyle::Normal);
+        // An empty TextInput lays out nothing and discards its glyph node
+        // (QQuickTextInput::updatePaintNode), so the next text is a new
+        // node: subpixel until it changes.
+        ui.card.texts.style_keyed((SEARCH_TEXT, 0), &Line::default(), t.col_white, TextStyle::Normal);
     } else {
         let sp = px(12.0);
         let fl = ui.fonts.layout(&w.filter, CONTENT, px(13.0), 0.0);
@@ -1464,7 +1469,7 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, panel: (f32, f32, f32, f32), svc: &Servic
         ui.text_of(0, SEARCH_CAP, &cap, rx, ry + ac(row_h, cap.height()), t.col_grey);
         let fx = rx + cap.width + sp;
         let fy = ry + ac(row_h, fl.height());
-        ui.text(&fl, fx, fy, t.col_white, TextStyle::Normal);
+        ui.text_of(0, SEARCH_TEXT, &fl, fx, fy, t.col_white);
         let cx = ui.fonts.layout(&w.filter[..w.cursor.min(w.filter.len())], CONTENT, px(13.0), 0.0).adv;
         if w.blink_since.map_or(true, |s| s.elapsed().as_millis() / 500 % 2 == 0) {
             ui.scene.fill(fx + cx, fy, 1.0, fl.height(), t.col_white);

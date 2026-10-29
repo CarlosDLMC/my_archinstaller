@@ -827,9 +827,10 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
     // TextInput scrolls to keep its cursor in view: ensureVisible's hscroll =
     // cursorX - width, the cursor just past the box, inside the wider clip.
     let shift = (cursor_x - sw).max(0.0);
-    if !c.filter.is_empty() {
-        ui.text(&line, sx - shift, sy, t.col_white, TextStyle::Normal);
-    }
+    // Drawn empty too: an empty TextInput discards its glyph node
+    // (QQuickTextInput::updatePaintNode), so the next text is a new node -
+    // subpixel until it changes.
+    ui.text(&line, sx - shift, sy, t.col_white, TextStyle::Normal);
     // No cursor once closed: the keyboard leaves with `shown`, and an
     // unfocused TextInput draws none while the card fades out.
     if c.open && c.blink_since.map_or(true, |s| s.elapsed().as_millis() / 500 % 2 == 0) {

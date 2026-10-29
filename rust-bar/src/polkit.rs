@@ -800,9 +800,10 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
         let (s0, s1) = (x_at(ui.fonts, p, f.response_visible, p.sel.0), x_at(ui.fonts, p, f.response_visible, p.sel.1));
         ui.scene.fill(fx + s0 - shift, fy, s1 - s0, fl.height(), t.col_grey);
     }
-    if !shown.is_empty() {
-        ui.text(&fl, fx - shift, fy, t.col_white, TextStyle::Normal);
-    }
+    // Drawn empty too: an empty TextInput discards its glyph node
+    // (QQuickTextInput::updatePaintNode), so the next text is a new node -
+    // subpixel until it changes.
+    ui.text(&fl, fx - shift, fy, t.col_white, TextStyle::Normal);
     if enabled {
         // 1 px, the text colour, 500 ms on / 500 ms off.
         let on = p.blink_since.map_or(true, |s| s.elapsed().as_millis() / 500 % 2 == 0);
