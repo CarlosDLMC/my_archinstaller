@@ -34,6 +34,8 @@ const REVEAL_MS: u64 = 1100;
 const CONTENT: FontKey = FontKey { family: theme::FONT_CONTENT, bold: false, plain: false };
 pub const CARD: u32 = 0x1_0000;
 pub const TAB: u32 = 0x2_0000;
+/// The dim's MouseArea, under everything (a Hover: no hand cursor).
+const DIM: u32 = 0x3_0000;
 
 fn px(v: f32) -> f32 {
     (v * UI).round()
@@ -617,6 +619,9 @@ pub fn wheel(app: &mut App, delta: f32) {
 }
 
 pub fn click(app: &mut App, action: Action) {
+    if action == Action::Hover(DIM) {
+        return close(app);
+    }
     let Action::Card(code) = action else { return };
     if code >= TAB {
         let w = &mut app.svc.wall;
@@ -731,8 +736,10 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, panel: (f32, f32, f32, f32), svc: &Servic
     let w = &svc.wall;
     let g = geo(sw, sh);
     let now = ui.now;
-    // The dim under everything.
+    // The dim under everything; a click anywhere out there dismisses
+    // (WallpaperOsd.qml's dim MouseArea - first, so every other hit wins).
     ui.scene.fill(0.0, 0.0, sw, sh, Color::qt_rgba(0.0, 0.0, 0.0, 0.6));
+    ui.hits.push(crate::bar::Hit { x: 0.0, y: 0.0, w: sw, h: sh, action: Action::Hover(DIM) });
     let strip = w.strip();
     let vx = w.view_x.as_ref().map_or(content_x(&g, w.index), |a| a.get(now));
     if w.view_x.as_ref().map_or(false, |a| a.running(now)) {
