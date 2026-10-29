@@ -1121,7 +1121,7 @@ impl PointerHandler for App {
                         cards::press(self, a, x, button);
                     }
                 }
-                PointerEventKind::Axis { horizontal, vertical, source, .. } => {
+                PointerEventKind::Axis { time, horizontal, vertical, source } => {
                     // Qt's angleDelta (QtWayland's FrameData::angleDelta), positive
                     // away from the user: 120 a notch, else a continuous axis'
                     // value times -12, rounded.
@@ -1143,8 +1143,8 @@ impl PointerHandler for App {
                     let delta = if dy == 0.0 && w == WinRef::Osd(crate::osd::OsdKind::Wallpaper) { dx } else { dy };
                     if delta != 0.0 {
                         match w {
-                            WinRef::Card => cards::wheel(self, delta),
-                            WinRef::Osd(k) => crate::osd::wheel(self, k, delta),
+                            WinRef::Card => cards::wheel(self, delta, time),
+                            WinRef::Osd(k) => crate::osd::wheel(self, k, delta, time),
                             WinRef::Crt(_) | WinRef::Reveal(_) => {}
                             WinRef::Strip(i) => {
                                 if let Some(act) = self.hit_at(w, x, y) {

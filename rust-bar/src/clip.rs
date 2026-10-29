@@ -55,6 +55,8 @@ pub struct Clip {
     /// towards it: (from, to, start).
     pub scroll: f32,
     glide: Option<(f32, f32, Instant)>,
+    /// The ListView's lastPosTime as the wheel sets it (cards::Flick::wheel).
+    wheel_time: Option<u32>,
     /// A finger's scroll that began over the list (cards::PixelDrag).
     drag: Option<crate::cards::PixelDrag>,
     /// Decoded thumbnail files (id -> path), the queue, the one decoding.
@@ -173,6 +175,7 @@ fn open(app: &mut App) {
     c.selected = 0;
     c.scroll = 0.0;
     c.glide = None;
+    c.wheel_time = None;
     c.open = true;
     c.blink_since = Some(Instant::now());
     reload(app);
@@ -247,6 +250,7 @@ pub(crate) fn refocus(app: &mut App) {
     c.select_all = false;
     c.scroll = 0.0;
     c.glide = None;
+    c.wheel_time = None;
     c.blink_since = Some(Instant::now());
     blink(app);
     position_view(app);
@@ -571,8 +575,9 @@ fn filter_changed(app: &mut App) {
 /// _q_MaximumWheelDeceleration): wheelScrollLines (3) x 24 px per 120 of
 /// angleDelta, glided 300 ms OutExpo from where the list is now and cut at its
 /// ends (StopAtBounds). Only the ListView takes it: over the preview, the
-/// search line or the hints no item accepts the wheel.
-pub fn wheel(app: &mut App, delta: f32) {
+/// search line or the hints no item accepts the wheel. `time` is the
+/// event's: one no later than the last is dropped (cards::Flick::wheel).
+pub fn wheel(app: &mut App, delta: f32, time: u32) {
     let Some((x, y)) = app.osd(OsdKind::Clipboard).and_then(|o| o.st.pointer) else { return };
     let (lx, ly, lw, lh) = list_rect();
     if x < lx || x >= lx + lw || y < ly || y >= ly + lh {
@@ -580,6 +585,9 @@ pub fn wheel(app: &mut App, delta: f32) {
     }
     let now = Instant::now();
     let c = &mut app.svc.clip;
+    if !crate::cards::wheel_time(&mut c.wheel_time, time) {
+        return;
+    }
     let max = max_scroll(c.filtered().len());
     let from = c.scroll_at(now);
     let step = -delta / 120.0 * 72.0;
