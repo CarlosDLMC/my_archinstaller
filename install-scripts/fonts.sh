@@ -16,12 +16,13 @@ fonts=(
   ttf-jetbrains-mono-nerd
   noto-fonts
 
-  # REQUIRED by the quickshell bar. Theme.qml sets
-  #   readonly property string fontFamily: "Terminess Nerd Font"
-  # and every widget in the bar renders through Theme.fontFamily, so without
-  # this package fontconfig substitutes something else and the whole bar is
-  # laid out in the wrong face - silently, since a font fallback is not an
-  # error. "Terminess" is the Nerd Fonts name for Terminus.
+  # REQUIRED by the bar. rust-bar/src/theme.rs sets
+  #   pub const FONT: &str = "Terminess Nerd Font";
+  # and every widget in the bar renders through it (Theme.fontFamily in the
+  # QML bar it replaces), so without this package fontconfig substitutes
+  # something else and the whole bar is laid out in the wrong face -
+  # silently, since a font fallback is not an error. "Terminess" is the Nerd
+  # Fonts name for Terminus.
   ttf-terminus-nerd
 
   # ttf-fira-code above covers "Fira Code Semi-Bold", named by
@@ -31,7 +32,7 @@ fonts=(
 
   # The rest of the terminal/bitmap Nerd Fonts on this setup. Nothing in the
   # dots hardcodes them, but they are what is available to pick from when
-  # editing Theme.qml, foot.ini or a rofi theme.
+  # editing the bar's FONT, foot.ini or a rofi theme.
   ttf-3270-nerd
   ttf-bigblueterminal-nerd
   ttf-envycoder-nerd
@@ -47,7 +48,7 @@ fonts=(
 # install. fontconfig substitutes silently on a miss, so a missing font shows up
 # as a subtly wrong-looking desktop rather than as a failure - check explicitly.
 required_families=(
-  "Terminess Nerd Font"           # quickshell bar (Theme.qml)
+  "Terminess Nerd Font"           # the bar (rust-bar/src/theme.rs)
   "JetBrainsMono Nerd Font Mono"  # foot, hyprlock, SovietLockGen.py
   "Fira Code"                     # gtk-3.0/settings.ini
 )

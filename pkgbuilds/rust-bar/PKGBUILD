@@ -39,12 +39,17 @@ sha256sums=('SKIP')
 prepare() {
   cd "$srcdir/rust-bar"
   export CARGO_HOME="$srcdir/cargo-home"
+  # Where cargo is rustup's (it provides rust, so 01-desktop-pkgs.sh installs
+  # no rust then), with no default toolchain every bare cargo and rustc fails
+  # with "no default is configured". The rust package ignores this.
+  export RUSTUP_TOOLCHAIN=stable
   cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
 }
 
 build() {
   cd "$srcdir/rust-bar"
   export CARGO_HOME="$srcdir/cargo-home"
+  export RUSTUP_TOOLCHAIN=stable
   # Inside srcdir: the builder's own CARGO_TARGET_DIR must not catch it.
   export CARGO_TARGET_DIR="$srcdir/target"
   # Paths in the binary (panic messages) without the build directory.

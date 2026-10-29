@@ -562,6 +562,7 @@ if [ ${#missing[@]} -ne 0 ]; then
             text-boot)        _hint=" (not a package - 'quiet'/'splash' could not be taken off the kernel command line; the text-boot log in Install-Logs/ says where, then re-run install-scripts/text-boot.sh)" ;;
             plymouth-splash)  _hint=" (not a package - 'splash' could not be put on the kernel command line; the plymouth log in Install-Logs/ says where to add it, then re-run install-scripts/plymouth.sh)" ;;
             plymouth-hook)    _hint=" (not a package - the plymouth hook could not go into every mkinitcpio config; the plymouth log in Install-Logs/ says which, then re-run install-scripts/plymouth.sh)" ;;
+            rust-bar-build)   _hint=" (not a package - the bar could not be built from rust-bar/, so an older rust-bar, if one is installed, is what runs; the rust-bar log in Install-Logs/ says why, then re-run install-scripts/rust-bar.sh)" ;;
             *)                _hint="" ;;
         esac
         echo "${WARNING}$pkg${RESET}$_hint"

@@ -1382,11 +1382,12 @@ and functions as the old `qs -c bar ipc call`. See `rust-bar/README.md`.
 
 The installer's `bar` option (`install-scripts/rust-bar.sh`) builds it from
 the `rust-bar/` crate with `pkgbuilds/rust-bar` and installs the package;
-`makepkg -s` pulls in `rust` and `clang` for the build, which takes a minute
-or a few. A re-run builds again only when the crate changed (the package
-version is the crate's plus a hash of it, `0.1.0.<hash>`). It draws with Vulkan:
-`graphics.sh` installs the driver, and a machine with none (a VM) gets Mesa's
-software Vulkan. Presets that still say `quickshell="ON"` get the bar.
+`makepkg -s` pulls in `clang` for the build (Rust itself comes with the
+desktop packages), which takes a minute or a few. A re-run builds again only
+when the crate changed (the package version is the crate's plus a hash of it,
+`0.1.0.<hash>`). It draws with Vulkan: `graphics.sh` installs the driver, and a
+machine with none - and any virtual machine - gets Mesa's software Vulkan.
+Presets that still say `quickshell="ON"` get the bar.
 
 The bar's scripts and the wallust palette stay in
 `dotfiles/config/quickshell/bar/` (`scripts/`, `wallust-colors.json`), where
@@ -1991,7 +1992,7 @@ are there even unlit, because the widgets laid over the panel are placed once pe
 
 **Weather comes from the bar**, `~/.cache/quickshell/weather.json`, so the lock screen
 and the bar always show the same reading. If that file is missing (a machine without
-quickshell) it falls back to the legacy `~/.cache/.weather_cache`. Either way, a reading
+the bar) it falls back to the legacy `~/.cache/.weather_cache`. Either way, a reading
 older than two hours is labelled with its age in the section header
 (`╠═ ПОГОДА · 3 Ч НАЗАД ═╣`) rather than shown as if it were current — weather fetchers
 here have broken silently before.
@@ -2302,7 +2303,8 @@ of the old file and deletes it if nothing else is in it.
 All configs are in `~/.config/`. Main files to edit:
 - `~/.config/mango/` - mango configuration (keybinds, rules, startup, look)
 - `~/.config/hypr/` - the scripts the binds run, the lock screen and hypridle
-- `~/.config/quickshell/bar/` - Custom bar configuration
+- `~/.config/quickshell/bar/` - the bar's scripts and wallust palette (the bar itself is
+  rust-bar: change `rust-bar/` in the repo and re-run `install-scripts/rust-bar.sh`)
 - `~/.config/foot/` - Terminal configuration
 - `~/.zshrc` - Shell configuration
 - `~/.config/herdr/config.toml` - Herdr keybindings, sidebar rows, theme and sounds
