@@ -431,12 +431,17 @@ fn refresh_stats(app: &mut App) {
     }
 }
 
-/// The 5 s Timer, `running: root.shown`.
-fn stats_tick(app: &mut App) {
+/// The bar's three 5 s Timers as one wakeup: SystemStats' (`running:
+/// root.shown`, SystemStats.qml:211-216), CenterInfo's DND poll and
+/// VpnWidget's status check (VpnWidget.qml:285-290). Separate, they woke
+/// the bar three times every five seconds, a few ms apart.
+fn poll_tick(app: &mut App) {
     if app.svc.stats.shown {
         refresh_stats(app);
-        app.debounce("stats", Duration::from_millis(5000), stats_tick);
     }
+    dnd_poll(app);
+    vpn_poll(app);
+    app.debounce("poll", Duration::from_millis(5000), poll_tick);
 }
 
 /// SystemStats.setShown(on): the ПУЛЬТ switch.
@@ -458,9 +463,10 @@ fn stats_shown_changed(app: &mut App) {
     if on {
         refresh_stats(app);
         app.debounce("stats-settle", Duration::from_secs(1), refresh_stats);
-        app.debounce("stats", Duration::from_millis(5000), stats_tick);
+        // The Timer starts over as `running` turns true: the next reading
+        // comes 5 s from now (the DND and VPN checks move with it, once).
+        app.debounce("poll", Duration::from_millis(5000), poll_tick);
     } else {
-        app.cancel_timer("stats");
         app.svc.stats.last_total = 0;
         app.svc.stats.last_idle = 0;
     }
@@ -632,9 +638,6 @@ pub fn start(app: &mut App) {
     app.svc.stats.mem_usage = "0G".into();
     // Component.onCompleted: a reading whatever the switch says.
     refresh_stats(app);
-    if app.svc.stats.shown {
-        app.debounce("stats", Duration::from_millis(5000), stats_tick);
-    }
 
     app.svc.timezone = read_cache("timezone");
     app.svc.weather.city = read_cache("weather_city");
@@ -654,10 +657,6 @@ pub fn start(app: &mut App) {
     app.svc.dnd_available = true;
     dnd_connect(app);
     dnd_poll(app);
-    app.every(Duration::from_millis(5000), |app| {
-        dnd_poll(app);
-        true
-    });
 
     if let Ok(t) = std::fs::read_to_string(format!("{}/weather.json", cache_dir())) {
         apply_weather(app, &t);
@@ -697,10 +696,8 @@ pub fn start(app: &mut App) {
     }
 
     vpn_poll(app);
-    app.every(Duration::from_millis(5000), |app| {
-        vpn_poll(app);
-        true
-    });
+    // The stats, DND and VPN polls from here on: one 5 s timer.
+    app.debounce("poll", Duration::from_millis(5000), poll_tick);
 
     crate::agent::run(app, "check");
 }
@@ -956,7 +953,7 @@ pub fn vpn_check(app: &mut App) {
     vpn_poll(app);
 }
 
-fn vpn_poll(app: &mut App) -> bool {
+fn vpn_poll(app: &mut App) {
     let first = !app.svc.vpn_checked;
     app.svc.vpn_checked = true;
     // Interfaces of this network namespace (/proc/net/dev), the ones whose
@@ -981,5 +978,4 @@ fn vpn_poll(app: &mut App) -> bool {
         app.svc.vpn = active;
         app.mark_all_dirty();
     }
-    true
 }
