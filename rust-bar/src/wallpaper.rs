@@ -221,7 +221,6 @@ pub struct Wall {
     /// jump() that follows animates them from there.
     reset_pre: Option<i64>,
     wheel_acc: f32,
-    tab_acc: f32,
     tab_scroll: f32,
     textures: HashMap<String, Tex>,
     loading: HashMap<String, Cancel>,
@@ -453,10 +452,9 @@ pub fn open(app: &mut App) {
         w.model = None;
         w.list_index = -1;
         w.reset_pre = None;
-        // The handlers' wheel sums and the tabs' scroll belong to the
+        // The handler's wheel sum and the tabs' scroll belong to the
         // Loader's content.
         w.wheel_acc = 0.0;
-        w.tab_acc = 0.0;
         w.tab_scroll = 0.0;
     }
     w.filter.clear();
@@ -509,7 +507,6 @@ pub(crate) fn refocus(app: &mut App) {
     w.list_index = -1;
     w.reset_pre = None;
     w.wheel_acc = 0.0;
-    w.tab_acc = 0.0;
     w.tab_scroll = 0.0;
     w.filter.clear();
     w.cursor = 0;
@@ -1117,33 +1114,18 @@ fn set_filter(app: &mut App, f: String) {
     }
 }
 
+/// The wheel over the carousel. Only the ListView's WheelHandler takes it
+/// (WallpaperOsd.qml:292-299), over the strip's own height, the tab row
+/// included. The tabs' one (:493-499) never runs on mango: it keeps
+/// WheelHandler's default acceptedDevices, Mouse, and QtWayland gives every
+/// pointer event its touchpad device whenever the compositor has pointer
+/// gestures and no mouse device is registered (QWaylandInputDevice::
+/// seat_capabilities, QPointingDevice::primaryPointingDevice), so
+/// wantsPointerEvent turns it down and the wheel goes on to the ListView's.
 pub fn wheel(app: &mut App, delta: f32) {
-    let Some((x, y)) = app.osd(OsdKind::Wallpaper).and_then(|o| o.st.pointer) else { return };
+    let Some((_, y)) = app.osd(OsdKind::Wallpaper).and_then(|o| o.st.pointer) else { return };
     let (sw, sh) = screen_of(app);
     let g = geo(sw, sh);
-    // The tabs' WheelHandler walks the folders, inside their Flickable only:
-    // it is there with folders and enabled while nothing is searched.
-    let (x0, y0, width, h) = tab_row(&g);
-    let w = &app.svc.wall;
-    let over_tabs = w.filter.is_empty() && w.has_folders() && y >= y0 && y < y0 + h && {
-        let (_, total) = tab_cells(&mut app.fonts, w);
-        let vw = total.min(width);
-        let fx = x0 + ac(width, vw);
-        x >= fx && x < fx + vw
-    };
-    if over_tabs {
-        app.svc.wall.tab_acc += delta;
-        while app.svc.wall.tab_acc >= 120.0 {
-            app.svc.wall.tab_acc -= 120.0;
-            step_folder(app, -1);
-        }
-        while app.svc.wall.tab_acc <= -120.0 {
-            app.svc.wall.tab_acc += 120.0;
-            step_folder(app, 1);
-        }
-        return;
-    }
-    // The ListView's walks the cards, over the strip's own height only.
     if y < g.list_y || y >= g.list_y + g.list_h {
         return;
     }
