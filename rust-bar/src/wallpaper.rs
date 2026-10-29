@@ -1391,6 +1391,11 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, panel: (f32, f32, f32, f32), svc: &Servic
         if w.blink_since.map_or(true, |s| s.elapsed().as_millis() / 500 % 2 == 0) {
             ui.scene.fill(fx + cx, fy, 1.0, fl.height(), t.col_white);
         }
+        // QQuickTextInput's I-beam over the TextInput (WallpaperOsd.qml:588-591),
+        // which takes a click there instead of the dim behind it. (At opacity
+        // 0, with nothing typed, QML's would do both over the tabs' middle;
+        // the port leaves the tabs theirs.)
+        ui.hits.push(crate::bar::Hit { x: fx, y: fy, w: iw, h: fl.height(), action: Action::Hover(crate::bar::TEXT_FIELD) });
         ui.text_of(0, SEARCH_COUNT, &cnt, fx + iw + sp, ry + ac(row_h, cnt.height()), t.col_grey);
     }
 

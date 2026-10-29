@@ -796,6 +796,10 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
         ui.scene.fill(sx + cursor_x - shift, sy, 1.0, ih, t.col_white);
     }
     ui.scene.restore();
+    // QQuickTextInput's I-beam over the search TextInput: from the caption
+    // row's right + 20 to the count's left - 10, a line high, centred
+    // (ClipboardOsd.qml:199-206). A click there is the field's, not a row's.
+    ui.hits.push(Hit { x: sx, y: sy, w: sw, h: ih, action: Action::Hover(crate::bar::TEXT_FIELD) });
     y += head_h + px(10.0);
 
     // The list on its plate, the preview beside it.
