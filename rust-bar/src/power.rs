@@ -327,6 +327,10 @@ fn uptime_tick(app: &mut App) {
     if !app.svc.power.open {
         return;
     }
+    // Still on the focused screen: services::on_monitors moves the menu as
+    // the focus changes; this also brings it back on another screen when
+    // the compositor closed it with its output (PowerOsd is per screen).
+    osd::follow_focus(app);
     let p = &mut app.svc.power;
     let shown = p.uptime.floor();
     p.uptime = read_uptime().unwrap_or(p.uptime + 1.0);
@@ -361,7 +365,7 @@ fn grid(sw: f32, sh: f32) -> Grid {
     Grid { cw: 13.0 * k, ch: 29.0 * k, px: (22.0 * k).round(), k }
 }
 
-fn show_osd(app: &mut App) {
+pub(crate) fn show_osd(app: &mut App) {
     let Some((_, sw, sh)) = osd::focused_output(app) else { return };
     let g = grid(sw, sh);
     let (w, h) = (WW * g.cw, WH * g.ch);

@@ -193,6 +193,43 @@ pub fn focused_output(app: &App) -> Option<(WlOutput, f32, f32)> {
     Some((s.output.clone(), s.screen_width, s.screen_height))
 }
 
+/// The focused monitor changed, or an open dialog's screen went away. QML
+/// has an overlay window per screen and shows it only on the focused one.
+/// The layout popups all run the same fade, so the focused screen's simply
+/// shows it as it stands (LayoutOsd.qml:60-63). A dialog (`shown: ready &&
+/// <open> && onFocusedMonitor`, PowerOsd.qml:21-29, ShotOsd.qml:15-24,
+/// RecordOsd.qml:17-26) fades in on the new screen and takes the keyboard
+/// while the old screen's lets go; here the old surface goes at once.
+pub fn follow_focus(app: &mut App) {
+    let Some((out, _, _)) = focused_output(app) else { return };
+    if let Some(o) = app.osd_mut(OsdKind::Layout).filter(|o| o.output != out) {
+        let (shown, fade) = (o.shown, o.fade);
+        let (colors, numbers) = (std::mem::take(&mut o.st.colors), std::mem::take(&mut o.st.numbers));
+        drop_now(app, OsdKind::Layout);
+        crate::layout::map_osd(app);
+        if let Some(o) = app.osd_mut(OsdKind::Layout) {
+            (o.shown, o.fade) = (shown, fade);
+            (o.st.colors, o.st.numbers) = (colors, numbers);
+        }
+    }
+    for kind in [OsdKind::Power, OsdKind::Shot, OsdKind::Record] {
+        let open = match kind {
+            OsdKind::Power => app.svc.power.open,
+            OsdKind::Shot => app.svc.capture.shot_open,
+            _ => app.svc.capture.rec_open,
+        };
+        // Closed (or fading out), or already where the focus is.
+        if !open || app.osd(kind).map_or(false, |o| !o.shown || o.output == out) {
+            continue;
+        }
+        drop_now(app, kind);
+        match kind {
+            OsdKind::Power => crate::power::show_osd(app),
+            _ => crate::capture::show(app, kind),
+        }
+    }
+}
+
 /// Maps the overlay (or, if it is already up, retargets its fade to shown).
 pub fn show(app: &mut App, p: OpenParams) {
     let now = Instant::now();
@@ -314,7 +351,14 @@ fn gone_timer(kind: OsdKind) -> &'static str {
 
 /// Unmaps the overlay now, unless it was shown again meanwhile.
 pub fn destroy(app: &mut App, kind: OsdKind) {
-    let Some(o) = app.osd_mut(kind).filter(|o| !o.shown) else { return };
+    if app.osd(kind).map_or(false, |o| !o.shown) {
+        drop_now(app, kind);
+    }
+}
+
+/// The overlay's surfaces go now, as its window hides.
+fn drop_now(app: &mut App, kind: OsdKind) {
+    let Some(o) = app.osd_mut(kind) else { return };
     let hovered = o.st.pointer.is_some();
     // LayoutOsd's window is only hidden: its Texts live on (TextMemo).
     let texts = (kind == OsdKind::Layout).then(|| std::mem::take(&mut o.st.texts));

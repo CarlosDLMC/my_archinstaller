@@ -282,7 +282,7 @@ fn keycaps_size(fonts: &mut crate::text::Fonts, size: f32, record: bool) -> (f32
     (w, h)
 }
 
-fn show(app: &mut App, kind: OsdKind) {
+pub(crate) fn show(app: &mut App, kind: OsdKind) {
     let Some((_, sw, sh)) = osd::focused_output(app) else { return };
     let m = met();
     let (cw, ch) = content_size(&mut app.fonts, &app.svc, kind == OsdKind::Record);

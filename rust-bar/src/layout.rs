@@ -233,6 +233,8 @@ fn show_osd(app: &mut App, from: usize) {
     if app.svc.layout.switcher_items().is_empty() {
         return;
     }
+    // Shown on the focused screen: a popup still up on another one moves.
+    osd::follow_focus(app);
     let fresh = app.osd(OsdKind::Layout).is_none();
     map_osd(app);
     if fresh {
@@ -264,7 +266,7 @@ fn seed_selection(app: &mut App, from: usize) {
 }
 
 /// windowVisible = shown = true: maps the popup, or brings back a fading one.
-fn map_osd(app: &mut App) {
+pub(crate) fn map_osd(app: &mut App) {
     let fresh = app.osd(OsdKind::Layout).is_none();
     let (pw, ph) = panel_size(app);
     // implicitWidth: panel + 40; the panel centred in it.
