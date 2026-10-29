@@ -38,6 +38,17 @@ pub const CARD: u32 = 0x1_0000;
 pub const TAB: u32 = 0x2_0000;
 /// The dim's MouseArea, under everything (a Hover: no hand cursor).
 const DIM: u32 = 0x3_0000;
+/// A card's Behaviors on scale (OutCubic) and opacity (linear), by strip
+/// index (OsdState numbers), and its Texts (TextMemo parts).
+const CARD_SCALE: u32 = 0x10_0000;
+const CARD_OPACITY: u32 = 0x20_0000;
+const CARD_MS: u64 = 260;
+const CARD_ICON: u64 = 0xA1;
+const CARD_BADGE: u64 = 0xA2;
+const TAB_LABEL: u64 = 0xB1;
+const TAB_COUNT: u64 = 0xB2;
+const SEARCH_CAP: u64 = 0xC1;
+const SEARCH_COUNT: u64 = 0xC2;
 
 fn px(v: f32) -> f32 {
     (v * UI).round()
@@ -51,6 +62,9 @@ pub struct Item {
     pub kind: String,
     pub src: String,
     pub thumb: String,
+    /// The scan's own "ready" (the object QML keeps; `Wall::ready` follows
+    /// the thumb lines): part of what ListView compares a new model with.
+    pub ready: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -194,6 +208,15 @@ pub struct Wall {
     view_x: Option<Smoothed>,
     pending: Pending,
     centred_id: String,
+    /// The strip the ListView holds (its content, hashed); None before a new
+    /// ListView's first model.
+    model: Option<u64>,
+    /// ListView.currentIndex as QML has it: -1 in a new ListView and with an
+    /// empty model.
+    list_index: i64,
+    /// A new model's first delegates were made with this currentIndex; the
+    /// jump() that follows animates them from there.
+    reset_pre: Option<i64>,
     wheel_acc: f32,
     tab_acc: f32,
     tab_scroll: f32,
@@ -339,30 +362,50 @@ fn scan_line(app: &mut App, line: &str) {
         let items: Vec<Item> = v
             .get("items")
             .and_then(|x| x.as_array())
-            .map(|a| a.iter().map(|o| Item { id: s(o, "id"), name: s(o, "name"), dir: s(o, "dir"), kind: s(o, "kind"), src: s(o, "src"), thumb: s(o, "thumb") }).collect())
+            .map(|a| {
+                a.iter()
+                    .map(|o| Item { id: s(o, "id"), name: s(o, "name"), dir: s(o, "dir"), kind: s(o, "kind"), src: s(o, "src"), thumb: s(o, "thumb"), ready: o.get("ready").and_then(|r| r.as_bool()).unwrap_or(false) })
+                    .collect()
+            })
             .unwrap_or_default();
-        let ready: HashSet<String> = v.get("items").and_then(|x| x.as_array()).map(|a| a.iter().filter(|o| o.get("ready").and_then(|r| r.as_bool()).unwrap_or(false)).map(|o| s(o, "id")).collect()).unwrap_or_default();
+        let ready: HashSet<String> = items.iter().filter(|it| it.ready).map(|it| it.id.clone()).collect();
         let w = &mut app.svc.wall;
         let same = items.len() == w.items.len() && items.iter().zip(&w.items).all(|(a, b)| a.id == b.id && a.thumb == b.thumb && a.name == b.name);
+        let mut reset = false;
         if !same {
+            let tabs = folders_sig(w);
             w.items = items;
+            // The tabs' Repeater makes its delegates anew when the folders differ.
+            if folders_sig(&app.svc.wall) != tabs {
+                if let Some(o) = app.osd_mut(OsdKind::Wallpaper) {
+                    o.st.texts.forget_parts(&[TAB_LABEL, TAB_COUNT]);
+                }
+            }
+            reset = sync_model(app);
         }
+        let w = &mut app.svc.wall;
         w.ready = ready;
         w.failed.clear();
         w.scanned = true;
         let cur = s(&v, "current");
         let folder = w.folder_index;
+        // recenterRequested(): only while the dialog is up and untouched.
+        let mut recenter = false;
         if cur != w.current_id && w.picked_id.is_empty() {
             w.current_id = cur.clone();
             if w.open && !w.navigated {
                 w.folder_index = w.folder_of(&cur);
                 w.pending = Pending::Current;
+                recenter = true;
             }
         }
         if app.svc.wall.folder_index != folder {
             reveal_tab(app);
+            reset |= sync_model(app);
         }
-        if !same || app.svc.wall.pending == Pending::Current {
+        // onModelChanged and onRecenterRequested reselect; a scan that
+        // changes neither leaves the view alone.
+        if reset || recenter {
             reselect(app);
         }
     } else if let Some(id) = line.strip_prefix("thumb ") {
@@ -399,21 +442,43 @@ pub fn open(app: &mut App) {
     if app.svc.wall.open {
         return;
     }
+    // Reopened while it fades out, the window keeps its Loader content - the
+    // ListView, its delegates, the handlers; otherwise all of it is new.
+    let fresh = app.osd(OsdKind::Wallpaper).is_none();
     let w = &mut app.svc.wall;
+    if fresh {
+        w.model = None;
+        w.list_index = -1;
+        w.reset_pre = None;
+        // The handlers' wheel sums and the tabs' scroll belong to the
+        // Loader's content.
+        w.wheel_acc = 0.0;
+        w.tab_acc = 0.0;
+        w.tab_scroll = 0.0;
+    }
     w.filter.clear();
     w.cursor = 0;
+    sync_model(app);
+    let w = &mut app.svc.wall;
     w.picked_id.clear();
     w.navigated = false;
-    // The handlers' wheel sums belong to the Loader's content, new each open.
-    w.wheel_acc = 0.0;
-    w.tab_acc = 0.0;
-    w.tab_scroll = 0.0;
+    let folder = w.folder_index;
     w.folder_index = w.folder_of(&w.current_id.clone());
+    if !fresh && app.svc.wall.folder_index != folder {
+        reveal_tab(app);
+    }
+    sync_model(app);
+    let w = &mut app.svc.wall;
     w.open = true;
     w.pending = Pending::Current;
     osd::show(app, OpenParams { kind: OsdKind::Wallpaper, size: (0, 0), panel: (0.0, 0.0, 0.0, 0.0), dim: None, keyboard: true, namespace: "quickshell:wallpaper", fade_ms: FADE_MS, min_scale: 1.0, fade_easing: Easing::Linear, pos: None, fill: true, output: None });
-    if let Some(o) = app.osd_mut(OsdKind::Wallpaper) {
-        o.st.reset_numbers();
+    // A new ListView takes its first model; reopen() reselects either way.
+    // quickshell sizes a layer surface's window only at the compositor's
+    // first configure, so the new ListView is 0x0 when it is made and has
+    // no delegate to animate before reselect() places it: the cards come up
+    // at their places.
+    if sync_model(app) && fresh {
+        app.svc.wall.reset_pre = None;
     }
     reselect(app);
     refresh(app);
@@ -517,12 +582,131 @@ fn content_x(g: &Geo, i: usize) -> f32 {
     i as f32 * (g.card_w + g.spacing) - g.begin
 }
 
+/// The cards a ListView at contentX `x` has delegates for: in view, or
+/// within cacheBuffer (two card widths) of it.
+fn delegates(g: &Geo, n: usize, x: f32) -> std::ops::Range<usize> {
+    let step = g.card_w + g.spacing;
+    let lo = ((x - 3.0 * g.card_w) / step).ceil().max(0.0) as usize;
+    let hi = (((x + g.w + 2.0 * g.card_w) / step).floor() + 1.0).max(0.0) as usize;
+    lo.min(n)..hi.min(n)
+}
+
+/// A card's scale and opacity (WallpaperOsd.qml:325-330) at `dist` from
+/// currentIndex.
+fn card_targets(dist: u64, picked: bool, other_picked: bool, hover: bool, is_centre: bool) -> (f32, f32) {
+    let dist = dist as f32;
+    let falloff = 1.0 / (1.0 + dist * dist);
+    let scale = if picked { 1.3 } else { (FAR_SCALE + (CENTRE_SCALE - FAR_SCALE) * falloff) * if hover && !is_centre { 1.04 } else { 1.0 } };
+    let op = if picked || other_picked { 0.0 } else if hover { 1.0 } else { 0.12 + 0.88 * falloff };
+    (scale, op)
+}
+
+/// What ListView compares a new model with: every item, field by field.
+fn strip_sig(strip: &[&Item]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    strip.len().hash(&mut h);
+    for it in strip {
+        (&it.id, &it.name, &it.dir, &it.kind, &it.src, &it.thumb, it.ready).hash(&mut h);
+    }
+    h.finish()
+}
+
+/// What the tabs' Repeater compares a new model with: WallpaperState.folders.
+fn folders_sig(w: &Wall) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    for f in w.folders() {
+        (&f.dir, &f.label, f.count).hash(&mut h);
+    }
+    h.finish()
+}
+
+/// list.model = scope.strip, while the window has its content. ListView
+/// takes a model only when its content differs from the one it holds
+/// (QQuickItemView::setModel compares them: a search that keeps the same
+/// matches changes nothing), then makes the delegates for the start of the
+/// strip with the currentIndex it still has (-1 in a new ListView), sets
+/// currentIndex to 0 (-1 when empty), and onModelChanged reselects. True
+/// when that happened.
+fn sync_model(app: &mut App) -> bool {
+    if app.osd(OsdKind::Wallpaper).is_none() {
+        return false;
+    }
+    let w = &mut app.svc.wall;
+    let (sig, n) = {
+        let strip = w.strip();
+        (strip_sig(&strip), strip.len())
+    };
+    if w.model == Some(sig) {
+        return false;
+    }
+    w.model = Some(sig);
+    w.reset_pre = Some(w.list_index);
+    w.list_index = if n == 0 { -1 } else { 0 };
+    true
+}
+
+/// The cards' Behaviors as the ListView goes from contentX `from` to card
+/// `i`. A delegate in range at both ends lives on and animates to its new
+/// scale and opacity; a card coming into range gets a new delegate, made at
+/// its new values, so a value kept from an earlier visit goes. After a new
+/// model (`pre`), the delegates made for the start of the strip (`from`)
+/// begin at the falloff of the currentIndex they were made with and animate
+/// from there, drawn or not (a new folder's first cards grow or shrink from
+/// where the old folder's centre was), and the old delegates' Texts go.
+fn renew_cards(app: &mut App, g: &Geo, i: usize, pre: Option<i64>, from: f32, now: Instant) {
+    let w = &app.svc.wall;
+    let strip = w.strip();
+    let n = strip.len();
+    let (old, new) = (delegates(g, n, from), delegates(g, n, content_x(g, i)));
+    let ids = |j: usize| [(CARD_SCALE + j as u32, Easing::OutCubic), (CARD_OPACITY + j as u32, Easing::Linear)];
+    let seeds: Vec<(usize, (f32, f32), (f32, f32))> = match pre {
+        Some(pre) => {
+            let some_picked = !w.picked_id.is_empty();
+            (old.start.max(new.start)..old.end.min(new.end))
+                .map(|j| {
+                    let picked = some_picked && strip.get(j).is_some_and(|it| it.id == w.picked_id);
+                    let made = card_targets((j as i64 - pre).unsigned_abs(), picked, some_picked && !picked, false, false);
+                    (j, made, card_targets((j as i64 - i as i64).unsigned_abs(), picked, some_picked && !picked, false, j == i))
+                })
+                .collect()
+        }
+        None => Vec::new(),
+    };
+    let Some(o) = app.osd_mut(OsdKind::Wallpaper) else { return };
+    let st = &mut o.st;
+    if pre.is_some() {
+        st.reset_numbers();
+        st.texts.forget_parts(&[CARD_ICON, CARD_BADGE]);
+        for (j, made, to) in seeds {
+            for (k, e, v0, v1) in [(CARD_SCALE, Easing::OutCubic, made.0, to.0), (CARD_OPACITY, Easing::Linear, made.1, to.1)] {
+                st.number_e(k + j as u32, v0, CARD_MS, e, now);
+                st.number_e(k + j as u32, v1, CARD_MS, e, now);
+            }
+        }
+        return;
+    }
+    // OsdState forgets numbers only all at once: the delegates in range now
+    // are kept at their values (Behaviors restart from there), the rest goes.
+    let stale = new.clone().filter(|j| !old.contains(j)).any(|j| ids(j).iter().any(|&(k, _)| st.number_peek(k, now).is_some()));
+    if stale {
+        let keep: Vec<(u32, Easing, f32)> = old.flat_map(ids).filter_map(|(k, e)| st.number_peek(k, now).map(|v| (k, e, v))).collect();
+        st.reset_numbers();
+        for (k, e, v) in keep {
+            st.number_e(k, v, CARD_MS, e, now);
+        }
+    }
+}
+
 /// reselect(): which card is centred after the strip changed.
 fn reselect(app: &mut App) {
     let w = &app.svc.wall;
     let strip = w.strip();
     if strip.is_empty() {
         app.svc.wall.pending = Pending::Keep;
+        // Nothing to centre, but the empty state shows.
+        redraw(app);
         return;
     }
     let idx = |id: &str| strip.iter().position(|it| it.id == id);
@@ -540,17 +724,22 @@ fn reselect(app: &mut App) {
     jump(app, i);
 }
 
-/// jump(): straight there, no animation.
+/// jump(): straight there, no scroll (positionViewAtIndex). The cards'
+/// Behaviors still run: the delegates kept in range animate to their new
+/// scale and opacity.
 fn jump(app: &mut App, i: usize) {
+    let now = Instant::now();
     let (sw, sh) = screen_of(app);
     let g = geo(sw, sh);
     let w = &mut app.svc.wall;
+    // A new model's delegates were made at the start of the strip.
+    let pre = w.reset_pre.take();
+    let from = if pre.is_some() { content_x(&g, 0) } else { w.view_x.as_ref().map_or(content_x(&g, w.index), |a| a.get(now)) };
     w.index = i;
+    w.list_index = i as i64;
     w.view_x = Some(Smoothed::new(content_x(&g, i)));
     set_centred(app);
-    if let Some(o) = app.osd_mut(OsdKind::Wallpaper) {
-        o.st.reset_numbers();
-    }
+    renew_cards(app, &g, i, pre, from, now);
     redraw(app);
 }
 
@@ -566,14 +755,17 @@ fn move_to(app: &mut App, i: usize) {
     let (sw, sh) = screen_of(app);
     let g = geo(sw, sh);
     let w = &mut app.svc.wall;
-    w.index = i;
-    let target = content_x(&g, i);
     let now = Instant::now();
+    let from = w.view_x.as_ref().map_or(content_x(&g, w.index), |a| a.get(now));
+    w.index = i;
+    w.list_index = i as i64;
+    let target = content_x(&g, i);
     match w.view_x.as_mut() {
         Some(a) => a.set(target, now),
         None => w.view_x = Some(Smoothed::new(target)),
     }
     set_centred(app);
+    renew_cards(app, &g, i, None, from, now);
     redraw(app);
     // Once the strip has come to rest, the cards it passed are let go.
     app.debounce("wall-settle", Duration::from_millis(MOVE_MS + 10), |app| {
@@ -635,18 +827,40 @@ pub fn folder(app: &mut App, delta: i64) {
 }
 
 fn step_folder(app: &mut App, delta: i64) {
-    let w = &mut app.svc.wall;
+    let w = &app.svc.wall;
     if !w.has_folders() {
         return;
     }
-    w.navigated = true;
-    w.filter.clear();
-    w.cursor = 0;
     let n = w.folders().len() as i64;
-    w.folder_index = ((w.folder_index as i64 + delta) % n + n) as usize % n as usize;
-    w.pending = Pending::Current;
-    reveal_tab(app);
-    reselect(app);
+    let i = ((w.folder_index as i64 + delta) % n + n) as usize % n as usize;
+    set_folder(app, i);
+}
+
+/// stepFolder() and a tab click: navigated, the search cleared, then the
+/// folder set. onFilterChanged and onFolderIndexChanged ask for the card on
+/// screen; each strip change the ListView takes reselects (once, later).
+fn set_folder(app: &mut App, i: usize) {
+    let w = &mut app.svc.wall;
+    w.navigated = true;
+    let mut reset = false;
+    if !w.filter.is_empty() {
+        w.filter.clear();
+        w.cursor = 0;
+        w.pending = Pending::Current;
+        reset = sync_model(app);
+    }
+    let w = &mut app.svc.wall;
+    if w.folder_index != i {
+        w.folder_index = i;
+        w.pending = Pending::Current;
+        reveal_tab(app);
+        reset |= sync_model(app);
+    }
+    if reset {
+        reselect(app);
+    } else {
+        redraw(app);
+    }
 }
 
 /// tabsView.reveal() on every folderIndex change while the carousel is up:
@@ -769,7 +983,9 @@ fn blink(app: &mut App) {
 }
 
 /// onFilterChanged: the first match is centred; clearing it goes back home.
-/// Only on a change: Backspace in an empty field is no signal at all.
+/// Only on a change: Backspace in an empty field is no signal at all. Only
+/// a strip the ListView takes as new reselects: typing on with the same
+/// matches, or a leading space, leaves the view where it is.
 fn set_filter(app: &mut App, f: String) {
     let w = &mut app.svc.wall;
     if f == w.filter {
@@ -780,7 +996,11 @@ fn set_filter(app: &mut App, f: String) {
     }
     w.pending = if f.is_empty() { Pending::Current } else { Pending::First };
     w.filter = f;
-    reselect(app);
+    if sync_model(app) {
+        reselect(app);
+    } else {
+        redraw(app);
+    }
 }
 
 pub fn wheel(app: &mut App, delta: f32) {
@@ -837,12 +1057,7 @@ pub fn click(app: &mut App, action: Action) {
         if (code - TAB) as usize == w.folder_index {
             return;
         }
-        w.filter.clear();
-        w.cursor = 0;
-        w.folder_index = (code - TAB) as usize;
-        w.pending = Pending::Current;
-        reveal_tab(app);
-        reselect(app);
+        set_folder(app, (code - TAB) as usize);
     } else if code >= CARD {
         let i = (code - CARD) as usize;
         if i == app.svc.wall.index {
@@ -1034,7 +1249,7 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, panel: (f32, f32, f32, f32), svc: &Servic
         for &(_, i) in order.iter().rev() {
             let x = i as f32 * step_w - vx;
             let cy = g.list_y + ac(g.list_h, g.card_h);
-            let sc = ui.card.number_peek(0x10_0000 + i as u32, now).unwrap_or(FAR_SCALE);
+            let sc = ui.card.number_peek(CARD_SCALE + i as u32, now).unwrap_or(FAR_SCALE);
             if let Some((lx, ly)) = invert(&card_xf(x, cy, &g, sc), px0, py0) {
                 if lx >= 0.0 && lx < g.card_w && ly >= 0.0 && ly < g.card_h {
                     hovered = Some(i);
@@ -1047,16 +1262,13 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, panel: (f32, f32, f32, f32), svc: &Servic
         let it = strip[i];
         let x = i as f32 * step_w - vx;
         let cy = g.list_y + ac(g.list_h, g.card_h);
-        let dist = (i as i64 - w.index as i64).unsigned_abs() as f32;
-        let falloff = 1.0 / (1.0 + dist * dist);
         let is_centre = i == w.index;
         let picked = it.id == w.picked_id;
         let other_picked = !w.picked_id.is_empty() && !picked;
         let hover = hovered == Some(i);
-        let target_scale = if picked { 1.3 } else { (FAR_SCALE + (CENTRE_SCALE - FAR_SCALE) * falloff) * if hover && !is_centre { 1.04 } else { 1.0 } };
-        let target_op = if picked || other_picked { 0.0 } else if hover { 1.0 } else { 0.12 + 0.88 * falloff };
-        let (sc, r1) = ui.card.number_e(0x10_0000 + i as u32, target_scale, 260, Easing::OutCubic, now);
-        let (op, r2) = ui.card.number_e(0x20_0000 + i as u32, target_op, 260, Easing::Linear, now);
+        let (target_scale, target_op) = card_targets((i as i64 - w.index as i64).unsigned_abs(), picked, other_picked, hover, is_centre);
+        let (sc, r1) = ui.card.number_e(CARD_SCALE + i as u32, target_scale, CARD_MS, Easing::OutCubic, now);
+        let (op, r2) = ui.card.number_e(CARD_OPACITY + i as u32, target_op, CARD_MS, Easing::Linear, now);
         ui.animating |= r1 || r2;
         let m = card_xf(x, cy, &g, sc);
         ui.scene.save();
@@ -1073,7 +1285,7 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, panel: (f32, f32, f32, f32), svc: &Servic
             Some(&tex) => ui.scene.image(tex.id, 0.0, 0.0, fw, g.card_h, crop_uv(tex, fw, g.card_h)),
             None => {
                 let gl = ui.fonts.layout(if it.kind == "video" { "\u{f040a}" } else { "\u{f02e9}" }, CONTENT, px(36.0), 0.0);
-                ui.text_of(i as u32, 0xA1, &gl, ac(fw, gl.width), ac(g.card_h, gl.height()), t.col_grey);
+                ui.text_of(i as u32, CARD_ICON, &gl, ac(fw, gl.width), ac(g.card_h, gl.height()), t.col_grey);
             }
         }
         if it.kind != "image" {
@@ -1083,7 +1295,7 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, panel: (f32, f32, f32, f32), svc: &Servic
             let by = g.card_h - bh - 12.0;
             let bx = SKEW.abs() * (g.card_h - by) + 12.0;
             ui.scene.rect(bx, by, bw, bh, Color::qt_rgba(0.0, 0.0, 0.0, 0.55), 4.0, 0.0, Color::TRANSPARENT, true);
-            ui.text_of(i as u32, 0xA2, &bl, bx + ac(bw, bl.width), by + ac(bh, bl.height()), t.col_white);
+            ui.text_of(i as u32, CARD_BADGE, &bl, bx + ac(bw, bl.width), by + ac(bh, bl.height()), t.col_white);
         }
         ui.scene.restore();
         if is_centre {
@@ -1118,17 +1330,24 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, panel: (f32, f32, f32, f32), svc: &Servic
     if w.filter.is_empty() && w.has_folders() {
         draw_tabs(ui, w, gap, top_y, top_w, top_h);
     }
-    if !w.filter.is_empty() {
+    // The search Row is there all along, only see-through (opacity 0) while
+    // nothing is typed: its label and count have their nodes and the count
+    // changes with the strip - which grays it as anywhere - so the memo
+    // sees both every frame.
+    let cap = ui.fonts.layout("ПОИСК", theme::bar_font(false), 24.0, 2.0);
+    let n = strip.len();
+    let cnt = ui.fonts.layout(&format!("{n}{}", if n == 1 { " match" } else { " matches" }), theme::bar_font(false), px(11.0), 0.0);
+    if w.filter.is_empty() {
+        ui.card.texts.style_keyed((SEARCH_CAP, 0), &cap, t.col_grey, TextStyle::Normal);
+        ui.card.texts.style_keyed((SEARCH_COUNT, 0), &cnt, t.col_grey, TextStyle::Normal);
+    } else {
         let sp = px(12.0);
-        let cap = ui.fonts.layout("ПОИСК", theme::bar_font(false), 24.0, 2.0);
         let fl = ui.fonts.layout(&w.filter, CONTENT, px(13.0), 0.0);
         let iw = (fl.adv + 4.0).max(px(40.0));
-        let n = strip.len();
-        let cnt = ui.fonts.layout(&format!("{n}{}", if n == 1 { " match" } else { " matches" }), theme::bar_font(false), px(11.0), 0.0);
         let row_w = cap.width + sp + iw + sp + cnt.width;
         let row_h = cap.height().max(fl.height()).max(cnt.height());
         let (rx, ry) = (gap + ac(top_w, row_w), top_y + ac(top_h, row_h));
-        ui.text(&cap, rx, ry + ac(row_h, cap.height()), t.col_grey, TextStyle::Normal);
+        ui.text_of(0, SEARCH_CAP, &cap, rx, ry + ac(row_h, cap.height()), t.col_grey);
         let fx = rx + cap.width + sp;
         let fy = ry + ac(row_h, fl.height());
         ui.text(&fl, fx, fy, t.col_white, TextStyle::Normal);
@@ -1136,7 +1355,7 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, panel: (f32, f32, f32, f32), svc: &Servic
         if w.blink_since.map_or(true, |s| s.elapsed().as_millis() / 500 % 2 == 0) {
             ui.scene.fill(fx + cx, fy, 1.0, fl.height(), t.col_white);
         }
-        ui.text(&cnt, fx + iw + sp, ry + ac(row_h, cnt.height()), t.col_grey, TextStyle::Normal);
+        ui.text_of(0, SEARCH_COUNT, &cnt, fx + iw + sp, ry + ac(row_h, cnt.height()), t.col_grey);
     }
 
     // Below: the centred card's folder, name, position and whether it is on.
@@ -1152,20 +1371,22 @@ pub fn draw_osd(ui: &mut Ui<OsdState>, panel: (f32, f32, f32, f32), svc: &Servic
         let dir_w = (fm_ch * dir_cols).round();
         let name_w = (fm_ch * name_cols).round();
         let pos_w = (fm_ch * pos_cols).round();
-        if !c.dir.is_empty() {
+        // The folder and the stamp are "" when absent: an empty Text has no
+        // node, so the next text is a new one (drawn empty, the memo forgets).
+        let line = if c.dir.is_empty() {
+            Line::default()
+        } else {
             let text = format!("{}  /  ", c.dir);
             let full = ui.fonts.layout(&text, CONTENT, 24.0, 0.0);
-            let line = if full.width <= dir_w { full } else { elide_left(ui, &text, dir_w) };
-            ui.text(&line, cap_x + dir_w - line.adv, cap_y, t.col_grey, TextStyle::Normal);
-        }
+            if full.width <= dir_w { full } else { elide_left(ui, &text, dir_w) }
+        };
+        ui.text(&line, cap_x + dir_w - line.adv, cap_y, t.col_grey, TextStyle::Normal);
         let nl = ui.fonts.elide_middle(&c.name, CONTENT, 24.0, 0.0, name_w);
         ui.text(&nl, cap_x + dir_w, cap_y, t.col_white, TextStyle::Normal);
         let pl = ui.fonts.layout(&format!("  ·  {} ИЗ {}", w.index + 1, strip.len()), CONTENT, 24.0, 0.0);
         ui.text(&pl, cap_x + dir_w + name_w, cap_y, t.col_grey, TextStyle::Normal);
-        if w.current_id == c.id {
-            let sl = ui.fonts.layout("  ·  УСТАНОВЛЕНО", CONTENT, 24.0, 0.0);
-            ui.text(&sl, cap_x + dir_w + name_w + pos_w, cap_y, t.col_grey, TextStyle::Normal);
-        }
+        let sl = if w.current_id == c.id { ui.fonts.layout("  ·  УСТАНОВЛЕНО", CONTENT, 24.0, 0.0) } else { Line::default() };
+        ui.text(&sl, cap_x + dir_w + name_w + pos_w, cap_y, t.col_grey, TextStyle::Normal);
     }
     // The key line hangs under the caption, which is only hidden (no card
     // centred: no match, an empty folder) - the line itself always shows.
@@ -1230,10 +1451,10 @@ fn draw_tabs(ui: &mut Ui<OsdState>, w: &Wall, x0: f32, y0: f32, width: f32, h: f
         let row_h = label.height().max(count.height());
         let ry = y0 + ac(h, row_h);
         let ly = ry;
-        ui.text_of(i as u32, 0xB1, label, tx, ly, if *chosen || hot { t.col_white } else { t.col_grey });
+        ui.text_of(i as u32, TAB_LABEL, label, tx, ly, if *chosen || hot { t.col_white } else { t.col_grey });
         // anchors.baseline: the count sits on the label's baseline.
         let base = ly + label.ascent;
-        ui.text_of(i as u32, 0xB2, count, tx + label.width + inner, base - count.ascent, t.col_grey);
+        ui.text_of(i as u32, TAB_COUNT, count, tx + label.width + inner, base - count.ascent, t.col_grey);
         if *chosen {
             ui.scene.fill(tx, y0 + h - 2.0, tw, 2.0, t.col_white);
         }
