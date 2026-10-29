@@ -551,8 +551,10 @@ fn draw_center(p: &mut Painter, svc: &Services, x0: f32, width: f32, design_widt
     let row_h: f32 = if has_weather { 26.0f32.max(bell.height()) } else { bell.height() };
     let row_y = ac(DESIGN_HEIGHT, row_h);
     let left_x = x0 + sep_x - 8.0 - (bell.width + pill_w);
-    p.label(&bell, left_x, row_y + ac(row_h, bell.height()), bell_color);
-    p.hit(left_x, 0.0, bell.width, DESIGN_HEIGHT, Action::Bell);
+    let bell_y = row_y + ac(row_h, bell.height());
+    p.label(&bell, left_x, bell_y, bell_color);
+    // Its MouseArea fills the bell's Text, not the strip's height.
+    p.hit(left_x, bell_y, bell.width, bell.height(), Action::Bell);
     if has_weather {
         let px = left_x + bell.width;
         let py = row_y + ac(row_h, 26.0);
@@ -613,7 +615,9 @@ pub fn activate(app: &mut App, strip: usize, action: Action, button: u32) {
                 crate::cards::toggle(app, strip, crate::cards::CardKind::Power, &h, false);
             }
         }
-        Action::Workspace(id) => {
+        // WorkspaceBar, KeyboardLayoutWidget and the bell: MouseAreas with the
+        // default acceptedButtons, the left button only.
+        Action::Workspace(id) if button == BTN_LEFT => {
             let name = app.strips[strip].name.clone();
             services::mango_dispatch(app, &format!("viewcrossmon,{id},^{name}$"));
         }
@@ -673,8 +677,8 @@ pub fn activate(app: &mut App, strip: usize, action: Action, button: u32) {
                 crate::cards::toggle(app, strip, crate::cards::CardKind::Battery, &h, false);
             }
         }
-        Action::LayoutCycle => crate::layout::cycle(app),
-        Action::Bell => services::dnd_toggle(app),
+        Action::LayoutCycle if button == BTN_LEFT => crate::layout::cycle(app),
+        Action::Bell if button == BTN_LEFT => services::dnd_toggle(app),
         _ => {}
     }
     let _ = FontKey { family: "", bold: false, plain: false };
