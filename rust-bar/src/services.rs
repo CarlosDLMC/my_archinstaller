@@ -743,6 +743,10 @@ pub fn start(app: &mut App) {
     app.svc.wifi.has = glob_dir("/sys/class/net", "").iter().any(|d| std::path::Path::new(&format!("{d}/wireless")).exists());
     if app.svc.wifi.has {
         wifi_status(app);
+        // savedProfilesProc runs at start too (Component.onCompleted,
+        // WifiWidget.qml:227): a saved network picked at the first opening,
+        // before that opening's read lands, connects without the password view.
+        crate::wifi_card::load_saved(app);
         app.spawn_lines(&["nmcli", "monitor"], |app, _| app.debounce("wifi", Duration::from_millis(400), wifi_status));
     }
 
