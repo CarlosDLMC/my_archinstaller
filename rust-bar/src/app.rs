@@ -196,6 +196,9 @@ pub struct App {
 
 impl App {
     pub fn run(crt_mode: bool) {
+        if !crt_mode {
+            crate::ipc::single_instance();
+        }
         let conn = Connection::connect_to_env().expect("no Wayland display");
         let (globals, queue) = registry_queue_init::<App>(&conn).expect("registry");
         let qh = queue.handle();
