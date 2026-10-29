@@ -26,9 +26,21 @@ LOG="Install-Logs/install-$(date +%Y%m%d-%H%M%S)_rust-bar.log"
 SRC="$PARENT_DIR/pkgbuilds/$PKG"
 CRATE="$PARENT_DIR/rust-bar"
 
+# A failure is recorded under this name, not the package's: 02-Final-Check.sh
+# drops every name `pacman -Qi` finds, so with an older build still installed
+# a failed rebuild passed the final check and the preset rebooted onto the old
+# bar. mango-patched.sh records "mangowm-patched" for the same reason.
+FAIL=rust-bar-build
+HAVE=$(pacman -Q "$PKG" 2>/dev/null | awk '{print $2}')
+if [ -n "$HAVE" ]; then
+  LEFT="the installed rust-bar $HAVE stays"
+else
+  LEFT="the desktop has no bar"
+fi
+
 if [ ! -f "$SRC/PKGBUILD" ] || [ ! -f "$CRATE/Cargo.toml" ]; then
-  echo "${ERROR} No rust-bar crate or PKGBUILD in the repo - the desktop has no bar." | tee -a "$LOG"
-  record_package_failure "$PKG"
+  echo "${ERROR} No rust-bar crate or PKGBUILD in the repo - $LEFT." | tee -a "$LOG"
+  record_package_failure "$FAIL"
   exit 0
 fi
 
@@ -51,10 +63,9 @@ fi
 CRATE_VER=$(sed -n 's/^version *= *"\(.*\)"/\1/p' "$CRATE/Cargo.toml" | head -n1)
 HASH=$( cd "$CRATE" && find . -path ./target -prune -o -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -c1-12 )
 WANT="${CRATE_VER:-0}.${HASH}-1"
-HAVE=$(pacman -Q "$PKG" 2>/dev/null | awk '{print $2}')
 if [ "$HAVE" = "$WANT" ]; then
   echo "${INFO} ${MAGENTA}rust-bar${RESET} $HAVE is already built from this crate. Skipping..." | tee -a "$LOG"
-  clear_package_failure "$PKG"
+  clear_package_failure "$FAIL"
   exit 0
 fi
 
@@ -65,8 +76,8 @@ printf "\n%s - Building ${SKY_BLUE}rust-bar${RESET} (the desktop bar) from rust-
 if ! TMPD=$(mktemp -d) || ! cp -r "$SRC/." "$TMPD/" \
    || ! sed -i "s/^pkgver=.*/pkgver=${WANT%-1}/" "$TMPD/PKGBUILD" \
    || ! tar -C "$PARENT_DIR" --exclude=rust-bar/target -czf "$TMPD/rust-bar.tar.gz" rust-bar; then
-  echo "${ERROR} Could not set up a build directory for rust-bar (a full /tmp?) - the desktop has no bar." | tee -a "$LOG"
-  record_package_failure "$PKG"
+  echo "${ERROR} Could not set up a build directory for rust-bar (a full /tmp?) - $LEFT." | tee -a "$LOG"
+  record_package_failure "$FAIL"
   [ -n "${TMPD:-}" ] && rm -rf "$TMPD"
   exit 0
 fi
@@ -76,8 +87,8 @@ fi
 ( cd "$TMPD" && makepkg -sf --noconfirm 2>&1 ) | tee -a "$LOG"
 # tee is last in the pipeline: PIPESTATUS[0] is makepkg's status.
 if [ "${PIPESTATUS[0]}" -ne 0 ]; then
-  echo "${ERROR} Failed to build rust-bar - the desktop has no bar. See $LOG." | tee -a "$LOG"
-  record_package_failure "$PKG"
+  echo "${ERROR} Failed to build rust-bar - $LEFT. See $LOG." | tee -a "$LOG"
+  record_package_failure "$FAIL"
   rm -rf "$TMPD"
   exit 0
 fi
@@ -103,10 +114,10 @@ rm -rf "$TMPD"
 
 if [ "$(pacman -Q "$PKG" 2>/dev/null | awk '{print $2}')" = "$WANT" ]; then
   echo "${OK} ${YELLOW}rust-bar${RESET} $WANT is installed." | tee -a "$LOG"
-  clear_package_failure "$PKG"
+  clear_package_failure "$FAIL"
 else
-  echo "${ERROR} rust-bar did not install - the desktop has no bar. See $LOG." | tee -a "$LOG"
-  record_package_failure "$PKG"
+  echo "${ERROR} rust-bar did not install - $LEFT. See $LOG." | tee -a "$LOG"
+  record_package_failure "$FAIL"
 fi
 
 printf "\n%.0s" {1..1}
