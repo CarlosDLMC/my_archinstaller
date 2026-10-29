@@ -87,6 +87,9 @@ pub struct OpenCard {
     colors: HashMap<u32, Animated<Color>>,
     /// Calendar: the month shown (year, month 1-12) and the wheel's remainder.
     month: (i32, u32),
+    /// Calendar: the date it opened on, the day it shows as today
+    /// (CalendarPopup.qml:33-39 sets currentDate when it opens, and only then).
+    today: (i32, u32, u32),
     wheel_acc: f32,
     /// Sliders of the last draw: (code, x, width, maximum).
     pub(crate) sliders: Vec<(u32, f32, f32, f32)>,
@@ -521,6 +524,7 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
     };
     let output = s.output.clone();
     let (screen_w, screen_h) = (s.screen_width as u32, s.screen_height as u32);
+    let today = crate::cal::today();
 
     let surface = app.compositor.create_surface(&app.qh);
     let layer = app.layer_shell.create_layer_surface(&app.qh, surface, Layer::Top, Some("quickshell:card"), Some(&output));
@@ -550,7 +554,8 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         stem_w,
         notch: None,
         colors: HashMap::new(),
-        month: { let (y, m, _) = crate::cal::today(); (y, m) },
+        month: (today.0, today.1),
+        today,
         wheel_acc: 0.0,
         sliders: Vec::new(),
         meter: (0.0, 0.0, 0),
@@ -1526,7 +1531,7 @@ fn draw_calendar(ui: &mut Ui, w: f32) {
         ui.text(&l, cx, cy, t.col_dim, TextStyle::Normal);
     }
     let gy = py + 8.0 + 24.0 + 4.0;
-    let today = crate::cal::today();
+    let today = ui.card.today;
     let start = crate::cal::grid_start(year, month, first);
     for k in 0..42u32 {
         let (dy, dm, dd) = crate::cal::add_days(start, k as i64);

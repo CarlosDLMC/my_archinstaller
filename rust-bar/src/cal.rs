@@ -6,10 +6,14 @@ extern "C" {
     fn tzset();
 }
 
-/// (year, month 1-12, day) today, local time.
+/// (year, month 1-12, day) today, local time. CLOCK_REALTIME, as JS's new
+/// Date() reads it: time() is the kernel's coarse clock, a tick behind, and
+/// just past midnight it still gave yesterday (services::local_now's fix).
 pub fn today() -> (i32, u32, u32) {
     unsafe { tzset() };
-    let t = unsafe { libc::time(std::ptr::null_mut()) };
+    let mut now = libc::timespec { tv_sec: 0, tv_nsec: 0 };
+    unsafe { libc::clock_gettime(libc::CLOCK_REALTIME, &mut now) };
+    let t: libc::time_t = now.tv_sec;
     let mut tm: libc::tm = unsafe { std::mem::zeroed() };
     unsafe { libc::localtime_r(&t, &mut tm) };
     (tm.tm_year + 1900, tm.tm_mon as u32 + 1, tm.tm_mday as u32)
