@@ -1720,9 +1720,14 @@ fn calendar_step(app: &mut App, delta: i32) {
 pub fn wheel(app: &mut App, angle_delta_y: f32) {
     let Some(c) = app.card.as_mut() else { return };
     if c.kind == CardKind::Audio {
-        // A VolumeSlider under the pointer takes it first: 5% a notch.
-        let over = c.pointer.and_then(|(px, py)| c.sliders.iter().find(|s| px >= s.1 && px < s.1 + s.2 && py >= 0.0).map(|s| s.0));
-        let over = over.filter(|code| c.hits.iter().any(|h| h.action == Action::Card(*code) && c.pointer.map_or(false, |(px, py)| h.contains(px, py))));
+        // A VolumeSlider under the pointer takes it first: 5% a notch
+        // (VolumeSlider.qml:129-133). Every fader spans the same x, so the
+        // hit under the pointer (the top one, as app.rs hit_at finds it)
+        // says which; one scrolled out of view has no hit there.
+        let over = c.pointer.and_then(|(px, py)| c.hits.iter().rev().find(|h| h.contains(px, py))).and_then(|h| match h.action {
+            Action::Card(code) if crate::audio_card::is_slider(code) => Some(code),
+            _ => None,
+        });
         if let Some(code) = over {
             crate::audio_card::slider_step(app, code, angle_delta_y > 0.0);
             return;
