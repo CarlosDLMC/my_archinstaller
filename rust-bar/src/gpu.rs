@@ -319,11 +319,17 @@ impl Scene {
     /// like Qt's native (ARGB) glyph cache.
     pub fn color_glyphs(&mut self, fonts: &mut Fonts, line: &Line, x: f32, baseline: f32) {
         let size = line.size * self.xf.scale();
+        // QTextureGlyphCache::populate keeps the scaled strike bearings as
+        // QFixed (1/64, cut towards zero) truncated by a shift - floored:
+        // baseLineX = floor(left), baseLineY = -floor(-top).
+        let fixed_floor = |v: f32| ((v * 64.0) as i32 >> 6) as f32;
         for g in line.glyphs.iter().filter(|g| g.color) {
             let (dx, dy) = self.xf.apply(x + g.x, baseline);
             let Some(cg) = fonts.color_glyph(g.face, g.gid, size) else { continue };
-            let px = (dx + cg.left).round();
-            let py = (dy - cg.top).round();
+            // QSGTextMaskMaterial::populate: the pen's x floored, its y
+            // rounded (ARGB glyphs have no margin), then those bearings.
+            let px = dx.floor() + fixed_floor(cg.left);
+            let py = dy.round() + fixed_floor(-cg.top);
             let mut i = Inst {
                 rect: [px, py, cg.w as f32, cg.h as f32],
                 xf0: [1.0, 0.0, 0.0],
