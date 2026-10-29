@@ -379,7 +379,7 @@ fn caption(ui: &mut Ui, text: &str, x: f32, y: f32) {
 #[allow(clippy::too_many_arguments)]
 fn switch(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32, icon: &str, label: &str, detail: &str, on: bool) {
     let t = ui.theme;
-    super_lamp(ui, code, x + 4.0, y + ac(h, 10.0), on);
+    crate::cards::lamp(ui, code, x + 4.0, y + ac(h, 10.0), on);
     let fg = if on { t.col_white } else { t.col_grey };
     let gw = FONT_SIZE - 2.0;
     let gx = x + 4.0 + 10.0 + 10.0;
@@ -403,21 +403,6 @@ fn switch(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32, icon: &str, la
     ui.console_button_sized(code, bx, y + ac(h, bh), bw, font, "", t.col_grey, if on { "ВКЛ" } else { "ВЫКЛ" }, on);
 }
 
-fn super_lamp(ui: &mut Ui, id: u32, x: f32, y: f32, lit: bool) {
-    let t = ui.theme;
-    let (halo, r1) = ui.card.number(0x3_0000 + id, if lit { 0.22 } else { 0.0 }, 160, ui.now);
-    let (dot, r2) = ui.card.color(0x4_0000 + id, if lit { t.col_accent } else { t.col_plate.darker(1.3) }, 160, ui.now);
-    ui.animating |= r1 || r2;
-    if halo > 0.0 {
-        ui.scene.save();
-        ui.scene.multiply_opacity(halo);
-        ui.scene.rect(x - 4.0, y - 4.0, 18.0, 18.0, t.col_accent, 9.0, 0.0, Color::TRANSPARENT, true);
-        ui.scene.restore();
-    }
-    let border = if lit { t.col_accent.lighter(1.25) } else { Color::qt_rgba(1.0, 1.0, 1.0, 0.12) };
-    ui.scene.rect(x + 1.0, y + 1.0, 9.0, 9.0, dot, 4.5, 1.0, border, true);
-}
-
 /// A device row (ConsoleRow) with an optional detail and a spinner.
 #[allow(clippy::too_many_arguments)]
 fn device_row(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32, label: &str, lit: bool, detail: &str, detail_color: Color, spinning: bool) {
@@ -428,7 +413,7 @@ fn device_row(ui: &mut Ui, code: u32, x: f32, y: f32, w: f32, h: f32, label: &st
     let (bg, run) = ui.card.color(0x5_0000 + code, if hot { t.col_plate.lighter(1.6) } else { Color::TRANSPARENT }, 110, ui.now);
     ui.animating |= run;
     ui.scene.rect(x, y, w, h, bg, 4.0, if focused { 2.0 } else { 0.0 }, t.col_white, true);
-    super_lamp(ui, code, x + 6.0, y + qround((h - 10.0) / 2.0), lit);
+    crate::cards::lamp(ui, code, x + 6.0, y + qround((h - 10.0) / 2.0), lit);
     let fg = if lit || hot { t.col_white } else { t.col_grey };
     let ix = x + 6.0 + 10.0 + 8.0;
     let il = ui.fonts.layout("\u{f00af}", theme::bar_font(false), font, 0.0);
