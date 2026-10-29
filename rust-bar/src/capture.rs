@@ -102,13 +102,13 @@ fn refresh_monitors(app: &mut App) {
     });
 }
 
-/// RecordState's saved audio choice, and the monitors, at start.
+/// RecordState's saved audio choice, at start. The monitors are asked for
+/// when a dialog opens: Monitors.qml is a singleton nothing touches before.
 pub fn start(app: &mut App) {
     let mode = std::fs::read_to_string(audio_file()).unwrap_or_default();
     let m = mode.trim();
     app.svc.capture.audio_sys = m == "system" || m == "both";
     app.svc.capture.audio_mic = m == "mic" || m == "both";
-    refresh_monitors(app);
 }
 
 // ---- screenshot ----
