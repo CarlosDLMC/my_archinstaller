@@ -70,8 +70,11 @@ fn apply(app: &mut App, text: &str) {
     }
     let u = &mut app.svc.agent;
     // A Repeater handed an array that differs from its model makes all its
-    // rows anew: new Texts (subpixel again). An equal one keeps them.
+    // rows anew: new Texts (subpixel again), and new SegmentGauges whose
+    // cells fade from their first layout pass (first_lit). An equal one
+    // keeps them.
     let mut remade: Vec<u64> = Vec::new();
+    let mut gauges: Vec<(u32, i32)> = Vec::new();
     if j.get("probed").and_then(Value::as_bool) == Some(true) {
         if let Some(p) = j.get("plan").and_then(Value::as_str).filter(|p| !p.is_empty()) {
             u.plan = p.into();
@@ -90,6 +93,7 @@ fn apply(app: &mut App, text: &str) {
                 .collect();
             if limits != u.limits {
                 remade.extend(LIMIT_TEXTS);
+                gauges.extend(limits.iter().enumerate().map(|(i, l)| (i as u32, first_lit(l.percent / 100.0, true))));
             }
             u.limits = limits;
         }
@@ -104,6 +108,8 @@ fn apply(app: &mut App, text: &str) {
         let by_day: Vec<(String, f64)> = d.iter().map(|x| (x.get("day").and_then(Value::as_str).unwrap_or("").to_string(), x.get("tokens").and_then(Value::as_f64).unwrap_or(0.0))).collect();
         if by_day != u.by_day {
             remade.extend(DAY_TEXTS);
+            let old = u.by_day.iter().map(|d| d.1).fold(0.0, f64::max);
+            gauges.extend(by_day.iter().enumerate().map(|(i, d)| (16 + i as u32, first_lit(if old > 0.0 { d.1 / old } else { 0.0 }, true))));
         }
         u.by_day = by_day;
     }
@@ -112,6 +118,8 @@ fn apply(app: &mut App, text: &str) {
         let by_model: Vec<ModelUse> = m.iter().map(|x| ModelUse { model: x.get("model").and_then(Value::as_str).unwrap_or("").into(), tokens: n(x, "tokens"), input: n(x, "input"), output: n(x, "output"), cache_read: n(x, "cacheRead") }).collect();
         if by_model != u.by_model {
             remade.extend(MODEL_TEXTS);
+            let old = u.by_model.iter().map(|m| m.tokens).fold(0.0, f64::max);
+            gauges.extend(by_model.iter().enumerate().map(|(i, m)| (64 + i as u32, first_lit(if old > 0.0 { m.tokens / old } else { 0.0 }, false))));
         }
         u.by_model = by_model;
     }
@@ -119,6 +127,7 @@ fn apply(app: &mut App, text: &str) {
     u.clock_texts = clock_texts(u);
     if let Some(c) = app.card.as_mut().filter(|c| c.kind == CardKind::Agent) {
         c.texts.forget_parts(&remade);
+        c.gauge_from.extend(gauges);
     }
     app.mark_card_dirty(&[CardKind::Agent]);
 }
@@ -387,20 +396,39 @@ fn meter_row(ui: &mut Ui, id: u32, parts: [u64; 2], x: f32, y: f32, w: f32, labe
     gauge(ui, id, gx, y + ac(h, 10.0), gw, 10.0, n, value as f32, tint);
 }
 
-/// SegmentGauge in a Repeater's row. Its cells have Behavior on color
-/// (200 ms), but the row is made anew whenever its data changes and a new
-/// item does not animate: what fades is the lit cells' tint on a palette
-/// change. So the lit count applies at once, and the tint is animated, one
-/// per row and kind (accent or alert).
+/// The lit count of a SegmentGauge in a row a Repeater makes anew, at its
+/// first layout pass: the row has no parent yet, so it is 0 wide and the
+/// gauge has Math.max(10, ...) = 10 segments, and the panel's maximum is
+/// still the old one - maxDay and maxModel (AgentPanel.qml:20-32) hear of
+/// the new array after the Repeater. `at_least_one`: MeterRow lights one
+/// segment for any reading (AgentPanel.qml:145-149); ModelRow does not.
+fn first_lit(fraction: f64, at_least_one: bool) -> i32 {
+    let f = fraction.clamp(0.0, 1.0);
+    let value = if at_least_one && f > 0.0 { (f * 100.0).max(10.0) } else { f * 100.0 };
+    (value / 100.0 * 10.0).round() as i32
+}
+
+/// SegmentGauge in a Repeater's row: each cell has Behavior on color
+/// (200 ms, SegmentGauge.qml:31-32). A row made anew while the card is open
+/// (gauge_from, set by apply()) gets its cells at the first layout pass -
+/// ten, at that pass's lit count - and the second pass adds the rest dark
+/// (the cells' Repeater hears of `segments` before `lit` does): the cells
+/// whose colour the second pass changes fade from there. A row made with
+/// the card does not animate (its Behaviors are not finalized yet).
 #[allow(clippy::too_many_arguments)]
 fn gauge(ui: &mut Ui, id: u32, x: f32, y: f32, w: f32, h: f32, n: i32, value: f32, tint: Color) {
     let cell = (w - 2.0 * (n - 1) as f32) / n as f32;
     let lit = (value.clamp(0.0, 100.0) / 100.0 * n as f32).round() as i32;
-    let kind = (tint == ui.theme.col_alert) as u32;
-    let (tint, run) = ui.card.color(0x9_0000 + id * 2 + kind, tint, 200, ui.now);
-    ui.animating |= run;
+    let dark = Color::qt_rgba(1.0, 1.0, 1.0, 0.07);
+    let key = |i: i32| 0x9_0000 + id * 128 + i as u32;
+    if let Some(first) = ui.card.gauge_from.remove(&id) {
+        for i in 0..n {
+            ui.card.color_from(key(i), if i < first { tint } else { dark }, 200);
+        }
+    }
     for i in 0..n {
-        let c = if i < lit { tint } else { Color::qt_rgba(1.0, 1.0, 1.0, 0.07) };
+        let (c, run) = ui.card.color(key(i), if i < lit { tint } else { dark }, 200, ui.now);
+        ui.animating |= run;
         ui.scene.rect(x + i as f32 * (cell + 2.0), y, cell, h, c, 1.0, 0.0, Color::TRANSPARENT, true);
     }
 }

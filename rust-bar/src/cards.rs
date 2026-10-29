@@ -132,6 +132,9 @@ pub struct OpenCard {
     /// whose press began on a card closed since is not this card's.
     held: Option<(Action, u32)>,
     numbers: HashMap<u32, Animated<f32>>,
+    /// SegmentGauges of rows a Repeater made anew while the card is open
+    /// (agent.rs): gauge id -> the lit count of their first layout pass.
+    pub(crate) gauge_from: HashMap<u32, i32>,
     /// The card's Flickable and ListViews: where each is scrolled to.
     flicks: Vec<Flick>,
     /// Hover is cut to this (a Flickable's clip) while one is drawn.
@@ -177,6 +180,12 @@ impl OpenCard {
         let a = self.colors.entry(id).or_insert_with(|| Animated::new(target, ms, Easing::Linear));
         a.set(target, now);
         (a.get(now), a.running(now))
+    }
+
+    /// A new item's colour `from`, whatever the old item's was: the next
+    /// color() fades from it.
+    pub(crate) fn color_from(&mut self, id: u32, from: Color, ms: u64) {
+        self.colors.insert(id, Animated::new(from, ms, Easing::Linear));
     }
 
     /// CardKeys.step: the next (or previous) control of the chain, wrapping
@@ -807,6 +816,7 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         tint_alert: false,
         held: None,
         numbers: HashMap::new(),
+        gauge_from: HashMap::new(),
         flicks: Vec::new(),
         hover_clip: None,
         content_h,
