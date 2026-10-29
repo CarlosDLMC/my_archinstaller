@@ -215,6 +215,8 @@ fn open(app: &mut App) {
 pub fn close(app: &mut App) {
     disarm(app);
     app.svc.power.open = false;
+    // The uptime Timer runs only while dialogOpen.
+    app.cancel_timer("power-uptime");
     osd::hide(app, OsdKind::Power);
 }
 
@@ -303,6 +305,9 @@ fn run(app: &mut App, cmd: String) {
 fn armed_tick(app: &mut App) {
     let p = &mut app.svc.power;
     let Some(at) = p.armed_at.filter(|_| p.armed()) else { return };
+    // The window binds step and secondsLeft, not elapsed: they move once a
+    // second, and so does what Qt draws.
+    let shown = (p.step(), p.seconds_left());
     p.elapsed = at.elapsed().as_secs_f32();
     if p.step() >= 2 && !p.sync_done {
         p.sync_done = true;
@@ -312,7 +317,9 @@ fn armed_tick(app: &mut App) {
         fire(app);
         return;
     }
-    redraw(app);
+    if (app.svc.power.step(), app.svc.power.seconds_left()) != shown {
+        redraw(app);
+    }
     app.debounce("power-armed", Duration::from_millis(100), armed_tick);
 }
 
@@ -321,8 +328,12 @@ fn uptime_tick(app: &mut App) {
         return;
     }
     let p = &mut app.svc.power;
+    let shown = p.uptime.floor();
     p.uptime = read_uptime().unwrap_or(p.uptime + 1.0);
-    redraw(app);
+    // The title shows whole seconds of it, and only while not armed.
+    if !p.armed() && p.uptime.floor() != shown {
+        redraw(app);
+    }
     app.debounce("power-uptime", Duration::from_secs(1), uptime_tick);
 }
 
