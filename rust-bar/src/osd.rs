@@ -527,6 +527,12 @@ pub fn raw_pointer(app: &mut App, kind: OsdKind, ev: &smithay_client_toolkit::se
         // ToggleRow.qml:94, ShotOsd.qml:219, RecordOsd.qml:232): a right,
         // middle or side button neither presses nor clicks anything.
         OsdKind::Layout | OsdKind::Power | OsdKind::Shot | OsdKind::Record => {
+            // A monitor tile's onDoubleClicked comes with the second press.
+            if let (OsdKind::Shot | OsdKind::Record, P::Press { time, button, .. }) = (kind, ev) {
+                if crate::capture::press(app, kind, *button, *time, x, y) {
+                    return true;
+                }
+            }
             matches!(ev, P::Press { button, .. } | P::Release { button, .. } if *button != BTN_LEFT)
         }
         _ => false,
