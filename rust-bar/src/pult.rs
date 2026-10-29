@@ -185,14 +185,21 @@ fn start_scan(app: &mut App) {
         app.svc.pult.scan_done = true;
         bt_found(app);
     });
-    app.every(Duration::from_millis(1500), |app| {
-        if !scanning(app) {
-            return false;
-        }
-        bt_found(app);
-        true
-    });
+    app.debounce(FOUND_POLL, Duration::from_millis(1500), found_tick);
     app.mark_all_dirty();
+}
+
+/// Timer { interval: 1500; running: pult.scanning; repeat: true }
+/// (PultWidget.qml:262-267): one, by name, started again with each search -
+/// a search stopped and started again within 1.5 s kept the old one ticking
+/// beside the new one.
+const FOUND_POLL: &str = "bt-found-poll";
+
+fn found_tick(app: &mut App) {
+    if scanning(app) {
+        bt_found(app);
+        app.debounce(FOUND_POLL, Duration::from_millis(1500), found_tick);
+    }
 }
 
 pub fn stop_scan(app: &mut App) {
