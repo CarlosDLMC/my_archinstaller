@@ -193,7 +193,18 @@ fn drop_textures(app: &mut App) {
 fn show(app: &mut App) {
     let Some((_, sw, sh)) = osd::focused_output(app) else { return };
     let (w, h) = (px(820.0), px(480.0));
+    let fresh = app.osd(OsdKind::Clipboard).is_none();
     osd::show(app, OpenParams { kind: OsdKind::Clipboard, size: (w as u32, h as u32), panel: (0.0, 0.0, w, h), dim: Some(Color::qt_rgba(0.0, 0.0, 0.0, 0.45)), keyboard: true, namespace: "quickshell", fade_ms: FADE_MS, min_scale: 0.97, fade_easing: crate::anim::Easing::Linear, pos: Some((ac(sw, w) as i32, ac(sh, h) as i32)), fill: false, output: None });
+    // The card is in the Loader (ClipboardOsd.qml:132-138), which builds it
+    // when onShownChanged sets windowVisible - `shown` is already true, so
+    // its opacity and scale start at 1 and their Behaviors never run: QML
+    // pops the card in and only the dim fades. Reopened while it is still
+    // fading out, the loaded card animates back (osd::show's re-show).
+    if fresh {
+        if let Some(o) = app.osd_mut(OsdKind::Clipboard) {
+            o.fade.snap(1.0);
+        }
+    }
 }
 
 /// The model was replaced: ListView makes every delegate anew.
