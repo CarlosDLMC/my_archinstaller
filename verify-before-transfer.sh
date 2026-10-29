@@ -55,15 +55,18 @@ while read -r _script; do
 done < <(grep -oE '(execute_script|run_required) "[^"$]+\.sh"' install.sh | sed -E 's/.* "(.*)"/\1/' | sort -u)
 
 printf "\n${INFO} Checking what those scripts read...\n"
+# rust-bar.sh builds the bar from pkgbuilds/rust-bar and the rust-bar/ crate;
+# Cargo.lock too, the build is --locked.
 for _file in install-scripts/Global_functions.sh install-scripts/nvidia_detect.sh \
              install-scripts/checksum-skip.conf custom-preset.conf yay-bin/PKGBUILD \
+             pkgbuilds/rust-bar/PKGBUILD rust-bar/Cargo.toml rust-bar/Cargo.lock \
              dotfiles/copy.sh dotfiles/.zshrc dotfiles/pokefetch_perfect \
              dotfiles/.local/bin/pokefetch-merge diagnose.sh; do
     check_file "$_file"
 done
 # icons/: the logo cuts plymouth.sh and hackbgrt.sh render from. GTK-themes-icons/:
 # the GTK theme, icons and cursor gtk_themes.sh extracts.
-for _dir in assets icons GTK-themes-icons dotfiles/wallpapers dotfiles/.local/bin dotfiles/config/hypr \
+for _dir in assets icons GTK-themes-icons rust-bar/src dotfiles/wallpapers dotfiles/.local/bin dotfiles/config/hypr \
             dotfiles/config/mango dotfiles/config/quickshell/bar dotfiles/config/wallust \
             dotfiles/config/foot dotfiles/config/rofi; do
     check_dir "$_dir"
