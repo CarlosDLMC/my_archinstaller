@@ -464,11 +464,14 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         h = weather_height(&mut app.fonts, &app.svc, w);
     }
     if kind == CardKind::Audio {
+        // No PipeWire dispatch of its own: what the card lists is bound all
+        // the time (pw.rs follow), and a dispatch here ate the events whose
+        // new default sink then reached the strip only at PipeWire's next
+        // wakeup. services.rs's watcher dispatches them and applies them.
         if let Some(pw) = app.svc.pw.as_mut() {
             pw.track_all(true);
             let src = pw.source().1.map(|n| n.id);
             pw.monitor_peak(src);
-            pw.dispatch();
         }
         content_h = crate::audio_card::content_height(&mut app.fonts, &app.svc);
         h = 120f32.max((content_h.ceil() + 30.0).min(560.0));
