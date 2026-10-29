@@ -11,6 +11,7 @@ use crate::color::Color;
 use crate::gpu::TextStyle;
 use crate::osd::{self, OpenParams, OsdKind};
 use crate::services::{self, Services};
+use crate::text::TextMemo;
 use crate::theme;
 
 const OSD_VISIBLE_MS: u64 = 1300;
@@ -32,6 +33,10 @@ pub struct LayoutState {
     session_pos: usize,
     /// The OSD's hovered entry, -1 = none.
     hovered: Option<usize>,
+    /// The popup's Texts while it is unmapped: LayoutOsd is not on demand
+    /// (shell.qml:284-287), so its Text items live as long as the bar, and
+    /// one whose colour changed in between (a new palette) comes back gray.
+    texts: TextMemo,
 }
 
 impl LayoutState {
@@ -111,6 +116,12 @@ fn commit_restart(app: &mut App) {
         s.mru = move_to_front(&s.mru, s.current);
         s.session_active = false;
         s.session_pos = 0;
+        // A new mru is a new model: the Repeater makes new delegates, and
+        // their Texts start out subpixel again.
+        s.texts.forget_parts(&[0xE1, 0xE2]);
+        if let Some(o) = app.osd_mut(OsdKind::Layout) {
+            o.st.texts.forget_parts(&[0xE1, 0xE2]);
+        }
         app.mark_all_dirty();
     });
 }
@@ -254,11 +265,25 @@ fn seed_selection(app: &mut App, from: usize) {
 
 /// windowVisible = shown = true: maps the popup, or brings back a fading one.
 fn map_osd(app: &mut App) {
+    let fresh = app.osd(OsdKind::Layout).is_none();
     let (pw, ph) = panel_size(app);
     // implicitWidth: panel + 40; the panel centred in it.
     let (w, h) = ((pw + 40.0).ceil(), (ph + 40.0).ceil());
     osd::show(app, OpenParams { kind: OsdKind::Layout, size: (w as u32, h as u32), panel: (ac(w, pw), ac(h, ph), pw, ph), dim: None, keyboard: false, namespace: "quickshell", fade_ms: OSD_FADE_MS, min_scale: 0.94, fade_easing: crate::anim::Easing::OutCubic, pos: None, fill: false, output: None });
     app.svc.layout.hovered = None;
+    if fresh {
+        let texts = std::mem::take(&mut app.svc.layout.texts);
+        if let Some(o) = app.osd_mut(OsdKind::Layout) {
+            o.st.texts = texts;
+        } else {
+            app.svc.layout.texts = texts;
+        }
+    }
+}
+
+/// The popup was unmapped: its Texts wait for the next showing.
+pub fn keep_texts(app: &mut App, texts: TextMemo) {
+    app.svc.layout.texts = texts;
 }
 
 /// hideTimer.restart(): the popup fades 1.3 s later, under the pointer or

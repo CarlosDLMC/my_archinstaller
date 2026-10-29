@@ -314,11 +314,14 @@ fn gone_timer(kind: OsdKind) -> &'static str {
 
 /// Unmaps the overlay now, unless it was shown again meanwhile.
 pub fn destroy(app: &mut App, kind: OsdKind) {
-    if app.osd(kind).map_or(true, |o| o.shown) {
-        return;
-    }
-    let hovered = app.osd(kind).map_or(false, |o| o.st.pointer.is_some());
+    let Some(o) = app.osd_mut(kind).filter(|o| !o.shown) else { return };
+    let hovered = o.st.pointer.is_some();
+    // LayoutOsd's window is only hidden: its Texts live on (TextMemo).
+    let texts = (kind == OsdKind::Layout).then(|| std::mem::take(&mut o.st.texts));
     app.osds.retain(|o| o.kind != kind);
+    if let Some(t) = texts {
+        crate::layout::keep_texts(app, t);
+    }
     // A hidden window clears its hover (QQuickWindow::hideEvent): the
     // MouseArea still under the pointer gets onExited. No wl_pointer.leave
     // comes for a surface that is gone.
