@@ -64,6 +64,10 @@ pub struct Clip {
     pub preview_tex: Option<(String, Tex)>,
     loading_tex: Vec<String>,
     keep_index: usize,
+    /// filtered()'s last answer: (filter, entries_gen, indices into entries).
+    filtered_memo: std::cell::RefCell<Option<(String, u64, Vec<usize>)>>,
+    /// Counts the times `entries` was replaced.
+    entries_gen: u64,
 }
 
 fn script() -> String {
@@ -95,22 +99,26 @@ fn parse_list(text: &str) -> Vec<Entry> {
 }
 
 impl Clip {
-    /// The entries the filter keeps (image ones also match "image").
+    /// The entries the filter keeps (image ones also match "image"). Like the
+    /// `filtered` binding it is worked out once per change of the filter or
+    /// of the history, not at each call (every redraw asks twice, each key
+    /// about five times).
     pub fn filtered(&self) -> Vec<&Entry> {
-        let f = self.filter.trim().to_lowercase();
-        if f.is_empty() {
-            return self.entries.iter().collect();
-        }
-        self.entries
-            .iter()
-            .filter(|e| {
+        let mut memo = self.filtered_memo.borrow_mut();
+        if !matches!(&*memo, Some((f, g, _)) if *f == self.filter && *g == self.entries_gen) {
+            let f = self.filter.trim().to_lowercase();
+            let keep = |e: &Entry| {
                 let mut hay = e.preview.to_lowercase();
                 if e.image.is_some() {
                     hay += " image screenshot picture";
                 }
                 hay.contains(&f)
-            })
-            .collect()
+            };
+            let idx = (0..self.entries.len()).filter(|&i| f.is_empty() || keep(&self.entries[i])).collect();
+            *memo = Some((self.filter.clone(), self.entries_gen, idx));
+        }
+        let Some((_, _, idx)) = memo.as_ref() else { return Vec::new() };
+        idx.iter().filter_map(|&i| self.entries.get(i)).collect()
     }
     fn current(&self) -> Option<Entry> {
         self.filtered().get(self.selected).map(|e| (*e).clone())
@@ -140,6 +148,7 @@ fn reload(app: &mut App) {
         let next = parse_list(&d.stdout);
         if !(next.len() == c.entries.len() && (next.is_empty() || next[0].id == c.entries[0].id)) {
             c.entries = next;
+            c.entries_gen += 1;
             model_reset(app);
         }
         changed(app);
