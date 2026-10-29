@@ -9,7 +9,7 @@ use std::time::Instant;
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle};
 use smithay_client_toolkit::{
     compositor::{CompositorHandler, CompositorState},
-    delegate_compositor, delegate_keyboard, delegate_layer, delegate_output, delegate_pointer, delegate_registry, delegate_seat,
+    delegate_compositor, delegate_layer, delegate_output, delegate_pointer, delegate_registry, delegate_seat,
     delegate_shm,
     output::{OutputHandler, OutputState},
     reexports::calloop::{EventLoop, LoopHandle, RegistrationToken},
@@ -19,7 +19,7 @@ use smithay_client_toolkit::{
     registry::{ProvidesRegistryState, RegistryState},
     registry_handlers,
     seat::{
-        keyboard::{KeyEvent, KeyboardHandler, Keysym, Modifiers},
+        keyboard::{KeyEvent, KeyboardData, KeyboardHandler, Keysym, Modifiers},
         pointer::{cursor_shape::CursorShapeManager, PointerEvent, PointerEventKind, PointerHandler},
         Capability, SeatHandler, SeatState,
     },
@@ -31,7 +31,7 @@ use smithay_client_toolkit::{
 };
 use wayland_client::{
     globals::{registry_queue_init, GlobalList},
-    protocol::{wl_keyboard::WlKeyboard, wl_output, wl_pointer::WlPointer, wl_seat::WlSeat, wl_surface},
+    protocol::{wl_keyboard::{self, WlKeyboard}, wl_output, wl_pointer::WlPointer, wl_seat::WlSeat, wl_surface},
     Connection, Dispatch, Proxy, QueueHandle,
 };
 
@@ -88,8 +88,10 @@ fn gpu_surface(conn: &Connection, instance: &wgpu::Instance, gpu: &Gpu, wl: &wl_
 
 /// A layer surface drawn with the GPU.
 pub struct Win {
-    pub layer: LayerSurface,
+    /// First: fields drop in order, and the swapchain goes before the
+    /// wl_surface it presents to (create_surface_unsafe's contract).
     gpu: Option<(wgpu::Surface<'static>, wgpu::SurfaceConfiguration)>,
+    pub layer: LayerSurface,
     pub width: u32,
     pub height: u32,
     pub configured: bool,
@@ -160,6 +162,8 @@ pub struct App {
     kbd_focus: Option<WinRef>,
     shift: bool,
     mods: Mods,
+    /// Qt's event.isAutoRepeat: true while a held key's repeat is dispatched.
+    pub key_repeat: bool,
     hand: bool,
     /// The widget a button went down on: a click is a release on the same one.
     pressed: Option<(WinRef, u32, Action)>,
@@ -192,7 +196,15 @@ pub struct App {
 
 impl App {
     pub fn run(crt_mode: bool) {
-        let conn = Connection::connect_to_env().expect("no Wayland display");
+        if !crt_mode {
+            crate::ipc::single_instance();
+        }
+        // Started outside a Wayland session (a TTY, ssh): a message and exit
+        // status 1, not an abort and a core dump.
+        let Ok(conn) = Connection::connect_to_env() else {
+            eprintln!("rust-bar: no Wayland display (WAYLAND_DISPLAY)");
+            std::process::exit(1);
+        };
         let (globals, queue) = registry_queue_init::<App>(&conn).expect("registry");
         let qh = queue.handle();
         let mut ev: EventLoop<'static, App> = EventLoop::try_new().expect("event loop");
@@ -246,6 +258,7 @@ impl App {
             kbd_focus: None,
             shift: false,
             mods: Mods::default(),
+            key_repeat: false,
             svc: Services::default(),
             running: HashMap::new(),
             timers: HashMap::new(),
@@ -596,6 +609,21 @@ impl App {
             WinRef::Crt(_) | WinRef::Reveal(_) => None,
         }
     }
+
+    /// A key press, or a repeat of a held one (key_repeat): Keys.onPressed of
+    /// the overlay holding the keyboard, else of the open card.
+    fn key(&mut self, event: KeyEvent) {
+        if let Some(WinRef::Osd(k)) = self.kbd_focus {
+            if self.osd(k).is_some() {
+                // Qt's nativeScanCode is the XKB keycode: evdev + 8.
+                crate::osd::key(self, k, event.keysym, event.raw_code + 8, self.mods, event.utf8.as_deref());
+                return;
+            }
+        }
+        if self.card.is_some() {
+            cards::key(self, event.keysym, event.utf8.as_deref());
+        }
+    }
 }
 
 fn bind_viewporter(globals: &GlobalList, qh: &QueueHandle<App>) -> Option<WpViewporter> {
@@ -646,6 +674,7 @@ impl OutputHandler for App {
     }
     fn update_output(&mut self, _: &Connection, _: &QueueHandle<Self>, output: wl_output::WlOutput) {
         let info = self.outputs.info(&output);
+        let game_mode = self.svc.mango.game_mode;
         if let Some(s) = self.strips.iter_mut().find(|s| s.output == output) {
             if let Some(n) = info.as_ref().and_then(|i| i.name.clone()) {
                 s.name = n;
@@ -653,16 +682,41 @@ impl OutputHandler for App {
             if let Some((w, h)) = info.as_ref().and_then(|i| i.logical_size) {
                 s.screen_width = w as f32;
                 s.screen_height = h as f32;
+                // shell.qml: implicitHeight and exclusiveZone are bindings on
+                // the width (uiScale) - a new mode or scale resizes the strip.
+                let height = bar::strip_height(s.screen_width);
+                if height != s.win.height {
+                    s.win.layer.set_size(0, height);
+                    s.win.layer.set_exclusive_zone(bar::exclusive_zone(height, game_mode));
+                    s.win.layer.commit();
+                }
             }
             s.win.dirty = true;
         }
     }
     fn output_destroyed(&mut self, _: &Connection, _: &QueueHandle<Self>, output: wl_output::WlOutput) {
         if let Some(i) = self.strips.iter().position(|s| s.output == output) {
-            if self.card.as_ref().map_or(false, |c| c.strip == i) {
-                cards::close(self);
-            }
-            self.strips.remove(i);
+            self.remove_strip(i);
+        }
+    }
+}
+
+impl App {
+    /// A strip goes with its output: the card open on it closes, and the open
+    /// card and a held press keep pointing at their strips as the later
+    /// ones move down.
+    fn remove_strip(&mut self, i: usize) {
+        if self.card.as_ref().map_or(false, |c| c.strip == i) {
+            cards::close(self);
+        }
+        self.strips.remove(i);
+        if let Some(c) = self.card.as_mut().filter(|c| c.strip > i) {
+            c.strip -= 1;
+        }
+        match self.pressed {
+            Some((WinRef::Strip(j), ..)) if j == i => self.pressed = None,
+            Some((WinRef::Strip(j), button, action)) if j > i => self.pressed = Some((WinRef::Strip(j - 1), button, action)),
+            _ => {}
         }
     }
 }
@@ -672,7 +726,9 @@ impl LayerShellHandler for App {
         if self.card.as_ref().map_or(false, |c| &c.win.layer == layer) {
             cards::close(self);
         }
-        self.strips.retain(|s| &s.win.layer != layer);
+        if let Some(i) = self.strips.iter().position(|s| &s.win.layer == layer) {
+            self.remove_strip(i);
+        }
         self.osds.retain(|o| &o.win.layer != layer && o.dim.as_ref().map_or(true, |d| &d.layer != layer));
     }
     fn configure(&mut self, _: &Connection, _: &QueueHandle<Self>, layer: &LayerSurface, c: LayerSurfaceConfigure, _: u32) {
@@ -721,7 +777,16 @@ impl SeatHandler for App {
             }
         }
         if cap == Capability::Keyboard && self.keyboard.is_none() {
-            self.keyboard = self.seats.get_keyboard(qh, &seat, None).ok();
+            // QtWayland repeats a held key itself, at the compositor's
+            // repeat_info (mango: 50 a second after 300 ms), and the QML key
+            // handlers take every repeat as a press: sctk's repeat timer
+            // feeds them through the same path.
+            let repeat = Box::new(|app: &mut App, _: &WlKeyboard, event: KeyEvent| {
+                app.key_repeat = true;
+                app.key(event);
+                app.key_repeat = false;
+            });
+            self.keyboard = self.seats.get_keyboard_with_repeat(qh, &seat, None, self.handle.clone(), repeat).ok();
         }
     }
     fn remove_capability(&mut self, _: &Connection, _: &QueueHandle<Self>, _: WlSeat, cap: Capability) {
@@ -750,16 +815,7 @@ impl KeyboardHandler for App {
         self.kbd_focus = None;
     }
     fn press_key(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlKeyboard, _: u32, event: KeyEvent) {
-        if let Some(WinRef::Osd(k)) = self.kbd_focus {
-            if self.osd(k).is_some() {
-                // Qt's nativeScanCode is the XKB keycode: evdev + 8.
-                crate::osd::key(self, k, event.keysym, event.raw_code + 8, self.mods, event.utf8.as_deref());
-                return;
-            }
-        }
-        if self.card.is_some() {
-            cards::key(self, event.keysym, event.utf8.as_deref());
-        }
+        self.key(event);
     }
     fn release_key(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlKeyboard, _: u32, _: KeyEvent) {}
     fn update_modifiers(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlKeyboard, _: u32, m: Modifiers, _: u32) {
@@ -844,10 +900,13 @@ impl PointerHandler for App {
                         crate::osd::hover_changed(self, k, true);
                     }
                     self.enter_serial = serial;
-                    self.hand = !self.hit_at(w, x, y).is_some();
                     self.set_pointer(w, Some((x, y)));
                     self.win_mut(w).unwrap().dirty = true;
                     let hand = self.hit_at(w, x, y).map_or(false, |a| !matches!(a, Action::Hover(_)));
+                    // wl_pointer.enter leaves the image to the client, and
+                    // mango keeps the last app's (an I-beam) until one comes:
+                    // send it every time, as Qt does - also over a Hover area.
+                    self.hand = !hand;
                     self.set_cursor(hand);
                 }
                 PointerEventKind::Leave { .. } => {
@@ -944,13 +1003,26 @@ impl ProvidesRegistryState for App {
     registry_handlers![OutputState, SeatState];
 }
 
+/// delegate_keyboard!, except for one event. sctk 0.19 drops every press of a
+/// repeating key while the compositor has repeat turned off (repeat_rate 0:
+/// its key handler returns before press_key), where QtWayland just does not
+/// repeat. Off becomes a delay of 24 days, so the presses come through.
+impl Dispatch<WlKeyboard, KeyboardData<App>> for App {
+    fn event(app: &mut App, kbd: &WlKeyboard, event: wl_keyboard::Event, data: &KeyboardData<App>, conn: &Connection, qh: &QueueHandle<App>) {
+        let event = match event {
+            wl_keyboard::Event::RepeatInfo { rate: 0, .. } => wl_keyboard::Event::RepeatInfo { rate: 1, delay: i32::MAX },
+            e => e,
+        };
+        <SeatState as Dispatch<WlKeyboard, KeyboardData<App>, App>>::event(app, kbd, event, data, conn, qh)
+    }
+}
+
 delegate_compositor!(App);
 smithay_client_toolkit::delegate_subcompositor!(App);
 delegate_output!(App);
 delegate_layer!(App);
 delegate_seat!(App);
 delegate_pointer!(App);
-delegate_keyboard!(App);
 delegate_shm!(App);
 delegate_registry!(App);
 

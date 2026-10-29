@@ -61,6 +61,8 @@ pub struct Stats {
     pub cpu_temp: i64,
     pub mem_usage: String,
     pub shown: bool,
+    /// The `shown` whose onShownChanged has run (stats_shown_changed).
+    applied: bool,
     last_idle: u64,
     last_total: u64,
     temp_path: Option<String>,
@@ -79,6 +81,8 @@ pub struct Weather {
     pub max_temp: String,
     pub hourly_rain: Vec<i64>,
     retry_step: usize,
+    /// Asked again while a fetch ran: one more when it ends.
+    fetch_again: bool,
 }
 
 fn strip_html(s: &str) -> String {
@@ -162,6 +166,8 @@ pub struct Wifi {
     pub signal: i64,
     pub connecting: bool,
     pub pulse: crate::anim::Pulse,
+    /// Asked for again while a status read ran: one more when it ends.
+    again: bool,
 }
 
 /// dunst's pause state over the session bus (dnd_connect).
@@ -181,9 +187,9 @@ pub struct Services {
     pub stats: Stats,
     pub clock: String,
     /// The minute the clock last showed (lastClockMinute), and the wall
-    /// clock at the last tick in ms (lastTickMs).
+    /// clock in ms and the monotonic one at the last tick (lastTickMs).
     clock_minute: Option<i32>,
-    last_tick_ms: u64,
+    last_tick: Option<(i64, Instant)>,
     pub timezone: String,
     pub dnd_enabled: bool,
     pub dnd_available: bool,
@@ -203,6 +209,8 @@ pub struct Services {
     pub wifi: Wifi,
     pub vpn: String,
     vpn_checked: bool,
+    /// A reset asked for while one ran: one more when it ends.
+    vpn_reset_again: bool,
     /// Default sink: volume/mute and its node (name, description, nick).
     pub audio: (crate::pw::Audio, Option<crate::pw::NodeInfo>),
     pub pw: Option<crate::pw::Pw>,
@@ -268,16 +276,31 @@ fn parse_monitors(v: &Value) -> Option<Vec<Monitor>> {
     )
 }
 
+/// Whether the strips draw two snapshots the same: per monitor its name, its
+/// tags' index and client count and its first active tag (WorkspaceBar), and
+/// the focused window's title (WindowInfo) - all bar.rs reads of them.
+fn same_on_strips(a: &[Monitor], b: &[Monitor]) -> bool {
+    let tags = |m: &Monitor| m.tags.iter().map(|t| (t.index, t.client_count)).collect::<Vec<_>>();
+    let title = |ms: &[Monitor]| ms.iter().find(|m| m.active).filter(|m| m.client_id.is_some()).map(|m| m.client_title.clone()).unwrap_or_default();
+    a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.name == y.name && x.active_tags.first() == y.active_tags.first() && tags(x) == tags(y)) && title(a) == title(b)
+}
+
 fn on_monitors(app: &mut App, line: &str) {
     let Ok(v) = serde_json::from_str::<Value>(line) else { return };
     let Some(mons) = parse_monitors(&v) else { return };
     let before = app.svc.mango.focused().and_then(|m| m.client_id);
+    // mango sends 2-4 snapshots per action, and more for what no strip shows
+    // (geometry, layout symbol, keymode, urgency). Mango.qml takes each one,
+    // but a binding that comes out the same changes nothing on screen.
+    let same = same_on_strips(&app.svc.mango.monitors, &mons);
     app.svc.mango.monitors = mons;
     let after = app.svc.mango.focused().and_then(|m| m.client_id);
     if before != after {
         crate::bar::close_all_popups(app);
     }
-    app.mark_all_dirty();
+    if !same {
+        app.mark_all_dirty();
+    }
 }
 
 fn on_layout(app: &mut App, line: &str) {
@@ -350,8 +373,8 @@ fn read_mem(s: &mut Stats) {
         }
     }
     if total > 0 {
-        // JS toFixed(2)
-        s.mem_usage = format!("{:.2}G", (total - avail) as f64 / 1024.0 / 1024.0);
+        // JS toFixed(2): an exact tie goes up, where {:.2} picks the even digit.
+        s.mem_usage = format!("{}G", to_fixed((total - avail) as f64 / 1024.0 / 1024.0, 2));
     }
 }
 
@@ -415,18 +438,58 @@ fn stats_pref() -> bool {
     std::fs::read_to_string(format!("{}/.cache/quickshell/bar-stats", home())).map_or(true, |t| t.trim() != "off")
 }
 
-fn refresh_stats(app: &mut App) -> bool {
-    if app.svc.stats.shown {
-        let s = &mut app.svc.stats;
-        let before = (s.cpu_usage, s.cpu_temp, s.mem_usage.clone());
-        read_cpu(s);
-        read_mem(s);
-        read_temp(s);
-        if before != (s.cpu_usage, s.cpu_temp, s.mem_usage.clone()) {
-            app.mark_all_dirty();
-        }
+/// SystemStats.refresh(): one reading of all three.
+fn refresh_stats(app: &mut App) {
+    let s = &mut app.svc.stats;
+    let before = (s.cpu_usage, s.cpu_temp, s.mem_usage.clone());
+    read_cpu(s);
+    read_mem(s);
+    read_temp(s);
+    if before != (s.cpu_usage, s.cpu_temp, s.mem_usage.clone()) {
+        app.mark_all_dirty();
     }
-    true
+}
+
+/// The bar's three 5 s Timers as one wakeup: SystemStats' (`running:
+/// root.shown`, SystemStats.qml:211-216), CenterInfo's DND poll and
+/// VpnWidget's status check (VpnWidget.qml:285-290). Separate, they woke
+/// the bar three times every five seconds, a few ms apart.
+fn poll_tick(app: &mut App) {
+    if app.svc.stats.shown {
+        refresh_stats(app);
+    }
+    dnd_poll(app);
+    vpn_poll(app);
+    app.debounce("poll", Duration::from_millis(5000), poll_tick);
+}
+
+/// SystemStats.setShown(on): the ПУЛЬТ switch.
+pub fn set_stats_shown(app: &mut App, on: bool) {
+    app.svc.stats.shown = on;
+    stats_shown_changed(app);
+}
+
+/// onShownChanged: shown, a reading at once and a real CPU one a second
+/// later (settleTimer), then the 5 s tick; hidden, nothing is sampled and the
+/// CPU baseline is dropped - kept, the first reading after showing them again
+/// was the average over the whole hidden time.
+fn stats_shown_changed(app: &mut App) {
+    let on = app.svc.stats.shown;
+    if on == app.svc.stats.applied {
+        return;
+    }
+    app.svc.stats.applied = on;
+    if on {
+        refresh_stats(app);
+        app.debounce("stats-settle", Duration::from_secs(1), refresh_stats);
+        // The Timer starts over as `running` turns true: the next reading
+        // comes 5 s from now (the DND and VPN checks move with it, once).
+        app.debounce("poll", Duration::from_millis(5000), poll_tick);
+    } else {
+        app.svc.stats.last_total = 0;
+        app.svc.stats.last_idle = 0;
+    }
+    app.mark_all_dirty();
 }
 
 // ---- clock ----
@@ -435,7 +498,12 @@ fn refresh_stats(app: &mut App) -> bool {
 /// time, as Qt does for local time, so a new /etc/localtime shows.
 fn local_now() -> (i32, String) {
     unsafe { tzset() };
-    let t = unsafe { libc::time(std::ptr::null_mut()) };
+    // CLOCK_REALTIME, as Qt's current time: time() is the kernel's coarse
+    // clock, a tick behind, and when the minute timer fires it still reads
+    // the second before the minute - the clock kept the old one up.
+    let mut now = libc::timespec { tv_sec: 0, tv_nsec: 0 };
+    unsafe { libc::clock_gettime(libc::CLOCK_REALTIME, &mut now) };
+    let t: libc::time_t = now.tv_sec;
     let mut tm: libc::tm = unsafe { std::mem::zeroed() };
     unsafe { libc::localtime_r(&t, &mut tm) };
     (tm.tm_min, format!("{:02}:{:02}", tm.tm_hour, tm.tm_min))
@@ -471,12 +539,26 @@ fn set_clock(app: &mut App, t: String) {
     }
 }
 
-/// refreshTimezone(): the timezone file again; a new zone redraws the clock.
+/// refreshTimezone() / applyTimezoneText(): the timezone file again; a new
+/// zone redraws the clock (and the VPN card's ВРЕМЯ, which shows whether
+/// there is one).
 fn refresh_timezone(app: &mut App) {
-    let before = app.svc.timezone.clone();
-    read_cache_files(app);
-    if app.svc.timezone != before {
+    let tz = read_cache("timezone");
+    if tz != app.svc.timezone {
+        app.svc.timezone = tz;
         update_clock(app, true);
+        app.mark_all_dirty();
+    }
+}
+
+/// refreshWeather() / applyWeatherCityText(): the city file again; a new city
+/// fetches the weather (and redraws the VPN card's ПОГОДА).
+fn refresh_weather_city(app: &mut App) {
+    let city = read_cache("weather_city");
+    if city != app.svc.weather.city {
+        app.svc.weather.city = city;
+        request_weather(app);
+        app.mark_all_dirty();
     }
 }
 
@@ -488,25 +570,46 @@ fn cache_dir() -> String {
     format!("{}/.cache/quickshell", home())
 }
 
-fn read_cache_files(app: &mut App) {
-    app.svc.timezone = std::fs::read_to_string(format!("{}/timezone", cache_dir())).map(|t| t.trim().to_string()).unwrap_or_default();
-    app.svc.weather.city = std::fs::read_to_string(format!("{}/weather_city", cache_dir())).map(|t| t.trim().to_string()).unwrap_or_default();
+/// A file of ~/.cache/quickshell, trimmed; "" when it is absent.
+fn read_cache(name: &str) -> String {
+    std::fs::read_to_string(format!("{}/{name}", cache_dir())).map(|t| t.trim().to_string()).unwrap_or_default()
 }
 
-/// ~/.cache/quickshell changed: the timezone and weather city follow the VPN
-/// card's sync (CenterInfo's FileViews); a new city fetches the weather.
+/// ~/.cache/quickshell changed: CenterInfo's FileViews, each reading only its
+/// own file - the timezone and weather city follow the VPN card's sync, and a
+/// timezone event must not take a new city in before its own event compares
+/// it (that swallowed the fetch).
 fn cache_changed(app: &mut App, name: &str) {
     match name {
         "timezone" => refresh_timezone(app),
-        "weather_city" => {
-            let before = app.svc.weather.city.clone();
-            read_cache_files(app);
-            if app.svc.weather.city != before {
-                request_weather(app);
+        "weather_city" => refresh_weather_city(app),
+        // weatherCacheFile: weather-location.py writes it after every good
+        // reading, so a fetch the bar did not start (vpn-sync.sh, vpn-reset.sh)
+        // shows too; the bar's own fetch is parsed twice, as in QML.
+        "weather.json" => {
+            let t = read_cache("weather.json");
+            if !t.is_empty() {
+                apply_weather(app, &t);
             }
-            app.mark_all_dirty();
         }
+        // SystemStats' prefFile: the switch, from the ПУЛЬТ card or anyone else.
+        "bar-stats" => set_stats_shown(app, stats_pref()),
         _ => {}
+    }
+}
+
+/// ~/.cache changed: NightLight.qml's FileView on .nightlight_state
+/// (watchChanges, NightLight.qml:28-62), so SUPER+N moves the ПУЛЬТ switch at
+/// once. applyState(): the file is the intent, and a fresh "on" is trusted -
+/// wlsunset may not have started yet; the pgrep is for later checks.
+fn home_cache_changed(app: &mut App, name: &str) {
+    if name != ".nightlight_state" {
+        return;
+    }
+    let on = std::fs::read_to_string(format!("{}/.cache/.nightlight_state", home())).map_or(false, |t| t.trim() == "on");
+    if on != app.svc.pult.night_on {
+        app.svc.pult.night_on = on;
+        app.mark_all_dirty();
     }
 }
 
@@ -520,6 +623,18 @@ fn palette_changed(app: &mut App, name: &str) {
                 if app.theme.apply_json(&t) {
                     if let Some(c) = app.card.as_mut() {
                         c.invalidate_notch();
+                        // The meter's surface paints the card's plate itself.
+                        if let Some(m) = c.meter_win.as_mut() {
+                            m.dirty = true;
+                        }
+                    }
+                    // Theme's bindings reach every window: the overlays and
+                    // the wallpaper reveal too, not just strips and card.
+                    for o in &mut app.osds {
+                        o.win.dirty = true;
+                    }
+                    for r in &mut app.reveals {
+                        r.win.dirty = true;
                     }
                     app.mark_all_dirty();
                 }
@@ -528,18 +643,26 @@ fn palette_changed(app: &mut App, name: &str) {
     }
 }
 
-/// CenterInfo's one-second tick. It also notices a resume: the timers run on
-/// the monotonic clock, which stops in suspend, so a wall-clock jump of over
-/// two minutes between ticks fetches the weather once the network has had ten
-/// seconds to come back (the hourly fetch could still be an hour away).
-fn tick_clock(app: &mut App) -> bool {
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
-    if app.svc.last_tick_ms > 0 && now.saturating_sub(app.svc.last_tick_ms) > 120_000 {
+fn wall_ms() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64)
+}
+
+/// CenterInfo's clock tick. QML ticks every second to catch the minute; this
+/// one comes on the minute (every_minute), and right after a resume. It also
+/// notices the resume: the timers run on the monotonic clock, which stops in
+/// suspend, so a wall clock that got over two minutes ahead of it since the
+/// last tick fetches the weather once the network has had ten seconds to come
+/// back (the hourly fetch could still be an hour away). After any jump the
+/// clock is redone even on the same minute of the hour - QML's minute check
+/// kept 23:10 up after a resume at 07:10 until 07:11.
+fn tick_clock(app: &mut App) {
+    let (now, mono) = (wall_ms(), Instant::now());
+    let jump = app.svc.last_tick.map_or(0, |(wall, at)| now - wall - mono.duration_since(at).as_millis() as i64);
+    if jump > 120_000 {
         app.debounce("weather-after-resume", Duration::from_secs(10), request_weather);
     }
-    app.svc.last_tick_ms = now;
-    update_clock(app, false);
-    true
+    app.svc.last_tick = Some((now, mono));
+    update_clock(app, jump.abs() > 1000);
 }
 
 pub fn start(app: &mut App) {
@@ -549,25 +672,31 @@ pub fn start(app: &mut App) {
     app.svc.mango.game_mode = std::path::Path::new(&gm).exists();
 
     app.svc.stats.shown = stats_pref();
+    app.svc.stats.applied = app.svc.stats.shown;
     app.svc.stats.temp_path = find_temp_path();
     app.svc.stats.mem_usage = "0G".into();
+    // Component.onCompleted: a reading whatever the switch says.
     refresh_stats(app);
-    app.every(Duration::from_millis(5000), refresh_stats);
 
-    read_cache_files(app);
+    app.svc.timezone = read_cache("timezone");
+    app.svc.weather.city = read_cache("weather_city");
     let _ = std::fs::create_dir_all(cache_dir());
     app.watch_dir(&cache_dir(), cache_changed);
+    app.watch_dir(&format!("{}/.cache", home()), home_cache_changed);
     app.watch_dir(&format!("{}/.config/quickshell/bar", home()), palette_changed);
     update_clock(app, true);
-    app.every(Duration::from_millis(1000), tick_clock);
+    app.svc.last_tick = Some((wall_ms(), Instant::now()));
+    // One wakeup a minute, not sixty; the 1 s tick without a timerfd.
+    if !app.every_minute(tick_clock) {
+        app.every(Duration::from_millis(1000), |app| {
+            tick_clock(app);
+            true
+        });
+    }
 
     app.svc.dnd_available = true;
     dnd_connect(app);
     dnd_poll(app);
-    app.every(Duration::from_millis(5000), |app| {
-        dnd_poll(app);
-        true
-    });
 
     if let Ok(t) = std::fs::read_to_string(format!("{}/weather.json", cache_dir())) {
         apply_weather(app, &t);
@@ -607,10 +736,8 @@ pub fn start(app: &mut App) {
     }
 
     vpn_poll(app);
-    app.every(Duration::from_millis(5000), |app| {
-        vpn_poll(app);
-        true
-    });
+    // The stats, DND and VPN polls from here on: one 5 s timer.
+    app.debounce("poll", Duration::from_millis(5000), poll_tick);
 
     crate::agent::run(app, "check");
 }
@@ -744,8 +871,11 @@ fn dnd_bus_ready(app: &mut App) {
 
 pub fn dnd_toggle(app: &mut App) {
     app.spawn("dnd-toggle", &["dunstctl", "set-paused", "toggle"], |app, d| {
-        if !d.ok {
+        // dndToggleProc.onExited: the hollow warn bell at once; the re-poll
+        // confirms or clears it.
+        if !d.ok && app.svc.dnd_available {
             app.svc.dnd_available = false;
+            app.mark_all_dirty();
         }
         dnd_poll(app);
     });
@@ -766,18 +896,34 @@ fn apply_weather(app: &mut App, out: &str) -> bool {
     v.get("stale").and_then(Value::as_bool) != Some(true)
 }
 
+/// requestWeather(): weatherFetchDebounce.restart() - 250 ms, so a burst (the
+/// zone and the city of one VPN sync, a tunnel up and down) is one fetch.
 pub fn request_weather(app: &mut App) {
+    app.debounce("weather-fetch", Duration::from_millis(250), fetch_weather);
+}
+
+/// weatherProc.running = true. A fetch already running does not drop it:
+/// Process runs again once that one ends (its targetRunning), so a city that
+/// changed mid-fetch still gets its own reading.
+fn fetch_weather(app: &mut App) {
+    if app.is_running("weather") {
+        app.svc.weather.fetch_again = true;
+        return;
+    }
     let cmd = format!("{}/.config/quickshell/bar/scripts/weather-fetch.sh 2>/dev/null", home());
     app.spawn("weather", &["sh", "-c", &cmd], |app, d| {
         let good = !d.stdout.trim().is_empty() && apply_weather(app, &d.stdout);
         if good {
             app.svc.weather.retry_step = 0;
             app.cancel_timer("weather-retry");
-            return;
+        } else {
+            let minutes = [1u64, 2, 5, 10][app.svc.weather.retry_step.min(3)];
+            app.svc.weather.retry_step += 1;
+            app.debounce("weather-retry", Duration::from_secs(minutes * 60), request_weather);
         }
-        let minutes = [1u64, 2, 5, 10][app.svc.weather.retry_step.min(3)];
-        app.svc.weather.retry_step += 1;
-        app.debounce("weather-retry", Duration::from_secs(minutes * 60), request_weather);
+        if std::mem::take(&mut app.svc.weather.fetch_again) {
+            fetch_weather(app);
+        }
     });
 }
 
@@ -805,7 +951,14 @@ pub fn wifi_refresh(app: &mut App) {
     wifi_status(app);
 }
 
+/// wifiCurrentProc.running = true. On a read still running, Process runs it
+/// once more when that one ends (its targetRunning): a change nmcli monitor
+/// reported meanwhile, or the card's connect finishing, is not dropped.
 fn wifi_status(app: &mut App) {
+    if app.is_running("wifi-current") {
+        app.svc.wifi.again = true;
+        return;
+    }
     app.spawn("wifi-current", &["sh", "-c", "nmcli -t -f IN-USE,SSID,SIGNAL device wifi list --rescan no | grep '^\\*' | head -1"], |app, d| {
         let w = &mut app.svc.wifi;
         let before = (w.connected, w.ssid.clone());
@@ -825,6 +978,9 @@ fn wifi_status(app: &mut App) {
         if before != (w.connected, w.ssid.clone()) {
             app.mark_all_dirty();
         }
+        if std::mem::take(&mut app.svc.wifi.again) {
+            wifi_status(app);
+        }
     });
 }
 
@@ -832,11 +988,23 @@ fn wifi_status(app: &mut App) {
 
 /// VpnWidget's side effects: a VPN that went down, or none at start with a
 /// city still cached from one, resets the time/weather sync (vpn-reset.sh).
+/// vpnResetProc.running = true during a reset runs it again after it, as
+/// Process does: a tunnel that came up and went down meanwhile is reset too.
 fn vpn_reset(app: &mut App) {
+    if app.is_running("vpn-reset") {
+        app.svc.vpn_reset_again = true;
+        return;
+    }
     let cmd = format!("{}/.config/quickshell/bar/scripts/vpn-reset.sh all --forget", home());
     app.spawn("vpn-reset", &["sh", "-c", &cmd], |app, _| {
+        // vpnResetProc ending: refreshTimezone(), refreshWeather() - a fetch
+        // only for a new city; the reset fetched home's weather itself, and
+        // the weather.json watch shows it.
         refresh_timezone(app);
-        request_weather(app);
+        refresh_weather_city(app);
+        if std::mem::take(&mut app.svc.vpn_reset_again) {
+            vpn_reset(app);
+        }
     });
 }
 
@@ -844,7 +1012,7 @@ pub fn vpn_check(app: &mut App) {
     vpn_poll(app);
 }
 
-fn vpn_poll(app: &mut App) -> bool {
+fn vpn_poll(app: &mut App) {
     let first = !app.svc.vpn_checked;
     app.svc.vpn_checked = true;
     // Interfaces of this network namespace (/proc/net/dev), the ones whose
@@ -869,5 +1037,4 @@ fn vpn_poll(app: &mut App) -> bool {
         app.svc.vpn = active;
         app.mark_all_dirty();
     }
-    true
 }

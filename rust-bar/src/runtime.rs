@@ -42,6 +42,8 @@ impl App {
         cmd.args(&argv[1..]).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
         unsafe {
             cmd.pre_exec(|| {
+                // Its own process group, for kill().
+                libc::setpgid(0, 0);
                 libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM);
                 Ok(())
             });
@@ -79,10 +81,20 @@ impl App {
         });
     }
 
-    /// Process.running = false: SIGTERM to a helper started under `tag`.
+    /// Process.running = false: SIGTERM to a helper started under `tag`, and
+    /// to the children it left in its process group. A helper counts as
+    /// running until its stdout closes, and a grandchild holding that pipe
+    /// (the keep-awake inhibitor's `sleep 5`) kept the tag for seconds after
+    /// the helper died, so starting it again in that time did nothing;
+    /// QProcess reports the exit as soon as its child is gone.
     pub fn kill(&mut self, tag: &str) {
         if let Some((_, pid)) = self.running.get(tag) {
-            unsafe { libc::kill(*pid as i32, libc::SIGTERM) };
+            let pid = *pid as i32;
+            unsafe {
+                if libc::kill(-pid, libc::SIGTERM) != 0 {
+                    libc::kill(pid, libc::SIGTERM);
+                }
+            }
         }
     }
 
@@ -108,6 +120,8 @@ impl App {
         cmd.args(&argv[1..]).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(stderr);
         unsafe {
             cmd.pre_exec(|| {
+                // Its own process group, for kill().
+                libc::setpgid(0, 0);
                 libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM);
                 Ok(())
             });
@@ -283,7 +297,10 @@ impl App {
             });
         }
         if let Ok(mut c) = cmd.spawn() {
-            std::thread::spawn(move || {
+            // Builder, not thread::spawn: that one panics - an abort here - when
+            // the system cannot start a thread; then the child stays a zombie
+            // until the bar exits instead.
+            let _ = std::thread::Builder::new().spawn(move || {
                 let _ = c.wait();
             });
         }
@@ -298,6 +315,35 @@ impl App {
                 TimeoutAction::Drop
             }
         });
+    }
+
+    /// `tick` at the start of every minute of the wall clock (a minute starts
+    /// at the same instant in every zone), and at once when the wall clock is
+    /// set or the machine resumes: an absolute CLOCK_REALTIME timerfd, which
+    /// the kernel cancels then (ECANCELED) and which is armed again. False
+    /// when there is no timerfd.
+    pub fn every_minute(&self, tick: fn(&mut App)) -> bool {
+        let fd = unsafe { libc::timerfd_create(libc::CLOCK_REALTIME, libc::TFD_NONBLOCK | libc::TFD_CLOEXEC) };
+        if fd < 0 {
+            return false;
+        }
+        let file = unsafe { <std::fs::File as std::os::fd::FromRawFd>::from_raw_fd(fd) };
+        if !arm_minute(fd) {
+            return false;
+        }
+        self.handle
+            .insert_source(Generic::new(file, Interest::READ, Mode::Level), move |_, _, app: &mut App| {
+                let mut n = [0u8; 8];
+                if unsafe { libc::read(fd, n.as_mut_ptr().cast(), n.len()) } < 0 {
+                    if std::io::Error::last_os_error().raw_os_error() != Some(libc::ECANCELED) {
+                        return Ok(PostAction::Continue);
+                    }
+                    arm_minute(fd);
+                }
+                tick(app);
+                Ok(PostAction::Continue)
+            })
+            .is_ok()
     }
 
     pub fn after(&self, delay: Duration, f: fn(&mut App)) {
@@ -339,6 +385,15 @@ impl App {
             Ok(PostAction::Continue)
         });
     }
+}
+
+/// The next whole minute of CLOCK_REALTIME, then every 60 s, cancelled when
+/// the clock is set.
+fn arm_minute(fd: std::os::fd::RawFd) -> bool {
+    let mut now = libc::timespec { tv_sec: 0, tv_nsec: 0 };
+    unsafe { libc::clock_gettime(libc::CLOCK_REALTIME, &mut now) };
+    let at = libc::itimerspec { it_interval: libc::timespec { tv_sec: 60, tv_nsec: 0 }, it_value: libc::timespec { tv_sec: (now.tv_sec / 60 + 1) * 60, tv_nsec: 0 } };
+    unsafe { libc::timerfd_settime(fd, libc::TFD_TIMER_ABSTIME | libc::TFD_TIMER_CANCEL_ON_SET, &at, std::ptr::null_mut()) == 0 }
 }
 
 pub fn write_line(mut s: &UnixStream, line: &str) {

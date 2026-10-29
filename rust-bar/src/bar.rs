@@ -283,8 +283,22 @@ pub fn draw(scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, svc: &Services,
                 let title = svc.mango.focused_title();
                 if !title.is_empty() {
                     let key = theme::bar_font(true);
-                    let full = p.fonts.layout(title, key, FONT_SIZE, 0.0);
-                    let line = p.fonts.elide_right(&full, title, key, 375.0, 0.0);
+                    let line = match title.split_once('\n') {
+                        // maximumLineCount: 1 on a title with a newline: Qt
+                        // sizes the Text to its first line (RowLayout rounds
+                        // that up) and elides the line with "…" in it -
+                        // "first lin…", measured on Qt 6.12.
+                        Some((first, _)) => {
+                            let width = p.fonts.layout(first, key, FONT_SIZE, 0.0).width.ceil().min(375.0);
+                            let text = format!("{first}…");
+                            let full = p.fonts.layout(&text, key, FONT_SIZE, 0.0);
+                            p.fonts.elide_right(&full, &text, key, width, 0.0)
+                        }
+                        None => {
+                            let full = p.fonts.layout(title, key, FONT_SIZE, 0.0);
+                            p.fonts.elide_right(&full, title, key, 375.0, 0.0)
+                        }
+                    };
                     p.label(&line, x + 5.0, ((DESIGN_HEIGHT - line.height()) / 2.0).round(), theme.col_window);
                 }
             }
@@ -551,8 +565,10 @@ fn draw_center(p: &mut Painter, svc: &Services, x0: f32, width: f32, design_widt
     let row_h: f32 = if has_weather { 26.0f32.max(bell.height()) } else { bell.height() };
     let row_y = ac(DESIGN_HEIGHT, row_h);
     let left_x = x0 + sep_x - 8.0 - (bell.width + pill_w);
-    p.label(&bell, left_x, row_y + ac(row_h, bell.height()), bell_color);
-    p.hit(left_x, 0.0, bell.width, DESIGN_HEIGHT, Action::Bell);
+    let bell_y = row_y + ac(row_h, bell.height());
+    p.label(&bell, left_x, bell_y, bell_color);
+    // Its MouseArea fills the bell's Text, not the strip's height.
+    p.hit(left_x, bell_y, bell.width, bell.height(), Action::Bell);
     if has_weather {
         let px = left_x + bell.width;
         let py = row_y + ac(row_h, 26.0);
@@ -613,7 +629,9 @@ pub fn activate(app: &mut App, strip: usize, action: Action, button: u32) {
                 crate::cards::toggle(app, strip, crate::cards::CardKind::Power, &h, false);
             }
         }
-        Action::Workspace(id) => {
+        // WorkspaceBar, KeyboardLayoutWidget and the bell: MouseAreas with the
+        // default acceptedButtons, the left button only.
+        Action::Workspace(id) if button == BTN_LEFT => {
             let name = app.strips[strip].name.clone();
             services::mango_dispatch(app, &format!("viewcrossmon,{id},^{name}$"));
         }
@@ -673,8 +691,8 @@ pub fn activate(app: &mut App, strip: usize, action: Action, button: u32) {
                 crate::cards::toggle(app, strip, crate::cards::CardKind::Battery, &h, false);
             }
         }
-        Action::LayoutCycle => crate::layout::cycle(app),
-        Action::Bell => services::dnd_toggle(app),
+        Action::LayoutCycle if button == BTN_LEFT => crate::layout::cycle(app),
+        Action::Bell if button == BTN_LEFT => services::dnd_toggle(app),
         _ => {}
     }
     let _ = FontKey { family: "", bold: false, plain: false };

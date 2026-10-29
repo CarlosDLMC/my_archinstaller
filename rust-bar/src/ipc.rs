@@ -2,22 +2,46 @@
 //! [args...]` sends one line to $XDG_RUNTIME_DIR/rust-bar.sock - the same
 //! targets and functions as the QML bar's IpcHandlers (qs -c bar ipc call).
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
+use std::os::fd::{AsRawFd, IntoRawFd};
+use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
+use std::time::{Duration, Instant};
 
 use crate::app::App;
 
+fn runtime_dir() -> String {
+    std::env::var("XDG_RUNTIME_DIR").unwrap_or("/tmp".into())
+}
+
 pub fn socket_path() -> String {
-    format!("{}/rust-bar.sock", std::env::var("XDG_RUNTIME_DIR").unwrap_or("/tmp".into()))
+    format!("{}/rust-bar.sock", runtime_dir())
+}
+
+/// One bar a session, decided before it connects to Wayland or starts a
+/// helper: checked in listen(), after services::start, a second bar had
+/// already run the weather fetch, vpn-reset.sh and the polkit registration,
+/// and its exit killed them mid-run. A lock held for the bar's life lets only
+/// one of two bars started at once through; a live bar answering on the
+/// socket (one without the lock) also counts.
+pub fn single_instance() {
+    let lock = std::fs::OpenOptions::new().create(true).truncate(false).write(true).mode(0o600).open(format!("{}/rust-bar.lock", runtime_dir()));
+    let mut taken = false;
+    if let Ok(f) = lock {
+        taken = unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 && std::io::Error::last_os_error().kind() == std::io::ErrorKind::WouldBlock;
+        // Open for the bar's life: the exit closes it and drops the lock
+        // (CLOEXEC keeps it out of the helpers).
+        let _ = f.into_raw_fd();
+    }
+    // A stale socket file from a crash does not answer.
+    if taken || UnixStream::connect(socket_path()).is_ok() {
+        eprintln!("rust-bar: another bar is already running");
+        std::process::exit(1);
+    }
 }
 
 pub fn listen(app: &mut App) {
     let path = socket_path();
-    // A live bar answers; a stale socket file from a crash does not.
-    if UnixStream::connect(&path).is_ok() {
-        eprintln!("rust-bar: another bar is already running");
-        std::process::exit(1);
-    }
     let _ = std::fs::remove_file(&path);
     match UnixListener::bind(&path) {
         Ok(l) => app.listen_unix(l, on_conn),
@@ -25,11 +49,30 @@ pub fn listen(app: &mut App) {
     }
 }
 
-fn on_conn(app: &mut App, c: UnixStream) {
+/// The request line. The event loop waits while it is read, so the wait is
+/// bounded - 200 ms in all and 4 KiB - for a client that connects and sends
+/// nothing, trickles bytes or never ends its line.
+fn read_request(c: &UnixStream) -> String {
+    let deadline = Instant::now() + Duration::from_millis(200);
     let _ = c.set_nonblocking(false);
-    let _ = c.set_read_timeout(Some(std::time::Duration::from_millis(200)));
-    let mut line = String::new();
-    let _ = BufReader::new(&c).read_line(&mut line);
+    let mut buf = Vec::new();
+    let mut chunk = [0u8; 512];
+    while buf.len() < 4096 && !buf.contains(&b'\n') {
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() || c.set_read_timeout(Some(left)).is_err() {
+            break;
+        }
+        match (&*c).read(&mut chunk) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => buf.extend_from_slice(&chunk[..n]),
+        }
+    }
+    let end = buf.iter().position(|&b| b == b'\n').unwrap_or(buf.len());
+    String::from_utf8_lossy(&buf[..end]).into_owned()
+}
+
+fn on_conn(app: &mut App, c: UnixStream) {
+    let line = read_request(&c);
     let words: Vec<&str> = line.split_whitespace().collect();
     let reply = if words.len() >= 2 { call(app, words[0], words[1], &words[2..]) } else { Err("usage: <target> <function> [args]".into()) };
     let mut c = c;
