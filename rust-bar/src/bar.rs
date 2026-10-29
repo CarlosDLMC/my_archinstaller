@@ -90,6 +90,10 @@ pub struct Ctx<'a> {
     pub pointer: Option<(f32, f32)>,
     /// The card open on this strip, if any.
     pub open: Option<crate::cards::CardKind>,
+    /// The Wi-Fi connect running (or last run) is this bar's: every bar has
+    /// its own WifiWidget and wifiConnectProc (shell.qml), and only that
+    /// widget's icon blinks.
+    pub wifi_pulse: bool,
 }
 
 struct Painter<'a> {
@@ -336,8 +340,9 @@ pub fn draw(scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, svc: &Services,
             Slot::Wifi => {
                 let line = p.line(wifi_icon(svc), true, FONT_SIZE + 4.0);
                 let c = if svc.wifi.connected { theme.col_white } else { theme.col_grey };
-                // Blinks 1 -> .35 -> 1 (450 ms each, InOutQuad) while connecting.
-                let (o, running) = svc.wifi.pulse.value(p.now, 0.35, 450, crate::anim::Easing::InOutQuad);
+                // Blinks 1 -> .35 -> 1 (450 ms each, InOutQuad) while this
+                // bar's connect runs (WifiWidget.qml:414-424).
+                let (o, running) = if ctx.wifi_pulse { svc.wifi.pulse.value(p.now, 0.35, 450, crate::anim::Easing::InOutQuad) } else { (1.0, false) };
                 p.animating |= running;
                 p.scene.save();
                 p.scene.multiply_opacity(o);

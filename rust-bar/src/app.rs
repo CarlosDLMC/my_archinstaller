@@ -438,7 +438,14 @@ impl App {
             WinRef::Strip(i) => {
                 let mut memo = std::mem::take(&mut self.strips[i].texts);
                 let s = &self.strips[i];
-                let ctx = bar::Ctx { width: width as f32, screen_width: s.screen_width, name: &s.name, pointer: s.pointer, open: self.card.as_ref().filter(|c| c.strip == i).map(|c| c.kind) };
+                let ctx = bar::Ctx {
+                    width: width as f32,
+                    screen_width: s.screen_width,
+                    name: &s.name,
+                    pointer: s.pointer,
+                    open: self.card.as_ref().filter(|c| c.strip == i).map(|c| c.kind),
+                    wifi_pulse: self.svc.wifi_card.strip == Some(i),
+                };
                 // Theme.qml loads the wallust palette just after the QML bar's
                 // first frame, and to Qt that is a change: every strip text whose
                 // colour it moved is gray from then on (TextMemo). A silent pass
@@ -719,8 +726,8 @@ impl OutputHandler for App {
 
 impl App {
     /// A strip goes with its output: the card open on it closes, and the open
-    /// card and a held press keep pointing at their strips as the later
-    /// ones move down.
+    /// card, a held press and the Wi-Fi connect's bar keep pointing at their
+    /// strips as the later ones move down.
     fn remove_strip(&mut self, i: usize) {
         if self.card.as_ref().map_or(false, |c| c.strip == i) {
             cards::close(self);
@@ -729,6 +736,12 @@ impl App {
         if let Some(c) = self.card.as_mut().filter(|c| c.strip > i) {
             c.strip -= 1;
         }
+        let s = &mut self.svc.wifi_card.strip;
+        *s = match *s {
+            Some(j) if j == i => None,
+            Some(j) if j > i => Some(j - 1),
+            s => s,
+        };
         match self.pressed {
             Some((WinRef::Strip(j), ..)) if j == i => self.pressed = None,
             Some((WinRef::Strip(j), button, action)) if j > i => self.pressed = Some((WinRef::Strip(j - 1), button, action)),
