@@ -664,6 +664,7 @@ impl OutputHandler for App {
     }
     fn update_output(&mut self, _: &Connection, _: &QueueHandle<Self>, output: wl_output::WlOutput) {
         let info = self.outputs.info(&output);
+        let game_mode = self.svc.mango.game_mode;
         if let Some(s) = self.strips.iter_mut().find(|s| s.output == output) {
             if let Some(n) = info.as_ref().and_then(|i| i.name.clone()) {
                 s.name = n;
@@ -671,16 +672,41 @@ impl OutputHandler for App {
             if let Some((w, h)) = info.as_ref().and_then(|i| i.logical_size) {
                 s.screen_width = w as f32;
                 s.screen_height = h as f32;
+                // shell.qml: implicitHeight and exclusiveZone are bindings on
+                // the width (uiScale) - a new mode or scale resizes the strip.
+                let height = bar::strip_height(s.screen_width);
+                if height != s.win.height {
+                    s.win.layer.set_size(0, height);
+                    s.win.layer.set_exclusive_zone(bar::exclusive_zone(height, game_mode));
+                    s.win.layer.commit();
+                }
             }
             s.win.dirty = true;
         }
     }
     fn output_destroyed(&mut self, _: &Connection, _: &QueueHandle<Self>, output: wl_output::WlOutput) {
         if let Some(i) = self.strips.iter().position(|s| s.output == output) {
-            if self.card.as_ref().map_or(false, |c| c.strip == i) {
-                cards::close(self);
-            }
-            self.strips.remove(i);
+            self.remove_strip(i);
+        }
+    }
+}
+
+impl App {
+    /// A strip goes with its output: the card open on it closes, and the open
+    /// card and a held press keep pointing at their strips as the later
+    /// ones move down.
+    fn remove_strip(&mut self, i: usize) {
+        if self.card.as_ref().map_or(false, |c| c.strip == i) {
+            cards::close(self);
+        }
+        self.strips.remove(i);
+        if let Some(c) = self.card.as_mut().filter(|c| c.strip > i) {
+            c.strip -= 1;
+        }
+        match self.pressed {
+            Some((WinRef::Strip(j), ..)) if j == i => self.pressed = None,
+            Some((WinRef::Strip(j), button, action)) if j > i => self.pressed = Some((WinRef::Strip(j - 1), button, action)),
+            _ => {}
         }
     }
 }
@@ -690,7 +716,9 @@ impl LayerShellHandler for App {
         if self.card.as_ref().map_or(false, |c| &c.win.layer == layer) {
             cards::close(self);
         }
-        self.strips.retain(|s| &s.win.layer != layer);
+        if let Some(i) = self.strips.iter().position(|s| &s.win.layer == layer) {
+            self.remove_strip(i);
+        }
         self.osds.retain(|o| &o.win.layer != layer && o.dim.as_ref().map_or(true, |d| &d.layer != layer));
     }
     fn configure(&mut self, _: &Connection, _: &QueueHandle<Self>, layer: &LayerSurface, c: LayerSurfaceConfigure, _: u32) {
