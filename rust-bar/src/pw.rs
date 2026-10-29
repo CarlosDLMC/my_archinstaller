@@ -61,13 +61,16 @@ struct State {
     nodes: HashMap<u32, (NodeInfo, pw::registry::GlobalObject<pw::properties::PropertiesBox>)>,
     default_sink: String,
     default_source: String,
-    metadata: Option<(Metadata, MetadataListener)>,
+    /// Listener before proxy in each of these tuples: a tuple drops in field
+    /// order, and a listener dropped after its proxy unhooked itself from the
+    /// freed proxy's list (proxy.c frees on the last unref, hooks and all).
+    metadata: Option<(MetadataListener, Metadata)>,
     /// Nodes whose Props are followed: the defaults always, every listed
     /// device and stream while the audio card is open (PwObjectTracker).
-    bound: HashMap<u32, (Node, NodeListener)>,
+    bound: HashMap<u32, (NodeListener, Node)>,
     audio: HashMap<u32, Audio>,
     /// The audio cards and the route device indexes each one has (PwDevice::hasRouteDevice).
-    devices: HashMap<u32, (Device, DeviceListener)>,
+    devices: HashMap<u32, (DeviceListener, Device)>,
     routes: HashMap<u32, Vec<i32>>,
     track_all: bool,
     changed: bool,
@@ -77,8 +80,9 @@ pub struct Pw {
     mainloop: pw::main_loop::MainLoopRc,
     _context: pw::context::ContextRc,
     core: pw::core::CoreRc,
-    /// The peak monitor (PwNodePeakMonitor) while the audio card shows a source.
-    peak: Option<(u32, pw::stream::StreamRc, pw::stream::StreamListener<Rc<std::cell::Cell<f32>>>)>,
+    /// The peak monitor (PwNodePeakMonitor) while the audio card shows a
+    /// source; its listener before the stream (pw_stream_destroy frees it).
+    peak: Option<(u32, pw::stream::StreamListener<Rc<std::cell::Cell<f32>>>, pw::stream::StreamRc)>,
     peak_value: Rc<std::cell::Cell<f32>>,
     registry: Rc<pw::registry::RegistryRc>,
     _reg_listener: pw::registry::Listener,
@@ -187,7 +191,7 @@ impl Pw {
                             })
                             .register();
                         dev.subscribe_params(&[ParamType::Route]);
-                        st.borrow_mut().devices.insert(g.id, (dev, l));
+                        st.borrow_mut().devices.insert(g.id, (l, dev));
                     }
                     ObjectType::Metadata => {
                         if props.and_then(|p| p.get("metadata.name")) != Some("default") {
@@ -209,7 +213,7 @@ impl Pw {
                                 0
                             })
                             .register();
-                        st.borrow_mut().metadata = Some((md, l));
+                        st.borrow_mut().metadata = Some((l, md));
                     }
                     _ => {}
                 }
@@ -286,7 +290,7 @@ impl Pw {
         }
     }
 
-    fn bind_node(&self, g: &pw::registry::GlobalObject<pw::properties::PropertiesBox>, id: u32) -> Option<(Node, NodeListener)> {
+    fn bind_node(&self, g: &pw::registry::GlobalObject<pw::properties::PropertiesBox>, id: u32) -> Option<(NodeListener, Node)> {
         let node: Node = self.registry.bind(g).ok()?;
         let st = self.state.clone();
         let l = node
@@ -305,7 +309,7 @@ impl Pw {
             })
             .register();
         node.subscribe_params(&[ParamType::Props]);
-        Some((node, l))
+        Some((l, node))
     }
 
     /// PwObjectTracker over every device and stream: on while the audio card is open.
@@ -346,7 +350,7 @@ impl Pw {
     /// PwNodeAudio.volume = v: every channel at v cubed (the inverse of the read).
     pub fn set_volume(&self, id: u32, v: f32) {
         let s = self.state.borrow();
-        let Some((node, _)) = s.bound.get(&id) else { return };
+        let Some((_, node)) = s.bound.get(&id) else { return };
         let n = s.audio.get(&id).map_or(2, |a| a.channels.max(1));
         let lin = v.max(0.0).powi(3);
         let bytes = Self::props_pod(pw::spa::pod::Property { key: pw::spa::sys::SPA_PROP_channelVolumes, flags: pw::spa::pod::PropertyFlags::empty(), value: Value::ValueArray(ValueArray::Float(vec![lin; n])) });
@@ -357,7 +361,7 @@ impl Pw {
 
     pub fn set_mute(&self, id: u32, muted: bool) {
         let s = self.state.borrow();
-        let Some((node, _)) = s.bound.get(&id) else { return };
+        let Some((_, node)) = s.bound.get(&id) else { return };
         let bytes = Self::props_pod(pw::spa::pod::Property { key: pw::spa::sys::SPA_PROP_mute, flags: pw::spa::pod::PropertyFlags::empty(), value: Value::Bool(muted) });
         if let Some(pod) = pw::spa::pod::Pod::from_bytes(&bytes) {
             node.set_param(ParamType::Props, 0, pod);
@@ -367,7 +371,7 @@ impl Pw {
     /// Pipewire.preferredDefaultAudioSink/Source = node.
     pub fn set_default(&self, sink: bool, name: &str) {
         let s = self.state.borrow();
-        let Some((md, _)) = &s.metadata else { return };
+        let Some((_, md)) = &s.metadata else { return };
         let key = if sink { "default.configured.audio.sink" } else { "default.configured.audio.source" };
         let value = serde_json::json!({ "name": name }).to_string();
         md.set_property(0, key, Some("Spa:String:JSON"), Some(&value));
@@ -421,7 +425,7 @@ impl Pw {
         let Some(pod) = pw::spa::pod::Pod::from_bytes(&bytes) else { return };
         let mut params = [pod];
         if stream.connect(pw::spa::utils::Direction::Input, None, pw::stream::StreamFlags::AUTOCONNECT | pw::stream::StreamFlags::MAP_BUFFERS, &mut params).is_ok() {
-            self.peak = Some((id, stream, listener));
+            self.peak = Some((id, listener, stream));
         }
     }
 
