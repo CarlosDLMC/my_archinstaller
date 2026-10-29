@@ -353,9 +353,12 @@ fn set_keep_awake(app: &mut App, on: bool) {
     app.mark_all_dirty();
 }
 
-/// SystemStats.setShown: the strip's CPU/RAM readouts.
+/// SystemStats.setShown: the strip's CPU/RAM readouts. `shown = on` runs
+/// onShownChanged at once (SystemStats.qml:43-47, 75-83): shown, a reading
+/// now and a real CPU one a second later; the file's watch event then finds
+/// it applied.
 fn set_stats_shown(app: &mut App, on: bool) {
-    app.svc.stats.shown = on;
+    services::set_stats_shown(app, on);
     let path = format!("{}/.cache/quickshell/bar-stats", services::home());
     if let Some(dir) = std::path::Path::new(&path).parent() {
         let _ = std::fs::create_dir_all(dir);

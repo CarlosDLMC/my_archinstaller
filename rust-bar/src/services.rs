@@ -289,14 +289,25 @@ fn on_monitors(app: &mut App, line: &str) {
     let Ok(v) = serde_json::from_str::<Value>(line) else { return };
     let Some(mons) = parse_monitors(&v) else { return };
     let before = app.svc.mango.focused().and_then(|m| m.client_id);
+    let screen = app.svc.mango.focused().map(|m| m.name.clone());
     // mango sends 2-4 snapshots per action, and more for what no strip shows
     // (geometry, layout symbol, keymode, urgency). Mango.qml takes each one,
     // but a binding that comes out the same changes nothing on screen.
     let same = same_on_strips(&app.svc.mango.monitors, &mons);
     app.svc.mango.monitors = mons;
+    // The overview binds its frame, group and hidden-workspace layout to
+    // Mango.monitor(...): an open one follows every snapshot (it draws only
+    // when what it shows changed). Not under `same`, which is the strips'.
+    crate::overview::monitors_changed(app);
     let after = app.svc.mango.focused().and_then(|m| m.client_id);
     if before != after {
         crate::bar::close_all_popups(app);
+    }
+    // The overlays show on the focused monitor (`onFocusedMonitor`,
+    // PowerOsd.qml:21-29, ShotOsd.qml:15-24, RecordOsd.qml:17-26,
+    // LayoutOsd.qml:60-63): an open one moves with the focus.
+    if app.svc.mango.focused().map(|m| &m.name) != screen.as_ref() {
+        crate::osd::follow_focus(app);
     }
     if !same {
         app.mark_all_dirty();
@@ -732,6 +743,10 @@ pub fn start(app: &mut App) {
     app.svc.wifi.has = glob_dir("/sys/class/net", "").iter().any(|d| std::path::Path::new(&format!("{d}/wireless")).exists());
     if app.svc.wifi.has {
         wifi_status(app);
+        // savedProfilesProc runs at start too (Component.onCompleted,
+        // WifiWidget.qml:227): a saved network picked at the first opening,
+        // before that opening's read lands, connects without the password view.
+        crate::wifi_card::load_saved(app);
         app.spawn_lines(&["nmcli", "monitor"], |app, _| app.debounce("wifi", Duration::from_millis(400), wifi_status));
     }
 
@@ -954,15 +969,18 @@ pub fn wifi_refresh(app: &mut App) {
 /// wifiCurrentProc.running = true. On a read still running, Process runs it
 /// once more when that one ends (its targetRunning): a change nmcli monitor
 /// reported meanwhile, or the card's connect finishing, is not dropped.
+/// QML pipes nmcli through `grep '^\*' | head -1`; the line is picked here,
+/// one process per read instead of four.
 fn wifi_status(app: &mut App) {
     if app.is_running("wifi-current") {
         app.svc.wifi.again = true;
         return;
     }
-    app.spawn("wifi-current", &["sh", "-c", "nmcli -t -f IN-USE,SSID,SIGNAL device wifi list --rescan no | grep '^\\*' | head -1"], |app, d| {
+    app.spawn("wifi-current", &["nmcli", "-t", "-f", "IN-USE,SSID,SIGNAL", "device", "wifi", "list", "--rescan", "no"], |app, d| {
         let w = &mut app.svc.wifi;
         let before = (w.connected, w.ssid.clone());
-        let out = d.stdout.trim();
+        // The first line of the access point in use, trimmed (output.trim()).
+        let out = d.stdout.lines().find(|l| l.starts_with('*')).unwrap_or("").trim();
         if out.is_empty() {
             w.connected = false;
             w.ssid.clear();
@@ -988,9 +1006,11 @@ fn wifi_status(app: &mut App) {
 
 /// VpnWidget's side effects: a VPN that went down, or none at start with a
 /// city still cached from one, resets the time/weather sync (vpn-reset.sh).
-/// vpnResetProc.running = true during a reset runs it again after it, as
-/// Process does: a tunnel that came up and went down meanwhile is reset too.
-fn vpn_reset(app: &mut App) {
+/// The card's ВЫКЛ starts the same vpnResetProc (VpnWidget.qml:249-262,
+/// 384-393). vpnResetProc.running = true during a reset runs it again after
+/// it, as Process does: a tunnel that came up and went down meanwhile is
+/// reset too, and ВЫКЛ during a reset does not run a second one beside it.
+pub fn vpn_reset(app: &mut App) {
     if app.is_running("vpn-reset") {
         app.svc.vpn_reset_again = true;
         return;
@@ -1005,6 +1025,8 @@ fn vpn_reset(app: &mut App) {
         if std::mem::take(&mut app.svc.vpn_reset_again) {
             vpn_reset(app);
         }
+        // ...and updateVpnStatus(), whose answer QML gets after the above.
+        vpn_poll(app);
     });
 }
 
@@ -1026,6 +1048,14 @@ fn vpn_poll(app: &mut App) {
         }
     }
     let was_active = !app.svc.vpn.is_empty();
+    // vpn-switch.sh takes the old tunnel down before it brings the new one
+    // up: no tunnel while the card's action still runs is no drop yet. Its
+    // end looks again (vpn.rs tunnel_done, 500 ms later) and resets then if
+    // none came up. QML's 5 s check can land in that gap and send the clock
+    // and weather home mid-switch, forgetting the saved home zone.
+    if active.is_empty() && was_active && app.is_running("vpn-action") {
+        return;
+    }
     if active.is_empty() {
         if was_active {
             vpn_reset(app);
