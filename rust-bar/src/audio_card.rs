@@ -18,10 +18,22 @@ pub const OUT_MUTE: u32 = 1;
 pub const OUT_SLIDER: u32 = 2;
 pub const IN_MUTE: u32 = 3;
 pub const IN_SLIDER: u32 = 4;
-pub const SINK_ROW: u32 = 0x100;
-pub const SOURCE_ROW: u32 = 0x200;
-pub const STREAM_MUTE: u32 = 0x300;
-pub const STREAM_SLIDER: u32 = 0x400;
+/// A device row or an app's controls carry their node (slot()), not their
+/// place in the list: a QML delegate belongs to its node, so a click or a
+/// drag never lands on the next one when a node before it goes, and
+/// colours and texts do not pass to whatever moves up. Every code stays
+/// under 0x1_0000, so the keys made from codes (0x2_0000 + code, ...,
+/// 0x100_0000 + code * 64) keep their ranges apart.
+const SLOTS: u32 = 0x3C00;
+pub const SINK_ROW: u32 = 0x400;
+pub const SOURCE_ROW: u32 = 0x4000;
+pub const STREAM_MUTE: u32 = 0x8000;
+pub const STREAM_SLIDER: u32 = 0xC000;
+
+/// A node's slot in its code range (PipeWire's ids stay far below).
+fn slot(id: u32) -> u32 {
+    id % SLOTS
+}
 
 const LABEL: f32 = FONT_SIZE - 2.0;
 const HEADER: f32 = FONT_SIZE - 4.0;
@@ -241,10 +253,10 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
     ui.card.tint_alert = false;
     slider(ui, OUT_SLIDER, ix + m.btn_w + 10.0, cy + ac(m.btn_h, 20.0), iw - m.btn_w - 10.0, l.sink.0.volume, 1.0, muted, l.sink.0.ready);
     cy += m.btn_h;
-    for (i, n) in l.sinks.iter().enumerate() {
+    for n in &l.sinks {
         cy += 6.0;
         let lit = l.sink.1.as_ref().map_or(false, |s| s.id == n.id);
-        console_row(ui, SINK_ROW + i as u32, ix, cy, iw, m.row_h, sink_glyph(n), &node_label(n), lit);
+        console_row(ui, SINK_ROW + slot(n.id), ix, cy, iw, m.row_h, sink_glyph(n), &node_label(n), lit);
         cy += m.row_h;
     }
     y += out_h + 8.0;
@@ -264,10 +276,10 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
         cy += m.btn_h + 6.0;
         level_meter(ui, ix + m.btn_w + 10.0, cy, iw - m.btn_w - 10.0, l.source.0.ready);
         cy += 6.0;
-        for (i, n) in l.sources.iter().enumerate() {
+        for n in &l.sources {
             cy += 6.0;
             let lit = l.source.1.as_ref().map_or(false, |s| s.id == n.id);
-            console_row(ui, SOURCE_ROW + i as u32, ix, cy, iw, m.row_h, source_glyph(n), &node_label(n), lit);
+            console_row(ui, SOURCE_ROW + slot(n.id), ix, cy, iw, m.row_h, source_glyph(n), &node_label(n), lit);
             cy += m.row_h;
         }
         y += in_h + 8.0;
@@ -281,9 +293,9 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
         let mut cy = y + 10.0;
         section_header(ui, ix, cy, iw, m.cap_h, "ПРИЛОЖЕНИЯ", "");
         cy += m.cap_h;
-        for (i, (n, a)) in l.streams.iter().enumerate() {
+        for (n, a) in &l.streams {
             cy += 8.0;
-            let i = i as u32;
+            let i = slot(n.id);
             ui.card.tint_alert = true;
             ui.console_button_sized(STREAM_MUTE + i, ix, cy + ac(row, m.btn_h), m.btn_w, font, mute_icon(a.muted), t.col_grey, "", a.muted);
             ui.card.tint_alert = false;
@@ -291,12 +303,12 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
             let colw = iw - m.btn_w - 10.0;
             let col_y = cy + ac(row, (m.name_h + 2.0 + 20.0));
             let pl = ui.fonts.layout(&format!("{}%", (a.volume * 100.0).round() as i64), theme::bar_font(true), HEADER + 1.0, 0.0);
-            ui.text(&pl, colx + colw - pl.width, col_y, t.col_white, TextStyle::Normal);
+            ui.text_of(STREAM_SLIDER + i, 0xA1, &pl, colx + colw - pl.width, col_y, t.col_white);
             let name = stream_label(n);
             let nk = theme::bar_font(false);
             let full = ui.fonts.layout(&name, nk, HEADER + 1.0, 0.0);
             let line: Line = ui.fonts.elide_right(&full, &name, nk, colw - pl.width - 8.0, 0.0);
-            ui.text(&line, colx, col_y, t.col_grey, TextStyle::Normal);
+            ui.text_of(STREAM_SLIDER + i, 0xA2, &line, colx, col_y, t.col_grey);
             slider(ui, STREAM_SLIDER + i, colx, col_y + m.name_h + 2.0, colw, a.volume, 1.5, a.muted, true);
             cy += row;
         }
@@ -502,13 +514,16 @@ pub fn slider_to(app: &mut App, code: u32, x: f32) {
     set_volume(app, code, v);
 }
 
+/// The node a control acts on, as the lists are now: an app's control whose
+/// stream is gone acts on nothing (its QML delegate went with it).
 fn target_of(app: &App, code: u32) -> Option<(u32, Audio)> {
     let l = lists(&app.svc);
+    let stream = |base: u32| l.streams.iter().find(|(n, _)| base + slot(n.id) == code).map(|(n, a)| (n.id, a.clone()));
     match code {
         OUT_SLIDER | OUT_MUTE => l.sink.1.map(|n| (n.id, l.sink.0.clone())),
         IN_SLIDER | IN_MUTE => l.source.1.map(|n| (n.id, l.source.0.clone())),
-        c if (STREAM_MUTE..STREAM_MUTE + 0x100).contains(&c) => l.streams.get((c - STREAM_MUTE) as usize).map(|(n, a)| (n.id, a.clone())),
-        c if (STREAM_SLIDER..STREAM_SLIDER + 0x100).contains(&c) => l.streams.get((c - STREAM_SLIDER) as usize).map(|(n, a)| (n.id, a.clone())),
+        c if (STREAM_MUTE..STREAM_MUTE + SLOTS).contains(&c) => stream(STREAM_MUTE),
+        c if (STREAM_SLIDER..STREAM_SLIDER + SLOTS).contains(&c) => stream(STREAM_SLIDER),
         _ => None,
     }
 }
@@ -527,24 +542,24 @@ fn toggle_mute(app: &mut App, code: u32) {
 }
 
 pub fn is_slider(code: u32) -> bool {
-    code == OUT_SLIDER || code == IN_SLIDER || (STREAM_SLIDER..STREAM_SLIDER + 0x100).contains(&code)
+    code == OUT_SLIDER || code == IN_SLIDER || (STREAM_SLIDER..STREAM_SLIDER + SLOTS).contains(&code)
 }
 
 pub fn activate(app: &mut App, code: u32) {
     let l = lists(&app.svc);
     match code {
         OUT_MUTE | IN_MUTE => toggle_mute(app, code),
-        c if (SINK_ROW..SINK_ROW + 0x100).contains(&c) => {
-            if let (Some(n), Some(pw)) = (l.sinks.get((c - SINK_ROW) as usize), app.svc.pw.as_ref()) {
+        c if (SINK_ROW..SINK_ROW + SLOTS).contains(&c) => {
+            if let (Some(n), Some(pw)) = (l.sinks.iter().find(|n| SINK_ROW + slot(n.id) == c), app.svc.pw.as_ref()) {
                 pw.set_default(true, &n.name);
             }
         }
-        c if (SOURCE_ROW..SOURCE_ROW + 0x100).contains(&c) => {
-            if let (Some(n), Some(pw)) = (l.sources.get((c - SOURCE_ROW) as usize), app.svc.pw.as_ref()) {
+        c if (SOURCE_ROW..SOURCE_ROW + SLOTS).contains(&c) => {
+            if let (Some(n), Some(pw)) = (l.sources.iter().find(|n| SOURCE_ROW + slot(n.id) == c), app.svc.pw.as_ref()) {
                 pw.set_default(false, &n.name);
             }
         }
-        c if (STREAM_MUTE..STREAM_MUTE + 0x100).contains(&c) => toggle_mute(app, c),
+        c if (STREAM_MUTE..STREAM_MUTE + SLOTS).contains(&c) => toggle_mute(app, c),
         c if is_slider(c) => {}
         _ => {}
     }
