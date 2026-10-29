@@ -21,6 +21,10 @@ pub struct WifiCard {
     pub selected_ssid: String,
     pub selected_security: String,
     pub password: String,
+    /// The field's cursorPosition, in chars of `password`.
+    pub cursor: usize,
+    /// How far the field's text is scrolled left (QQuickTextInput's hscroll).
+    pub hscroll: f32,
     pub failed: bool,
     /// When the password field took focus (the cursor blinks from there).
     pub input_since: Option<Instant>,
@@ -84,9 +88,15 @@ fn cancel_password(app: &mut App) {
     w.password_mode = false;
     w.selected_ssid.clear();
     w.selected_security.clear();
-    w.password.clear();
+    clear_password(w);
     w.failed = false;
     app.mark_all_dirty();
+}
+
+fn clear_password(w: &mut WifiCard) {
+    w.password.clear();
+    w.cursor = 0;
+    w.hscroll = 0.0;
 }
 
 /// wifiConnectProc (WifiWidget.qml:330-369). Process.running = true on a
@@ -200,8 +210,126 @@ fn connect_with_password(app: &mut App) {
     }
     let (ssid, pass) = (w.selected_ssid.clone(), w.password.clone());
     app.svc.wifi_card.password_mode = false;
-    app.svc.wifi_card.password.clear();
+    clear_password(&mut app.svc.wifi_card);
     run_connect(app, &["nmcli", "device", "wifi", "connect", &ssid, "password", &pass]);
+}
+
+// ---- the password field (TextInput, echoMode Password) ----
+
+/// TextInput.maxLength, in UTF-16 units.
+const MAX_LENGTH: usize = 32767;
+
+/// The byte where char `i` of `s` starts (its end for i past the last).
+fn byte_at(s: &str, i: usize) -> usize {
+    s.char_indices().nth(i).map_or(s.len(), |(b, _)| b)
+}
+
+/// The field's dots and the cursor's x in them (QTextLine::cursorToX). Each
+/// UTF-16 unit is a dot: QQuickTextInput fills its displayed text with the
+/// mask character.
+fn field_text(fonts: &mut crate::text::Fonts, w: &WifiCard) -> (crate::text::Line, f32) {
+    let dots = "●".repeat(w.password.encode_utf16().count());
+    let line = fonts.layout(&dots, theme::bar_font(false), FONT_SIZE - 1.0, 0.0);
+    let k: usize = w.password.chars().take(w.cursor).map(char::len_utf16).sum();
+    let cx = line.glyphs.get(k).map_or(line.adv, |g| g.x);
+    (line, cx)
+}
+
+/// QQuickTextInputPrivate::updateHorizontalScroll (autoScroll): the text
+/// moves only as far as it must to keep the cursor in a field `width` wide;
+/// typing past the end leaves the cursor just outside the clip, as in Qt.
+fn scroll(prev: f32, cx: f32, text_w: f32, width: f32) -> f32 {
+    let used = text_w.max(cx);
+    if used <= width {
+        0.0
+    } else if cx - prev >= width {
+        cx - width
+    } else if cx - prev < 0.0 && prev < used {
+        cx
+    } else if used - prev < width {
+        used - width
+    } else if width - prev > used {
+        width - used
+    } else {
+        prev
+    }
+}
+
+/// The field's width: popupWidth less the Loader's and the TextInput's margins.
+fn field_width(app: &mut App) -> f32 {
+    card_width(&mut app.fonts, &app.svc) - 32.0
+}
+
+/// The scroll the field shows now: a width changed since the last edit runs
+/// updateHorizontalScroll again (geometryChange), before an edit's own.
+fn shown_scroll(app: &mut App, width: f32) -> f32 {
+    let (line, cx) = field_text(&mut app.fonts, &app.svc.wifi_card);
+    scroll(app.svc.wifi_card.hscroll, cx, line.adv, width)
+}
+
+/// After an edit or a cursor move: scrolled from `prev` to keep the cursor in.
+fn rescroll(app: &mut App, prev: f32, width: f32) {
+    let (line, cx) = field_text(&mut app.fonts, &app.svc.wifi_card);
+    app.svc.wifi_card.hscroll = scroll(prev, cx, line.adv, width);
+}
+
+/// QQuickTextInputPrivate::insert at the cursor, cut at maxLength.
+fn insert(w: &mut WifiCard, s: &str) {
+    let mut room = MAX_LENGTH.saturating_sub(w.password.encode_utf16().count());
+    let text: String = s
+        .chars()
+        .take_while(|c| match room.checked_sub(c.len_utf16()) {
+            Some(r) => {
+                room = r;
+                true
+            }
+            None => false,
+        })
+        .collect();
+    w.cursor = w.cursor.min(w.password.chars().count());
+    let b = byte_at(&w.password, w.cursor);
+    w.password.insert_str(b, &text);
+    w.cursor += text.chars().count();
+}
+
+/// QKeySequence::Paste (Ctrl+V, Shift+Insert): the clipboard's text goes
+/// in at the cursor as it is, newlines and all. wl-paste reads it through
+/// the compositor's data-control, as the clipboard history does.
+fn paste(app: &mut App) {
+    app.spawn("wifi-paste", &["wl-paste", "--no-newline", "--type", "text"], |app, d| {
+        let open = app.card.as_ref().map_or(false, |c| c.kind == CardKind::Wifi);
+        if d.stdout.is_empty() || !open || !app.svc.wifi_card.password_mode {
+            return;
+        }
+        let width = field_width(app);
+        let prev = shown_scroll(app, width);
+        insert(&mut app.svc.wifi_card, &d.stdout);
+        rescroll(app, prev, width);
+        if let Some(c) = app.card.as_mut() {
+            c.win.dirty = true;
+        }
+    });
+}
+
+/// A press in the field puts the cursor at the gap between two dots
+/// nearest to it (positionAt, CursorBetweenCharacters); `x` is from the
+/// field's left edge.
+fn place_cursor(app: &mut App, x: f32) {
+    let width = field_width(app);
+    let prev = shown_scroll(app, width);
+    let (line, _) = field_text(&mut app.fonts, &app.svc.wifi_card);
+    let (x, n) = (x + prev, line.glyphs.len());
+    let gap = |k: usize| line.glyphs.get(k).map_or(line.adv, |g| g.x);
+    let unit = (0..n).find(|&k| x < (gap(k) + gap(k + 1)) / 2.0).unwrap_or(n);
+    // A dot is a UTF-16 unit; the cursor stays off the middle of a character.
+    let w = &mut app.svc.wifi_card;
+    let mut units = 0;
+    w.cursor = w.password.chars().take_while(|c| {
+        let before = units;
+        units += c.len_utf16();
+        before < unit
+    }).count();
+    rescroll(app, prev, width);
 }
 
 fn signal_icon(s: i64) -> &'static str {
@@ -328,25 +456,27 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, busy: bool) {
         let cap = ui.fonts.layout("КОД ДОСТУПА", theme::bar_font(true), FONT_SIZE - 5.0, 1.0);
         ui.text(&cap, x0, y, t.col_dim, TextStyle::Normal);
         y += cap.height() + 8.0;
-        // The field: plate, accent border while focused, bullets and a blinking cursor.
+        // The field: plate, accent border while focused, bullets and a
+        // blinking cursor; the TextInput is the plate less 8 px around.
         let focused = ui.focusable(INPUT);
         ui.scene.rect(x0, y, cw, 36.0, t.col_plate, 4.0, 1.0, if focused { t.col_accent } else { Color::TRANSPARENT }, true);
-        let dots: String = "●".repeat(wc.password.chars().count());
-        let fl = ui.fonts.layout(&dots, theme::bar_font(false), FONT_SIZE - 1.0, 0.0);
+        let fw = cw - 16.0;
+        let (fl, cur) = field_text(ui.fonts, wc);
+        let hs = scroll(wc.hscroll, cur, fl.adv, fw);
         let ty = y + 8.0 + ac(20.0, fl.height());
         ui.scene.save();
-        ui.scene.clip_rect(x0 + 8.0, y + 8.0, cw - 16.0, 20.0);
-        ui.text(&fl, x0 + 8.0, ty, t.col_white, TextStyle::Normal);
+        ui.scene.clip_rect(x0 + 8.0, y + 8.0, fw, 20.0);
+        ui.text(&fl, x0 + 8.0 - hs, ty, t.col_white, TextStyle::Normal);
         if focused {
             // TextInput's cursor: 1 px, the text colour, 500 ms on / 500 ms
             // off; blink() redraws the card at each flip.
             let on = wc.input_since.map_or(true, |s| (s.elapsed().as_millis() / 500) % 2 == 0);
             if on {
-                ui.scene.fill(x0 + 8.0 + fl.adv, ty, 1.0, fl.height(), t.col_white);
+                ui.scene.fill(x0 + 8.0 + cur - hs, ty, 1.0, fl.height(), t.col_white);
             }
         }
         ui.scene.restore();
-        ui.hits.push(Hit { x: x0, y, w: cw, h: 36.0, action: Action::Card(INPUT) });
+        ui.hits.push(Hit { x: x0 + 8.0, y: y + 8.0, w: fw, h: 20.0, action: Action::Card(INPUT) });
         y += 36.0 + 8.0;
         let bw = (cw - 8.0) / 2.0;
         ui.console_button_sized(CANCEL, x0, y, bw, font, "", t.col_grey, "ОТМЕНА", false);
@@ -399,12 +529,16 @@ pub fn activate(app: &mut App, code: u32) {
             run_connect(app, &["sh", "-c", "nmcli -t -f DEVICE,TYPE,STATE device | awk -F: '$2 == \"wifi\" && $3 == \"connected\" { print $1 }' | while IFS= read -r d; do nmcli device disconnect \"$d\"; done"]);
         }
         INPUT => {
-            // A press gives the field the focus; coming in, its cursor shows
-            // and blinks anew (focusInEvent).
+            // A press gives the field the focus and puts the cursor where it
+            // was; coming in, the cursor shows and blinks anew (focusInEvent).
             let Some(c) = app.card.as_mut() else { return };
             let had = c.focus.and_then(|f| c.focus_codes.get(f)) == Some(&INPUT);
             c.focus = c.focus_codes.iter().position(|x| *x == INPUT);
             c.win.dirty = true;
+            // The field starts at the Loader's 8 px plus its own 8 px margin.
+            if let Some(x) = c.pointer.map(|(px, _)| px - c.origin().0 - 16.0) {
+                place_cursor(app, x);
+            }
             if !had {
                 blink_restart(app);
             }
@@ -420,8 +554,11 @@ pub fn activate(app: &mut App, code: u32) {
     }
 }
 
-/// Keys while the password field has focus: text, Backspace, Return, Escape.
-/// Returns true when the key was the field's.
+/// Keys while the password field has focus (WifiWidget.qml:545-557, Qt's
+/// TextInput): Return submits and Esc cancels (its Keys handlers); text goes
+/// in at the cursor; Backspace, Delete, Left, Right, Home and End edit and
+/// move it; Ctrl+V and Shift+Insert paste. Returns true when the key was the
+/// field's - checked against Qt 6.12 offscreen.
 pub fn input_key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Keysym, utf8: Option<&str>) -> bool {
     use smithay_client_toolkit::seat::keyboard::Keysym;
     let Some(card) = app.card.as_ref() else { return false };
@@ -429,18 +566,57 @@ pub fn input_key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Key
     if focused != Some(INPUT) {
         return false;
     }
+    let shift = card.shift;
+    let w = &app.svc.wifi_card;
+    let len = w.password.chars().count();
+    let at = w.cursor.min(len);
     match sym {
-        Keysym::Return | Keysym::KP_Enter => connect_with_password(app),
-        Keysym::Escape => cancel_password(app),
-        Keysym::BackSpace => {
-            app.svc.wifi_card.password.pop();
+        Keysym::Return => {
+            connect_with_password(app);
+            return true;
         }
-        Keysym::Tab | Keysym::ISO_Left_Tab | Keysym::Up | Keysym::Down => return false,
+        Keysym::Escape => {
+            cancel_password(app);
+            return true;
+        }
+        // Keypad Enter is Key_Enter: TextInput emits accepted() and lets it
+        // go, and nothing up to CardKeys takes it.
+        Keysym::KP_Enter => return true,
+        // CardKeys' Tab shortcuts; and what QQuickTextInput::keyPressEvent
+        // leaves to it: Up, Down, Left at the start, Right at the end.
+        Keysym::Tab | Keysym::ISO_Left_Tab | Keysym::Up | Keysym::Down | Keysym::KP_Up | Keysym::KP_Down => return false,
+        Keysym::Left | Keysym::KP_Left if at == 0 => return false,
+        Keysym::Right | Keysym::KP_Right if at >= len => return false,
+        _ => {}
+    }
+    // Ctrl+V's text is U+0016 (Ctrl+Shift+V is no paste in Qt).
+    let paste_key = (utf8 == Some("\u{16}") && !shift) || (sym == Keysym::Insert && shift) || sym == Keysym::XF86_Paste;
+    let width = field_width(app);
+    let prev = shown_scroll(app, width);
+    let w = &mut app.svc.wifi_card;
+    match sym {
+        Keysym::BackSpace => {
+            if at > 0 {
+                w.password.remove(byte_at(&w.password, at - 1));
+                w.cursor = at - 1;
+            }
+        }
+        Keysym::Delete | Keysym::KP_Delete => {
+            if at < len {
+                w.password.remove(byte_at(&w.password, at));
+            }
+        }
+        Keysym::Left | Keysym::KP_Left => w.cursor = at - 1,
+        Keysym::Right | Keysym::KP_Right => w.cursor = at + 1,
+        Keysym::Home | Keysym::KP_Home => w.cursor = 0,
+        Keysym::End | Keysym::KP_End => w.cursor = len,
+        _ if paste_key => paste(app),
         _ => match utf8 {
-            Some(s) if !s.is_empty() && !s.chars().any(char::is_control) => app.svc.wifi_card.password.push_str(s),
+            Some(s) if !s.is_empty() && !s.chars().any(char::is_control) => insert(w, s),
             _ => return false,
         },
     }
+    rescroll(app, prev, width);
     blink_restart(app);
     if let Some(c) = app.card.as_mut() {
         c.win.dirty = true;
