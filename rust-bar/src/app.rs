@@ -489,6 +489,10 @@ impl App {
 
     /// The audio card's meter onto its own surface once the card has placed it.
     fn place_meter(&mut self) {
+        // Its clock runs while the meter has a node (LevelMeter.qml:61).
+        if self.card.as_ref().map_or(false, |c| c.kind == cards::CardKind::Audio && c.meter_node) {
+            crate::audio_card::start_meter(self);
+        }
         let Some(card) = self.card.as_mut() else { return };
         if card.kind != cards::CardKind::Audio {
             return;

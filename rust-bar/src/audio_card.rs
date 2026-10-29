@@ -1,7 +1,8 @@
 //! The volume widget's card (AudioPanel.qml): output and input with their
 //! faders and device lists, the live mic meter, per-application faders.
 
-use std::time::Instant;
+use std::cell::Cell;
+use std::time::{Duration, Instant};
 
 use crate::app::App;
 use crate::bar::{ac, Action, Hit};
@@ -466,15 +467,44 @@ fn level_meter(ui: &mut Ui, x: f32, y: f32, w: f32, has_node: bool) {
     meter_cells(ui.scene, t, x, y, w, level, hold);
 }
 
+const METER_PERIOD: Duration = Duration::from_millis(33);
+
+thread_local! {
+    /// When the meter's clock last moved (started or ticked); None while it
+    /// is stopped. LevelMeter has one Timer.
+    static METER_CLOCK: Cell<Option<Instant>> = const { Cell::new(None) };
+}
+
+/// LevelMeter's Timer runs while the meter has a node (LevelMeter.qml:58-61,
+/// running: meter.visible && !!meter.node): the card's draw starts it when
+/// no clock runs, so an input that appears with the card open starts it again.
+pub fn start_meter(app: &App) {
+    // A running clock moved within the period (three, for a slow frame).
+    if METER_CLOCK.get().map_or(true, |t| t.elapsed() > METER_PERIOD * 3) {
+        METER_CLOCK.set(Some(Instant::now()));
+        app.every(METER_PERIOD, meter_tick);
+    }
+}
+
 /// The meter's 33 ms tick: level falls 0.025 a tick, the hold stays 30 ticks
 /// then falls 0.02 a tick. The card is redrawn only when that moves a lit
 /// segment or the hold marker - Qt repaints only what changed, and a silent
 /// mic redrew the card (and mango re-composited it) 30 times a second.
 pub fn meter_tick(app: &mut App) -> bool {
-    let Some(card) = app.card.as_mut() else { return false };
-    if card.kind != crate::cards::CardKind::Audio {
+    let now = Instant::now();
+    // One clock: a timer ticks again a whole period after its own tick
+    // ended, so a tick sooner than that is a second timer's (the card closed
+    // and opened again, on another screen, before the first saw it close) -
+    // with two, the level fell twice as fast.
+    if METER_CLOCK.get().map_or(false, |t| now.duration_since(t) < METER_PERIOD - Duration::from_millis(3)) {
         return false;
     }
+    // It stops with the card, and while the meter has no node.
+    let Some(card) = app.card.as_mut().filter(|c| c.kind == crate::cards::CardKind::Audio && c.meter_node) else {
+        METER_CLOCK.set(None);
+        return false;
+    };
+    METER_CLOCK.set(Some(now));
     let audio = app.svc.pw.as_ref().map(|p| p.source_audio()).unwrap_or_default();
     let peak = app.svc.pw.as_ref().map_or(0.0, |p| p.peak());
     let target = if audio.muted || !audio.ready || !(peak > 0.0) {
