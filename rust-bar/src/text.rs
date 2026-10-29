@@ -56,7 +56,12 @@ fn ube16(d: &[u8], o: usize) -> i64 {
 }
 
 impl Face {
-    fn new(font: FontRef<'static>) -> Face {
+    /// None when HarfBuzz's parser (rustybuzz) does not take the face: a
+    /// broken font, or a file fontconfig lists that is no usable OpenType.
+    /// It checks head (unitsPerEm 16..16384), hhea and maxp, so the reads
+    /// of those below stay inside them.
+    fn new(font: FontRef<'static>, index: u32) -> Option<Face> {
+        let hb = rustybuzz::Face::from_slice(font.data, index)?;
         let table = |tag: &[u8; 4]| font.table(swash::tag_from_bytes(tag));
         let upem = table(b"head").map(|d| ube16(d, 18)).unwrap_or(1000);
         let hhea = table(b"hhea").map(|d| (be16(d, 4), be16(d, 6))).unwrap_or((800, -200));
@@ -71,7 +76,7 @@ impl Face {
             }
         }
         let mut strikes = vec![];
-        if let Some(d) = table(b"EBLC") {
+        if let Some(d) = table(b"EBLC").filter(|d| d.len() >= 8) {
             let n = u32::from_be_bytes([d[4], d[5], d[6], d[7]]) as usize;
             for i in 0..n {
                 let b = 8 + 48 * i;
@@ -84,8 +89,7 @@ impl Face {
         let has_bitmaps = table(b"EBLC").is_some() || table(b"CBLC").is_some() || table(b"bdat").is_some();
         let fixed_pitch = table(b"post").map_or(false, |d| d.len() >= 16 && u32::from_be_bytes([d[12], d[13], d[14], d[15]]) != 0);
         let color = table(b"CBDT").is_some() || table(b"sbix").is_some();
-        let hb = rustybuzz::Face::from_slice(font.data, 0).expect("font for shaping");
-        Face { font, data: font.data, index: 0, ft_face: None, upem, hhea, typo, win, strikes, has_bitmaps, fixed_pitch, hb, color }
+        Some(Face { font, data: font.data, index, ft_face: None, upem, hhea, typo, win, strikes, has_bitmaps, fixed_pitch, hb, color })
     }
 
     fn scale26(&self, size: f32) -> i64 {
@@ -520,10 +524,7 @@ impl Fonts {
         let map = unsafe { memmap2::Mmap::map(&f).ok()? };
         let data: &'static [u8] = Box::leak(Box::new(map));
         let font = FontRef::from_index(data, index as usize)?;
-        let mut face = Face::new(font);
-        face.data = data;
-        face.index = index;
-        face.hb = rustybuzz::Face::from_slice(data, index)?;
+        let face = Face::new(font, index)?;
         self.faces.push(face);
         let i = (self.faces.len() - 1) as u16;
         self.by_file.insert((file.to_string(), index), i);
@@ -536,8 +537,11 @@ impl Fonts {
         }
         // The bar's Qt resolves bold to the family's regular file (the live bar
         // maps only TerminessNerdFont-Regular.ttf) and emboldens it - see layout().
-        let (file, index) = fc_match(key.family).unwrap_or_else(|| ("/usr/share/fonts/TTF/DejaVuSans.ttf".into(), 0));
-        let i = self.load_file(&file, index).expect("no usable font");
+        // A match that does not load falls back as a failed match does.
+        let i = fc_match(key.family)
+            .and_then(|(file, index)| self.load_file(&file, index))
+            .or_else(|| self.load_file("/usr/share/fonts/TTF/DejaVuSans.ttf", 0))
+            .expect("no usable font");
         self.by_key.insert(key, i);
         i
     }
