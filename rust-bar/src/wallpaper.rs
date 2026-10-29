@@ -360,6 +360,8 @@ fn scan_line(app: &mut App, line: &str) {
         forget_card(app, id);
     } else if let Some(id) = line.strip_prefix("fail ") {
         app.svc.wall.failed.insert(id.to_string());
+        // thumbUrl() is "" now: the Image lets go of the original too.
+        forget_card(app, id);
     }
     redraw(app);
 }
