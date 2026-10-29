@@ -81,6 +81,8 @@ pub struct Weather {
     pub max_temp: String,
     pub hourly_rain: Vec<i64>,
     retry_step: usize,
+    /// Asked again while a fetch ran: one more when it ends.
+    fetch_again: bool,
 }
 
 fn strip_html(s: &str) -> String {
@@ -827,18 +829,34 @@ fn apply_weather(app: &mut App, out: &str) -> bool {
     v.get("stale").and_then(Value::as_bool) != Some(true)
 }
 
+/// requestWeather(): weatherFetchDebounce.restart() - 250 ms, so a burst (the
+/// zone and the city of one VPN sync, a tunnel up and down) is one fetch.
 pub fn request_weather(app: &mut App) {
+    app.debounce("weather-fetch", Duration::from_millis(250), fetch_weather);
+}
+
+/// weatherProc.running = true. A fetch already running does not drop it:
+/// Process runs again once that one ends (its targetRunning), so a city that
+/// changed mid-fetch still gets its own reading.
+fn fetch_weather(app: &mut App) {
+    if app.is_running("weather") {
+        app.svc.weather.fetch_again = true;
+        return;
+    }
     let cmd = format!("{}/.config/quickshell/bar/scripts/weather-fetch.sh 2>/dev/null", home());
     app.spawn("weather", &["sh", "-c", &cmd], |app, d| {
         let good = !d.stdout.trim().is_empty() && apply_weather(app, &d.stdout);
         if good {
             app.svc.weather.retry_step = 0;
             app.cancel_timer("weather-retry");
-            return;
+        } else {
+            let minutes = [1u64, 2, 5, 10][app.svc.weather.retry_step.min(3)];
+            app.svc.weather.retry_step += 1;
+            app.debounce("weather-retry", Duration::from_secs(minutes * 60), request_weather);
         }
-        let minutes = [1u64, 2, 5, 10][app.svc.weather.retry_step.min(3)];
-        app.svc.weather.retry_step += 1;
-        app.debounce("weather-retry", Duration::from_secs(minutes * 60), request_weather);
+        if std::mem::take(&mut app.svc.weather.fetch_again) {
+            fetch_weather(app);
+        }
     });
 }
 
