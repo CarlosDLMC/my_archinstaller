@@ -30,7 +30,6 @@ pub struct LayoutState {
     pub current: usize,
     session_active: bool,
     session_pos: usize,
-    held: bool,
     /// The OSD's hovered entry, -1 = none.
     hovered: Option<usize>,
 }
@@ -148,8 +147,8 @@ fn select_pos(app: &mut App, pos: usize) {
     release(app);
 }
 
+/// releaseOsd(): the MRU commit runs again.
 fn release(app: &mut App) {
-    app.svc.layout.held = false;
     commit_restart(app);
 }
 
@@ -215,21 +214,28 @@ fn panel_size(app: &mut App) -> (f32, f32) {
     (body_w + m.panel_pad, body_h + m.panel_pad)
 }
 
+/// onShowOsd: the popup up, and hideTimer restarted.
 fn show_osd(app: &mut App) {
     if app.svc.layout.switcher_items().is_empty() {
         return;
     }
+    map_osd(app);
+    hide_later(app);
+}
+
+/// windowVisible = shown = true: maps the popup, or brings back a fading one.
+fn map_osd(app: &mut App) {
     let (pw, ph) = panel_size(app);
     // implicitWidth: panel + 40; the panel centred in it.
     let (w, h) = ((pw + 40.0).ceil(), (ph + 40.0).ceil());
     osd::show(app, OpenParams { kind: OsdKind::Layout, size: (w as u32, h as u32), panel: (ac(w, pw), ac(h, ph), pw, ph), dim: None, keyboard: false, namespace: "quickshell", fade_ms: OSD_FADE_MS, min_scale: 0.94, fade_easing: crate::anim::Easing::OutCubic, pos: None, fill: false, output: None });
     app.svc.layout.hovered = None;
-    // hideTimer: fade after 1.3 s unless the pointer holds it.
-    app.debounce("layout-osd-hide", Duration::from_millis(OSD_VISIBLE_MS), |app| {
-        if !app.svc.layout.held {
-            osd::hide(app, OsdKind::Layout);
-        }
-    });
+}
+
+/// hideTimer.restart(): the popup fades 1.3 s later, under the pointer or
+/// not (LayoutOsd.qml:97-101 hides unconditionally; only onEntered stops it).
+fn hide_later(app: &mut App) {
+    app.debounce("layout-osd-hide", Duration::from_millis(OSD_VISIBLE_MS), |app| osd::hide(app, OsdKind::Layout));
 }
 
 fn hide_osd(app: &mut App) {
@@ -240,17 +246,16 @@ fn hide_osd(app: &mut App) {
 /// MouseArea.onEntered / onExited over the panel.
 pub fn osd_hover(app: &mut App, inside: bool) {
     if inside {
-        app.svc.layout.held = true;
-        show_osd(app);
+        // Freeze: no auto-hide and no MRU commit while pointed at; a popup
+        // that was fading comes back (LayoutOsd.qml:233-240). A later
+        // switch restarts both, and then it hides under the pointer too.
+        map_osd(app);
+        app.cancel_timer("layout-osd-hide");
         app.cancel_timer("layout-commit");
     } else {
         app.svc.layout.hovered = None;
         release(app);
-        app.debounce("layout-osd-hide", Duration::from_millis(OSD_VISIBLE_MS), |app| {
-            if !app.svc.layout.held {
-                osd::hide(app, OsdKind::Layout);
-            }
-        });
+        hide_later(app);
     }
 }
 

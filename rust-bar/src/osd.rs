@@ -317,7 +317,14 @@ pub fn destroy(app: &mut App, kind: OsdKind) {
     if app.osd(kind).map_or(true, |o| o.shown) {
         return;
     }
+    let hovered = app.osd(kind).map_or(false, |o| o.st.pointer.is_some());
     app.osds.retain(|o| o.kind != kind);
+    // A hidden window clears its hover (QQuickWindow::hideEvent): the
+    // MouseArea still under the pointer gets onExited. No wl_pointer.leave
+    // comes for a surface that is gone.
+    if hovered {
+        hover_changed(app, kind, false);
+    }
     unsafe { libc::malloc_trim(0) };
 }
 
