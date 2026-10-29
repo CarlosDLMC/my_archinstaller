@@ -1352,11 +1352,23 @@ pub(crate) fn info_grid<S: UiState>(ui: &mut Ui<S>, x: f32, y: f32, w: f32, rows
 fn snap_columns<const N: usize>(sizes: [f32; N], spacing: f32, target: f32, minimum: [f32; N]) -> ([f32; N], [f32; N]) {
     let mut pos = [0f32; N];
     let mut size = sizes;
-    for i in 1..N {
+    snap_cells(&mut pos, &mut size, spacing, target, &minimum);
+    (pos, size)
+}
+
+/// snap_columns for any number of cells (a Repeater's): `size` holds the
+/// cells' sizes and gets the snapped ones, `pos` gets where they start.
+fn snap_cells(pos: &mut [f32], size: &mut [f32], spacing: f32, target: f32, minimum: &[f32]) {
+    let n = size.len().min(pos.len());
+    if n == 0 {
+        return;
+    }
+    pos[0] = 0.0;
+    for i in 1..n {
         pos[i] = pos[i - 1] + size[i - 1] + spacing;
     }
     let qround = |v: f32| (v + 0.5).floor();
-    for i in 0..N {
+    for i in 0..n {
         let old = pos[i];
         pos[i] = qround(old);
         let delta = pos[i] - old;
@@ -1365,11 +1377,10 @@ fn snap_columns<const N: usize>(sizes: [f32; N], spacing: f32, target: f32, mini
             size[i - 1] += delta;
         }
     }
-    size[N - 1] = target - pos[N - 1];
-    for i in 0..N {
-        size[i] = minimum[i].max(qround(size[i]));
+    size[n - 1] = target - pos[n - 1];
+    for i in 0..n {
+        size[i] = minimum.get(i).copied().unwrap_or(0.0).max(qround(size[i]));
     }
-    (pos, size)
 }
 
 pub(crate) fn plate<S: UiState>(ui: &mut Ui<S>, x: f32, y: f32, w: f32, h: f32) {
@@ -1558,16 +1569,18 @@ fn draw_weather(ui: &mut Ui, w: f32, svc: &Services) {
     }
     y += l.p1 + 8.0;
 
-    // Plate 2: МИН / МАКС / ОЩУЩАЕТСЯ, three equal columns.
+    // Plate 2: МИН / МАКС / ОЩУЩАЕТСЯ, a GridLayout of three equal columns
+    // (fillWidth), on whole pixels as Qt's layouts snap them.
     if l.p2 > 0.0 {
         plate(ui, x0, y, cw, l.p2);
         let colw = (cw - 20.0 - 16.0) / 3.0;
+        let (cols, widths) = snap_columns([colw; 3], 8.0, cw - 20.0, [0.0; 3]);
         let caps = ["МИН", "МАКС", "ОЩУЩАЕТСЯ"];
         let vals = [&wx.min_temp, &wx.max_temp, &wx.feels_like];
         let r1 = ui.fonts.layout("М", theme::bar_font(true), FONT_SIZE - 5.0, 1.0).height();
         let r2 = ui.fonts.layout("0", theme::bar_font(true), FONT_SIZE, 0.0).height();
         for i in 0..3 {
-            let cx = x0 + 10.0 + i as f32 * (colw + 8.0);
+            let (cx, colw) = (x0 + 10.0 + cols[i], widths[i]);
             let cl = ui.fonts.layout(caps[i], theme::bar_font(true), FONT_SIZE - 5.0, 1.0);
             ui.text(&cl, cx + (colw - cl.adv) / 2.0, y + 10.0 + ac(r1, cl.height()), t.col_dim, TextStyle::Normal);
             let v = if vals[i].is_empty() { "—" } else { vals[i].as_str() };
@@ -1582,12 +1595,15 @@ fn draw_weather(ui: &mut Ui, w: f32, svc: &Services) {
         plate(ui, x0, y, cw, l.p3);
         let cap = ui.fonts.layout(" ДОЖДЬ", theme::bar_font(true), FONT_SIZE - 5.0, 1.0);
         ui.text(&cap, x0 + 10.0, y + 10.0, t.col_dim, TextStyle::Normal);
-        let n = wx.hourly_rain.len() as f32;
-        let colw = (cw - 20.0 - 8.0 * (n - 1.0)) / n;
+        // A RowLayout of equal columns (fillWidth), snapped to whole pixels.
+        let n = wx.hourly_rain.len();
+        let mut cols = vec![0.0; n];
+        let mut widths = vec![(cw - 20.0 - 8.0 * (n as f32 - 1.0)) / n as f32; n];
+        snap_cells(&mut cols, &mut widths, 8.0, cw - 20.0, &[]);
         let by = y + 10.0 + cap.height() + 6.0;
         for (i, v) in wx.hourly_rain.iter().enumerate() {
             let lit = ((*v).clamp(0, 100) as f32 / 100.0 * 6.0).round() as i64;
-            let cx = x0 + 10.0 + i as f32 * (colw + 8.0);
+            let (cx, colw) = (x0 + 10.0 + cols[i], widths[i]);
             for k in 0..6i64 {
                 let c = if (5 - k) < lit { t.col_accent } else { Color::qt_rgba(1.0, 1.0, 1.0, 0.07) };
                 ui.scene.rect(cx, by + k as f32 * 7.0, colw, 5.0, c, 1.0, 0.0, Color::TRANSPARENT, true);
