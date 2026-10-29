@@ -233,11 +233,17 @@ pub fn show(app: &mut App, p: OpenParams) {
     layer.set_size(p.size.0, p.size.1);
     layer.set_exclusive_zone(-1);
     layer.set_keyboard_interactivity(if p.keyboard { KeyboardInteractivity::Exclusive } else { KeyboardInteractivity::None });
-    // mask: Region { item: panel } - clicks outside the panel go through.
-    if let (false, Ok(region)) = (p.fill, smithay_client_toolkit::compositor::Region::new(&app.compositor)) {
-        let (x, y, w, h) = p.panel;
-        region.add(x.floor() as i32, y.floor() as i32, w.ceil() as i32, h.ceil() as i32);
-        layer.wl_surface().set_input_region(Some(region.wl_region()));
+    // mask: Region { item: panel } - clicks outside the panel go through. A
+    // panel that is the whole surface needs none: QML's dialogs are
+    // full-screen windows without a mask, and the default region grows with
+    // the surface when the dialog does (capture's and polkit's reshow).
+    let (x, y, w, h) = p.panel;
+    let whole = x <= 0.0 && y <= 0.0 && w.ceil() as u32 >= p.size.0 && h.ceil() as u32 >= p.size.1;
+    if !p.fill && !whole {
+        if let Ok(region) = smithay_client_toolkit::compositor::Region::new(&app.compositor) {
+            region.add(x.floor() as i32, y.floor() as i32, w.ceil() as i32, h.ceil() as i32);
+            layer.wl_surface().set_input_region(Some(region.wl_region()));
+        }
     }
     layer.commit();
     let mut fade = Animated::new(0.0, p.fade_ms, p.fade_easing);
