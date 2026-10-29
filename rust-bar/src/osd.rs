@@ -457,13 +457,23 @@ pub fn key(app: &mut App, kind: OsdKind, sym: smithay_client_toolkit::seat::keyb
 }
 
 /// Every pointer event on an overlay, before the generic hit handling; true
-/// when the overlay took it (the overview's drags).
+/// when the overlay took it (the overview's drags, the buttons QML ignores).
 pub fn raw_pointer(app: &mut App, kind: OsdKind, ev: &smithay_client_toolkit::seat::pointer::PointerEventKind, x: f32, y: f32) -> bool {
+    use smithay_client_toolkit::seat::pointer::PointerEventKind as P;
     match kind {
         OsdKind::Overview(i) => crate::overview::pointer(app, i, ev, x, y),
+        // Their MouseAreas keep acceptedButtons' default, Qt.LeftButton
+        // (LayoutOsd.qml:216, PowerOsd.qml:123,263, BigButton.qml:88,
+        // ToggleRow.qml:94, ShotOsd.qml:219, RecordOsd.qml:232): a right,
+        // middle or side button neither presses nor clicks anything.
+        OsdKind::Layout | OsdKind::Power | OsdKind::Shot | OsdKind::Record => {
+            matches!(ev, P::Press { button, .. } | P::Release { button, .. } if *button != BTN_LEFT)
+        }
         _ => false,
     }
 }
+
+const BTN_LEFT: u32 = 0x110;
 
 /// The wheel over the panel (QML angleDelta: +120 per notch away from you).
 pub fn wheel(app: &mut App, kind: OsdKind, delta: f32) {
