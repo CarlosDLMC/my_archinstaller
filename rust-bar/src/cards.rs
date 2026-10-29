@@ -26,6 +26,7 @@ use crate::gpu::{Gpu, Scene, TextStyle};
 use crate::services::{self, Services};
 use crate::text::{Fonts, Line};
 use crate::theme::{self, Theme, FONT_SIZE};
+use wayland_client::protocol::wl_output::WlOutput;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum CardKind {
@@ -43,6 +44,28 @@ pub enum CardKind {
 
 /// A fixed origin for animations that run on the clock (Spinner).
 pub static EPOCH: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+
+/// What a bar keeps of a card QML makes once and only hides (see KEPT).
+struct Kept {
+    output: WlOutput,
+    kind: CardKind,
+    texts: crate::text::TextMemo,
+    /// CardKeys' focused control when the card closed.
+    focus: Option<u32>,
+}
+
+thread_local! {
+    /// CalendarPopup and CenterInfo's weather card are no Loaders: every bar
+    /// has its own of each, made once and only hidden when it closes
+    /// (CenterInfo.qml:903-911). Their Texts keep what happened to them - a
+    /// month paged or an arrow hovered is gray from then on - and the
+    /// calendar's CardKeys keeps its focused arrow, which the next opening
+    /// by the mouse shows again: the window gives its focus back down the
+    /// focus scopes (QQuickWindow::focusInEvent). Kept by the bar's output:
+    /// a new output is a new bar, and a gone one's state goes at the next
+    /// closing.
+    static KEPT: std::cell::RefCell<Vec<Kept>> = const { std::cell::RefCell::new(Vec::new()) };
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Stem {
@@ -576,12 +599,18 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         top: y.round(),
     });
     app.strips[strip].win.dirty = true;
-    if kind == CardKind::Weather {
-        // CenterInfo's weather card is not a Loader: Qt makes its Texts' nodes
-        // the first time it is shown and keeps them, so what changed since the
-        // last opening is gray (the palette load at startup came before any node).
-        if let Some(m) = app.weather_texts.take() {
-            app.card.as_mut().unwrap().texts = m;
+    if matches!(kind, CardKind::Calendar | CardKind::Weather) {
+        // This bar's own (KEPT): Qt made its Texts' nodes the first time it
+        // was shown, so what changed since is gray (the palette load at
+        // startup came before any node).
+        let output = &app.strips[strip].output;
+        let kept = KEPT.with_borrow_mut(|v| v.iter().position(|k| k.kind == kind && k.output == *output).map(|i| v.swap_remove(i)));
+        if let (Some(k), Some(card)) = (kept, app.card.as_mut()) {
+            card.texts = k.texts;
+            // A keyboard opening focuses the first control (focusFirst).
+            if !keyboard {
+                card.focus_code = k.focus;
+            }
         }
     }
     if kind == CardKind::Pult {
@@ -618,8 +647,14 @@ pub fn close(app: &mut App) {
     let Some(mut card) = app.card.take() else { return };
     // The meter's subsurface goes before the card's surface.
     card.meter_win = None;
-    if card.kind == CardKind::Weather {
-        app.weather_texts = Some(std::mem::take(&mut card.texts));
+    if matches!(card.kind, CardKind::Calendar | CardKind::Weather) {
+        if let Some(s) = app.strips.get(card.strip) {
+            let kept = Kept { output: s.output.clone(), kind: card.kind, texts: std::mem::take(&mut card.texts), focus: card.focus_code };
+            KEPT.with_borrow_mut(|v| {
+                v.retain(|k| app.strips.iter().any(|s| s.output == k.output));
+                v.push(kept);
+            });
+        }
     }
     if card.kind == CardKind::Audio {
         if let Some(pw) = app.svc.pw.as_mut() {
