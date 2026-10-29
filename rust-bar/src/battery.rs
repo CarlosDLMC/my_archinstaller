@@ -13,7 +13,7 @@ use crate::theme::{self, FONT_SIZE};
 
 const HELPER: &str = "/usr/local/bin/battery-charge-limit";
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, PartialEq)]
 pub struct Pack {
     pub name: String,
     pub status: String,
@@ -221,6 +221,8 @@ pub fn refresh(app: &mut App, with_limits: bool) {
     if packs.is_empty() {
         return;
     }
+    // The card's pack Repeater makes its rows anew when the array differs.
+    let remade = packs != b.packs;
     b.packs = packs;
     b.on_ac = b.mains.is_empty() || std::fs::read_to_string(format!("{}/uevent", b.mains)).unwrap_or_default().contains("POWER_SUPPLY_ONLINE=1");
 
@@ -281,6 +283,11 @@ pub fn refresh(app: &mut App, with_limits: bool) {
     };
     // The strip shows the level and state; the open card shows the rest.
     let card_open = app.card.as_ref().map(|c| c.kind) == Some(crate::cards::CardKind::Battery);
+    if card_open && remade {
+        if let Some(c) = app.card.as_mut() {
+            c.texts.forget_parts(&PACK_TEXTS);
+        }
+    }
     if card_open || before != (app.svc.battery.level, app.svc.battery.charge_state.clone()) {
         app.mark_all_dirty();
     }
@@ -307,6 +314,8 @@ const LABEL: f32 = FONT_SIZE - 3.0;
 const PRESETS: [(i64, &str, &str); 3] = [(60, "60%", "Всегда от сети"), (80, "80%", "Смешанный режим"), (100, "100%", "Без ограничения")];
 pub const LIMIT: u32 = 0x10;
 
+/// TextMemo parts of a pack row's Texts (name, model, stats), named by row.
+const PACK_TEXTS: [u64; 3] = [0xA9, 0xAA, 0xAB];
 /// TextMemo parts of the wrapped Texts: one Text each, one verdict for all
 /// its lines (BatteryPanel.qml:355-378, 382-391).
 const NOTE_TEXT: u64 = 0xAC;
@@ -541,15 +550,15 @@ fn pack_row(ui: &mut Ui, i: u32, x: f32, y: f32, w: f32, p: &Pack) {
     let tint = if p.health > 0 && p.health < 60 { t.col_alert } else { t.col_accent };
     lamp_tinted(ui, 0x7100 + i, x, y + ac(PACK_ROW, 10.0), true, tint);
     let name = ui.fonts.layout(&p.name, theme::bar_font(true), LABEL, 0.0);
-    ui.text(&name, x + 18.0, y + ac(PACK_ROW, name.height()), t.col_white, TextStyle::Normal);
+    ui.text_of(i, PACK_TEXTS[0], &name, x + 18.0, y + ac(PACK_ROW, name.height()), t.col_white);
     let health = if p.health > 0 { format!("ресурс {}%", p.health) } else { "—".into() };
     let stats_text = format!("{}% · {} · {} цикл.", p.capacity, health, js_num(p.cycles));
     let stats = ui.fonts.layout(&stats_text, theme::bar_font(false), LABEL - 1.0, 0.0);
     let sx = x + w - stats.width;
-    ui.text(&stats, sx, y + ac(PACK_ROW, stats.height()), health_color(p.health, t), TextStyle::Normal);
+    ui.text_of(i, PACK_TEXTS[2], &stats, sx, y + ac(PACK_ROW, stats.height()), health_color(p.health, t));
     let mx = x + 18.0 + name.width + 10.0;
     let key = theme::bar_font(false);
     let full = ui.fonts.layout(&p.model, key, LABEL - 2.0, 0.0);
     let model = ui.fonts.elide_right(&full, &p.model, key, sx - 10.0 - mx, 0.0);
-    ui.text(&model, mx, y + ac(PACK_ROW, model.height()), t.col_muted, TextStyle::Normal);
+    ui.text_of(i, PACK_TEXTS[1], &model, mx, y + ac(PACK_ROW, model.height()), t.col_muted);
 }
