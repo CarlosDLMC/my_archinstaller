@@ -1919,8 +1919,8 @@ fn power_pick(app: &mut App, i: u32, keyboard: bool) {
 }
 
 /// CardKeys: Esc closes, Tab/arrows walk the focus chain, Return/Enter/Space press.
-pub fn key(app: &mut App, sym: Keysym, utf8: Option<&str>) {
-    if app.card.as_ref().map(|c| c.kind) == Some(CardKind::Wifi) && crate::wifi_card::input_key(app, sym, utf8) {
+pub fn key(app: &mut App, sym: Keysym, mods: crate::app::Mods, utf8: Option<&str>) {
+    if app.card.as_ref().map(|c| c.kind) == Some(CardKind::Wifi) && crate::wifi_card::input_key(app, sym, mods, utf8) {
         return;
     }
     let Some(card) = app.card.as_mut() else { return };

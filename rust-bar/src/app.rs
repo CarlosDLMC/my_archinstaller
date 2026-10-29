@@ -669,7 +669,7 @@ impl App {
             }
         }
         if self.card.is_some() {
-            cards::key(self, event.keysym, event.utf8.as_deref());
+            cards::key(self, event.keysym, self.mods, event.utf8.as_deref());
         }
     }
 }

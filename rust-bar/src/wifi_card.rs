@@ -584,7 +584,7 @@ pub fn activate(app: &mut App, code: u32) {
 /// in at the cursor; Backspace, Delete, Left, Right, Home and End edit and
 /// move it; Ctrl+V and Shift+Insert paste. Returns true when the key was the
 /// field's - checked against Qt 6.12 offscreen.
-pub fn input_key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Keysym, utf8: Option<&str>) -> bool {
+pub fn input_key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Keysym, mods: crate::app::Mods, utf8: Option<&str>) -> bool {
     use smithay_client_toolkit::seat::keyboard::Keysym;
     let Some(card) = app.card.as_ref() else { return false };
     let focused = card.focus.and_then(|f| card.focus_codes.get(f).copied());
@@ -614,8 +614,10 @@ pub fn input_key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Key
         Keysym::Right | Keysym::KP_Right if at >= len => return false,
         _ => {}
     }
-    // Ctrl+V's text is U+0016 (Ctrl+Shift+V is no paste in Qt).
-    let paste_key = (utf8 == Some("\u{16}") && !shift) || (sym == Keysym::Insert && shift) || sym == Keysym::XF86_Paste;
+    // QKeySequence::Paste: Ctrl+V (not Ctrl+Shift+V), Shift+Insert, the
+    // Paste key. The key, not its text: Ctrl+М on the ru layout reaches here
+    // as Keysym::v (App::key's Latin fallback, eabd205) with "м" for text.
+    let paste_key = (matches!(sym, Keysym::v | Keysym::V) && mods.ctrl && !shift && !mods.alt) || (sym == Keysym::Insert && shift && !mods.ctrl) || sym == Keysym::XF86_Paste;
     let width = field_width(app);
     let prev = shown_scroll(app, width);
     let w = &mut app.svc.wifi_card;
@@ -636,8 +638,10 @@ pub fn input_key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Key
         Keysym::Home | Keysym::KP_Home => w.cursor = 0,
         Keysym::End | Keysym::KP_End => w.cursor = len,
         _ if paste_key => paste(app),
+        // QInputControl::isAcceptableInput: what Ctrl or Ctrl+Shift types is
+        // no text for the field (Ctrl+М's "м" on ru); AltGr's (Ctrl+Alt) is.
         _ => match utf8 {
-            Some(s) if !s.is_empty() && !s.chars().any(char::is_control) => insert(w, s),
+            Some(s) if !s.is_empty() && !s.chars().any(char::is_control) && !(mods.ctrl && !mods.alt) => insert(w, s),
             _ => return false,
         },
     }
