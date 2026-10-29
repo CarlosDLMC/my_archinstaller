@@ -59,9 +59,25 @@ pub struct OpenCard {
     pub pointer: Option<(f32, f32)>,
     pub shift: bool,
     /// Index into the card's focus chain (CardKeys), None = nothing focused.
+    /// Code that sets it names the control at that place in the next draw's
+    /// chain; after a draw it is where `focus_code` is.
     pub(crate) focus: Option<usize>,
     /// The focus chain of the last draw: each focusable control's code.
     pub(crate) focus_codes: Vec<u32>,
+    /// The focused control (the window's activeFocusItem): it keeps the focus
+    /// while the chain changes around it. Gone from the chain (disabled,
+    /// hidden), the keys go to the card's scope until it comes back.
+    focus_code: Option<u32>,
+    /// `focus` as the last draw left it: a change since is an index set by code.
+    focus_seen: Option<usize>,
+    /// The keys moved the focus since the last draw: a list shows that row.
+    focus_moved: bool,
+    /// Where they moved it from, and which way: a list is scrolled over the
+    /// rows on their way.
+    focus_from: Option<u32>,
+    focus_forward: bool,
+    /// The Wi-Fi card's password view at the last draw.
+    wifi_password: bool,
     width: f32,
     height: f32,
     /// x of the stem's centre inside the card.
@@ -85,9 +101,16 @@ pub struct OpenCard {
     pub(crate) meter_win: Option<crate::audio_card::MeterWin>,
     /// ConsoleButton.tint for the next button: colAlert (the mute buttons).
     pub(crate) tint_alert: bool,
+    /// The control and button a press went down on in this card (its
+    /// MouseArea's grab, which dies with the card): a release or a drag
+    /// whose press began on a card closed since is not this card's.
+    held: Option<(Action, u32)>,
     numbers: HashMap<u32, Animated<f32>>,
-    /// Flickable.contentY and the content height.
-    scroll: f32,
+    /// The card's Flickable and ListViews: where each is scrolled to.
+    flicks: Vec<Flick>,
+    /// Hover is cut to this (a Flickable's clip) while one is drawn.
+    hover_clip: Option<[f32; 4]>,
+    /// The Flickable's content height.
     content_h: f32,
     notch_stale: bool,
     /// The anchoring icon's centre on screen (for cards whose width changes).
@@ -129,6 +152,208 @@ impl OpenCard {
         a.set(target, now);
         (a.get(now), a.running(now))
     }
+
+    /// CardKeys.step: the next (or previous) control of the chain, wrapping
+    /// around; from the card's scope (nothing focused) the first (or last).
+    fn step_focus(&mut self, forward: bool) {
+        let n = self.focus_codes.len();
+        if n == 0 {
+            return;
+        }
+        let i = match self.focus.filter(|f| *f < n) {
+            Some(f) if forward => (f + 1) % n,
+            Some(f) => (f + n - 1) % n,
+            None if forward => 0,
+            None => n - 1,
+        };
+        if !self.focus_moved {
+            self.focus_from = self.focus_code;
+        }
+        self.focus = Some(i);
+        self.focus_seen = self.focus;
+        self.focus_code = Some(self.focus_codes[i]);
+        self.focus_moved = true;
+        self.focus_forward = forward;
+        self.win.dirty = true;
+    }
+
+    /// The card's Flickable or ListView `id`, made at contentY 0 the first time.
+    fn flick(&mut self, id: u32, sig: u64) -> &mut Flick {
+        let i = match self.flicks.iter().position(|f| f.id == id) {
+            Some(i) => i,
+            None => {
+                self.flicks.push(Flick { id, glide: Animated::new(0.0, 300, Easing::OutExpo), rest: 0.0, max: 0.0, content: 0.0, height: 0.0, sig, rect: None });
+                self.flicks.len() - 1
+            }
+        };
+        &mut self.flicks[i]
+    }
+
+    /// A ListView's model was replaced by different data: Qt makes its rows
+    /// anew (the codes base .. base + 0x100, `count` of them now). A row
+    /// that had the focus hands it to the ListView, a FocusScope, and the
+    /// new model's currentIndex 0 takes it (QQuickItemView::setModel ->
+    /// connectModel -> updateCurrent: setFocus): the new first row has it,
+    /// scrolled to the top - checked against Qt 6.12. A focus left on a row
+    /// that was no longer shown stays with the card's scope. (A first row
+    /// that is not pickable - the VPN tunnel in use - would show the focus
+    /// ring in QML; here it stays with the scope.) The rows' lamps and
+    /// texts start fresh; their backgrounds from transparent, as a new
+    /// delegate's, so hover and focus fade in on them.
+    fn list_replaced(&mut self, base: u32, count: usize) {
+        let rows = base..base + 0x100;
+        if self.focus_code.map_or(false, |c| rows.contains(&c)) {
+            let shown = self.focus == self.focus_seen && self.focus.and_then(|f| self.focus_codes.get(f)).map_or(false, |c| rows.contains(c));
+            self.focus_code = Some(base).filter(|_| shown && count > 0);
+            self.focus = None;
+            self.focus_seen = None;
+        }
+        // ConsoleRow's background (0x5_0000), ConsoleLamp's dot (0x4_0000) and halo (0x3_0000).
+        let row_key = |k: u32, kinds: &[u32]| kinds.contains(&(k >> 16)) && rows.contains(&(k & 0xFFFF));
+        self.colors.retain(|k, _| !row_key(*k, &[4, 5]));
+        for code in rows.clone().take(count) {
+            self.colors.insert(0x5_0000 + code, Animated::new(Color::TRANSPARENT, 110, Easing::Linear));
+        }
+        self.numbers.retain(|k, _| !row_key(*k, &[3]));
+        // ConsoleRow's texts (text_of parts 0xC1-0xC4): the list cards have no other rows.
+        self.texts.forget_parts(&[0xC1, 0xC2, 0xC3, 0xC4]);
+    }
+}
+
+/// The Flickable of the Agent, Battery, Network and Audio cards.
+const BODY: u32 = 0;
+
+/// A Flickable's contentY (clip: true, boundsBehavior: StopAtBounds), a
+/// ListView's too, kept from draw to draw.
+struct Flick {
+    /// BODY, or a ListView's first row code.
+    id: u32,
+    /// The wheel's glide (300 ms OutExpo) towards its target.
+    glide: Animated<f32>,
+    /// Where contentY comes to rest when no glide runs.
+    rest: f32,
+    /// contentHeight - height at the last draw.
+    max: f32,
+    /// contentHeight and height at the last draw.
+    content: f32,
+    height: f32,
+    /// A ListView's model at the last draw (see model_sig).
+    sig: u64,
+    /// The viewport in the card's coordinates, if the last draw showed it.
+    rect: Option<[f32; 4]>,
+}
+
+impl Flick {
+    /// contentY now.
+    fn y(&self, now: Instant) -> f32 {
+        if self.glide.running(now) { self.glide.get(now) } else { self.rest }
+    }
+
+    /// setContentY / positionViewAtIndex: there at once; a glide stops.
+    fn jump(&mut self, y: f32) {
+        self.glide.snap(y);
+        self.rest = y;
+    }
+
+    /// QQuickFlickable::wheelEvent (Qt 6.12, wheelDeceleration 15000 > 14999):
+    /// a fixed wheelScrollLines (3) x 24 px per 120 of angleDelta, glided over
+    /// 3/4 of fixupDuration (300 ms) OutExpo from where the content is now,
+    /// cut at the bounds (StopAtBounds). At a bound in that direction it does
+    /// not take the wheel (false).
+    fn wheel(&mut self, angle_delta_y: f32, now: Instant) -> bool {
+        let y = self.y(now);
+        let step = -angle_delta_y / 120.0 * 72.0;
+        if step == 0.0 || (step < 0.0 && y <= 0.0) || (step > 0.0 && y >= self.max) {
+            return false;
+        }
+        let to = (y + step).clamp(0.0, self.max);
+        self.glide.snap(y);
+        self.glide.set(to, now);
+        // fixup() when the glide ends: between the bounds, contentY goes to a
+        // whole pixel. A glide started mid-glide ends off the pixel grid.
+        self.rest = if to <= 0.0 || to >= self.max { to } else { pixel(to, step > 0.0) };
+        self.rest = self.rest.clamp(0.0, self.max);
+        true
+    }
+
+    /// A new contentHeight or height (QQuickFlickable::setContentHeight /
+    /// geometryChange): back inside the bounds and onto a whole pixel.
+    /// At rest that is at once (fixupMode Immediate). During the wheel's
+    /// glide only a new contentHeight counts (ExtentChanged): past a bound
+    /// it glides there (300 ms OutExpo from here), between them it stops
+    /// on a pixel, exactly on one it runs on; a new height waits for the
+    /// glide's end, which puts it inside.
+    fn resized(&mut self, content_changed: bool, now: Instant) {
+        if !self.glide.running(now) {
+            let y = self.rest;
+            let to = if y <= 0.0 || self.max <= 0.0 {
+                0.0
+            } else if y >= self.max {
+                self.max
+            } else {
+                // No velocity at rest: the nearest pixel.
+                y.round()
+            };
+            if to != y {
+                self.jump(to);
+            }
+            return;
+        }
+        if !content_changed {
+            return;
+        }
+        let y = self.glide.get(now);
+        if y <= 0.0 || self.max <= 0.0 || y >= self.max {
+            let to = if y <= 0.0 || self.max <= 0.0 { 0.0 } else { self.max };
+            self.glide.snap(y);
+            self.glide.set(to, now);
+            self.rest = to;
+        } else if y.fract() != 0.0 {
+            let down = self.glide.target() > y;
+            self.jump(pixel(y, down));
+        }
+    }
+}
+
+/// QQuickFlickablePrivate::fixup between the bounds, a contentY off the
+/// pixel grid: the nearest pixel within a quarter, else back against the
+/// motion (smoothVelocity's sign; `down` = contentY growing).
+fn pixel(y: f32, down: bool) -> f32 {
+    if y.fract() == 0.0 || (y.round() - y).abs() < 0.25 {
+        y.round()
+    } else if down {
+        y.floor()
+    } else {
+        y.ceil()
+    }
+}
+
+/// A Flickable or ListView being drawn into the card, from view_begin() or
+/// list_begin() to view_end().
+pub(crate) struct View {
+    rect: [f32; 4],
+    /// contentY: the content is drawn this far up.
+    pub off: f32,
+    /// A ListView's row pitch (row height + spacing).
+    pitch: f32,
+    hits: usize,
+    hover: Option<[f32; 4]>,
+}
+
+impl View {
+    /// Where a ListView's row i is drawn.
+    pub fn row_y(&self, i: usize) -> f32 {
+        self.rect[1] - self.off + i as f32 * self.pitch
+    }
+}
+
+/// A ListView model's value: QQuickItemView::setModel compares a new array
+/// with the old one and only a different one replaces the rows.
+pub(crate) fn model_sig<T: std::hash::Hash>(items: &[T]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    items.hash(&mut h);
+    h.finish()
 }
 
 pub(crate) const STEM_H: f32 = 12.0;
@@ -187,7 +412,12 @@ pub fn wifi_details(app: &mut App, strip: usize, icon: &Hit) {
             let card = app.card.as_mut().unwrap();
             card.kind = CardKind::Network;
             card.focus = None;
-            card.scroll = 0.0;
+            card.focus_code = None;
+            card.focus_seen = None;
+            // NetworkPanel is new content: its Flickable starts at the top,
+            // and no press on the old view is one on the new.
+            card.flicks.clear();
+            card.held = None;
             card.hits.clear();
             card.colors.clear();
             card.numbers.clear();
@@ -242,7 +472,6 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         }
         content_h = crate::audio_card::content_height(&mut app.fonts, &app.svc);
         h = 120f32.max((content_h.ceil() + 30.0).min(560.0));
-        app.every(Duration::from_millis(33), crate::audio_card::meter_tick);
     }
     if kind == CardKind::Pult {
         let scanning = crate::pult::scanning(app);
@@ -300,6 +529,12 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         shift: false,
         focus: if keyboard { Some(0) } else { None },
         focus_codes: Vec::new(),
+        focus_code: None,
+        focus_seen: None,
+        focus_moved: false,
+        focus_from: None,
+        focus_forward: true,
+        wifi_password: false,
         width: w,
         height: h,
         stem_cx,
@@ -315,8 +550,10 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         meter_node: false,
         meter_win: None,
         tint_alert: false,
+        held: None,
         numbers: HashMap::new(),
-        scroll: 0.0,
+        flicks: Vec::new(),
+        hover_clip: None,
         content_h,
         texts: Default::default(),
         notch_stale: false,
@@ -332,6 +569,9 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         if let Some(m) = app.weather_texts.take() {
             app.card.as_mut().unwrap().texts = m;
         }
+    }
+    if kind == CardKind::Audio {
+        app.debounce(METER_TIMER, Duration::from_millis(33), meter_timer);
     }
     if kind == CardKind::Pult {
         crate::pult::opened(app);
@@ -349,7 +589,26 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
     }
 }
 
+/// LevelMeter's Timer (interval 33, running while the meter shows): one
+/// timer, by name, so a card closed and opened again (toggle() on another
+/// bar does both at once) does not leave a second one ticking.
+const METER_TIMER: &str = "audio-meter";
+
+/// The timers a card runs while it is open (QML: Timer { running: cardOpen }),
+/// stopped when it closes: the meter's, and the agent card's tick
+/// (AgentPanel.qml nowTick, AgentUsage.qml:149-154), agent.rs's "agent-tick".
+const CARD_TIMERS: [&str; 2] = [METER_TIMER, "agent-tick"];
+
+fn meter_timer(app: &mut App) {
+    if crate::audio_card::meter_tick(app) {
+        app.debounce(METER_TIMER, Duration::from_millis(33), meter_timer);
+    }
+}
+
 pub fn close(app: &mut App) {
+    for t in CARD_TIMERS {
+        app.cancel_timer(t);
+    }
     if app.card.as_ref().map(|c| c.kind) == Some(CardKind::Pult) {
         crate::pult::closed(app);
     }
@@ -438,6 +697,23 @@ pub fn update_height(app: &mut App) {
             }
             120f32.max((content.ceil() + 30.0).min(560.0))
         }
+        CardKind::Weather => {
+            // CenterInfo's card: open: popupVisible && !!weatherText - a
+            // reading with no text closes it.
+            if app.svc.weather.text.is_empty() {
+                close(app);
+                return;
+            }
+            // cardX and the stem follow the pill; a strip about to redraw
+            // may move it, so look again once it has.
+            let strip = card.strip;
+            follow_weather_pill(app);
+            if app.strips.get(strip).map_or(false, |s| s.win.dirty) {
+                app.after(Duration::ZERO, follow_weather_pill);
+            }
+            let w = app.card.as_ref().unwrap().width;
+            weather_height(&mut app.fonts, &app.svc, w)
+        }
         _ => return,
     };
     let card = app.card.as_mut().unwrap();
@@ -446,6 +722,25 @@ pub fn update_height(app: &mut App) {
     }
     card.height = h;
     card.win.dirty = true;
+}
+
+/// CenterInfo's weather card: cardX centres it on the weather pill and the
+/// stem is the pill's width (int), both bindings (CenterInfo.qml:638-647).
+fn follow_weather_pill(app: &mut App) {
+    let Some(card) = app.card.as_ref().filter(|c| c.kind == CardKind::Weather) else { return };
+    let Some(s) = app.strips.get(card.strip) else { return };
+    let Some(pill) = s.hits.iter().find(|h| h.action == Action::Weather) else { return };
+    let ui = crate::bar::ui_scale(s.screen_width);
+    let (center, stem_w, screen_w) = (pill.x + pill.w / 2.0, (pill.w / ui).trunc(), s.screen_width);
+    let card = app.card.as_mut().unwrap();
+    let left = (center - card.width / 2.0).min(screen_w - card.width).max(0.0).round();
+    if left != card.left || stem_w != card.stem_w {
+        card.icon_center = center;
+        card.left = left;
+        card.stem_w = stem_w;
+        card.notch_stale = true;
+        card.win.dirty = true;
+    }
 }
 
 /// Whether a point of the card's surface is on the card (CardSurface's card
@@ -542,9 +837,27 @@ pub(crate) trait UiState {
     fn focus(&self) -> Option<usize>;
     fn tint_alert(&self) -> bool;
     fn texts(&mut self) -> &mut crate::text::TextMemo;
+    /// Whether the control `code`, `index`-th in this draw's focus chain, has the focus.
+    fn has_focus(&self, index: usize, _code: u32) -> bool {
+        self.focus() == Some(index)
+    }
+    /// Hover stays inside this rect: a Flickable's clip, while it is drawn.
+    fn hover_clip(&self) -> Option<[f32; 4]> {
+        None
+    }
 }
 
 impl UiState for OpenCard {
+    fn has_focus(&self, index: usize, code: u32) -> bool {
+        if self.focus != self.focus_seen {
+            self.focus == Some(index)
+        } else {
+            self.focus_code == Some(code)
+        }
+    }
+    fn hover_clip(&self) -> Option<[f32; 4]> {
+        self.hover_clip
+    }
     fn color(&mut self, id: u32, target: Color, ms: u64, now: Instant) -> (Color, bool) {
         OpenCard::color(self, id, target, ms, now)
     }
@@ -578,14 +891,15 @@ pub(crate) struct Ui<'a, S: UiState = OpenCard> {
 
 impl<S: UiState> Ui<'_, S> {
     pub fn hovered(&self, x: f32, y: f32, w: f32, h: f32) -> bool {
-        self.card.pointer().map_or(false, |(px, py)| px >= x && px < x + w && py >= y && py < y + h)
+        let inside = |px: f32, py: f32, r: [f32; 4]| px >= r[0] && px < r[0] + r[2] && py >= r[1] && py < r[1] + r[3];
+        self.card.pointer().map_or(false, |(px, py)| inside(px, py, [x, y, w, h]) && self.card.hover_clip().map_or(true, |c| inside(px, py, c)))
     }
 
     /// Adds a control to the focus chain (activeFocusOnTab); true if it has focus.
     pub fn focusable(&mut self, code: u32) -> bool {
         let i = self.focus_codes.len();
         self.focus_codes.push(code);
-        self.card.focus() == Some(i)
+        self.card.has_focus(i, code)
     }
 
     /// A Text at (x, y): subpixel until it changes while the card is open
@@ -705,6 +1019,138 @@ impl<S: UiState> Ui<'_, S> {
     }
 }
 
+impl Ui<'_, OpenCard> {
+    /// Flickable { clip: true; boundsBehavior: Flickable.StopAtBounds } at
+    /// (x, y, w, h) over content `content_h` high: its content goes `off` up,
+    /// is clipped to it, and only its visible part takes hover and clicks
+    /// (Qt's pointerTargets stops at a clipping item), until view_end().
+    pub fn view_begin(&mut self, id: u32, x: f32, y: f32, w: f32, h: f32, content_h: f32) -> View {
+        let now = self.now;
+        let f = self.card.flick(id, 0);
+        let (content_changed, height_changed) = (f.content != content_h, f.height != h);
+        (f.content, f.height) = (content_h, h);
+        f.max = (content_h - h).max(0.0);
+        if content_changed || height_changed {
+            f.resized(content_changed, now);
+        } else if !f.glide.running(now) && f.rest > f.max {
+            // A glide that ended past a bound which moved under it.
+            f.jump(f.max);
+        }
+        f.rect = Some([x, y, w, h]);
+        let off = f.y(now);
+        self.animating |= f.glide.running(now);
+        self.scene.save();
+        self.scene.clip_rect(x, y, w, h);
+        let hover = self.card.hover_clip;
+        let r = [x, y, w, h];
+        self.card.hover_clip = Some(match hover {
+            Some(c) => {
+                let (x0, y0) = (c[0].max(r[0]), c[1].max(r[1]));
+                [x0, y0, ((c[0] + c[2]).min(r[0] + r[2]) - x0).max(0.0), ((c[1] + c[3]).min(r[1] + r[3]) - y0).max(0.0)]
+            }
+            None => r,
+        });
+        View { rect: r, off, pitch: 0.0, hits: self.hits.len(), hover }
+    }
+
+    /// ListView { clip: true; spacing; boundsBehavior: Flickable.StopAtBounds }
+    /// at (x, y, w), `shown` rows high, over `count` rows of `row_h`: row i is
+    /// the control base + i and is drawn at row_y(i); `pickable` says which
+    /// rows take the keys' focus. `sig` is the model's value (model_sig): a
+    /// different one is a new model, scrolled back to the top. When the keys
+    /// move to a row, the list scrolls it into view (ConsoleRow:
+    /// positionViewAtIndex(index, ListView.Contain)). Every row stays in the
+    /// focus chain, in order, which is how ConsoleRow.stepInList/entryRow walk
+    /// it. Ends with view_end().
+    #[allow(clippy::too_many_arguments)]
+    pub fn list_begin(&mut self, base: u32, x: f32, y: f32, w: f32, shown: usize, count: usize, row_h: f32, spacing: f32, sig: u64, pickable: impl Fn(usize) -> bool) -> View {
+        let now = self.now;
+        let pitch = row_h + spacing;
+        let view_h = (shown as f32 * pitch - spacing).max(0.0);
+        let content_h = if count == 0 { 0.0 } else { count as f32 * pitch - spacing };
+        let chain_start = self.focus_codes.len();
+        let card = &mut *self.card;
+        let f = card.flick(base, sig);
+        let replaced = f.sig != sig;
+        if replaced {
+            f.sig = sig;
+            f.jump(0.0);
+            card.list_replaced(base, count);
+        }
+        // The rows the list is scrolled to, one after the other, first to
+        // last (positionViewAtIndex(n, ListView.Contain) each). An index set
+        // by code (a keyboard open) names its row, counting the pickable rows
+        // from here. The keys (CardKeys.step, ConsoleRow.stepInList and
+        // entryRow) pass every row on their way, pickable or not: in the list,
+        // the rows after the one they left; coming in, the rows from the end
+        // they enter at; going out, the rest of the list that way. A model
+        // replaced this frame came after the keys: it starts at the top.
+        let row_of = |c: Option<u32>| c.and_then(|c| c.checked_sub(base)).map(|i| i as usize).filter(|i| *i < count.min(0x100));
+        let pass = if replaced {
+            None
+        } else if card.focus != card.focus_seen {
+            card.focus.and_then(|p| p.checked_sub(chain_start)).and_then(|k| (0..count).filter(|i| pickable(*i)).nth(k)).map(|t| (t, t))
+        } else if card.focus_moved {
+            let fwd = card.focus_forward;
+            match (row_of(card.focus_from), row_of(card.focus_code)) {
+                (Some(s), Some(t)) if fwd && t > s => Some((s + 1, t)),
+                (Some(s), Some(t)) if !fwd && t < s => Some((s - 1, t)),
+                // Round the end of a card that is only this list.
+                (Some(_), Some(t)) => Some((t, t)),
+                (None, Some(t)) => Some((if fwd { 0 } else { count - 1 }, t)),
+                (Some(s), None) if fwd && s + 1 < count => Some((s + 1, count - 1)),
+                (Some(s), None) if !fwd && s > 0 => Some((s - 1, 0)),
+                _ => None,
+            }
+        } else {
+            None
+        };
+        if let Some((a, b)) = pass {
+            let max = (content_h - view_h).max(0.0);
+            let f = card.flick(base, sig);
+            let (mut p, mut i) = (f.y(now), a);
+            loop {
+                let top = i as f32 * pitch;
+                if top + row_h >= p + view_h {
+                    p = top + row_h - view_h;
+                }
+                if top < p {
+                    p = top;
+                }
+                p = p.min(max).max(0.0);
+                if i == b {
+                    break;
+                }
+                if a < b { i += 1 } else { i -= 1 }
+            }
+            // cancelFlick() stops a glide, and fixupPosition() puts a place
+            // it left between two pixels on one (no velocity now: rounded).
+            f.jump(if p > 0.0 && p < max { p.round() } else { p });
+        }
+        let mut v = self.view_begin(base, x, y, w, view_h, content_h);
+        v.pitch = pitch;
+        v
+    }
+
+    /// The end of view_begin()/list_begin(): the clip goes, and the controls
+    /// drawn in the view take clicks only where it shows them.
+    pub fn view_end(&mut self, v: View) {
+        self.scene.restore();
+        self.card.hover_clip = v.hover;
+        let [vx, vy, vw, vh] = v.rect;
+        let shown: Vec<Hit> = self
+            .hits
+            .drain(v.hits.min(self.hits.len())..)
+            .filter_map(|h| {
+                let (x0, y0) = (h.x.max(vx), h.y.max(vy));
+                let (x1, y1) = ((h.x + h.w).min(vx + vw), (h.y + h.h).min(vy + vh));
+                (x1 > x0 && y1 > y0).then_some(Hit { x: x0, y: y0, w: x1 - x0, h: y1 - y0, action: h.action })
+            })
+            .collect();
+        self.hits.extend(shown);
+    }
+}
+
 /// Draws the open card; true while something in it animates.
 pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut Gpu, theme: &Theme, svc: &Services) -> bool {
     let (w, h) = (card.width, card.height);
@@ -735,6 +1181,22 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
     card.pointer = pointer.map(|(px, py)| (px - ox, py - oy));
 
     card.texts.begin_frame();
+    if card.kind == CardKind::Wifi && card.wifi_password != svc.wifi_card.password_mode {
+        card.wifi_password = svc.wifi_card.password_mode;
+        if card.wifi_password {
+            // WifiWidget: passwordInput.forceActiveFocus() - enter_password
+            // set the field's index in the chain this draw makes.
+            card.focus_seen = None;
+        } else {
+            // The field and its keys hide: the keys go to the card's scope.
+            card.focus = None;
+            card.focus_seen = None;
+            card.focus_code = None;
+        }
+    }
+    // Only what this draw shows takes the wheel.
+    card.flicks.iter_mut().for_each(|f| f.rect = None);
+    card.hover_clip = None;
     let mut ui = Ui { card, scene, fonts, theme, now: Instant::now(), animating: false, hits: Vec::new(), focus_codes: Vec::new() };
     // The Loader's margins: top stemHeight + 8, 8 around.
     let (cx, cy, cw) = (8.0, STEM_H + 8.0, w - 16.0);
@@ -766,26 +1228,22 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
     if ui.card.kind == CardKind::Wifi {
         crate::wifi_card::draw(&mut ui, w, svc, svc.wifi_connecting);
     }
+    // The Flickable cards: the Loader's area, clipped, scrolled by contentY.
+    let content_h = ui.card.content_h;
     if ui.card.kind == CardKind::Agent {
-        let scroll = ui.card.scroll;
-        ui.scene.save();
-        ui.scene.clip_rect(8.0, STEM_H + 8.0, w - 16.0, h - 28.0);
-        crate::agent::draw(&mut ui, w, svc, svc.agent_busy, STEM_H + 8.0 - scroll);
-        ui.scene.restore();
+        let body = ui.view_begin(BODY, 8.0, STEM_H + 8.0, w - 16.0, h - 28.0, content_h);
+        crate::agent::draw(&mut ui, w, svc, svc.agent_busy, STEM_H + 8.0 - body.off);
+        ui.view_end(body);
     }
     if ui.card.kind == CardKind::Network {
-        let scroll = ui.card.scroll;
-        ui.scene.save();
-        ui.scene.clip_rect(8.0, STEM_H + 8.0, w - 16.0, h - 28.0);
-        crate::network_card::draw(&mut ui, w, svc, STEM_H + 8.0 - scroll);
-        ui.scene.restore();
+        let body = ui.view_begin(BODY, 8.0, STEM_H + 8.0, w - 16.0, h - 28.0, content_h);
+        crate::network_card::draw(&mut ui, w, svc, STEM_H + 8.0 - body.off);
+        ui.view_end(body);
     }
     if ui.card.kind == CardKind::Battery {
-        let scroll = ui.card.scroll;
-        ui.scene.save();
-        ui.scene.clip_rect(8.0, STEM_H + 8.0, w - 16.0, h - 28.0);
-        crate::battery::draw(&mut ui, w, svc, STEM_H + 8.0 - scroll);
-        ui.scene.restore();
+        let body = ui.view_begin(BODY, 8.0, STEM_H + 8.0, w - 16.0, h - 28.0, content_h);
+        crate::battery::draw(&mut ui, w, svc, STEM_H + 8.0 - body.off);
+        ui.view_end(body);
     }
     if ui.card.kind == CardKind::Vpn {
         crate::vpn::draw(&mut ui, w, svc, svc.vpn_busy);
@@ -794,13 +1252,10 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
         }
     }
     if ui.card.kind == CardKind::Audio {
-        // The Loader's area, clipped like the Flickable, scrolled by contentY.
         ui.card.sliders.clear();
-        let scroll = ui.card.scroll;
-        ui.scene.save();
-        ui.scene.clip_rect(8.0, STEM_H + 8.0, w - 16.0, h - 28.0);
-        crate::audio_card::draw(&mut ui, w, svc, STEM_H + 8.0 - scroll);
-        ui.scene.restore();
+        let body = ui.view_begin(BODY, 8.0, STEM_H + 8.0, w - 16.0, h - 28.0, content_h);
+        crate::audio_card::draw(&mut ui, w, svc, STEM_H + 8.0 - body.off);
+        ui.view_end(body);
     }
     let _ = svc;
     let (hits, codes, animating) = (std::mem::take(&mut ui.hits), std::mem::take(&mut ui.focus_codes), ui.animating);
@@ -808,6 +1263,17 @@ pub fn draw(card: &mut OpenCard, scene: &mut Scene, fonts: &mut Fonts, gpu: &mut
     card.pointer = pointer;
     card.hits = hits.into_iter().map(|h| Hit { x: h.x + ox, y: h.y + oy, ..h }).collect();
     card.sliders.iter_mut().for_each(|s| s.1 += ox);
+    // CardKeys' focus is on a control, not a place in the chain: it follows
+    // its control when the chain changes; a control that left the chain
+    // (disabled, hidden) leaves the keys with the card's scope until it is
+    // back. An index set by code since the last draw names the control at
+    // that place in this chain.
+    if card.focus != card.focus_seen {
+        card.focus_code = card.focus.and_then(|i| codes.get(i).copied());
+    }
+    card.focus = card.focus_code.and_then(|c| codes.iter().position(|x| *x == c));
+    card.focus_seen = card.focus;
+    card.focus_moved = false;
     card.focus_codes = codes;
     animating
 }
@@ -866,19 +1332,22 @@ fn console_row_inner<S: UiState>(ui: &mut Ui<S>, code: u32, x: f32, y: f32, w: f
         ui.text_of(code, 0xC1, &il, cx + (font + 2.0 - il.adv) / 2.0, y + qround((h - il.height()) / 2.0), fg);
         cx += font + 2.0 + 8.0;
     }
+    // The RowLayout's fixed cells are qCeil(implicitWidth) wide, on whole
+    // pixels from the right edge; each Text starts at its cell. The trailing
+    // Row is a cell (and a spacing) even when its Text is empty.
     let mut right = x + w - 6.0;
     match trailing {
         // The VPN card's flag: a Text with the app font at fontSize + 2.
         Some((tr, None)) => {
             let tl = ui.fonts.layout(tr, theme::FontKey { family: "Fira Code:medium", bold: false, plain: false }, FONT_SIZE + 2.0, 0.0);
-            right -= tl.width;
+            right -= tl.width.ceil();
             ui.text_of(code, 0xC2, &tl, right, y + qround((h - tl.height()) / 2.0), t.col_white);
             right -= 8.0;
         }
         // The Wi-Fi lock: Terminess at fontSize - 4.
         Some((tr, Some(col))) => {
             let tl = ui.fonts.layout(tr, theme::bar_font(false), FONT_SIZE - 4.0, 0.0);
-            right -= tl.width;
+            right -= tl.width.ceil();
             ui.text_of(code, 0xC2, &tl, right, y + qround((h - tl.height()) / 2.0), col);
             right -= 8.0;
         }
@@ -886,7 +1355,7 @@ fn console_row_inner<S: UiState>(ui: &mut Ui<S>, code: u32, x: f32, y: f32, w: f
     }
     if let Some((d, dc)) = detail.filter(|d| !d.0.is_empty()) {
         let dl = ui.fonts.layout(d, theme::bar_font(false), font - 2.0, 0.0);
-        right -= dl.width;
+        right -= dl.width.ceil();
         ui.text_of(code, 0xC3, &dl, right, y + qround((h - dl.height()) / 2.0), dc);
         right -= 8.0;
     }
@@ -980,11 +1449,23 @@ pub(crate) fn info_grid<S: UiState>(ui: &mut Ui<S>, x: f32, y: f32, w: f32, rows
 fn snap_columns<const N: usize>(sizes: [f32; N], spacing: f32, target: f32, minimum: [f32; N]) -> ([f32; N], [f32; N]) {
     let mut pos = [0f32; N];
     let mut size = sizes;
-    for i in 1..N {
+    snap_cells(&mut pos, &mut size, spacing, target, &minimum);
+    (pos, size)
+}
+
+/// snap_columns for any number of cells (a Repeater's): `size` holds the
+/// cells' sizes and gets the snapped ones, `pos` gets where they start.
+fn snap_cells(pos: &mut [f32], size: &mut [f32], spacing: f32, target: f32, minimum: &[f32]) {
+    let n = size.len().min(pos.len());
+    if n == 0 {
+        return;
+    }
+    pos[0] = 0.0;
+    for i in 1..n {
         pos[i] = pos[i - 1] + size[i - 1] + spacing;
     }
     let qround = |v: f32| (v + 0.5).floor();
-    for i in 0..N {
+    for i in 0..n {
         let old = pos[i];
         pos[i] = qround(old);
         let delta = pos[i] - old;
@@ -993,11 +1474,10 @@ fn snap_columns<const N: usize>(sizes: [f32; N], spacing: f32, target: f32, mini
             size[i - 1] += delta;
         }
     }
-    size[N - 1] = target - pos[N - 1];
-    for i in 0..N {
-        size[i] = minimum[i].max(qround(size[i]));
+    size[n - 1] = target - pos[n - 1];
+    for i in 0..n {
+        size[i] = minimum.get(i).copied().unwrap_or(0.0).max(qround(size[i]));
     }
-    (pos, size)
 }
 
 pub(crate) fn plate<S: UiState>(ui: &mut Ui<S>, x: f32, y: f32, w: f32, h: f32) {
@@ -1175,27 +1655,25 @@ fn draw_weather(ui: &mut Ui, w: f32, svc: &Services) {
     let mut ry = iy + ac(l.row_h, l.read_h);
     ui.text(&l.temp, l.read_x, ry, temp_color(&wx.text), TextStyle::Normal);
     ry += l.temp.height() + 2.0;
-    for line in &l.cond {
-        ui.text(line, l.read_x, ry, t.col_white, TextStyle::Normal);
-        ry += line.height();
-    }
+    // The condition and the place are one wrapped Text each: one node, so
+    // a change to either grays all of its lines.
+    ry += ui.text_block(0, 0xE1, &l.cond, l.read_x, ry, t.col_white);
     ry += 2.0;
-    for line in &l.place {
-        ui.text(line, l.read_x, ry, t.col_grey, TextStyle::Normal);
-        ry += line.height();
-    }
+    ui.text_block(0, 0xE2, &l.place, l.read_x, ry, t.col_grey);
     y += l.p1 + 8.0;
 
-    // Plate 2: МИН / МАКС / ОЩУЩАЕТСЯ, three equal columns.
+    // Plate 2: МИН / МАКС / ОЩУЩАЕТСЯ, a GridLayout of three equal columns
+    // (fillWidth), on whole pixels as Qt's layouts snap them.
     if l.p2 > 0.0 {
         plate(ui, x0, y, cw, l.p2);
         let colw = (cw - 20.0 - 16.0) / 3.0;
+        let (cols, widths) = snap_columns([colw; 3], 8.0, cw - 20.0, [0.0; 3]);
         let caps = ["МИН", "МАКС", "ОЩУЩАЕТСЯ"];
         let vals = [&wx.min_temp, &wx.max_temp, &wx.feels_like];
         let r1 = ui.fonts.layout("М", theme::bar_font(true), FONT_SIZE - 5.0, 1.0).height();
         let r2 = ui.fonts.layout("0", theme::bar_font(true), FONT_SIZE, 0.0).height();
         for i in 0..3 {
-            let cx = x0 + 10.0 + i as f32 * (colw + 8.0);
+            let (cx, colw) = (x0 + 10.0 + cols[i], widths[i]);
             let cl = ui.fonts.layout(caps[i], theme::bar_font(true), FONT_SIZE - 5.0, 1.0);
             ui.text(&cl, cx + (colw - cl.adv) / 2.0, y + 10.0 + ac(r1, cl.height()), t.col_dim, TextStyle::Normal);
             let v = if vals[i].is_empty() { "—" } else { vals[i].as_str() };
@@ -1210,12 +1688,15 @@ fn draw_weather(ui: &mut Ui, w: f32, svc: &Services) {
         plate(ui, x0, y, cw, l.p3);
         let cap = ui.fonts.layout(" ДОЖДЬ", theme::bar_font(true), FONT_SIZE - 5.0, 1.0);
         ui.text(&cap, x0 + 10.0, y + 10.0, t.col_dim, TextStyle::Normal);
-        let n = wx.hourly_rain.len() as f32;
-        let colw = (cw - 20.0 - 8.0 * (n - 1.0)) / n;
+        // A RowLayout of equal columns (fillWidth), snapped to whole pixels.
+        let n = wx.hourly_rain.len();
+        let mut cols = vec![0.0; n];
+        let mut widths = vec![(cw - 20.0 - 8.0 * (n as f32 - 1.0)) / n as f32; n];
+        snap_cells(&mut cols, &mut widths, 8.0, cw - 20.0, &[]);
         let by = y + 10.0 + cap.height() + 6.0;
         for (i, v) in wx.hourly_rain.iter().enumerate() {
             let lit = ((*v).clamp(0, 100) as f32 / 100.0 * 6.0).round() as i64;
-            let cx = x0 + 10.0 + i as f32 * (colw + 8.0);
+            let (cx, colw) = (x0 + 10.0 + cols[i], widths[i]);
             for k in 0..6i64 {
                 let c = if (5 - k) < lit { t.col_accent } else { Color::qt_rgba(1.0, 1.0, 1.0, 0.07) };
                 ui.scene.rect(cx, by + k as f32 * 7.0, colw, 5.0, c, 1.0, 0.0, Color::TRANSPARENT, true);
@@ -1238,25 +1719,31 @@ fn calendar_step(app: &mut App, delta: i32) {
 /// A wheel turn over the card (QML angleDelta: +120 per notch away from you).
 pub fn wheel(app: &mut App, angle_delta_y: f32) {
     let Some(c) = app.card.as_mut() else { return };
-    if c.kind == CardKind::Agent || c.kind == CardKind::Battery || c.kind == CardKind::Network {
-        let view = c.height - 28.0;
-        let max = (c.content_h - view).max(0.0);
-        c.scroll = (c.scroll - angle_delta_y / 120.0 * 3.0 * 20.0).clamp(0.0, max);
-        c.win.dirty = true;
-        return;
-    }
     if c.kind == CardKind::Audio {
+        // A VolumeSlider under the pointer takes it first: 5% a notch.
         let over = c.pointer.and_then(|(px, py)| c.sliders.iter().find(|s| px >= s.1 && px < s.1 + s.2 && py >= 0.0).map(|s| s.0));
         let over = over.filter(|code| c.hits.iter().any(|h| h.action == Action::Card(*code) && c.pointer.map_or(false, |(px, py)| h.contains(px, py))));
         if let Some(code) = over {
             crate::audio_card::slider_step(app, code, angle_delta_y > 0.0);
-        } else {
-            let view = c.height - 28.0;
-            let max = (c.content_h - view).max(0.0);
-            c.scroll = (c.scroll - angle_delta_y / 120.0 * 3.0 * 20.0).clamp(0.0, max);
-            c.win.dirty = true;
+            return;
         }
-        return;
+    }
+    // Then the Flickable under the pointer, a ListView before the card's
+    // own; one at its end that way lets the wheel go on to what is under it.
+    // The card's margins and stem are no Flickable: nothing scrolls there.
+    let now = Instant::now();
+    let at = c.pointer.map(|(px, py)| (px - c.left, py - c.top));
+    let under = |f: &Flick| match (f.rect, at) {
+        (Some(r), Some((x, y))) => x >= r[0] && x < r[0] + r[2] && y >= r[1] && y < r[1] + r[3],
+        _ => false,
+    };
+    for body in [false, true] {
+        if let Some(i) = c.flicks.iter().position(|f| (f.id == BODY) == body && under(f)) {
+            if c.flicks[i].wheel(angle_delta_y, now) {
+                c.win.dirty = true;
+                return;
+            }
+        }
     }
     if c.kind != CardKind::Calendar {
         return;
@@ -1280,20 +1767,36 @@ pub fn wheel(app: &mut App, angle_delta_y: f32) {
 
 /// A button went down on a card control: a slider jumps to the pointer.
 pub fn press(app: &mut App, action: Action, x: f32, button: u32) {
+    let Some(card) = app.card.as_mut() else { return };
+    card.held = Some((action, button));
+    if button == 0x110 {
+        slide(app, action, x);
+    }
+}
+
+/// The pointer moved with the left button held on a control of this card.
+pub fn drag(app: &mut App, action: Action, x: f32) {
+    if app.card.as_ref().map_or(false, |c| c.held == Some((action, 0x110))) {
+        slide(app, action, x);
+    }
+}
+
+/// A VolumeSlider under the left button follows the pointer.
+fn slide(app: &mut App, action: Action, x: f32) {
     if let (Action::Card(code), Some(card)) = (action, app.card.as_ref()) {
-        if card.kind == CardKind::Audio && button == 0x110 && crate::audio_card::is_slider(code) {
+        if card.kind == CardKind::Audio && crate::audio_card::is_slider(code) {
             crate::audio_card::slider_to(app, code, x);
         }
     }
 }
 
-/// The pointer moved with the left button held on a slider.
-pub fn drag(app: &mut App, action: Action, x: f32) {
-    press(app, action, x, 0x110);
-}
-
 /// A click (release over the pressed control) with a button.
 pub fn click(app: &mut App, action: Action, button: u32) {
+    // Only a press this card took: one held while its card closed (a focus
+    // change, a shortcut) is no click on the card opened in its place.
+    if app.card.as_mut().map_or(true, |c| c.held.take() != Some((action, button))) {
+        return;
+    }
     let Action::Card(code) = action else { return };
     let Some(card) = app.card.as_ref() else { return };
     if card.kind == CardKind::Audio && crate::audio_card::is_slider(code) {
@@ -1382,18 +1885,11 @@ pub fn key(app: &mut App, sym: Keysym, utf8: Option<&str>) {
         }
     }
     let Some(card) = app.card.as_mut() else { return };
-    let n = card.focus_codes.len().max(1);
     let back = card.shift;
     match sym {
         Keysym::Escape => close(app),
-        Keysym::Tab | Keysym::Down | Keysym::Right if !(sym == Keysym::Tab && back) => {
-            card.focus = Some(card.focus.map_or(0, |f| (f + 1) % n));
-            card.win.dirty = true;
-        }
-        Keysym::ISO_Left_Tab | Keysym::Tab | Keysym::Up | Keysym::Left => {
-            card.focus = Some(card.focus.map_or(n - 1, |f| (f + n - 1) % n));
-            card.win.dirty = true;
-        }
+        Keysym::Tab | Keysym::Down | Keysym::Right if !(sym == Keysym::Tab && back) => card.step_focus(true),
+        Keysym::ISO_Left_Tab | Keysym::Tab | Keysym::Up | Keysym::Left => card.step_focus(false),
         Keysym::Return | Keysym::KP_Enter | Keysym::space => {
             if let Some(code) = card.focus.and_then(|f| card.focus_codes.get(f).copied()) {
                 activate(app, Action::Card(code), true);

@@ -197,15 +197,18 @@ fn is_open(app: &App) -> bool {
 
 // ---- the processes ----
 
-/// onActiveChanged(true): fresh rate samples, every source once, then the
-/// status every 3 s (triggeredOnStart).
+/// A new NetworkPanel: QML makes one with every opening, in the card's
+/// Loader (WifiWidget.qml:429-439, DropdownWidget.qml:174-176), so every
+/// reading starts at its declared default (NetworkPanel.qml:28-33, 147-151,
+/// 281-298, 391-394) - dashes, no gauge, Готов / СТАРТ, no QR - until the
+/// first answers land. The speed test's generation goes on, so the exit of
+/// a test still dying from the last opening stays ignored, and an action
+/// still running keeps its spinner until it ends. Then onActiveChanged(true):
+/// every source once, the status every 3 s (triggeredOnStart).
 pub fn opened(app: &mut App) {
-    let n = &mut app.svc.net;
-    n.last_rx = -1.0;
-    n.last_tx = -1.0;
-    n.last_sample = None;
-    n.rx_rate = -1.0;
-    n.tx_rate = -1.0;
+    let old = std::mem::take(&mut app.svc.net);
+    let busy = if app.is_running("net-action") { old.busy } else { String::new() };
+    app.svc.net = NetPanel { speed_run: old.speed_run, proc_gen: old.proc_gen, proc_phase: old.proc_phase, busy, ..NetPanel::default() };
     refresh(app);
     status_tick(app);
 }
@@ -567,6 +570,23 @@ fn elide_middle(fonts: &mut Fonts, text: &str, size: f32, bold: bool, max: f32) 
     fonts.elide_middle(text, theme::bar_font(bold), size, 0.0, max)
 }
 
+/// The КАНАЛ plate's SegmentGauge exists from the panel's start, hidden at
+/// value 0 while no signal is known (NetworkPanel.qml:649-655), and its
+/// cells follow the signal in every view: the first reading fades the lit
+/// cells in (Behavior on color, 200 ms), and a change made while another
+/// view was up has faded by the time the readings come back. The targets
+/// cards::gauge gives its 28 cells, set without drawing them.
+fn gauge_follows(ui: &mut Ui, n: &NetPanel) {
+    let pct = n.num("signal_pct");
+    let value = if pct.is_nan() { 0.0 } else { pct as f32 };
+    let tint = if !pct.is_nan() && pct < 30.0 { ui.theme.col_alert } else { ui.theme.col_accent };
+    let lit = ((value.clamp(0.0, 100.0) / 100.0 * 28.0) + 0.5).floor() as u32;
+    for i in 0..28 {
+        let target = if i < lit { tint } else { Color::qt_rgba(1.0, 1.0, 1.0, 0.07) };
+        ui.card.color(0x6_0000 + i, target, 200, ui.now);
+    }
+}
+
 pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
     let n = &svc.net;
     let t = ui.theme;
@@ -576,6 +596,7 @@ pub fn draw(ui: &mut Ui, w: f32, svc: &Services, top: f32) {
     if !n.busy.is_empty() {
         ui.animating = true;
     }
+    gauge_follows(ui, n);
     let mut y = top;
     for (block, h) in blocks(ui.fonts, n, cw) {
         match block {

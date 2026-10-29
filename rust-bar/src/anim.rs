@@ -14,6 +14,8 @@ pub enum Easing {
     OutCubic,
     InOutQuad,
     InOutCubic,
+    /// A Flickable's wheel glide (QQuickFlickable::wheelEvent).
+    OutExpo,
     /// Easing.BezierSpline with one segment: (x1, y1, x2, y2), ending at (1, 1).
     Bezier(f32, f32, f32, f32),
 }
@@ -45,6 +47,14 @@ pub fn ease(e: Easing, t: f32) -> f32 {
             } else {
                 let t = t - 2.0;
                 0.5 * (t * t * t + 2.0)
+            }
+        }
+        // easing.cpp easeOutExpo: a hair past 1 just before the end.
+        Easing::OutExpo => {
+            if t == 1.0 {
+                1.0
+            } else {
+                1.001 * (1.0 - 2f32.powf(-10.0 * t))
             }
         }
         Easing::Bezier(x1, y1, x2, y2) => bezier(t, x1, y1, x2, y2),

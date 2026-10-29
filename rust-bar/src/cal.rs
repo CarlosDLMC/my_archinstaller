@@ -54,36 +54,67 @@ pub fn add_days(start: i64, n: i64) -> (i32, u32, u32) {
     civil_from_days(start + n)
 }
 
-fn lc_time() -> String {
-    for v in ["LC_ALL", "LC_TIME", "LANG"] {
-        if let Ok(s) = std::env::var(v) {
-            if !s.is_empty() {
-                return s;
+/// The LC_TIME locale's name, as Qt's unix system locale reads it (the
+/// bar's environment does not change while it runs).
+fn lc_time() -> &'static str {
+    static NAME: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    NAME.get_or_init(|| {
+        for v in ["LC_ALL", "LC_TIME", "LANG"] {
+            if let Ok(s) = std::env::var(v) {
+                if !s.is_empty() {
+                    return s;
+                }
             }
         }
-    }
-    "C".into()
+        "C".into()
+    })
 }
 
-fn lang() -> String {
-    lc_time().split(['_', '.', '@']).next().unwrap_or("C").to_string()
+fn lang() -> &'static str {
+    lc_time().split(['_', '.', '@']).next().unwrap_or("C")
 }
 
-/// QLocale::firstDayOfWeek for the LC_TIME locale, as 0 = Sunday.
+/// QLocale::firstDayOfWeek for the LC_TIME locale, as 0 = Sunday. Qt takes
+/// it from CLDR's week data by territory; these are the territories Qt
+/// 6.12 starts on another day than Monday (asked of Qt itself). C and
+/// POSIX start on Monday; a bare language goes by its likely territory.
 pub fn first_weekday() -> u32 {
-    let l = lc_time();
-    // CLDR: Sunday-first territories among the likely ones; Monday elsewhere.
-    if l.starts_with("en_US") || l.starts_with("en_CA") || l == "C" || l.starts_with("ja") || l.starts_with("he") || l.starts_with("pt_BR") {
+    const SUNDAY: [&str; 56] = [
+        "AG", "AS", "BD", "BR", "BS", "BT", "BW", "BZ", "CA", "CO", "DM", "DO", "ET", "GT", "GU", "HK", "HN", "ID", "IL", "IN", "IS", "JM", "JP", "KE", "KH", "KR", "LA", "MH", "MM", "MO", "MT", "MX", "MZ", "NI", "NP", "PA", "PE", "PH", "PK", "PR", "PT", "PY", "SA", "SG", "SV", "TH", "TT", "TW", "UM", "US", "VE", "VI", "WS", "YE", "ZA", "ZW",
+    ];
+    const SATURDAY: [&str; 14] = ["AF", "BH", "DJ", "DZ", "EG", "IQ", "IR", "JO", "KW", "LY", "OM", "QA", "SD", "SY"];
+    let name = lc_time().split(['.', '@']).next().unwrap_or("");
+    let territory = match name.rsplit_once('_') {
+        Some((_, t)) => t,
+        None => match name {
+            "en" => "US",
+            "ja" => "JP",
+            "he" => "IL",
+            "ar" => "EG",
+            "pt" => "BR",
+            "fa" => "IR",
+            "ko" => "KR",
+            "th" => "TH",
+            "hi" => "IN",
+            _ => "",
+        },
+    };
+    if SUNDAY.contains(&territory) {
         0
+    } else if SATURDAY.contains(&territory) {
+        6
+    } else if territory == "MV" {
+        5
     } else {
         1
     }
 }
 
-/// QLocale::standaloneMonthName(month, LongFormat).
+/// QLocale::standaloneMonthName(month, LongFormat). Russian and Spanish as
+/// Qt has them; any other language gets the English (C) names.
 pub fn month_name(m: u32) -> String {
     let i = (m as usize).clamp(1, 12) - 1;
-    match lang().as_str() {
+    match lang() {
         "ru" => ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"][i].into(),
         "es" => ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"][i].into(),
         _ => ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][i].into(),
@@ -93,7 +124,7 @@ pub fn month_name(m: u32) -> String {
 /// QLocale::dayName(day, ShortFormat), 0 = Sunday.
 pub fn day_name_short(d: u32) -> String {
     let i = (d % 7) as usize;
-    match lang().as_str() {
+    match lang() {
         "ru" => ["вс", "пн", "вт", "ср", "чт", "пт", "сб"][i].into(),
         "es" => ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"][i].into(),
         _ => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][i].into(),
@@ -103,7 +134,7 @@ pub fn day_name_short(d: u32) -> String {
 /// The format-context abbreviated month (QLocale "MMM"): CLDR's "сент.".
 pub fn month_abbr(m: u32) -> String {
     let i = (m as usize).clamp(1, 12) - 1;
-    match lang().as_str() {
+    match lang() {
         "ru" => ["янв.", "февр.", "мар.", "апр.", "мая", "июн.", "июл.", "авг.", "сент.", "окт.", "нояб.", "дек."][i].into(),
         "es" => ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sept", "oct", "nov", "dic"][i].into(),
         _ => ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][i].into(),
