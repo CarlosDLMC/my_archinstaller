@@ -487,7 +487,9 @@ fn geo(m: &Monitor) -> Geo {
     let grid_w = COLS as f32 * cell_w + (COLS - 1) as f32 * SPACING;
     let grid_h = ROWS as f32 * cell_h + (ROWS - 1) as f32 * SPACING;
     let (rw, rh) = (grid_w + 40.0, grid_h + 40.0);
-    let root = (ac(w / m.scale.max(0.1), rw), 100.0, rw, rh);
+    // anchors.horizontalCenter of the full-screen window: mango's monitor box
+    // is already logical (wlr_output_layout), the window's own width.
+    let root = (ac(w, rw), 100.0, rw, rh);
     Geo { reserved_top, ws_w, ws_h, cell_w, cell_h, root, grid: (root.0 + 20.0, root.1 + 20.0) }
 }
 
@@ -758,7 +760,7 @@ pub fn pointer(app: &mut App, screen: u8, ev: &PointerEventKind, x: f32, y: f32)
             if let Some(m) = app.svc.overview_screens.get(screen as usize).and_then(|n| app.svc.mango.monitor(n)) {
                 let g = geo(m);
                 let half = g.root.2 / 2.0;
-                let centre = m.width / m.scale.max(0.1) / 2.0;
+                let centre = m.width / 2.0;
                 if x < centre - half || x > centre + half {
                     close(app);
                     return true;
