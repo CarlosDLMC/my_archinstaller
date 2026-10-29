@@ -19,7 +19,7 @@ use smithay_client_toolkit::{
     registry::{ProvidesRegistryState, RegistryState},
     registry_handlers,
     seat::{
-        keyboard::{KeyEvent, KeyboardData, KeyboardHandler, Keysym, Modifiers},
+        keyboard::{KeyEvent, KeyboardData, KeyboardHandler, Keymap, Keysym, Modifiers},
         pointer::{cursor_shape::CursorShapeManager, PointerEvent, PointerEventKind, PointerHandler},
         Capability, SeatHandler, SeatState,
     },
@@ -167,6 +167,8 @@ pub struct App {
     kbd_focus: Option<WinRef>,
     shift: bool,
     mods: Mods,
+    /// Ctrl shortcuts on a non-Latin layout (App::key).
+    latin: LatinKeys,
     /// Qt's event.isAutoRepeat: true while a held key's repeat is dispatched.
     pub key_repeat: bool,
     hand: bool,
@@ -263,6 +265,7 @@ impl App {
             kbd_focus: None,
             shift: false,
             mods: Mods::default(),
+            latin: LatinKeys::default(),
             key_repeat: false,
             svc: Services::default(),
             running: HashMap::new(),
@@ -635,7 +638,16 @@ impl App {
 
     /// A key press, or a repeat of a held one (key_repeat): Keys.onPressed of
     /// the overlay holding the keyboard, else of the open card.
-    fn key(&mut self, event: KeyEvent) {
+    fn key(&mut self, mut event: KeyEvent) {
+        // QXkbCommon::keysymToQtKey: with Ctrl held, a key whose keysym is not
+        // Latin-1 is the Latin key it is in another layout - Ctrl+К on the ru
+        // layout is Ctrl+R (the carousel's random card), Ctrl+Ф Ctrl+A. The
+        // text stays as typed.
+        if self.mods.ctrl && !is_latin1(event.keysym.raw()) {
+            if let Some(sym) = self.latin.lookup(event.raw_code + 8) {
+                event.keysym = Keysym::new(sym);
+            }
+        }
         if let Some(WinRef::Osd(k)) = self.kbd_focus {
             if self.osd(k).is_some() {
                 // Qt's nativeScanCode is the XKB keycode: evdev + 8.
@@ -854,6 +866,10 @@ impl KeyboardHandler for App {
             c.shift = m.shift;
         }
     }
+    fn update_keymap(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlKeyboard, keymap: Keymap<'_>) {
+        self.latin.keymap = std::ffi::CString::new(keymap.as_string()).ok();
+        self.latin.found.clear();
+    }
 }
 
 impl PointerHandler for App {
@@ -1058,15 +1074,114 @@ impl ProvidesRegistryState for App {
 /// delegate_keyboard!, except for one event. sctk 0.19 drops every press of a
 /// repeating key while the compositor has repeat turned off (repeat_rate 0:
 /// its key handler returns before press_key), where QtWayland just does not
-/// repeat. Off becomes a delay of 24 days, so the presses come through.
+/// repeat. Off becomes a delay of 24 days, so the presses come through. The
+/// raw modifier state is noted for LatinKeys on the way.
 impl Dispatch<WlKeyboard, KeyboardData<App>> for App {
     fn event(app: &mut App, kbd: &WlKeyboard, event: wl_keyboard::Event, data: &KeyboardData<App>, conn: &Connection, qh: &QueueHandle<App>) {
         let event = match event {
             wl_keyboard::Event::RepeatInfo { rate: 0, .. } => wl_keyboard::Event::RepeatInfo { rate: 1, delay: i32::MAX },
             e => e,
         };
+        if let wl_keyboard::Event::Modifiers { mods_depressed, mods_latched, mods_locked, group, .. } = event {
+            app.latin.mods = [mods_depressed, mods_latched, mods_locked, group];
+        }
         <SeatState as Dispatch<WlKeyboard, KeyboardData<App>, App>>::event(app, kbd, event, data, conn, qh)
     }
+}
+
+/// QXkbCommon::lookupLatinKeysym, for the Ctrl shortcuts of App::key: the
+/// first Latin-1 keysym the key has in the other layouts, in their order, at
+/// the level the modifiers give - unless a key of a layout before that one
+/// gives the same keysym. It needs the keymap and the modifier state, which
+/// sctk keeps to itself: the keymap's text is kept (41 KB for us,es,ru) and
+/// compiled only to answer (0.7 ms; compiled it holds 180 KB), and the
+/// answers are kept until the next keymap.
+#[derive(Default)]
+struct LatinKeys {
+    keymap: Option<std::ffi::CString>,
+    /// wl_keyboard.modifiers: depressed, latched, locked, the layout.
+    mods: [u32; 4],
+    found: HashMap<(u32, [u32; 4]), Option<u32>>,
+}
+
+impl LatinKeys {
+    fn lookup(&mut self, keycode: u32) -> Option<u32> {
+        let text = self.keymap.as_ref()?;
+        if self.found.len() >= 64 {
+            self.found.clear();
+        }
+        let mods = self.mods;
+        *self.found.entry((keycode, mods)).or_insert_with(|| unsafe { latin_keysym(text, keycode, mods) })
+    }
+}
+
+/// QXkbCommon's isLatin1.
+fn is_latin1(sym: u32) -> bool {
+    (0x20..=0xff).contains(&sym)
+}
+
+#[link(name = "xkbcommon")]
+extern "C" {
+    fn xkb_context_new(flags: std::ffi::c_int) -> *mut std::ffi::c_void;
+    fn xkb_context_unref(context: *mut std::ffi::c_void);
+    fn xkb_keymap_new_from_string(context: *mut std::ffi::c_void, string: *const std::ffi::c_char, format: std::ffi::c_int, flags: std::ffi::c_int) -> *mut std::ffi::c_void;
+    fn xkb_keymap_unref(keymap: *mut std::ffi::c_void);
+    fn xkb_keymap_num_layouts_for_key(keymap: *mut std::ffi::c_void, key: u32) -> u32;
+    fn xkb_keymap_key_get_syms_by_level(keymap: *mut std::ffi::c_void, key: u32, layout: u32, level: u32, syms_out: *mut *const u32) -> std::ffi::c_int;
+    fn xkb_keymap_min_keycode(keymap: *mut std::ffi::c_void) -> u32;
+    fn xkb_keymap_max_keycode(keymap: *mut std::ffi::c_void) -> u32;
+    fn xkb_state_new(keymap: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+    fn xkb_state_unref(state: *mut std::ffi::c_void);
+    fn xkb_state_update_mask(state: *mut std::ffi::c_void, depressed: u32, latched: u32, locked: u32, depressed_layout: u32, latched_layout: u32, locked_layout: u32) -> std::ffi::c_int;
+    fn xkb_state_key_get_one_sym(state: *mut std::ffi::c_void, key: u32) -> u32;
+    fn xkb_state_key_get_layout(state: *mut std::ffi::c_void, key: u32) -> u32;
+    fn xkb_state_key_get_level(state: *mut std::ffi::c_void, key: u32, layout: u32) -> u32;
+}
+
+/// The lookup itself, on a keymap compiled from the compositor's text (it
+/// includes nothing: no include paths, no environment names).
+unsafe fn latin_keysym(text: &std::ffi::CStr, keycode: u32, [depressed, latched, locked, layout_now]: [u32; 4]) -> Option<u32> {
+    const NO_DEFAULT_INCLUDES_OR_ENVIRONMENT: std::ffi::c_int = 3;
+    const KEYMAP_FORMAT_TEXT_V1: std::ffi::c_int = 1;
+    let context = xkb_context_new(NO_DEFAULT_INCLUDES_OR_ENVIRONMENT);
+    if context.is_null() {
+        return None;
+    }
+    let keymap = xkb_keymap_new_from_string(context, text.as_ptr(), KEYMAP_FORMAT_TEXT_V1, 0);
+    xkb_context_unref(context);
+    if keymap.is_null() {
+        return None;
+    }
+    let (state, query) = (xkb_state_new(keymap), xkb_state_new(keymap));
+    let mut found = None;
+    if !state.is_null() && !query.is_null() {
+        xkb_state_update_mask(state, depressed, latched, locked, 0, 0, layout_now);
+        let current = xkb_state_key_get_layout(state, keycode);
+        for layout in (0..xkb_keymap_num_layouts_for_key(keymap, keycode)).filter(|&l| l != current) {
+            let level = xkb_state_key_get_level(state, keycode, layout);
+            let mut syms: *const u32 = std::ptr::null();
+            if xkb_keymap_key_get_syms_by_level(keymap, keycode, layout, level, &mut syms) == 1 && is_latin1(*syms) {
+                found = Some((layout, *syms));
+                break;
+            }
+        }
+        // Unique: no key gives it in a layout before that one (with the
+        // latched and locked modifiers only), as Qt checks.
+        if let Some((layout, sym)) = found {
+            let (min, max) = (xkb_keymap_min_keycode(keymap), xkb_keymap_max_keycode(keymap));
+            let taken = (0..layout).any(|before| {
+                xkb_state_update_mask(query, 0, latched, locked, 0, 0, before);
+                (min..max).any(|code| xkb_state_key_get_one_sym(query, code) == sym)
+            });
+            if taken {
+                found = None;
+            }
+        }
+    }
+    xkb_state_unref(state);
+    xkb_state_unref(query);
+    xkb_keymap_unref(keymap);
+    found.map(|(_, sym)| sym)
 }
 
 delegate_compositor!(App);
