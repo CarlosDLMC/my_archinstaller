@@ -403,7 +403,6 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         }
         content_h = crate::audio_card::content_height(&mut app.fonts, &app.svc);
         h = 120f32.max((content_h.ceil() + 30.0).min(560.0));
-        app.every(Duration::from_millis(33), crate::audio_card::meter_tick);
     }
     if kind == CardKind::Pult {
         let scanning = crate::pult::scanning(app);
@@ -499,6 +498,9 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
             app.card.as_mut().unwrap().texts = m;
         }
     }
+    if kind == CardKind::Audio {
+        app.debounce(METER_TIMER, Duration::from_millis(33), meter_timer);
+    }
     if kind == CardKind::Pult {
         crate::pult::opened(app);
     }
@@ -515,7 +517,26 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
     }
 }
 
+/// LevelMeter's Timer (interval 33, running while the meter shows): one
+/// timer, by name, so a card closed and opened again (toggle() on another
+/// bar does both at once) does not leave a second one ticking.
+const METER_TIMER: &str = "audio-meter";
+
+/// The timers a card runs while it is open (QML: Timer { running: cardOpen }),
+/// stopped when it closes: the meter's, and the agent card's minute tick
+/// (AgentUsage.qml:149-154), which agent.rs starts under "agent-stats".
+const CARD_TIMERS: [&str; 2] = [METER_TIMER, "agent-stats"];
+
+fn meter_timer(app: &mut App) {
+    if crate::audio_card::meter_tick(app) {
+        app.debounce(METER_TIMER, Duration::from_millis(33), meter_timer);
+    }
+}
+
 pub fn close(app: &mut App) {
+    for t in CARD_TIMERS {
+        app.cancel_timer(t);
+    }
     if app.card.as_ref().map(|c| c.kind) == Some(CardKind::Pult) {
         crate::pult::closed(app);
     }
