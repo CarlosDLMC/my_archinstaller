@@ -201,7 +201,11 @@ fn activate(app: &mut App) {
         p.checking = false;
         p.field.clear();
         setup_session(app);
-        show_osd(app);
+        // A helper that cannot be reached ends the request at once (and may
+        // have started the next one, which showed itself).
+        if app.svc.polkit.flow.is_some() {
+            show_osd(app);
+        }
         return;
     }
 }
@@ -211,9 +215,23 @@ fn setup_session(app: &mut App) {
     close_session(app);
     let Some(f) = app.svc.polkit.flow.as_ref() else { return };
     let (user, cookie) = (f.user.clone(), f.req.cookie.clone());
-    let Ok(mut stream) = UnixStream::connect(HELPER_SOCKET) else {
-        completed(app, false);
-        return;
+    let mut stream = match UnixStream::connect(HELPER_SOCKET) {
+        Ok(s) => s,
+        Err(e) => {
+            // libpolkit-agent would spawn the setuid helper instead, but polkit
+            // 128 installs it without the setuid bit. Treating this as a failed
+            // attempt (completed(false)) started a new session at once, which
+            // failed the same way: the recursion overflowed the stack and took
+            // the bar down. The request ends with an error, so polkitd is not
+            // left waiting for it.
+            eprintln!("rust-bar: polkit: cannot reach {HELPER_SOCKET}: {e}");
+            if let Some(f) = app.svc.polkit.flow.as_ref() {
+                let err = f.req.call.error(&"org.freedesktop.PolicyKit1.Error.Failed".into(), &std::ffi::CString::new("Cannot reach polkit-agent-helper-1").unwrap());
+                send(app, err);
+            }
+            finish(app);
+            return;
+        }
     };
     let _ = stream.write_all(format!("{user}\n{cookie}\n").as_bytes());
     let _ = stream.set_nonblocking(true);
