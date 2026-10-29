@@ -591,15 +591,17 @@ pub fn key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Keysym, s
                 press(app, k);
             }
         }
-        Keysym::Left | Keysym::ISO_Left_Tab if !armed => {
+        // Qt's xkb table gives the keypad's arrows and Tab (NumLock off)
+        // Key_Left, Key_Right and Key_Tab, so they move the selection too.
+        Keysym::Left | Keysym::KP_Left | Keysym::ISO_Left_Tab if !armed => {
             app.svc.power.selected = (app.svc.power.selected + 4) % 5;
             redraw(app);
         }
-        Keysym::Tab if !armed && shift => {
+        Keysym::Tab | Keysym::KP_Tab if !armed && shift => {
             app.svc.power.selected = (app.svc.power.selected + 4) % 5;
             redraw(app);
         }
-        Keysym::Right | Keysym::Tab if !armed => {
+        Keysym::Right | Keysym::KP_Right | Keysym::Tab | Keysym::KP_Tab if !armed => {
             app.svc.power.selected = (app.svc.power.selected + 1) % 5;
             redraw(app);
         }
