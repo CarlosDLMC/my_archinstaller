@@ -166,6 +166,8 @@ pub struct Wifi {
     pub signal: i64,
     pub connecting: bool,
     pub pulse: crate::anim::Pulse,
+    /// Asked for again while a status read ran: one more when it ends.
+    again: bool,
 }
 
 /// dunst's pause state over the session bus (dnd_connect).
@@ -207,6 +209,8 @@ pub struct Services {
     pub wifi: Wifi,
     pub vpn: String,
     vpn_checked: bool,
+    /// A reset asked for while one ran: one more when it ends.
+    vpn_reset_again: bool,
     /// Default sink: volume/mute and its node (name, description, nick).
     pub audio: (crate::pw::Audio, Option<crate::pw::NodeInfo>),
     pub pw: Option<crate::pw::Pw>,
@@ -942,7 +946,14 @@ pub fn wifi_refresh(app: &mut App) {
     wifi_status(app);
 }
 
+/// wifiCurrentProc.running = true. On a read still running, Process runs it
+/// once more when that one ends (its targetRunning): a change nmcli monitor
+/// reported meanwhile, or the card's connect finishing, is not dropped.
 fn wifi_status(app: &mut App) {
+    if app.is_running("wifi-current") {
+        app.svc.wifi.again = true;
+        return;
+    }
     app.spawn("wifi-current", &["sh", "-c", "nmcli -t -f IN-USE,SSID,SIGNAL device wifi list --rescan no | grep '^\\*' | head -1"], |app, d| {
         let w = &mut app.svc.wifi;
         let before = (w.connected, w.ssid.clone());
@@ -962,6 +973,9 @@ fn wifi_status(app: &mut App) {
         if before != (w.connected, w.ssid.clone()) {
             app.mark_all_dirty();
         }
+        if std::mem::take(&mut app.svc.wifi.again) {
+            wifi_status(app);
+        }
     });
 }
 
@@ -969,7 +983,13 @@ fn wifi_status(app: &mut App) {
 
 /// VpnWidget's side effects: a VPN that went down, or none at start with a
 /// city still cached from one, resets the time/weather sync (vpn-reset.sh).
+/// vpnResetProc.running = true during a reset runs it again after it, as
+/// Process does: a tunnel that came up and went down meanwhile is reset too.
 fn vpn_reset(app: &mut App) {
+    if app.is_running("vpn-reset") {
+        app.svc.vpn_reset_again = true;
+        return;
+    }
     let cmd = format!("{}/.config/quickshell/bar/scripts/vpn-reset.sh all --forget", home());
     app.spawn("vpn-reset", &["sh", "-c", &cmd], |app, _| {
         // vpnResetProc ending: refreshTimezone(), refreshWeather() - a fetch
@@ -977,6 +997,9 @@ fn vpn_reset(app: &mut App) {
         // the weather.json watch shows it.
         refresh_timezone(app);
         refresh_weather_city(app);
+        if std::mem::take(&mut app.svc.vpn_reset_again) {
+            vpn_reset(app);
+        }
     });
 }
 
