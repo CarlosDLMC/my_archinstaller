@@ -625,6 +625,23 @@ pub fn update_height(app: &mut App) {
             }
             120f32.max((content.ceil() + 30.0).min(560.0))
         }
+        CardKind::Weather => {
+            // CenterInfo's card: open: popupVisible && !!weatherText - a
+            // reading with no text closes it.
+            if app.svc.weather.text.is_empty() {
+                close(app);
+                return;
+            }
+            // cardX and the stem follow the pill; a strip about to redraw
+            // may move it, so look again once it has.
+            let strip = card.strip;
+            follow_weather_pill(app);
+            if app.strips.get(strip).map_or(false, |s| s.win.dirty) {
+                app.after(Duration::ZERO, follow_weather_pill);
+            }
+            let w = app.card.as_ref().unwrap().width;
+            weather_height(&mut app.fonts, &app.svc, w)
+        }
         _ => return,
     };
     let card = app.card.as_mut().unwrap();
@@ -633,6 +650,25 @@ pub fn update_height(app: &mut App) {
     }
     card.height = h;
     card.win.dirty = true;
+}
+
+/// CenterInfo's weather card: cardX centres it on the weather pill and the
+/// stem is the pill's width (int), both bindings (CenterInfo.qml:638-647).
+fn follow_weather_pill(app: &mut App) {
+    let Some(card) = app.card.as_ref().filter(|c| c.kind == CardKind::Weather) else { return };
+    let Some(s) = app.strips.get(card.strip) else { return };
+    let Some(pill) = s.hits.iter().find(|h| h.action == Action::Weather) else { return };
+    let ui = crate::bar::ui_scale(s.screen_width);
+    let (center, stem_w, screen_w) = (pill.x + pill.w / 2.0, (pill.w / ui).trunc(), s.screen_width);
+    let card = app.card.as_mut().unwrap();
+    let left = (center - card.width / 2.0).min(screen_w - card.width).max(0.0).round();
+    if left != card.left || stem_w != card.stem_w {
+        card.icon_center = center;
+        card.left = left;
+        card.stem_w = stem_w;
+        card.notch_stale = true;
+        card.win.dirty = true;
+    }
 }
 
 /// Whether a point of the card's surface is on the card (CardSurface's card
