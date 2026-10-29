@@ -88,15 +88,17 @@ fn read_int(path: &str) -> i64 {
 }
 
 /// Probe + the minute timer + the uevent socket (`udevadm monitor` in QML).
+/// Both only with a battery, as their `running: root.present`
+/// (BatteryState.qml:429, 462): a desktop does not wake for them.
 pub fn start(app: &mut App) {
     probe(app);
     if app.svc.battery.present {
         listen(app);
+        app.every(std::time::Duration::from_secs(60), |app| {
+            refresh(app, true);
+            true
+        });
     }
-    app.every(std::time::Duration::from_secs(60), |app| {
-        refresh(app, true);
-        true
-    });
 }
 
 /// probeProc: the system batteries, the mains supply, the limit helper.
