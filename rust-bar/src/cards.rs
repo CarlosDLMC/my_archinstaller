@@ -1558,15 +1558,11 @@ fn draw_weather(ui: &mut Ui, w: f32, svc: &Services) {
     let mut ry = iy + ac(l.row_h, l.read_h);
     ui.text(&l.temp, l.read_x, ry, temp_color(&wx.text), TextStyle::Normal);
     ry += l.temp.height() + 2.0;
-    for line in &l.cond {
-        ui.text(line, l.read_x, ry, t.col_white, TextStyle::Normal);
-        ry += line.height();
-    }
+    // The condition and the place are one wrapped Text each: one node, so
+    // a change to either grays all of its lines.
+    ry += ui.text_block(0, 0xE1, &l.cond, l.read_x, ry, t.col_white);
     ry += 2.0;
-    for line in &l.place {
-        ui.text(line, l.read_x, ry, t.col_grey, TextStyle::Normal);
-        ry += line.height();
-    }
+    ui.text_block(0, 0xE2, &l.place, l.read_x, ry, t.col_grey);
     y += l.p1 + 8.0;
 
     // Plate 2: МИН / МАКС / ОЩУЩАЕТСЯ, a GridLayout of three equal columns
