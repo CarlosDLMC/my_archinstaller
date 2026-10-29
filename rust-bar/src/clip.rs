@@ -51,8 +51,10 @@ pub struct Clip {
     blink_since: Option<Instant>,
     pub selected: usize,
     pub loading: bool,
-    /// ListView.contentY.
+    /// ListView.contentY where the list comes to rest, and the wheel's glide
+    /// towards it: (from, to, start).
     pub scroll: f32,
+    glide: Option<(f32, f32, Instant)>,
     /// Decoded thumbnail files (id -> path), the queue, the one decoding.
     thumbs: HashMap<String, String>,
     pending: VecDeque<String>,
@@ -62,6 +64,10 @@ pub struct Clip {
     pub preview_tex: Option<(String, Tex)>,
     loading_tex: Vec<String>,
     keep_index: usize,
+    /// filtered()'s last answer: (filter, entries_gen, indices into entries).
+    filtered_memo: std::cell::RefCell<Option<(String, u64, Vec<usize>)>>,
+    /// Counts the times `entries` was replaced.
+    entries_gen: u64,
 }
 
 fn script() -> String {
@@ -69,7 +75,8 @@ fn script() -> String {
 }
 
 fn thumb_dir() -> String {
-    let cache = std::env::var("XDG_CACHE_HOME").unwrap_or_else(|_| format!("{}/.cache", services::home()));
+    // Quickshell.env("XDG_CACHE_HOME") || HOME + "/.cache": empty counts as unset.
+    let cache = std::env::var("XDG_CACHE_HOME").ok().filter(|v| !v.is_empty()).unwrap_or_else(|| format!("{}/.cache", services::home()));
     format!("{cache}/quickshell/clip-thumbs")
 }
 
@@ -92,25 +99,39 @@ fn parse_list(text: &str) -> Vec<Entry> {
 }
 
 impl Clip {
-    /// The entries the filter keeps (image ones also match "image").
+    /// The entries the filter keeps (image ones also match "image"). Like the
+    /// `filtered` binding it is worked out once per change of the filter or
+    /// of the history, not at each call (every redraw asks twice, each key
+    /// about five times).
     pub fn filtered(&self) -> Vec<&Entry> {
-        let f = self.filter.trim().to_lowercase();
-        if f.is_empty() {
-            return self.entries.iter().collect();
-        }
-        self.entries
-            .iter()
-            .filter(|e| {
+        let mut memo = self.filtered_memo.borrow_mut();
+        if !matches!(&*memo, Some((f, g, _)) if *f == self.filter && *g == self.entries_gen) {
+            let f = self.filter.trim().to_lowercase();
+            let keep = |e: &Entry| {
                 let mut hay = e.preview.to_lowercase();
                 if e.image.is_some() {
                     hay += " image screenshot picture";
                 }
                 hay.contains(&f)
-            })
-            .collect()
+            };
+            let idx = (0..self.entries.len()).filter(|&i| f.is_empty() || keep(&self.entries[i])).collect();
+            *memo = Some((self.filter.clone(), self.entries_gen, idx));
+        }
+        let Some((_, _, idx)) = memo.as_ref() else { return Vec::new() };
+        idx.iter().filter_map(|&i| self.entries.get(i)).collect()
     }
     fn current(&self) -> Option<Entry> {
         self.filtered().get(self.selected).map(|e| (*e).clone())
+    }
+    /// ListView.contentY on the wheel's glide; None once it has ended.
+    fn glide_at(&self, now: Instant) -> Option<f32> {
+        let (from, to, start) = self.glide?;
+        let t = now.saturating_duration_since(start).as_secs_f32() * 1000.0 / GLIDE_MS;
+        (t < 1.0).then(|| from + (to - from) * out_expo(t))
+    }
+    /// ListView.contentY now.
+    fn scroll_at(&self, now: Instant) -> f32 {
+        self.glide_at(now).unwrap_or(self.scroll)
     }
 }
 
@@ -127,6 +148,7 @@ fn reload(app: &mut App) {
         let next = parse_list(&d.stdout);
         if !(next.len() == c.entries.len() && (next.is_empty() || next[0].id == c.entries[0].id)) {
             c.entries = next;
+            c.entries_gen += 1;
             model_reset(app);
         }
         changed(app);
@@ -148,6 +170,7 @@ fn open(app: &mut App) {
     c.select_all = false;
     c.selected = 0;
     c.scroll = 0.0;
+    c.glide = None;
     c.open = true;
     c.blink_since = Some(Instant::now());
     reload(app);
@@ -193,7 +216,18 @@ fn drop_textures(app: &mut App) {
 fn show(app: &mut App) {
     let Some((_, sw, sh)) = osd::focused_output(app) else { return };
     let (w, h) = (px(820.0), px(480.0));
+    let fresh = app.osd(OsdKind::Clipboard).is_none();
     osd::show(app, OpenParams { kind: OsdKind::Clipboard, size: (w as u32, h as u32), panel: (0.0, 0.0, w, h), dim: Some(Color::qt_rgba(0.0, 0.0, 0.0, 0.45)), keyboard: true, namespace: "quickshell", fade_ms: FADE_MS, min_scale: 0.97, fade_easing: crate::anim::Easing::Linear, pos: Some((ac(sw, w) as i32, ac(sh, h) as i32)), fill: false, output: None });
+    // The card is in the Loader (ClipboardOsd.qml:132-138), which builds it
+    // when onShownChanged sets windowVisible - `shown` is already true, so
+    // its opacity and scale start at 1 and their Behaviors never run: QML
+    // pops the card in and only the dim fades. Reopened while it is still
+    // fading out, the loaded card animates back (osd::show's re-show).
+    if fresh {
+        if let Some(o) = app.osd_mut(OsdKind::Clipboard) {
+            o.fade.snap(1.0);
+        }
+    }
 }
 
 /// The model was replaced: ListView makes every delegate anew.
@@ -214,6 +248,13 @@ fn changed(app: &mut App) {
 fn blink(app: &mut App) {
     if !app.svc.clip.open {
         return;
+    }
+    // mango closes the layer surfaces of a screen that goes away; QML's
+    // ClipboardOsd is a window per screen, shown on the focused one, so the
+    // open picker shows up there. Without this, `open` stayed true with no
+    // dialog and the next SUPER+ALT+V only "closed" it.
+    if app.osd(OsdKind::Clipboard).is_none() {
+        show(app);
     }
     if let Some(o) = app.osd_mut(OsdKind::Clipboard) {
         o.win.dirty = true;
@@ -247,6 +288,45 @@ fn view_h() -> f32 {
 fn body_h() -> f32 {
     let m = met();
     m.card_h - 2.0 * m.pad - (m.title * 2.0).round() - (m.hint * 2.4).round() - px(20.0)
+}
+
+/// The ListView in the panel, where draw_osd puts it: (x, y, w, h).
+fn list_rect() -> (f32, f32, f32, f32) {
+    let m = met();
+    let list_w = ((m.card_w - 2.0 * m.pad) * 0.52).round();
+    (m.pad + 6.0, m.pad + (m.title * 2.0).round() + px(10.0) + 6.0, list_w - 12.0, view_h())
+}
+
+/// contentHeight - height for `n` rows of row_h, 2 px apart.
+fn max_scroll(n: usize) -> f32 {
+    (n as f32 * (met().row_h + 2.0) - 2.0 - view_h()).max(0.0)
+}
+
+/// QQuickFlickable::wheelEvent's glide: 3/4 of fixupDuration (400 ms).
+const GLIDE_MS: f32 = 300.0;
+
+/// easing.cpp easeOutExpo: a hair past 1 just before the end.
+fn out_expo(t: f32) -> f32 {
+    if t >= 1.0 {
+        1.0
+    } else {
+        1.001 * (1.0 - 2f32.powf(-10.0 * t))
+    }
+}
+
+/// QQuickFlickablePrivate::fixup: between the ends contentY goes to a whole
+/// pixel - the nearest within a quarter, else back against the motion (`dir`
+/// is the sign of smoothVelocity; 0 rounds).
+fn fixup(y: f32, dir: f32, max: f32) -> f32 {
+    if y <= 0.0 || y >= max || y.fract() == 0.0 {
+        y.clamp(0.0, max)
+    } else if (y.round() - y).abs() < 0.25 || dir == 0.0 {
+        y.round()
+    } else if dir > 0.0 {
+        y.floor()
+    } else {
+        y.ceil()
+    }
 }
 
 /// Delegates exist for the rows in view plus ListView's cacheBuffer; each
@@ -295,7 +375,12 @@ fn pump(app: &mut App) {
     app.spawn("clip-thumb", &["sh", "-c", &cmd], |app, d| {
         let c = &mut app.svc.clip;
         if let Some(id) = c.decoding.take() {
-            if d.ok {
+            // Only while open. close() has emptied the map and thumbclean
+            // deletes the file 400 ms later: recorded after close, the entry
+            // pointed at nothing, and the next open never asked for that
+            // picture again - a row (and its preview) left on the glyph.
+            // QML's onExited records it all the same; this keeps its intent.
+            if d.ok && c.open {
                 c.thumbs.insert(id.clone(), format!("{}/{id}.img", thumb_dir()));
             }
         }
@@ -324,10 +409,11 @@ fn load_textures(app: &mut App) {
             }
         }
     }
+    let max = app.gpu.as_ref().map_or(4096, |g| g.device.limits().max_texture_dimension_2d);
     for (id, path, preview) in jobs {
         app.svc.clip.loading_tex.push(format!("{}{id}", if preview { 'p' } else { 't' }));
         app.background(
-            move || (id.clone(), preview, decode(&path, if preview { (900, 700) } else { (96, 96) }, !preview)),
+            move || (id.clone(), preview, decode(&path, if preview { (900, 700) } else { (96, 96) }, !preview, max)),
             |app, (id, preview, img)| {
                 let c = &mut app.svc.clip;
                 c.loading_tex.retain(|k| *k != format!("{}{id}", if preview { 'p' } else { 't' }));
@@ -351,20 +437,30 @@ fn load_textures(app: &mut App) {
     }
 }
 
-/// QQuickImage's load at sourceSize: scaled down (never up) so it covers
-/// (crop) or fits (fit) the requested box, smooth, premultiplied RGBA.
-fn decode(path: &str, req: (u32, u32), crop: bool) -> Option<(u32, u32, Vec<u8>)> {
+/// QQuickImage's load at sourceSize - QQuickImageProviderWithOptions::loadSize,
+/// the same for PreserveAspectCrop and PreserveAspectFit: one scale, the
+/// LARGER of the two ratios, down or up, so the picture covers the box (the
+/// crop or fit happens when it is drawn). Smooth, premultiplied RGBA.
+/// `max` is the GPU's largest texture side: a thin strip of a picture can
+/// ask for more, and wgpu aborts on a texture that big.
+fn decode(path: &str, req: (u32, u32), crop: bool, max: u32) -> Option<(u32, u32, Vec<u8>)> {
     // The thumbnails are "<id>.img": the format comes from the bytes.
-    let img = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?.decode().ok()?.to_rgba8();
+    let mut img = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?.decode().ok()?.to_rgba8();
     let (w, h) = img.dimensions();
-    let (sx, sy) = (req.0 as f32 / w as f32, req.1 as f32 / h as f32);
-    let ratio = if crop { sx.max(sy) } else { sx.min(sy) };
-    let img = if ratio < 1.0 {
-        let (nw, nh) = (((w as f32 * ratio).round() as u32).max(1), ((h as f32 * ratio).round() as u32).max(1));
-        crate::gpu::scale(img, nw, nh)
-    } else {
-        img
-    };
+    let ratio = (req.0 as f64 / w as f64).max(req.1 as f64 / h as f64);
+    let size = |w: u32, h: u32, r: f64| (((w as f64 * r).round() as u32).max(1), ((h as f64 * r).round() as u32).max(1));
+    let (mut nw, mut nh) = size(w, h, ratio);
+    if nw.max(nh) > max {
+        if crop {
+            // A thumbnail's box is square: only the middle square shows.
+            let s = w.min(h);
+            img = image::imageops::crop_imm(&img, (w - s) / 2, (h - s) / 2, s, s).to_image();
+            (nw, nh) = size(s, s, ratio);
+        } else {
+            (nw, nh) = size(w, h, max as f64 / w.max(h) as f64);
+        }
+    }
+    let img = crate::gpu::scale(img, nw.min(max), nh.min(max));
     let (w, h) = img.dimensions();
     Some((w, h, crate::gpu::premultiply(img.into_raw())))
 }
@@ -417,20 +513,25 @@ fn move_sel(app: &mut App, delta: i64) {
     position_view(app);
 }
 
-/// positionViewAtIndex(currentIndex, ListView.Contain).
+/// positionViewAtIndex(currentIndex, ListView.Contain), from where the list
+/// is now: a glide stops there (cancelFlick), and fixupPosition() puts the
+/// list on a whole pixel.
 fn position_view(app: &mut App) {
     let step = met().row_h + 2.0;
     let c = &mut app.svc.clip;
-    let n = c.filtered().len() as f32;
+    let now = Instant::now();
+    let dir = c.glide.filter(|_| c.glide_at(now).is_some()).map_or(0.0, |(from, to, _)| to - from);
+    let mut y = c.scroll_at(now);
+    c.glide = None;
     let top = c.selected as f32 * step;
     let bottom = top + met().row_h;
-    if top < c.scroll {
-        c.scroll = top;
-    } else if bottom > c.scroll + view_h() {
-        c.scroll = bottom - view_h();
+    if top < y {
+        y = top;
+    } else if bottom > y + view_h() {
+        y = bottom - view_h();
     }
-    let max = (n * step - 2.0 - view_h()).max(0.0);
-    c.scroll = c.scroll.clamp(0.0, max);
+    let max = max_scroll(c.filtered().len());
+    c.scroll = fixup(y.clamp(0.0, max), dir, max);
     changed(app);
 }
 
@@ -439,16 +540,35 @@ fn filter_changed(app: &mut App) {
     let c = &mut app.svc.clip;
     c.selected = 0;
     c.scroll = 0.0;
+    c.glide = None;
     model_reset(app);
     changed(app);
 }
 
+/// The wheel: QQuickFlickable::wheelEvent (Qt 6.12; wheelDeceleration is past
+/// _q_MaximumWheelDeceleration): wheelScrollLines (3) x 24 px per 120 of
+/// angleDelta, glided 300 ms OutExpo from where the list is now and cut at its
+/// ends (StopAtBounds). Only the ListView takes it: over the preview, the
+/// search line or the hints no item accepts the wheel.
 pub fn wheel(app: &mut App, delta: f32) {
-    let step = met().row_h + 2.0;
+    let Some((x, y)) = app.osd(OsdKind::Clipboard).and_then(|o| o.st.pointer) else { return };
+    let (lx, ly, lw, lh) = list_rect();
+    if x < lx || x >= lx + lw || y < ly || y >= ly + lh {
+        return;
+    }
+    let now = Instant::now();
     let c = &mut app.svc.clip;
-    let n = c.filtered().len() as f32;
-    let max = (n * step - 2.0 - view_h()).max(0.0);
-    c.scroll = (c.scroll - delta / 120.0 * 3.0 * 20.0).clamp(0.0, max);
+    let max = max_scroll(c.filtered().len());
+    let from = c.scroll_at(now);
+    let step = -delta / 120.0 * 72.0;
+    // At an end in that direction the list lets the wheel go.
+    if step == 0.0 || (step < 0.0 && from <= 0.0) || (step > 0.0 && from >= max) {
+        return;
+    }
+    let to = (from + step).clamp(0.0, max);
+    c.glide = Some((from, to, now));
+    // Where fixup() leaves it when the glide ends.
+    c.scroll = fixup(to, step, max);
     changed(app);
 }
 
@@ -465,6 +585,20 @@ pub fn click(app: &mut App, action: Action) {
 /// handleKey(), then the search line (TextInput).
 pub fn key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Keysym, mods: Mods, utf8: Option<&str>) {
     use smithay_client_toolkit::seat::keyboard::Keysym;
+    // NumLock off, the keypad's keys reach Qt as Key_Up .. Key_Delete (with
+    // KeypadModifier, which handleKey and TextInput's key matching ignore).
+    let sym = match sym {
+        Keysym::KP_Up => Keysym::Up,
+        Keysym::KP_Down => Keysym::Down,
+        Keysym::KP_Prior => Keysym::Prior,
+        Keysym::KP_Next => Keysym::Next,
+        Keysym::KP_Left => Keysym::Left,
+        Keysym::KP_Right => Keysym::Right,
+        Keysym::KP_Home => Keysym::Home,
+        Keysym::KP_End => Keysym::End,
+        Keysym::KP_Delete => Keysym::Delete,
+        s => s,
+    };
     match sym {
         Keysym::Escape => return close(app),
         Keysym::Down => return move_sel(app, 1),
@@ -499,7 +633,9 @@ fn edit_line(c: &mut Clip, sym: smithay_client_toolkit::seat::keyboard::Keysym, 
     let next = |s: &str, i: usize| s[i..].chars().next().map_or(i, |ch| i + ch.len_utf8());
     let word_left = |s: &str, i: usize| {
         let t = s[..i].trim_end_matches(char::is_whitespace);
-        t.rfind(char::is_whitespace).map_or(0, |p| p + 1)
+        // Past the blank, whatever its length: a no-break space is 2 bytes,
+        // and an index inside it panics in replace_range / the slicing.
+        t.char_indices().rev().find(|(_, ch)| ch.is_whitespace()).map_or(0, |(p, ch)| p + ch.len_utf8())
     };
     let word_right = |s: &str, i: usize| {
         let rest = &s[i..];
@@ -507,7 +643,10 @@ fn edit_line(c: &mut Clip, sym: smithay_client_toolkit::seat::keyboard::Keysym, 
         let r = &rest[skip..];
         i + skip + r.find(char::is_whitespace).unwrap_or(r.len())
     };
-    if c.select_all && !matches!(sym, Keysym::Left | Keysym::Right | Keysym::Home | Keysym::End) && (matches!(sym, Keysym::BackSpace | Keysym::Delete) || utf8.map_or(false, |s| !s.is_empty() && !s.chars().any(char::is_control))) {
+    // QInputControl::isAcceptableInput: printable text, unless typed with Ctrl
+    // or Ctrl+Shift (Ctrl+1 is no input; Ctrl+Alt is AltGr to it).
+    let typed = utf8.filter(|s| !s.is_empty() && !s.chars().any(char::is_control) && !(mods.ctrl && !mods.alt));
+    if c.select_all && !matches!(sym, Keysym::Left | Keysym::Right | Keysym::Home | Keysym::End) && (matches!(sym, Keysym::BackSpace | Keysym::Delete) || typed.is_some()) {
         c.filter.clear();
         c.cursor = 0;
         c.select_all = false;
@@ -516,7 +655,8 @@ fn edit_line(c: &mut Clip, sym: smithay_client_toolkit::seat::keyboard::Keysym, 
         }
     }
     match sym {
-        Keysym::a | Keysym::A if mods.ctrl => {
+        // QKeySequence::SelectAll is Ctrl+A alone.
+        Keysym::a | Keysym::A if mods.ctrl && !mods.shift && !mods.alt => {
             c.select_all = true;
             c.cursor = c.filter.len();
         }
@@ -529,13 +669,16 @@ fn edit_line(c: &mut Clip, sym: smithay_client_toolkit::seat::keyboard::Keysym, 
             let to = if mods.ctrl { word_right(&c.filter, c.cursor) } else { next(&c.filter, c.cursor) };
             c.filter.replace_range(c.cursor..to, "");
         }
+        // With Ctrl+A's selection a plain arrow lands on that side of it
+        // (QQuickTextInputPrivate::processKeyEvent: moveCursor(selectionStart()
+        // / selectionEnd())); Ctrl+arrow moves a word from the cursor.
         Keysym::Left => {
+            c.cursor = if mods.ctrl { word_left(&c.filter, c.cursor) } else if c.select_all { 0 } else { prev(&c.filter, c.cursor) };
             c.select_all = false;
-            c.cursor = if mods.ctrl { word_left(&c.filter, c.cursor) } else { prev(&c.filter, c.cursor) };
         }
         Keysym::Right => {
+            c.cursor = if mods.ctrl { word_right(&c.filter, c.cursor) } else if c.select_all { c.filter.len() } else { next(&c.filter, c.cursor) };
             c.select_all = false;
-            c.cursor = if mods.ctrl { word_right(&c.filter, c.cursor) } else { next(&c.filter, c.cursor) };
         }
         Keysym::Home => {
             c.select_all = false;
@@ -546,10 +689,7 @@ fn edit_line(c: &mut Clip, sym: smithay_client_toolkit::seat::keyboard::Keysym, 
             c.cursor = c.filter.len();
         }
         _ => {
-            if mods.ctrl {
-                return;
-            }
-            if let Some(s) = utf8.filter(|s| !s.is_empty() && !s.chars().any(char::is_control)) {
+            if let Some(s) = typed {
                 c.filter.insert_str(c.cursor, s);
                 c.cursor += s.len();
             }
@@ -617,18 +757,22 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
     let ih = ui.fonts.layout("Н", CONTENT, m.title, 0.0).height();
     let sy = y + ac(head_h, ih);
     ui.scene.save();
-    ui.scene.clip_rect(sx, sy, sw, ih);
+    // QQuickTextInput::clipRect: one cursor width wider on the right.
+    ui.scene.clip_rect(sx, sy, sw + 1.0, ih);
     if c.filter.is_empty() {
         let pl = ui.fonts.layout("Поиск…", CONTENT, m.title, 0.0);
         ui.text(&pl, sx, sy + (ih - pl.height()) / 2.0, t.col_grey, TextStyle::Normal);
     }
     let cursor_x = ui.fonts.layout(&c.filter[..c.cursor.min(c.filter.len())], CONTENT, m.title, 0.0).adv;
-    // TextInput scrolls to keep its cursor in view.
-    let shift = (cursor_x + 1.0 - sw).max(0.0);
+    // TextInput scrolls to keep its cursor in view: ensureVisible's hscroll =
+    // cursorX - width, the cursor just past the box, inside the wider clip.
+    let shift = (cursor_x - sw).max(0.0);
     if !c.filter.is_empty() {
         ui.text(&line, sx - shift, sy, t.col_white, TextStyle::Normal);
     }
-    if c.blink_since.map_or(true, |s| s.elapsed().as_millis() / 500 % 2 == 0) {
+    // No cursor once closed: the keyboard leaves with `shown`, and an
+    // unfocused TextInput draws none while the card fades out.
+    if c.open && c.blink_since.map_or(true, |s| s.elapsed().as_millis() / 500 % 2 == 0) {
         ui.scene.fill(sx + cursor_x - shift, sy, 1.0, ih, t.col_white);
     }
     ui.scene.restore();
@@ -642,8 +786,12 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
     ui.scene.save();
     ui.scene.clip_rect(lx, ly, lw, lh);
     let step = m.row_h + 2.0;
+    // contentY, on its way while the wheel's glide runs.
+    let glide = c.glide_at(ui.now);
+    ui.animating |= glide.is_some();
+    let scroll = glide.unwrap_or(c.scroll);
     for (i, e) in filtered.iter().enumerate() {
-        let ry = ly + i as f32 * step - c.scroll;
+        let ry = ly + i as f32 * step - scroll;
         if ry + m.row_h < ly || ry > ly + lh {
             continue;
         }
@@ -654,7 +802,9 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
         let fg = if sel { t.col_bg } else { t.col_grey };
         let ib = m.row_h - 10.0;
         let (ix, iy) = (lx + 8.0, ry + ac(m.row_h, ib));
-        match c.thumb_tex.get(&e.id).filter(|_| e.image.is_some()) {
+        // close() empties `thumbs`: thumbFor() is "" for every row at once,
+        // so the glyphs stand in for the pictures while the card fades out.
+        match c.thumb_tex.get(&e.id).filter(|_| e.image.is_some() && c.open) {
             Some(&tex) => {
                 ui.scene.save();
                 ui.scene.clip_rect(ix, iy, ib, ib);
@@ -686,7 +836,8 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
             let l = ui.fonts.layout(if c.loading { "Чтение истории…" } else { "Ничего не найдено" }, CONTENT, m.row, 0.0);
             ui.text(&l, px0 + ac(pw, l.width), y + ac(bh, l.height()), t.col_grey, TextStyle::Normal);
         }
-        Some(e) if e.image.is_some() => match c.preview_tex.as_ref().filter(|(id, _)| *id == e.id) {
+        // The preview's source empties with the rows' (see above).
+        Some(e) if e.image.is_some() => match c.preview_tex.as_ref().filter(|(id, _)| *id == e.id && c.open) {
             Some((_, tex)) => draw_image(ui, *tex, px0 + 10.0, y + 10.0, pw - 20.0, bh - 20.0, false),
             None => {
                 let g = ui.fonts.layout("\u{f02e9}", CONTENT, px(48.0), 0.0);

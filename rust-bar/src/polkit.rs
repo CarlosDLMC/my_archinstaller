@@ -26,6 +26,7 @@ use crate::text::FontKey;
 use crate::theme;
 
 const AGENT_PATH: &str = "/org/rustbar/PolkitAgent";
+const AUTHORITY: &str = "org.freedesktop.PolicyKit1";
 const HELPER_SOCKET: &str = "/run/polkit/agent-helper.socket";
 const FADE_MS: u64 = 160;
 const UI: f32 = 1.35;
@@ -67,6 +68,8 @@ pub struct Flow {
 pub struct Polkit {
     chan: Option<Channel>,
     pub registered: bool,
+    /// A registration sent after polkitd came back, until it is answered.
+    register_serial: Option<u32>,
     queue: VecDeque<Request>,
     pub flow: Option<Flow>,
     /// PolkitState.error / checking, and the password field.
@@ -111,13 +114,7 @@ pub fn start(app: &mut App) {
         return;
     }
     let Ok(mut ch) = Channel::get_private(BusType::System) else { return };
-    let Some(sid) = session_id() else { return };
-    let mut details: PropMap = HashMap::new();
-    details.insert("session-id".into(), Variant(Box::new(sid) as Box<dyn RefArg>));
-    let subject = ("unix-session".to_string(), details);
-    let locale = std::env::var("LANG").unwrap_or_else(|_| "en_US.UTF-8".into());
-    let Ok(msg) = Message::new_method_call("org.freedesktop.PolicyKit1", "/org/freedesktop/PolicyKit1/Authority", "org.freedesktop.PolicyKit1.Authority", "RegisterAuthenticationAgent") else { return };
-    let msg = msg.append3(subject, locale, AGENT_PATH);
+    let Some(msg) = register_msg() else { return };
     match ch.send_with_reply_and_block(msg, Duration::from_secs(5)) {
         Ok(_) => app.svc.polkit.registered = true,
         Err(e) => {
@@ -125,16 +122,88 @@ pub fn start(app: &mut App) {
             return;
         }
     }
+    // A restarted polkitd has forgotten its agents; libpolkit-agent registers
+    // again when the name has an owner again (on_notify_authority_owner).
+    if let Ok(m) = Message::new_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "AddMatch") {
+        let _ = ch.send(m.append1(format!("type='signal',sender='org.freedesktop.DBus',interface='org.freedesktop.DBus',member='NameOwnerChanged',arg0='{AUTHORITY}'")));
+        ch.flush();
+    }
     ch.set_watch_enabled(true);
     let fd = ch.watch().fd;
     app.svc.polkit.chan = Some(ch);
     app.watch_fd(fd, dbus_ready);
+    // Anything read while the registration and the match were on their way.
+    app.after(Duration::ZERO, dbus_ready);
+}
+
+/// RegisterAuthenticationAgent for this session, in the locale polkitd
+/// translates its messages to - libpolkit-agent's: the first of LC_ALL,
+/// LC_MESSAGES and LANG that is set and not empty.
+fn register_msg() -> Option<Message> {
+    let sid = session_id()?;
+    let mut details: PropMap = HashMap::new();
+    details.insert("session-id".into(), Variant(Box::new(sid) as Box<dyn RefArg>));
+    let subject = ("unix-session".to_string(), details);
+    let locale = ["LC_ALL", "LC_MESSAGES", "LANG"].iter().find_map(|v| std::env::var(v).ok().filter(|l| !l.is_empty())).unwrap_or_else(|| "en_US.UTF-8".into());
+    let msg = Message::new_method_call(AUTHORITY, "/org/freedesktop/PolicyKit1/Authority", "org.freedesktop.PolicyKit1.Authority", "RegisterAuthenticationAgent").ok()?;
+    Some(msg.append3(subject, locale, AGENT_PATH))
+}
+
+/// polkitd left the bus or came back: back, it has no agents, so register
+/// again.
+fn owner_changed(app: &mut App, m: &Message) {
+    if m.member().as_deref() != Some("NameOwnerChanged") {
+        return;
+    }
+    let Ok((name, _, owner)) = m.read3::<&str, &str, &str>() else { return };
+    if name != AUTHORITY {
+        return;
+    }
+    let p = &mut app.svc.polkit;
+    if owner.is_empty() {
+        p.registered = false;
+        return;
+    }
+    if p.registered || p.register_serial.is_some() {
+        return;
+    }
+    let Some(msg) = register_msg() else { return };
+    if let Some(ch) = p.chan.as_ref() {
+        p.register_serial = ch.send(msg).ok();
+    }
+    flush(app);
+}
+
+/// The answer to that registration.
+fn registered_again(app: &mut App, m: &Message) {
+    let p = &mut app.svc.polkit;
+    if p.register_serial.is_none() || m.get_reply_serial() != p.register_serial {
+        return;
+    }
+    p.register_serial = None;
+    if m.msg_type() == MessageType::Error {
+        eprintln!("rust-bar: polkit agent not registered again: {}", m.read1::<&str>().unwrap_or(""));
+    } else {
+        p.registered = true;
+    }
 }
 
 fn send(app: &mut App, msg: Message) {
     if let Some(ch) = app.svc.polkit.chan.as_ref() {
         let _ = ch.send(msg);
+    }
+    flush(app);
+}
+
+/// Writes what is queued. dbus_connection_flush also READS (it iterates with
+/// DBUS_ITERATION_DO_READING): a call polkitd sent meanwhile lands in
+/// libdbus's queue, the socket has nothing left to wake the fd watch, and the
+/// call would wait there - polkitd with it, no timeout - until the bus next
+/// had something for the bar. One more pass of dbus_ready picks it up.
+fn flush(app: &mut App) {
+    if let Some(ch) = app.svc.polkit.chan.as_ref() {
         ch.flush();
+        app.after(Duration::ZERO, dbus_ready);
     }
 }
 
@@ -148,8 +217,16 @@ fn dbus_ready(app: &mut App) {
         }
     }
     for m in calls {
-        if m.msg_type() != MessageType::MethodCall {
-            continue;
+        match m.msg_type() {
+            MessageType::MethodCall => {}
+            MessageType::Signal => {
+                owner_changed(app, &m);
+                continue;
+            }
+            _ => {
+                registered_again(app, &m);
+                continue;
+            }
         }
         let member = m.member().map(|s| s.to_string()).unwrap_or_default();
         match member.as_str() {
@@ -201,7 +278,11 @@ fn activate(app: &mut App) {
         p.checking = false;
         p.field.clear();
         setup_session(app);
-        show_osd(app);
+        // A helper that cannot be reached ends the request at once (and may
+        // have started the next one, which showed itself).
+        if app.svc.polkit.flow.is_some() {
+            show_osd(app);
+        }
         return;
     }
 }
@@ -211,9 +292,23 @@ fn setup_session(app: &mut App) {
     close_session(app);
     let Some(f) = app.svc.polkit.flow.as_ref() else { return };
     let (user, cookie) = (f.user.clone(), f.req.cookie.clone());
-    let Ok(mut stream) = UnixStream::connect(HELPER_SOCKET) else {
-        completed(app, false);
-        return;
+    let mut stream = match UnixStream::connect(HELPER_SOCKET) {
+        Ok(s) => s,
+        Err(e) => {
+            // libpolkit-agent would spawn the setuid helper instead, but polkit
+            // 128 installs it without the setuid bit. Treating this as a failed
+            // attempt (completed(false)) started a new session at once, which
+            // failed the same way: the recursion overflowed the stack and took
+            // the bar down. The request ends with an error, so polkitd is not
+            // left waiting for it.
+            eprintln!("rust-bar: polkit: cannot reach {HELPER_SOCKET}: {e}");
+            if let Some(f) = app.svc.polkit.flow.as_ref() {
+                let err = f.req.call.error(&"org.freedesktop.PolicyKit1.Error.Failed".into(), &std::ffi::CString::new("Cannot reach polkit-agent-helper-1").unwrap());
+                send(app, err);
+            }
+            finish(app);
+            return;
+        }
     };
     let _ = stream.write_all(format!("{user}\n{cookie}\n").as_bytes());
     let _ = stream.set_nonblocking(true);
@@ -230,39 +325,51 @@ fn close_session(app: &mut App) {
     }
 }
 
-/// g_strcompress: the helper escapes its lines like C strings.
-fn unescape(s: &str) -> String {
-    let mut out = String::new();
-    let mut it = s.chars().peekable();
-    while let Some(c) = it.next() {
-        if c != '\\' {
+/// g_strcompress: the helper escapes its lines like C strings (g_strescape),
+/// every byte outside printable ASCII as \ooo - the escapes are bytes, and a
+/// localized PAM prompt is UTF-8 again only once they are put back together.
+/// The result is a C string: a \000 ends it.
+fn unescape(s: &[u8]) -> String {
+    let mut out = Vec::with_capacity(s.len());
+    let mut i = 0;
+    while i < s.len() {
+        let c = s[i];
+        i += 1;
+        if c != b'\\' {
             out.push(c);
             continue;
         }
-        match it.next() {
-            Some('n') => out.push('\n'),
-            Some('t') => out.push('\t'),
-            Some('r') => out.push('\r'),
-            Some('b') => out.push('\u{8}'),
-            Some('f') => out.push('\u{c}'),
-            Some(d @ '0'..='7') => {
-                let mut v = d.to_digit(8).unwrap();
+        // A trailing backslash ends the string.
+        let Some(&e) = s.get(i) else { break };
+        i += 1;
+        match e {
+            b'0'..=b'7' => {
+                let mut v = e - b'0';
                 for _ in 0..2 {
-                    match it.peek().and_then(|c| c.to_digit(8)) {
-                        Some(n) => {
-                            v = v * 8 + n;
-                            it.next();
+                    match s.get(i) {
+                        Some(&d @ b'0'..=b'7') => {
+                            v = v.wrapping_mul(8).wrapping_add(d - b'0');
+                            i += 1;
                         }
-                        None => break,
+                        _ => break,
                     }
                 }
-                out.push(char::from_u32(v).unwrap_or('?'));
+                out.push(v);
             }
-            Some(o) => out.push(o),
-            None => {}
+            b'b' => out.push(0x08),
+            b'f' => out.push(0x0c),
+            b'n' => out.push(b'\n'),
+            b'r' => out.push(b'\r'),
+            b't' => out.push(b'\t'),
+            b'v' => out.push(0x0b),
+            // \" and \\ too.
+            o => out.push(o),
         }
     }
-    out
+    if let Some(n) = out.iter().position(|&b| b == 0) {
+        out.truncate(n);
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// io_watch_have_data(): the helper's lines.
@@ -287,7 +394,7 @@ fn helper_ready(app: &mut App) {
         }
         while let Some(p) = s.buf.iter().position(|&b| b == b'\n') {
             let l: Vec<u8> = s.buf.drain(..=p).collect();
-            lines.push(unescape(String::from_utf8_lossy(&l[..l.len() - 1]).as_ref()));
+            lines.push(unescape(&l[..l.len() - 1]));
         }
     } else {
         return;
@@ -314,14 +421,26 @@ fn helper_ready(app: &mut App) {
     }
 }
 
+/// The field's `enabled` (PolkitOsd.qml:168): it has the keyboard focus then.
+fn enabled(p: &Polkit) -> bool {
+    p.flow.as_ref().map_or(false, |f| f.response_required) && !p.checking
+}
+
 fn request(app: &mut App, prompt: &str, echo: bool) {
     let p = &mut app.svc.polkit;
+    let was = enabled(p);
     if let Some(f) = p.flow.as_mut() {
         f.response_required = true;
         f.input_prompt = prompt.into();
         f.response_visible = echo;
         // onIsResponseRequiredChanged: a prompt ends the checking state.
         p.checking = false;
+    }
+    // Enabled again, the field gets the focus back: focusInEvent shows the
+    // cursor and starts its blink over (QQuickTextInputPrivate::
+    // handleFocusEvent -> updateCursorBlinking).
+    if !was && enabled(&app.svc.polkit) {
+        restart_blink(app);
     }
     redraw(app);
 }
@@ -359,6 +478,9 @@ fn completed(app: &mut App, gained: bool) {
 fn finish(app: &mut App) {
     app.svc.polkit.flow = None;
     app.svc.polkit.field.clear();
+    // PolkitState.onFlowChanged.
+    app.svc.polkit.error.clear();
+    app.svc.polkit.checking = false;
     osd::hide(app, OsdKind::Polkit);
     if !app.svc.polkit.queue.is_empty() {
         activate(app);
@@ -443,19 +565,37 @@ fn met() -> M {
 const CONTENT: FontKey = FontKey { family: theme::FONT_CONTENT, bold: false, plain: false };
 const FIELD: FontKey = FontKey { family: theme::FONT_CONTENT, bold: false, plain: true };
 
+/// What the dialog shows of the flow. Once PolkitState.flow is null - the
+/// card fading out after its request ended - QML's bindings read "" and
+/// false: no message, no action id, the field disabled with «Пароль».
+struct View<'a> {
+    message: &'a str,
+    action_id: &'a str,
+    prompt: &'a str,
+    response_required: bool,
+    response_visible: bool,
+}
+
+fn view(p: &Polkit) -> View<'_> {
+    match p.flow.as_ref() {
+        Some(f) => View { message: &f.req.message, action_id: &f.req.action_id, prompt: &f.input_prompt, response_required: f.response_required, response_visible: f.response_visible },
+        None => View { message: "", action_id: "", prompt: "", response_required: false, response_visible: false },
+    }
+}
+
 /// The Column's blocks: (height, what).
 fn blocks(fonts: &mut crate::text::Fonts, svc: &Services) -> Vec<f32> {
     let m = met();
     let p = &svc.polkit;
-    let Some(f) = p.flow.as_ref() else { return Vec::new() };
+    let f = view(p);
     let cw = m.card_w - 2.0 * m.pad;
     let cap = fonts.layout("ТРЕБУЕТСЯ ПАРОЛЬ", theme::bar_font(true), m.title, 1.0);
     let mut v = vec![cap.height().max(10.0)];
     let iw = cw - 2.0 * m.gap;
-    let msg: f32 = fonts.wrap(&f.req.message, CONTENT, m.body, 0.0, iw).iter().map(|l| l.height()).sum();
+    let msg: f32 = fonts.wrap(f.message, CONTENT, m.body, 0.0, iw).iter().map(|l| l.height()).sum();
     let mut plate = msg;
-    if !f.req.action_id.is_empty() {
-        plate += (m.gap * 0.5).round() + fonts.layout(&f.req.action_id, CONTENT, m.small, 0.0).height();
+    if !f.action_id.is_empty() {
+        plate += (m.gap * 0.5).round() + fonts.layout(f.action_id, CONTENT, m.small, 0.0).height();
     }
     v.push(plate + 2.0 * m.gap);
     v.push(m.field_h);
@@ -468,11 +608,13 @@ fn blocks(fonts: &mut crate::text::Fonts, svc: &Services) -> Vec<f32> {
 }
 
 fn note(p: &Polkit) -> (String, bool) {
-    let Some(f) = p.flow.as_ref() else { return (String::new(), false) };
     if !p.error.is_empty() {
         return (p.error.clone(), true);
     }
-    (f.supplementary.clone(), f.supplementary_is_error)
+    match p.flow.as_ref() {
+        Some(f) => (f.supplementary.clone(), f.supplementary_is_error),
+        None => (String::new(), false),
+    }
 }
 
 fn keycaps_h(fonts: &mut crate::text::Fonts, size: f32) -> f32 {
@@ -488,12 +630,20 @@ fn card_h(fonts: &mut crate::text::Fonts, svc: &Services) -> f32 {
 }
 
 fn show_osd(app: &mut App) {
+    map_osd(app);
+    app.svc.polkit.blink_since = Some(std::time::Instant::now());
+    blink(app);
+}
+
+/// The dialog on the focused screen.
+fn map_osd(app: &mut App) {
     let Some((_, sw, sh)) = osd::focused_output(app) else { return };
     let m = met();
     let h = card_h(&mut app.fonts, &app.svc);
     osd::show(app, OpenParams { kind: OsdKind::Polkit, size: (m.card_w as u32, h.ceil() as u32), panel: (0.0, 0.0, m.card_w, h), dim: Some(Color::qt_rgba(0.0, 0.0, 0.0, 0.45)), keyboard: true, namespace: "quickshell", fade_ms: FADE_MS, min_scale: 0.96, fade_easing: crate::anim::Easing::OutCubic, pos: Some((ac(sw, m.card_w) as i32, ac(sh, h) as i32)), fill: false, output: None });
-    app.svc.polkit.blink_since = Some(std::time::Instant::now());
-    blink(app);
+    // A dialog still up (the next queued request follows the last at once)
+    // keeps its old size in osd::show: the card's height is this request's.
+    reshow(app);
 }
 
 /// The card's height follows its texts (the error line comes and goes).
@@ -503,15 +653,16 @@ fn reshow(app: &mut App) {
     }
     let m = met();
     let h = card_h(&mut app.fonts, &app.svc);
-    let Some((_, _, sh)) = osd::focused_output(app) else { return };
-    let o = app.osd_mut(OsdKind::Polkit).unwrap();
+    let Some(o) = app.osd_mut(OsdKind::Polkit) else { return };
     if (o.panel.3 - h).abs() >= 0.5 {
         use smithay_client_toolkit::shell::WaylandSurface;
         o.panel.3 = h;
         o.win.height = h.ceil() as u32;
         o.win.layer.set_size(m.card_w as u32, h.ceil() as u32);
-        let x = ac(o.screen.0, m.card_w) as i32;
-        o.win.layer.set_margin(ac(sh, h) as i32, 0, 0, x);
+        // anchors.centerIn on the dialog's own screen (not the focused one,
+        // which may have changed since it opened).
+        let (sw, sh) = o.screen;
+        o.win.layer.set_margin(ac(sh, h) as i32, 0, 0, ac(sw, m.card_w) as i32);
         o.win.layer.commit();
     }
 }
@@ -520,6 +671,14 @@ fn reshow(app: &mut App) {
 fn blink(app: &mut App) {
     if app.svc.polkit.flow.is_none() {
         return;
+    }
+    // mango closes the layer surfaces of a screen that goes away, and a
+    // request can come while there is no screen at all. PolkitOsd is a window
+    // per screen, shown on the focused one, so QML shows the dialog again
+    // there; without it here the flow would wait for a dialog nobody sees,
+    // polkitd with it, and every later request behind it.
+    if app.osd(OsdKind::Polkit).is_none() {
+        map_osd(app);
     }
     if let Some(o) = app.osd_mut(OsdKind::Polkit) {
         o.win.dirty = true;
@@ -538,9 +697,19 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
     let m = met();
     let t = ui.theme;
     let p = &svc.polkit;
-    let (x0, y0, w, h) = panel;
+    let (x0, mut y0, w, mut h) = panel;
+    if p.flow.is_none() {
+        // Fading out after its request: the card is QML's without a flow,
+        // smaller, still centred (anchors.centerIn) - the surface keeps its
+        // size until it goes.
+        let ch = card_h(ui.fonts, svc);
+        if ch < h {
+            y0 += ac(h, ch);
+            h = ch;
+        }
+    }
     ui.scene.rect(x0, y0, w, h, t.col_bg, m.radius, 0.0, Color::TRANSPARENT, true);
-    let Some(f) = p.flow.as_ref() else { return };
+    let f = view(p);
     let (cx, cw) = (x0 + m.pad, w - 2.0 * m.pad);
     let mut y = y0 + m.pad;
 
@@ -552,9 +721,9 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
 
     // The plate: polkit's message and the action id.
     let iw = cw - 2.0 * m.gap;
-    let lines = ui.fonts.wrap(&f.req.message, CONTENT, m.body, 0.0, iw);
+    let lines = ui.fonts.wrap(f.message, CONTENT, m.body, 0.0, iw);
     let mut ph: f32 = lines.iter().map(|l| l.height()).sum();
-    let action = (!f.req.action_id.is_empty()).then(|| ui.fonts.elide_middle(&f.req.action_id, CONTENT, m.small, 0.0, iw));
+    let action = (!f.action_id.is_empty()).then(|| ui.fonts.elide_middle(f.action_id, CONTENT, m.small, 0.0, iw));
     if let Some(a) = &action {
         ph += (m.gap * 0.5).round() + a.height();
     }
@@ -575,30 +744,37 @@ pub fn draw_osd<S: UiState>(ui: &mut Ui<S>, panel: (f32, f32, f32, f32), svc: &S
     ui.scene.rect(cx, y, cw, m.field_h, t.col_plate, 5.0, 1.0, if enabled { t.col_accent } else { Color::TRANSPARENT }, true);
     let (fx, fw) = (cx + m.gap, cw - 2.0 * m.gap);
     ui.scene.save();
-    ui.scene.clip_rect(fx, y, fw, m.field_h);
+    // QQuickTextInput::clipRect: one cursor width wider on the right.
+    ui.scene.clip_rect(fx, y, fw + 1.0, m.field_h);
     if p.field.is_empty() {
-        let prompt = f.input_prompt.trim_end().trim_end_matches(':').trim_end().to_string();
+        // inputPrompt.replace(/:\s*$/, ""): one colon at the end and the
+        // blanks after it; a prompt without one keeps its own blanks.
+        let prompt = f.prompt.trim_end().strip_suffix(':').unwrap_or(f.prompt);
         let ph_text = if p.checking {
-            "Проверка…".to_string()
+            "Проверка…"
         } else if prompt.is_empty() || prompt.eq_ignore_ascii_case("password") {
-            "Пароль".into()
+            "Пароль"
         } else {
             prompt
         };
-        let pl = ui.fonts.layout(&ph_text, CONTENT, m.body, 0.0);
+        let pl = ui.fonts.layout(ph_text, CONTENT, m.body, 0.0);
         ui.text(&pl, fx, y + ac(m.field_h, pl.height()), t.col_grey, TextStyle::Normal);
     }
     let shown: String = if f.response_visible { p.field.clone() } else { "\u{2022}".repeat(p.field.chars().count()) };
     let fl = ui.fonts.layout(&shown, FIELD, m.body, 0.0);
     let fy = y + (m.field_h - fl.height()) / 2.0;
+    // TextInput.autoScroll: a line longer than the field slides left so the
+    // cursor at its end stays in view - ensureVisible's hscroll = cursorX -
+    // width, the cursor just past the box, inside the wider clip.
+    let shift = (fl.adv - fw).max(0.0);
     if !shown.is_empty() {
-        ui.text(&fl, fx, fy, t.col_white, TextStyle::Normal);
+        ui.text(&fl, fx - shift, fy, t.col_white, TextStyle::Normal);
     }
     if enabled {
         // 1 px, the text colour, 500 ms on / 500 ms off.
         let on = p.blink_since.map_or(true, |s| s.elapsed().as_millis() / 500 % 2 == 0);
         if on {
-            ui.scene.fill(fx + fl.adv, fy, 1.0, fl.height(), t.col_white);
+            ui.scene.fill(fx + fl.adv - shift, fy, 1.0, fl.height(), t.col_white);
         }
     }
     ui.scene.restore();
@@ -640,20 +816,20 @@ pub fn key(app: &mut App, sym: smithay_client_toolkit::seat::keyboard::Keysym, u
     match sym {
         Keysym::Return | Keysym::KP_Enter => submit(app),
         Keysym::Escape => cancel(app),
-        Keysym::BackSpace => {
-            app.svc.polkit.field.pop();
+        _ => {
+            // A disabled TextInput takes no keys. Every key the field takes
+            // starts the cursor's blink over (processKeyEvent ->
+            // updateCursorBlinking), Shift and the arrows too.
+            if !enabled(&app.svc.polkit) {
+                return;
+            }
+            if sym == Keysym::BackSpace {
+                app.svc.polkit.field.pop();
+            } else if let Some(s) = utf8.filter(|s| !s.is_empty() && !s.chars().any(char::is_control)) {
+                app.svc.polkit.field.push_str(s);
+            }
             restart_blink(app);
             redraw(app);
-        }
-        _ => {
-            let enabled = app.svc.polkit.flow.as_ref().map_or(false, |f| f.response_required) && !app.svc.polkit.checking;
-            if let Some(s) = utf8.filter(|s| !s.is_empty() && !s.chars().any(char::is_control)) {
-                if enabled {
-                    app.svc.polkit.field.push_str(s);
-                    restart_blink(app);
-                    redraw(app);
-                }
-            }
         }
     }
 }
