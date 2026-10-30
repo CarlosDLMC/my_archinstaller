@@ -6,11 +6,12 @@
 # rofi plus keyboard-on-demand.patch: with ROFI_KEYBOARD_ON_DEMAND set (the
 # SUPER D bind sets it), a click on a window gives that window the keyboard
 # while the launcher stays open - a file opened beside it with Shift+Enter in
-# the ФАЙЛЫ tab can be used. Four smaller patches ride along: the launcher's
+# the ФАЙЛЫ tab can be used. Five smaller patches ride along: the launcher's
 # row-position counter (num-current-row), the cursor's blink-interval,
-# keep-list (Shift+Enter toggles the preview without reloading the list), and
+# keep-list (Shift+Enter toggles the preview without reloading the list),
 # quote-entry (a row with a " or \ in it no longer breaks the launcher's
-# preview hook). See pkgbuilds/rofi/PKGBUILD.
+# preview hook), and error-quits (an error closes rofi instead of leaving an
+# error dialog in place of the menu). See pkgbuilds/rofi/PKGBUILD.
 #
 # Runs after 01-desktop-pkgs.sh, which installs the stock rofi. If this build
 # fails, that stock rofi stays and the launcher works without click-to-focus,

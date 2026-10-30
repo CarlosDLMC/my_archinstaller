@@ -1,6 +1,6 @@
 # Vendored from Arch's rofi package:
 #   https://gitlab.archlinux.org/archlinux/packaging/packages/rofi
-# with five patches. keyboard-on-demand.patch: when ROFI_KEYBOARD_ON_DEMAND is
+# with six patches. keyboard-on-demand.patch: when ROFI_KEYBOARD_ON_DEMAND is
 # set in its environment, rofi asks for on-demand keyboard focus instead of
 # exclusive. Stock rofi on Wayland always takes the keyboard exclusively (a
 # layer-shell overlay), so nothing else can be typed into or clicked while it
@@ -33,6 +33,11 @@
 # so the bind keeps its quotes and stock rofi still copes with the commoner
 # names (an apostrophe, a #).
 #
+# error-quits.patch: an error closes rofi, its message going to stderr, instead
+# of replacing the menu with an error dialog that waits for a key (Enter on a
+# typed \ that matches no app ran it as a command: "Failed to parse"). `rofi
+# -e`, a message asked for on purpose, still shows.
+#
 # install-scripts/rofi-ondemand.sh builds this with makepkg. pkgrel is above
 # the repos' (1, CachyOS 1.1), so `pacman -Syu` keeps it - until the repos ship
 # a newer rofi, which replaces it with the stock build: the launcher then works
@@ -57,8 +62,8 @@
 
 pkgname=rofi
 pkgver=2.0.0
-pkgrel=6
-pkgdesc="A window switcher, application launcher and dmenu replacement (on-demand focus, current-row, blink-interval, keep-list and entry-quoting patches)"
+pkgrel=7
+pkgdesc="A window switcher, application launcher and dmenu replacement (on-demand focus, current-row, blink-interval, keep-list, entry-quoting and error-quits patches)"
 url="https://davatorium.github.io/rofi"
 arch=('x86_64')
 license=('MIT')
@@ -73,14 +78,16 @@ source=("https://github.com/davatorium/rofi/releases/download/${pkgver}/rofi-${p
         'num-current-row.patch'
         'blink-interval.patch'
         'keep-list.patch'
-        'quote-entry.patch')
+        'quote-entry.patch'
+        'error-quits.patch')
 sha256sums=('f81659b175306ff487e35d88d6b36128e85a793bfb56b64fa22c62eb54c4abd0'
             '0cd6f1360580f49647ceb7d169ab015f4998e778fd750ce3ad2e861f333824e3'
             'b5b459b4334b0e529010539cfaaf35cd5da5a80d40a03bea42126714bd8a1b2c'
             '473d3a4cd6e9469c1e72245e34fd6a637969a6fbc94c70e2ee05624eb6871d40'
             '16a23289dfe7b53cb16e46462dc6e0f28041eb68016e530eadfe85a47d9689db'
             '2e0cdd44c7c465e68fb4b545f29f98b4bf92d6401adc85ac84571bd515fc1ada'
-            '42ab4f0a9d33e559d6c0cd906791a6193f8e447d07410c6355d66b2c492f8c5c')
+            '42ab4f0a9d33e559d6c0cd906791a6193f8e447d07410c6355d66b2c492f8c5c'
+            '9939f49aa454367cc895ee8a61bd6b972d36614977f1b61e6ca3b182b0047a48')
 
 prepare() {
 	cd "${pkgname}-${pkgver}"
@@ -92,6 +99,7 @@ prepare() {
 	patch -Np1 -i "${srcdir}/blink-interval.patch"
 	patch -Np1 -i "${srcdir}/keep-list.patch"
 	patch -Np1 -i "${srcdir}/quote-entry.patch"
+	patch -Np1 -i "${srcdir}/error-quits.patch"
 }
 
 build() {

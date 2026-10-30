@@ -1,0 +1,20 @@
+diff --git a/source/view.c b/source/view.c
+--- a/source/view.c
++++ b/source/view.c
+@@ -1941,6 +1941,16 @@
+ }
+ 
+ int rofi_view_error_dialog(const char *msg, int markup) {
++  // An error closes rofi instead of replacing the menu with a message that
++  // waits for a key (Enter on a typed "\" that matches nothing ran it as a
++  // command and left "Failed to parse" on screen). The message goes to
++  // stderr. `rofi -e`, a message asked for on purpose, still shows.
++  if (find_arg("-e") < 0) {
++    g_warning("%s", (msg != NULL) ? msg : "");
++    rofi_set_return_code(EXIT_FAILURE);
++    rofi_quit_main_loop();
++    return TRUE;
++  }
+   RofiViewState *state = __rofi_view_state_create();
+   state->retv = MENU_CANCEL;
+   state->menu_flags = MENU_ERROR_DIALOG;
