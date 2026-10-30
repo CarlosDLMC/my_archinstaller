@@ -22,6 +22,7 @@ mod pult;
 mod pw;
 mod runtime;
 mod services;
+mod shots;
 mod text;
 mod theme;
 mod vpn;

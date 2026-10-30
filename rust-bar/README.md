@@ -90,6 +90,7 @@ instead of approximating them:
 | `src/audio_card.rs`, `src/pult.rs`, `src/vpn.rs`, `src/wifi_card.rs`, `src/network_card.rs`, `src/agent.rs`, `src/battery.rs`, `src/cal.rs` | the other cards |
 | `src/osd.rs` | the centred dialogs' surface (layout popup, power menu, screenshot/recording, clipboard, polkit): a panel on the focused screen, the dim behind it, fade and scale |
 | `src/overview.rs`, `src/wallpaper.rs`, `src/clip.rs`, `src/capture.rs`, `src/power.rs`, `src/layout.rs` | overview, wallpaper carousel, clipboard, screenshot/recording, power menu, layout popup |
+| `src/shots.rs`, `src/shots/pixels.rs` | the overview's window pictures: ext-image-copy-capture by foreign-toplevel id, made as `grim -s 0.25` and `magick -trim` made them (`overview-shots.sh` where the compositor lacks it) |
 | `src/polkit.rs` | the polkit agent (system bus, PAM conversation through polkit's helper socket) and its dialog |
 | `src/crt.rs` | `rust-bar crt` |
 | `src/ipc.rs` | `rust-bar msg`: the socket in `$XDG_RUNTIME_DIR`, one bar per session |

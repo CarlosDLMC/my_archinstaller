@@ -1194,6 +1194,7 @@ dependencies = [
  "unicode-linebreak",
  "wayland-backend",
  "wayland-client",
+ "wayland-protocols",
  "wgpu",
  "zeno",
 ]

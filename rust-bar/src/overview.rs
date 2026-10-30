@@ -142,7 +142,7 @@ pub struct Overview {
     mon_sig: Option<u64>,
 }
 
-fn shot_dir() -> String {
+pub fn shot_dir() -> String {
     format!("{}/rust-bar-overview", std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into()))
 }
 
@@ -167,9 +167,9 @@ pub fn open(app: &mut App) {
     for (i, out) in outputs.into_iter().enumerate() {
         osd::show(app, OpenParams { kind: OsdKind::Overview(i as u8), size: (0, 0), panel: (0.0, 0.0, 0.0, 0.0), dim: None, keyboard: true, namespace: "rust-bar:overview", fade_ms: 0, min_scale: 1.0, fade_easing: Easing::Linear, pos: None, fill: true, output: Some(out) });
     }
-    // The pictures of the last shot generation load at once: once a run has
+    // The pictures of the last shot generation load at once: once a take has
     // finished, the last open's pictures are up at once and this open's
-    // replace them when overview-shots.sh is done. Icons first
+    // replace them when the take is done. Icons first
     // (monitors_changed loads them), so they do not wait behind the pictures
     // on the decode thread.
     monitors_changed(app);
@@ -193,6 +193,11 @@ pub fn close(app: &mut App) {
     o.mon_sig = None;
     if let Some((_, Some(t), _)) = o.watch.take() {
         app.unwatch(t);
+    }
+    // A take still running stops here; what it made already loads at the
+    // next open.
+    if crate::shots::cancel(app) {
+        app.svc.overview.shot_gen += 1;
     }
     app.osds.retain(|o| !matches!(o.kind, OsdKind::Overview(_)));
     let ids: Vec<u32> = app.svc.overview.previews.drain().map(|(_, (t, _))| t.id).chain(app.svc.overview.icons.drain().flat_map(|(_, by)| by.into_values().flatten().map(|t| t.id))).collect();
@@ -352,15 +357,18 @@ fn on_clients(app: &mut App, line: &str) {
     redraw(app);
 }
 
-/// overview-shots.sh: one still picture per window, then the next shot generation.
+/// One still picture per window, then the next shot generation: taken by
+/// the bar (shots.rs), or by overview-shots.sh where the compositor offers
+/// the bar no window capture.
 fn take_shots(app: &mut App) {
+    let shown = |w: &&Client| !w.toplevel.is_empty() && w.toplevel != "0" && !w.minimized && !(w.group && !w.group_focus);
+    let windows: Vec<(i64, String, i64, i64)> = app.svc.overview.clients.iter().filter(shown).map(|w| (w.id, w.toplevel.clone(), w.width as i64, w.height as i64)).collect();
+    if crate::shots::take(app, &windows) {
+        return;
+    }
     let script = format!("{}/.config/rust-bar/scripts/overview-shots.sh", services::home());
     let mut args = vec![script, shot_dir()];
-    for w in &app.svc.overview.clients {
-        if !w.toplevel.is_empty() && w.toplevel != "0" && !w.minimized && !(w.group && !w.group_focus) {
-            args.push(format!("{}:{}:{}x{}", w.id, w.toplevel, w.width as i64, w.height as i64));
-        }
-    }
+    args.extend(windows.iter().map(|(id, toplevel, w, h)| format!("{id}:{toplevel}:{w}x{h}")));
     let argv: Vec<&str> = args.iter().map(String::as_str).collect();
     app.spawn("overview-shots", &argv, |app, _| {
         app.svc.overview.shot_gen += 1;
@@ -370,29 +378,50 @@ fn take_shots(app: &mut App) {
     });
 }
 
+/// The bar's take is done: the next shot generation, its pictures up at
+/// once (shots.rs made them on the decode thread).
+pub fn shots_taken(app: &mut App, pictures: Vec<(i64, crate::shots::Levels)>) {
+    app.svc.overview.shot_gen += 1;
+    if !app.svc.overview.open {
+        return;
+    }
+    let gen = app.svc.overview.shot_gen;
+    let ids: HashSet<i64> = app.svc.overview.clients.iter().map(|c| c.id).collect();
+    for (id, levels) in pictures.into_iter().filter(|(id, _)| ids.contains(id)) {
+        show_shot(app, id, gen, levels);
+    }
+}
+
 /// The windows' pictures of the current shot generation, decoded off the
 /// main thread; a picture never replaces one from a later generation. Each
-/// file is opened here, so the script's `rm` at the next open cannot take
-/// it away before its decode.
+/// file is opened here, so the next take's clearing (or the script's `rm`)
+/// cannot take it away before its decode.
 fn load_shots(app: &mut App) {
     let (gen, dir) = (app.svc.overview.shot_gen, shot_dir());
     let ids: Vec<i64> = app.svc.overview.clients.iter().map(|c| c.id).collect();
     for id in ids {
         let Ok(file) = std::fs::File::open(format!("{dir}/{id}.ppm")) else { continue };
         app.background(move || (id, gen, decode(file).map(|(w, h, rgba)| crate::gpu::mip_levels(w, h, rgba, true))), |app, (id, gen, img)| {
-            let Some(levels) = img else { return };
-            let o = &app.svc.overview;
-            if !o.open || o.previews.get(&id).map_or(false, |p| p.1 > gen) {
-                return;
+            if let Some(levels) = img {
+                show_shot(app, id, gen, levels);
             }
-            let Some(gpu) = app.gpu.as_mut() else { return };
-            let t = Tex { id: gpu.add_levels(levels) };
-            if let Some((old, _)) = app.svc.overview.previews.insert(id, (t, gen)) {
-                gpu.drop_image(old.id);
-            }
-            redraw(app);
         });
     }
+}
+
+/// A window's picture onto the GPU, unless the overview closed or holds a
+/// later generation's.
+fn show_shot(app: &mut App, id: i64, gen: u32, levels: crate::shots::Levels) {
+    let o = &app.svc.overview;
+    if !o.open || o.previews.get(&id).map_or(false, |p| p.1 > gen) {
+        return;
+    }
+    let Some(gpu) = app.gpu.as_mut() else { return };
+    let t = Tex { id: gpu.add_levels(levels) };
+    if let Some((old, _)) = app.svc.overview.previews.insert(id, (t, gen)) {
+        gpu.drop_image(old.id);
+    }
+    redraw(app);
 }
 
 fn decode(file: std::fs::File) -> Option<(u32, u32, Vec<u8>)> {
