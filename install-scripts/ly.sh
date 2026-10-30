@@ -51,3 +51,31 @@ done
 printf "${NOTE} Enabling ly display manager on tty2...\n"
 sudo systemctl enable ly@tty2.service 2>&1 | tee -a "$LOG"
 
+# Start ly only once the console is final. With text_boot the GPU driver loads
+# from disk, so its framebuffer replaces the boot one just as ly starts: ly
+# redraws in the kernel's default font (no Cyrillic, box drawing elsewhere),
+# then the console font is loaded without a resize, nothing redraws, and the
+# login screen shows Latin look-alikes and broken borders. settle waits for
+# the driver to finish loading; the font is then set on ly's own tty before ly
+# draws. Both steps are allowed to fail: ly still starts.
+printf "${NOTE} Making ly wait for the final console font...\n"
+LY_DROPIN_TMP=$(mktemp)
+cat > "$LY_DROPIN_TMP" <<'EOF'
+# my_archinstaller: start ly only once the console is final. With text_boot
+# the GPU driver loads from disk, so its framebuffer replaces the boot one just
+# as ly starts: ly redraws in the kernel's default font (no Cyrillic, other
+# box-drawing positions), then the console font is loaded without a resize,
+# nothing redraws, and the login screen shows Latin look-alikes and broken
+# borders. settle waits for the driver to finish loading; the font is then
+# set on ly's own tty before ly draws.
+[Service]
+ExecStartPre=-/usr/bin/udevadm settle --timeout=15
+ExecStartPre=-/usr/lib/systemd/systemd-vconsole-setup /dev/%I
+EOF
+if sudo install -D -m 0644 "$LY_DROPIN_TMP" /etc/systemd/system/ly@.service.d/console-ready.conf 2>&1 | tee -a "$LOG" \
+   && sudo systemctl daemon-reload 2>&1 | tee -a "$LOG"; then
+  printf "${OK} ly waits for the console font (ly@.service.d/console-ready.conf)\n" | tee -a "$LOG"
+else
+  printf "${WARN} Could not install the ly console drop-in - the login screen may come up garbled now and then\n" | tee -a "$LOG"
+fi
+rm -f "$LY_DROPIN_TMP"
