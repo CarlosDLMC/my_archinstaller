@@ -100,6 +100,33 @@ else
   fi
 fi
 
+# Memory. keyd locks all its memory (mlockall) and checks every input device
+# at startup in a thread of its own, so each thread's 8 MiB stack is fully
+# resident, and glibc then keeps up to 40 MiB of finished stacks for reuse
+# keyd never makes: 4 x 8 MiB stayed locked for good (36 MiB in all; with this
+# 4 MiB). No stack cache frees them after the scan; 1 MiB stacks (keyd's main
+# stack peaks near 600 KiB) keep the scan's spike small too. Written before
+# the restart below, which picks it up.
+DROPIN_TMP=$(mktemp)
+cat > "$DROPIN_TMP" <<'EOF'
+# my_archinstaller: keyd locks all its memory (mlockall) and checks every
+# input device at startup in a thread of its own. Each thread stack is then
+# fully resident, and glibc keeps up to 40 MiB of finished stacks for reuse
+# that keyd never makes: 4 x 8 MiB stayed locked for good (36 MiB in all).
+# No stack cache frees them once the scan is done; 1 MiB stacks (keyd's main
+# stack peaks near 600 KiB) keep the scan's short spike small too.
+[Service]
+Environment=GLIBC_TUNABLES=glibc.pthread.stack_cache_size=0
+LimitSTACK=1M
+EOF
+if sudo install -D -m 0644 "$DROPIN_TMP" /etc/systemd/system/keyd.service.d/memory.conf \
+   && sudo systemctl daemon-reload >>"$LOG" 2>&1; then
+  echo "${OK} keyd frees its startup thread stacks (keyd.service.d/memory.conf): ~4 MiB instead of 36." | tee -a "$LOG"
+else
+  echo "${WARN} Could not install keyd.service.d/memory.conf - keyd works, but keeps 32 MiB it does not need." | tee -a "$LOG"
+fi
+rm -f "$DROPIN_TMP"
+
 # Enabled for every boot, and (re)started now so the new config is live -
 # restart, not reload, because a reload is ignored while keyd is not running.
 if sudo systemctl enable keyd.service >>"$LOG" 2>&1 \
