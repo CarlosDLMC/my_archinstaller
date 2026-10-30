@@ -57,7 +57,7 @@
 pkgname=mangowm
 _pkgname=mango
 pkgver=0.18.3
-pkgrel=1
+pkgrel=2
 _tag="${pkgver}-patched.${pkgrel}"
 pkgdesc="Lightweight, feature rich modern wayland compositor (patched to match a Hyprland setup)"
 url="https://mangowm.github.io"
@@ -69,7 +69,7 @@ depends=('glibc' 'wayland-protocols' 'pango' 'wayland' 'libinput' 'libdrm' 'cair
          'cjson' 'xcb-util-wm')
 makedepends=('meson' 'wlroots0.20' 'scenefx')
 source=("${pkgname}-${_tag}.tar.gz::https://github.com/CarlosDLMC/mango/archive/refs/tags/${_tag}.tar.gz")
-sha256sums=('7724d979861f52247566fe30caf9f1799cdc7b3c3461014146a36b1a9ebc18ea')
+sha256sums=('ea5c190b6f0e8c088fc3ca00d8693d8c09c6754b90b7ccd9522a9a8759b58b45')
 
 build() {
 	arch-meson "${_pkgname}-${_tag}" build
