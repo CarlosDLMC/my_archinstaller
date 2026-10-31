@@ -4,15 +4,15 @@
 # dialog comes up with an empty printer list and no way to add one.
 #
 # Like docker.sh, this uses SOCKET ACTIVATION rather than enabling cups.service
-# at boot: cups.socket + cups.path start cupsd on demand - the first print
-# dialog, `lp` or `lpadmin` call. NOT a visit to http://localhost:631: the
-# socket unit listens only on /run/cups/cups.sock, so on a machine where cupsd
-# has never run the web UI is "connection refused" until something starts it
-# (`sudo systemctl start cups`). Once it has run it stays: with the web
-# interface on (the stock cupsd.conf) cupsd never idle-exits, and it leaves
-# behind the /var/cache/cups/org.cups.cupsd that cups.path waits for, so it
-# starts at every boot from then on. Adding the PDF printer below is that first
-# run, so after the install reboot localhost:631 is simply there.
+# at boot: cups.socket starts cupsd on demand - the first print dialog, `lp`,
+# `lpstat` or `lpadmin` call. NOT a visit to http://localhost:631: the socket
+# unit listens only on /run/cups/cups.sock, so until something has started
+# cupsd since the boot the web UI is "connection refused" (`lpstat -r` or
+# `sudo systemctl start cups` brings it up). Once started it stays until the
+# next boot: with the web interface on (the stock cupsd.conf) cupsd never
+# idle-exits. cups.path is NOT enabled, and is disabled on a re-run: it waits
+# for the /var/cache/cups/org.cups.cupsd every cupsd run leaves behind, so it
+# started cupsd at every boot after the first one (3 MiB nobody used).
 #
 # No printer driver package is needed for an IPP Everywhere / AirPrint printer,
 # which is what modern network printers are: cups-filters does the rendering and
@@ -56,11 +56,11 @@ for PKG in "${printing_pkg[@]}"; do
   install_package "$PKG" "$LOG"
 done
 
-# Socket activation: cupsd starts on demand, not at boot (until it has run once -
-# see the top of this file).
+# Socket activation: cupsd starts on demand, not at boot (see the top of this
+# file). cups.path off: it started cupsd at every boot once cupsd had run.
 printf "\n${NOTE} Configuring ${SKY_BLUE}CUPS socket activation${RESET} (on-demand, no boot autostart)...\n" | tee -a "$LOG"
 sudo systemctl enable cups.socket 2>&1 | tee -a "$LOG"
-sudo systemctl enable cups.path 2>&1 | tee -a "$LOG"
+sudo systemctl disable cups.path >>"$LOG" 2>&1 || true
 
 if [ "$(systemctl is-enabled cups.socket 2>/dev/null)" = "enabled" ]; then
   echo "${OK} CUPS set to socket-activation. cupsd starts on the first print job." | tee -a "$LOG"

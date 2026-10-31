@@ -1343,14 +1343,13 @@ first time you try to print. `cups-pdf` also gets a `PDF` queue (`lp -d PDF`, or
 pick it in any print dialog); its files land in `/var/spool/cups-pdf/$USER/`.
 
 Like Docker, CUPS is **socket-activated** rather than enabled at boot: `cupsd`
-is idle almost all the time on a laptop, so `cups.socket` and `cups.path` start
-it on demand — the first print dialog, `lp` or `lpadmin` call brings it up.
-Port 631 is not a trigger: `cups.socket` listens only on `/run/cups/cups.sock`,
-so where cupsd has never run, <http://localhost:631> is refused until
-`sudo systemctl start cups`. Once cupsd has run it stays up (with the stock
-`WebInterface Yes` it never idle-exits), and `cups.path` starts it at every later
-boot. The installer adds the `PDF` printer, which is that first run, so after the
-install reboot the web UI is simply there.
+is idle almost all the time, so `cups.socket` starts it on demand — the first
+print dialog, `lp`, `lpstat` or `lpadmin` call brings it up. Port 631 is not a
+trigger: `cups.socket` listens only on `/run/cups/cups.sock`, so until cupsd has
+started since the boot, <http://localhost:631> is refused (`lpstat -r` brings it
+up). Once started it stays until the next boot (with the stock `WebInterface Yes`
+it never idle-exits). `cups.path` is left off: it waits for a file every cupsd
+run leaves behind, so it started cupsd at every boot.
 
 No driver package is installed, and for a modern network printer none is
 needed: IPP Everywhere / AirPrint printers advertise their own capabilities and
