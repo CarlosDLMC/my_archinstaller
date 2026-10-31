@@ -139,7 +139,12 @@ impl Painter<'_> {
         let h = (FONT_SIZE * 0.75).round();
         self.scene.save();
         self.scene.multiply_opacity(0.45);
-        self.scene.fill(x + 6.0, ((DESIGN_HEIGHT - h) / 2.0).round(), 1.0, h, self.theme.col_separator);
+        // One whole screen pixel, the one under the line's centre: scaled
+        // down (ui < 1) a 1-unit line is under a pixel wide and, unsmoothed,
+        // vanished whenever it fell between two pixel centres.
+        let s = self.ui;
+        let px = ((x + 6.0 + 0.5) * s).floor();
+        self.scene.fill(px / s, ((DESIGN_HEIGHT - h) / 2.0).round(), 1.0 / s, h, self.theme.col_separator);
         self.scene.restore();
         x + 13.0
     }
