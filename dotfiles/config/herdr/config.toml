@@ -161,3 +161,12 @@ type = "popup"
 command = "__HOME__/.local/bin/herdr-close-tab"
 width = "60%"
 height = "30%"
+
+# Alt+G: PyCharm-style Commit window for the focused agent's worktree - changed
+# files, side-by-side diff (HEAD | your version, editable), commit and push.
+# Plugin: ~/.config/herdr/git-changes.
+[[keys.command]]
+key = "alt+g"
+type = "plugin_action"
+command = "git-changes.open"
+description = "git changes (commit window)"

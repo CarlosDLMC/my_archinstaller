@@ -1,0 +1,27 @@
+# PyCharm-style Commit window for the focused agent's worktree: the changed
+# files, and a side-by-side diff (HEAD on the left, your version on the right,
+# editable) for the one you pick. ALT+G in config.toml runs the "open" action;
+# open.sh finds the focused pane's git worktree and opens the "changes" popup
+# there. The window itself is nvim with its own config (nvim/init.lua), kept
+# apart from the normal nvim setup.
+id = "git-changes"
+name = "Git changes"
+description = "PyCharm-style Commit window (changed files + side-by-side diff) for the focused agent's worktree"
+version = "0.1.0"
+min_herdr_version = "0.9.0"
+platforms = ["linux"]
+
+[[actions]]
+id = "open"
+title = "Git changes"
+contexts = ["workspace"]
+command = ["sh", "open.sh"]
+
+[[panes]]
+id = "changes"
+title = "Changes"
+placement = "popup"
+width = "94%"
+height = "92%"
+# panes start in the worktree (--cwd), not the plugin folder: use the full path
+command = ["sh", "-c", "exec sh \"$HERDR_PLUGIN_ROOT/changes.sh\""]

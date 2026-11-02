@@ -19,13 +19,14 @@
 #   - config/herdr/agent-notify/        plugin: dunst notices for agents
 #   - config/herdr/agent-awake/         plugin: no idle while an agent works
 #   - config/herdr/agent-order/         plugin: Agents tab blocked, working, done, idle
+#   - config/herdr/git-changes/         plugin: ALT+G PyCharm-style commit window
 #   - config/hypr/UserConfigs/UserKeybinds.lua  unbinds ALT+Tab so herdr gets it
 #
 # This script owns four things the dotfiles cannot:
 #   1. the binary itself
 #   2. the systemd --user unit (it names an absolute ExecStart)
 #   3. rewriting __HOME__ in the copied config.toml
-#   4. registering the agent-notify, agent-awake and agent-order plugins
+#   4. registering the agent-notify, agent-awake, agent-order and git-changes plugins
 #
 # On (3): herdr's [[keys.command]] entries take a command string, and a tracked
 # dotfile cannot contain this machine's $HOME. The dotfiles ship __HOME__ and
@@ -35,6 +36,7 @@
 herdr_pkg=(
   ffmpeg      # herdr shells out to a player for mp3 notification sounds
   libpulse    # provides paplay, the first player herdr looks for
+  neovim      # draws the git-changes window (ALT+G); the neovim option (LazyVim) is not needed
 )
 
 ## WARNING: DO NOT EDIT BEYOND THIS LINE IF YOU DON'T KNOW WHAT YOU ARE DOING! ##
@@ -182,7 +184,7 @@ else
 fi
 
 # ------------------------------------------------------------ agent plugins
-# Three herdr plugins, hooks herdr runs on every agent status change:
+# Four herdr plugins. Three are hooks herdr runs on every agent status change:
 #   agent-notify  a dunst notification when an agent finishes or is blocked
 #                 while the herdr window is not focused (see agent-notify.py
 #                 for why herdr's own popups cannot)
@@ -190,13 +192,18 @@ fi
 #                 screensaver waits, as for a video (see agent-awake.py)
 #   agent-order   sorts the Agents tab blocked, working, done, idle, which
 #                 neither of herdr's own orders does (see agent-order.py)
+# and one is a window:
+#   git-changes   ALT+G opens a PyCharm-style Commit window (changed files,
+#                 side-by-side diff, commit, push) on the focused agent's
+#                 worktree, as a herdr popup (see git-changes/nvim/init.lua)
 # copy.sh puts the files in place, but herdr only runs a plugin it has
 # registered. `plugin link` works with no server running (unlink does not).
 # Linked only when absent: linking again re-enables it, and a re-run should
 # not undo `herdr plugin disable <id>`.
 for _plugin in "agent-notify:notices for finished/blocked agents" \
                "agent-awake:no idle while an agent is working" \
-               "agent-order:Agents tab blocked, working, done, idle"; do
+               "agent-order:Agents tab blocked, working, done, idle" \
+               "git-changes:ALT+G commit window for the agent's worktree"; do
   _id=${_plugin%%:*}
   PLUGIN="$HOME/.config/herdr/$_id"
   if [ -f "$PLUGIN/herdr-plugin.toml" ]; then
