@@ -1,6 +1,7 @@
 #!/bin/sh
-# Action behind ALT+G: open the Changes popup on the git worktree of the
-# focused pane (the agent's worktree), whatever folder the agent is in.
+# Action behind ALT+G: open the Changes popup on the git worktree the focused
+# agent is working in. herdr gives the pane's folder; agent_worktree.py reads
+# the agent's transcript for the worktree it actually works in.
 H="${HERDR_BIN_PATH:-herdr}"
 
 if [ -n "$HERDR_PLUGIN_STATE_DIR" ]; then
@@ -10,7 +11,7 @@ fi
 # Pane id: from the env, else from the context JSON. Its cwd: the foreground
 # process's (the agent's) cwd, else the pane's.
 dir=$(H="$H" python3 -I - <<'EOF'
-import json, os, subprocess
+import json, os, subprocess, sys
 H = os.environ["H"]
 ctx = {}
 try:
@@ -32,15 +33,23 @@ def find(obj, keys):
 
 pane = (os.environ.get("HERDR_PANE_ID") or os.environ.get("HERDR_ACTIVE_PANE_ID")
         or find(ctx, ["pane_id", "focused_pane_id"]))
-cwd = None
+cwd, p = None, {}
 if pane:
     try:
         out = subprocess.run([H, "pane", "get", pane], capture_output=True, text=True).stdout
         p = json.loads(out)["result"]["pane"]
         cwd = p.get("foreground_cwd") or p.get("cwd")
     except Exception:
-        pass
-cwd = cwd or find(ctx, ["checkout_path", "foreground_cwd", "cwd"]) or os.environ.get("HERDR_ACTIVE_PANE_CWD") or os.getcwd()
+        p = {}
+cwd = cwd or find(ctx, ["focused_pane_cwd", "checkout_path", "cwd"]) or os.environ.get("HERDR_ACTIVE_PANE_CWD") or os.getcwd()
+# the agent usually works in a worktree its pane folder does not show
+try:
+    r = subprocess.run([sys.executable, "-I", "agent_worktree.py", "-", cwd], input=json.dumps(p),
+                       capture_output=True, text=True, timeout=5)
+    if r.returncode == 0 and r.stdout.strip():
+        cwd = r.stdout.strip()
+except Exception:
+    pass
 print(cwd)
 EOF
 )

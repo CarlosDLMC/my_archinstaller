@@ -128,6 +128,7 @@ local function colours()
   hl("PcFillDel", { bg = C.fill_del })
   hl("PcTitleOld", { fg = C.dim2, bg = C.editor })
   hl("PcTitleNew", { fg = C.bright, bg = C.editor, bold = true })
+  hl("PcRevert", { fg = C.modified, bg = C.editor, bold = true })
 
   -- syntax (PyCharm Dark): treesitter captures + the regex fallback groups
   local syn = {
@@ -182,6 +183,8 @@ local S = {
 }
 local ns = api.nvim_create_namespace("git-changes")
 local ns_diff = api.nvim_create_namespace("git-changes-diff")
+local ns_hunk = api.nvim_create_namespace("git-changes-hunks")
+local diff_aug = api.nvim_create_augroup("git-changes-diff", { clear = true })
 local CHECK_ON, CHECK_OFF, CHECK_SOME = "\u{F0132}", "\u{F0131}", "\u{F0375}"
 local OPEN, SHUT = "\u{EAB4}", "\u{EAB6}"
 local BRANCH = "\u{E725}"
@@ -449,7 +452,7 @@ end
 function _G.GitChangesStatus()
   if S.diff then
     return hint({ { "F7", "next change" }, { "⇧F7", "previous" }, { "Alt+→/←", "next/prev file" },
-      { "Ctrl+S", "save" }, { "Esc", "back to files" } })
+      { "Ctrl+Alt+Z / «", "revert change" }, { "Ctrl+S", "save" }, { "Esc", "back to files" } })
   end
   local cur = api.nvim_get_current_win()
   local n = 0
@@ -536,7 +539,7 @@ local function diff_geometry()
   }
 end
 
-local close_diff
+local close_diff, update_hunks
 
 local function first_change(win)
   api.nvim_win_call(win, function()
@@ -655,7 +658,14 @@ local function open_diff(e)
     api.nvim_win_call(lw, function() vim.cmd("syncbind") end)
   end
 
-  S.diff = { entry = e, lb = lb, rb = rb, real = real, lw = lw, rw = rw }
+  S.diff = { entry = e, lb = lb, rb = rb, real = real, lw = lw, rw = rw, revertable = real and not one_sided }
+  if S.diff.revertable then
+    vim.wo[rw].signcolumn = "yes:1"
+    update_hunks()
+    api.nvim_create_autocmd({ "TextChanged", "TextChangedI", "BufReadPost", "FileChangedShellPost" }, {
+      group = diff_aug, buffer = rb, callback = function() vim.schedule(update_hunks) end,
+    })
+  end
   if one_sided then
     api.nvim_set_current_win(right_empty and lw or rw)
   else
@@ -663,6 +673,97 @@ local function open_diff(e)
   end
   cursor_style()
   vim.cmd("redrawstatus")
+end
+
+-- The changes, the way the diff shows them (same algorithm and linematch as
+-- 'diffopt'): { a_start, a_count, b_start, b_count }, left = a (HEAD), right =
+-- b (the file). A count of 0 means "after line start".
+local function diff_hunks(d)
+  local ok, h = pcall(vim.text.diff,
+    table.concat(api.nvim_buf_get_lines(d.lb, 0, -1, false), "\n") .. "\n",
+    table.concat(api.nvim_buf_get_lines(d.rb, 0, -1, false), "\n") .. "\n",
+    { result_type = "indices", algorithm = "histogram", indent_heuristic = true, linematch = 60 })
+  if not ok or not h then return {} end
+  -- linematch splits one block into touching pieces (lines removed, then a
+  -- line changed): merge pieces with no unchanged line between them, so a
+  -- block is one change, as in PyCharm
+  local function range(start, count) -- inclusive lo..hi; empty = start+1..start
+    return count == 0 and start + 1 or start, start + count - (count == 0 and 0 or 1)
+  end
+  local merged = {}
+  for _, k in ipairs(h) do
+    local alo, ahi = range(k[1], k[2])
+    local blo, bhi = range(k[3], k[4])
+    local m = merged[#merged]
+    if m and alo == m.ahi + 1 and blo == m.bhi + 1 then
+      m.ahi, m.bhi = ahi, bhi
+    else
+      merged[#merged + 1] = { alo = alo, ahi = ahi, blo = blo, bhi = bhi }
+    end
+  end
+  local out = {}
+  for _, m in ipairs(merged) do
+    local ac, bc = m.ahi - m.alo + 1, m.bhi - m.blo + 1
+    out[#out + 1] = { ac == 0 and m.alo - 1 or m.alo, ac, bc == 0 and m.blo - 1 or m.blo, bc }
+  end
+  return out
+end
+
+-- A « on the first line of every change in the right pane (PyCharm's revert
+-- arrows): click it, or Ctrl+Alt+Z on the change, to put HEAD's lines back.
+update_hunks = function()
+  local d = S.diff
+  if not (d and d.revertable and api.nvim_buf_is_valid(d.rb)) then return end
+  local h = diff_hunks(d)
+  d.hunks = h
+  api.nvim_buf_clear_namespace(d.rb, ns_hunk, 0, -1)
+  local last = api.nvim_buf_line_count(d.rb)
+  for _, k in ipairs(h) do
+    -- a pure deletion sits between lines: mark the line after the gap
+    local line = k[4] == 0 and k[3] + 1 or k[3]
+    local row = math.min(math.max(line, 1), last) - 1
+    pcall(api.nvim_buf_set_extmark, d.rb, ns_hunk, row, 0, { sign_text = "«", sign_hl_group = "PcRevert", priority = 20 })
+  end
+  if api.nvim_win_is_valid(d.rw) then
+    api.nvim_win_set_config(d.rw, { footer = { { " " .. plural(#h, "difference") .. " ", "PcTitleOld" } }, footer_pos = "right" })
+  end
+end
+
+-- the change at a line of the right (or left) pane
+local function hunk_at(line, side)
+  local d = S.diff
+  for _, k in ipairs(d and d.hunks or {}) do
+    local start, count = k[3], k[4]
+    if side == "left" then start, count = k[1], k[2] end
+    if count == 0 then
+      if line == start or line == start + 1 or (start == 0 and line == 1) then return k end
+    elseif line >= start and line < start + count then
+      return k
+    end
+  end
+end
+
+local function revert_hunk(line, side)
+  local d = S.diff
+  if not d then return end
+  if not d.revertable then
+    return toast(d.real and "Nothing to revert here" or "New or deleted file - revert it with git", "warn")
+  end
+  update_hunks()
+  local k = hunk_at(line, side)
+  if not k then return toast("Put the cursor on a change (or click its «)", "warn") end
+  local a_start, a_count, b_start, b_count = k[1], k[2], k[3], k[4]
+  local old = a_count > 0 and api.nvim_buf_get_lines(d.lb, a_start - 1, a_start - 1 + a_count, false) or {}
+  local from = b_count > 0 and b_start - 1 or b_start   -- 0-based: replace these, or insert after b_start
+  api.nvim_buf_set_lines(d.rb, from, from + b_count, false, old)
+  update_hunks()
+  pcall(vim.cmd, "diffupdate")
+  if api.nvim_win_is_valid(d.rw) then
+    api.nvim_set_current_win(d.rw)
+    local target = math.min(math.max(from + 1, 1), api.nvim_buf_line_count(d.rb))
+    api.nvim_win_set_cursor(d.rw, { target, 0 })
+  end
+  toast("Change reverted - u undoes it")
 end
 
 close_diff = function(switching)
@@ -678,7 +779,11 @@ close_diff = function(switching)
       api.nvim_win_close(w, true)
     end
   end
-  if d.real and api.nvim_buf_is_valid(d.rb) then api.nvim_buf_clear_namespace(d.rb, ns_diff, 0, -1) end
+  api.nvim_clear_autocmds({ group = diff_aug })
+  if d.real and api.nvim_buf_is_valid(d.rb) then
+    api.nvim_buf_clear_namespace(d.rb, ns_diff, 0, -1)
+    api.nvim_buf_clear_namespace(d.rb, ns_hunk, 0, -1)
+  end
   if d.real and api.nvim_buf_is_valid(d.rb) and not vim.bo[d.rb].modified then
     pcall(api.nvim_buf_delete, d.rb, { force = false })
   end
@@ -993,6 +1098,18 @@ dmap("<M-Down>", function() step_change(1) end)
 dmap("<M-Up>", function() step_change(-1) end)
 vim.keymap.set({ "n", "i" }, "<C-s>", function() save_right() end, { silent = true })
 -- Tab switches between the two sides
+-- revert the change under the cursor (PyCharm: Rollback Lines, Ctrl+Alt+Z)
+dmap("<M-C-z>", function()
+  local w = api.nvim_get_current_win()
+  revert_hunk(api.nvim_win_get_cursor(w)[1], w == S.diff.lw and "left" or "right")
+end)
+-- or click the « in the right pane's sign column
+dmap("<LeftRelease>", function()
+  local pos = fn.getmousepos()
+  if S.diff and pos.winid == S.diff.rw and pos.wincol <= 2 and pos.line > 0 then
+    revert_hunk(pos.line, "right")
+  end
+end)
 dmap("<Tab>", function()
   local w = api.nvim_get_current_win()
   api.nvim_set_current_win(w == S.diff.lw and S.diff.rw or S.diff.lw)
