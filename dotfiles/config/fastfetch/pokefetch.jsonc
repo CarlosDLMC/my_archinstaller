@@ -72,15 +72,8 @@
     {
       "type": "disk",
       "format": "{size-used} / {size-total}",
-      "folders": "/",
-      "key": "Disk (/)",
-      "keyColor": "red"
-    },
-    {
-      "type": "disk",
-      "format": "{size-percentage}",
-      "folders": "/",
-      "key": "Disk Usage",
+      "folders": "",
+      "key": "Disk {mountpoint}",
       "keyColor": "red"
     }
   ]
