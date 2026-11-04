@@ -55,7 +55,7 @@ fn profile_label(p: &str) -> String {
 
 pub fn start(app: &mut App) {
     refresh(app);
-    // Keep-awake: the switch survives a bar restart in the session's runtime dir.
+    // Keep-awake: the switch is kept in ~/.cache/rust-bar, so it survives a reboot too.
     let on = std::fs::read_to_string(keep_awake_path()).map_or(false, |t| t.trim() == "on");
     app.svc.pult.keep_awake = on;
     if on {
@@ -335,7 +335,7 @@ fn night_toggle(app: &mut App) {
 }
 
 fn keep_awake_path() -> String {
-    format!("{}/rust-bar-keep-awake", std::env::var("XDG_RUNTIME_DIR").unwrap_or("/tmp".into()))
+    format!("{}/.cache/rust-bar/keep-awake", services::home())
 }
 
 /// Keep-awake: systemd-inhibit --what=idle held by a child that ends with the bar.
@@ -350,6 +350,9 @@ fn inhibit(app: &mut App, on: bool) {
 
 fn set_keep_awake(app: &mut App, on: bool) {
     app.svc.pult.keep_awake = on;
+    if let Some(dir) = std::path::Path::new(&keep_awake_path()).parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
     let _ = std::fs::write(keep_awake_path(), if on { "on\n" } else { "off\n" });
     inhibit(app, on);
     redraw(app);
