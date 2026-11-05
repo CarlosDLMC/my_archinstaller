@@ -1186,6 +1186,11 @@ echo "${INFO} Building ${SKY_BLUE}rofi with on-demand keyboard focus...${RESET}"
 sleep 1
 execute_script "rofi-ondemand.sh"
 
+# After 01-desktop-pkgs.sh, which installs the stock satty this replaces.
+echo "${INFO} Building ${SKY_BLUE}satty with our patches...${RESET}" | tee -a "$LOG"
+sleep 1
+execute_script "satty-patched.sh"
+
 echo "${INFO} Installing ${SKY_BLUE}CPU microcode...${RESET}" | tee -a "$LOG"
 sleep 1
 execute_script "ucode.sh"

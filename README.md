@@ -438,7 +438,10 @@ first prompt.
 - Thunar (file manager)
 - btop, cava, fastfetch
 - mpv, pavucontrol
-- satty (screenshot annotation editor)
+- satty (screenshot annotation editor) - built from `pkgbuilds/satty` by
+  `install-scripts/satty-patched.sh`: Arch's satty plus rotate left/right buttons
+  (Ctrl-Shift-R / Ctrl-R) that turn the image and what is drawn on it. If the build
+  fails, the repo's stock satty stays
 - Handy (offline speech-to-text — Parakeet V3, auto-detects 25 languages)
 - Herdr (terminal workspace manager for AI coding agents — a static binary from
   herdr.dev, not a repo or AUR package, see [Herdr](#herdr-terminal-workspace-manager))

@@ -1,0 +1,445 @@
+From 41dce11c77a90aed38dd32f304c6cc8b0a254674 Mon Sep 17 00:00:00 2001
+From: CarlosDLMC <delamorenacoco.carlos@gmail.com>
+Date: Thu, 5 Nov 2026 20:25:26 +0100
+Subject: [PATCH] feat: rotate the image a quarter turn left or right
+
+Toolbar buttons and Ctrl-R / Ctrl-Shift-R. The annotations are baked
+into the image, which is turned and refitted; the crop follows. Undo
+and redo restore the image and its annotations.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ build.rs                |   1 +
+ src/femtovg_area/imp.rs | 171 +++++++++++++++++++++++++++++++++++++++-
+ src/femtovg_area/mod.rs |   8 ++
+ src/main.rs             |   5 ++
+ src/sketch_board.rs     |  23 +++++-
+ src/tools/crop.rs       |  14 ++++
+ src/ui/toolbars.rs      |  18 +++++
+ 7 files changed, 238 insertions(+), 2 deletions(-)
+
+diff --git a/build.rs b/build.rs
+index 657def4..3eedb16 100644
+--- a/build.rs
++++ b/build.rs
+@@ -57,6 +57,7 @@ fn main() -> Result<(), io::Error> {
+             "highlight-regular",
+             "arrow-redo-filled",
+             "arrow-undo-filled",
++            "arrow-clockwise-regular",
+             "recycling-bin",
+             "save-regular",
+             "save-multiple-regular",
+diff --git a/src/femtovg_area/imp.rs b/src/femtovg_area/imp.rs
+index f147174..d29d1ed 100644
+--- a/src/femtovg_area/imp.rs
++++ b/src/femtovg_area/imp.rs
+@@ -24,9 +24,10 @@ use crate::{
+     APP_CONFIG,
+     configuration::Action,
+     math::{Vec2D, rect_ensure_in_bounds, rect_round},
+-    sketch_board::SketchBoardInput,
++    sketch_board::{SketchBoard, SketchBoardInput, SketchBoardOutput},
+     tools::{CropTool, Drawable, Tool},
+ };
++use relm4::gtk::gdk_pixbuf::PixbufRotation;
+ 
+ use super::{font_stack, set_font_stack};
+ 
+@@ -59,11 +60,25 @@ pub struct FemtoVgAreaMut {
+     drag_offset: Vec2D,
+     is_drag: bool,
+     is_reset: bool,
++    // rotations requested by the toolbar, applied on the next render (they
++    // need the GL canvas to bake the annotations into the image)
++    pending_rotations: Vec<bool>,
++    // GL images of replaced backgrounds, deleted on the next render
++    stale_images: Vec<ImageId>,
++    // the image changed size (rotation, or its undo/redo): refit the view
++    size_changed: bool,
+ }
+ 
+ enum HistoryEntry {
+     Drawable(Box<dyn Drawable>),
+     ClearAll(Vec<Box<dyn Drawable>>),
++    // the image before (on the undo stack) or after (on the redo stack) a
++    // 90 degree rotation, with the annotations that were baked into it
++    Rotate {
++        clockwise: bool,
++        background: Pixbuf,
++        drawables: Vec<Box<dyn Drawable>>,
++    },
+ }
+ 
+ #[glib::object_subclass]
+@@ -123,6 +138,30 @@ impl GLAreaImpl for FemtoVGArea {
+         let font = self.font.borrow().unwrap(); // this unwrap is safe as long as we call "ensure_canvas" before
+         let mut actions = self.request_render.borrow_mut();
+ 
++        // rotations and image size changes
++        let size_update = match self
++            .inner()
++            .as_mut()
++            .expect("Did you call init before using FemtoVgArea?")
++            .apply_rotations(canvas, font)
++        {
++            Ok(u) => u,
++            Err(e) => {
++                eprintln!("Error while rotating image: {e}");
++                None
++            }
++        };
++        if let Some((image_size, crop_size)) = size_update
++            && let Some(sender) = self.sender.borrow().as_ref()
++        {
++            sender.emit(SketchBoardInput::Output(SketchBoardOutput::ImageSizeChanged(
++                image_size,
++            )));
++            sender.emit(SketchBoardInput::Output(SketchBoardOutput::DimensionsUpdate(
++                crop_size,
++            )));
++        }
++
+         // if we got requested to render a frame
+         if let Some(a) = actions.take() {
+             // render image
+@@ -187,6 +226,9 @@ impl FemtoVGArea {
+             last_scale: initial_scale,
+             is_drag: false,
+             is_reset: false,
++            pending_rotations: Vec::new(),
++            stale_images: Vec::new(),
++            size_changed: false,
+         });
+         self.sender.borrow_mut().replace(sender);
+     }
+@@ -346,6 +388,17 @@ impl FemtoVgAreaMut {
+                 self.restore_clear_all(drawables);
+                 true
+             }
++            Some(HistoryEntry::Rotate {
++                clockwise,
++                background,
++                drawables,
++            }) => {
++                let (w, h) = self.image_size();
++                let entry = self.swap_image(clockwise, background, drawables);
++                self.crop_tool.borrow_mut().rotate(!clockwise, w, h);
++                self.redo_stack.push(entry);
++                true
++            }
+             None => false,
+         }
+     }
+@@ -363,6 +416,17 @@ impl FemtoVgAreaMut {
+                 self.apply_clear_all();
+                 true
+             }
++            Some(HistoryEntry::Rotate {
++                clockwise,
++                background,
++                drawables,
++            }) => {
++                let (w, h) = self.image_size();
++                let entry = self.swap_image(clockwise, background, drawables);
++                self.crop_tool.borrow_mut().rotate(clockwise, w, h);
++                self.undo_stack.push(entry);
++                true
++            }
+             None => false,
+         }
+     }
+@@ -410,6 +474,99 @@ impl FemtoVgAreaMut {
+         self.active_tool = active_tool;
+     }
+ 
++    pub fn request_rotation(&mut self, clockwise: bool) {
++        self.pending_rotations.push(clockwise);
++    }
++
++    fn image_size(&self) -> (f32, f32) {
++        (
++            self.background_image.width() as f32,
++            self.background_image.height() as f32,
++        )
++    }
++
++    // Put `background` and `drawables` in place of the current ones and
++    // return the current ones as the history entry that swaps them back.
++    fn swap_image(
++        &mut self,
++        clockwise: bool,
++        background: Pixbuf,
++        drawables: Vec<Box<dyn Drawable>>,
++    ) -> HistoryEntry {
++        let background = std::mem::replace(&mut self.background_image, background);
++        let drawables = std::mem::replace(&mut self.drawables, drawables);
++        if let Some(id) = self.background_image_id.take() {
++            self.stale_images.push(id);
++        }
++        self.size_changed = true;
++        HistoryEntry::Rotate {
++            clockwise,
++            background,
++            drawables,
++        }
++    }
++
++    // Bake the annotations into the image and turn it a quarter. The old
++    // image and annotations go on the undo stack.
++    fn rotate(
++        &mut self,
++        canvas: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
++        font: FontId,
++        clockwise: bool,
++    ) -> Result<()> {
++        let (w, h) = self.image_size();
++        let baked = self.render_region(canvas, font, Vec2D::zero(), Vec2D::new(w, h))?;
++        let rotated = SketchBoard::image_to_pixbuf(baked)
++            .rotate_simple(if clockwise {
++                PixbufRotation::Clockwise
++            } else {
++                PixbufRotation::Counterclockwise
++            })
++            .ok_or_else(|| anyhow::anyhow!("could not rotate the image"))?;
++        let entry = self.swap_image(clockwise, rotated, Vec::new());
++        self.undo_stack.push(entry);
++        self.redo_stack.clear();
++        self.crop_tool.borrow_mut().rotate(clockwise, w, h);
++        Ok(())
++    }
++
++    // Run the requested rotations, free replaced images and refit the view
++    // when the image changed size. Returns the new image size and crop size.
++    #[allow(clippy::type_complexity)]
++    pub fn apply_rotations(
++        &mut self,
++        canvas: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
++        font: FontId,
++    ) -> Result<Option<((i32, i32), Option<(i32, i32)>)>> {
++        let mut result = Ok(());
++        for clockwise in std::mem::take(&mut self.pending_rotations) {
++            result = self.rotate(canvas, font, clockwise);
++            if result.is_err() {
++                break;
++            }
++        }
++        for id in self.stale_images.drain(..) {
++            canvas.delete_image(id);
++        }
++        result?;
++        if !std::mem::take(&mut self.size_changed) {
++            return Ok(None);
++        }
++        // fit the new image to the window, centred
++        self.is_drag = false;
++        self.zoom_scale = 0.0;
++        self.last_scale = 0.0;
++        self.reset_drag_offset();
++        self.update_transformation(canvas);
++
++        let (w, h) = self.image_size();
++        let crop = self.crop_tool.borrow().get_crop().map(|c| {
++            let (_, size) = c.get_rectangle();
++            (size.x.round() as i32, size.y.round() as i32)
++        });
++        Ok(Some(((w as i32, h as i32), crop)))
++    }
++
+     pub fn render_native_resolution(
+         &mut self,
+         canvas: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
+@@ -433,6 +590,18 @@ impl FemtoVgAreaMut {
+             .filter(|(_, size)| !size.is_zero())
+             .unwrap_or(bounds);
+ 
++        self.render_region(canvas, font, pos, size)
++    }
++
++    // Render the image and its annotations (no crop overlay) at native
++    // resolution, limited to the rectangle at `pos` of `size`.
++    fn render_region(
++        &mut self,
++        canvas: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
++        font: FontId,
++        pos: Vec2D,
++        size: Vec2D,
++    ) -> anyhow::Result<ImgVec<RGBA8>> {
+         // create render-target
+         let image_id = canvas.create_image_empty(
+             size.x as usize,
+diff --git a/src/femtovg_area/mod.rs b/src/femtovg_area/mod.rs
+index cafda09..71ca17e 100644
+--- a/src/femtovg_area/mod.rs
++++ b/src/femtovg_area/mod.rs
+@@ -69,6 +69,14 @@ impl FemtoVGArea {
+             .expect("Did you call init before using FemtoVgArea?")
+             .redo()
+     }
++    pub fn rotate(&mut self, clockwise: bool) {
++        self.imp()
++            .inner()
++            .as_mut()
++            .expect("Did you call init before using FemtoVgArea?")
++            .request_rotation(clockwise);
++        gtk::prelude::GLAreaExt::queue_render(self);
++    }
+     pub fn request_render(&self, actions: &[Action]) {
+         self.imp().request_render(actions);
+     }
+diff --git a/src/main.rs b/src/main.rs
+index affbe6e..f183f26 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -81,6 +81,7 @@ enum AppInput {
+     ScaleFactorChanged,
+     FullscreenChanged(bool),
+     DimensionsUpdate(Option<(i32, i32)>),
++    ImageSizeChanged((i32, i32)),
+     ToolEditingChanged(bool),
+ }
+ 
+@@ -312,6 +313,9 @@ impl Component for App {
+                     .sender()
+                     .emit(StyleToolbarInput::DimensionsChanged(d));
+             }
++            AppInput::ImageSizeChanged(size) => {
++                self.image_dimensions = size;
++            }
+             AppInput::ToolEditingChanged(editing) => {
+                 self.tools_toolbar
+                     .sender()
+@@ -357,6 +361,7 @@ impl Component for App {
+                     SketchBoardOutput::DimensionsUpdate(dimensions) => {
+                         AppInput::DimensionsUpdate(dimensions)
+                     }
++                    SketchBoardOutput::ImageSizeChanged(size) => AppInput::ImageSizeChanged(size),
+                     SketchBoardOutput::ToolEditingChanged(editing) => {
+                         AppInput::ToolEditingChanged(editing)
+                     }
+diff --git a/src/sketch_board.rs b/src/sketch_board.rs
+index 6e96971..3abab87 100644
+--- a/src/sketch_board.rs
++++ b/src/sketch_board.rs
+@@ -54,6 +54,7 @@ pub enum SketchBoardOutput {
+     ToolSwitchShortcut(Tools),
+     ColorSwitchShortcut(u64),
+     DimensionsUpdate(Option<(i32, i32)>),
++    ImageSizeChanged((i32, i32)),
+     ToolEditingChanged(bool),
+ }
+ 
+@@ -284,7 +285,7 @@ impl SketchBoard {
+         self.renderer.queue_render();
+     }
+ 
+-    fn image_to_pixbuf(image: RenderedImage) -> Pixbuf {
++    pub(crate) fn image_to_pixbuf(image: RenderedImage) -> Pixbuf {
+         let (buf, w, h) = image.into_contiguous_buf();
+ 
+         Pixbuf::from_bytes(
+@@ -748,6 +749,13 @@ impl SketchBoard {
+         }
+     }
+ 
++    fn handle_rotate(&mut self, clockwise: bool) -> ToolUpdateResult {
++        // commit a drawing in progress so it is rotated with the image
++        self.deactivate_active_tool();
++        self.renderer.rotate(clockwise);
++        ToolUpdateResult::Unmodified
++    }
++
+     fn handle_resize(&mut self) -> ToolUpdateResult {
+         self.renderer.reset_size(0.);
+         self.renderer.request_render(&[]);
+@@ -867,6 +875,8 @@ impl SketchBoard {
+             }
+             ToolbarEvent::SaveFileAs => self.handle_action(&[Action::SaveToFileAs]),
+             ToolbarEvent::Resize => self.handle_resize(),
++            ToolbarEvent::RotateLeft => self.handle_rotate(false),
++            ToolbarEvent::RotateRight => self.handle_rotate(true),
+             ToolbarEvent::OriginalScale => self.handle_original_scale(),
+             ToolbarEvent::ToolCommit => self.active_tool.borrow_mut().handle_deactivated(),
+             ToolbarEvent::ToolDismiss => self.active_tool.borrow_mut().handle_dismissed(),
+@@ -1128,6 +1138,17 @@ impl Component for SketchBoard {
+                                 && ke.modifier == ModifierType::CONTROL_MASK
+                             {
+                                 self.handle_redo()
++                            } else if (ke.is_one_of(Key::r, KeyMappingId::UsR)
++                                || ke.is_one_of(Key::R, KeyMappingId::UsR))
++                                && ke.modifier == ModifierType::CONTROL_MASK
++                            {
++                                self.handle_rotate(true)
++                            } else if (ke.is_one_of(Key::r, KeyMappingId::UsR)
++                                || ke.is_one_of(Key::R, KeyMappingId::UsR))
++                                && ke.modifier
++                                    == (ModifierType::CONTROL_MASK | ModifierType::SHIFT_MASK)
++                            {
++                                self.handle_rotate(false)
+                             } else if ke.is_one_of(Key::t, KeyMappingId::UsT)
+                                 && ke.modifier == ModifierType::CONTROL_MASK
+                             {
+diff --git a/src/tools/crop.rs b/src/tools/crop.rs
+index 9ff493b..58f2ce1 100644
+--- a/src/tools/crop.rs
++++ b/src/tools/crop.rs
+@@ -183,6 +183,20 @@ impl CropTool {
+             None => None,
+         }
+     }
++
++    // Follow a quarter turn of an image that was `w` x `h` before it.
++    pub fn rotate(&mut self, clockwise: bool, w: f32, h: f32) {
++        if let Some(c) = &mut self.crop {
++            let (pos, size) = c.get_rectangle();
++            c.pos = if clockwise {
++                Vec2D::new(h - (pos.y + size.y), pos.x)
++            } else {
++                Vec2D::new(pos.y, w - (pos.x + size.x))
++            };
++            c.size = Vec2D::new(size.y, size.x);
++        }
++        self.action = None;
++    }
+ }
+ 
+ impl CropHandle {
+diff --git a/src/ui/toolbars.rs b/src/ui/toolbars.rs
+index af439d4..ccd21a3 100644
+--- a/src/ui/toolbars.rs
++++ b/src/ui/toolbars.rs
+@@ -54,6 +54,8 @@ pub enum ToolbarEvent {
+     SaveFileAs,
+     Resize,
+     OriginalScale,
++    RotateLeft,
++    RotateRight,
+     ToolCommit,
+     ToolDismiss,
+ }
+@@ -133,6 +135,22 @@ impl SimpleComponent for ToolsToolbar {
+                 set_focusable: false,
+                 set_hexpand: false,
+ 
++                set_icon_name: "arrow-counterclockwise-regular",
++                set_tooltip: "Rotate left (Ctrl-Shift-R)",
++                connect_clicked[sender] => move |_| {sender.output_sender().emit(ToolbarEvent::RotateLeft);},
++            },
++            gtk::Button {
++                set_focusable: false,
++                set_hexpand: false,
++
++                set_icon_name: "arrow-clockwise-regular",
++                set_tooltip: "Rotate right (Ctrl-R)",
++                connect_clicked[sender] => move |_| {sender.output_sender().emit(ToolbarEvent::RotateRight);},
++            },
++            gtk::Button {
++                set_focusable: false,
++                set_hexpand: false,
++
+                 set_icon_name: "arrow-undo-filled",
+                 set_tooltip: "Undo (Ctrl-Z)",
+                 connect_clicked[sender] => move |_| {sender.output_sender().emit(ToolbarEvent::Undo);},
+-- 
+2.56.0
+
