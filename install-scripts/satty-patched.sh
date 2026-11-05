@@ -3,7 +3,8 @@
 #
 # ScreenShot.sh opens every screenshot in satty to draw on it. The vendored
 # PKGBUILD is Arch's satty plus one patch per change: rotate.patch adds rotate
-# left/right buttons (Ctrl-Shift-R / Ctrl-R). See pkgbuilds/satty/PKGBUILD.
+# left/right buttons (Ctrl-Shift-R / Ctrl-R), drag-text.patch lets a written
+# text be dragged to a new place. See pkgbuilds/satty/PKGBUILD.
 #
 # Runs after 01-desktop-pkgs.sh, which installs the stock satty. If this build
 # fails, that stock satty stays and screenshots work without the patches, so a
@@ -61,7 +62,7 @@ if [ -n "$HAVE" ] && [ "$(vercmp "$HAVE" "$WANT")" -ge 0 ]; then
     echo "${INFO} The patched ${MAGENTA}satty${RESET} $HAVE is already installed. Skipping..." | tee -a "$LOG"
     pin_ignorepkg
   else
-    echo "${NOTE} ${MAGENTA}satty${RESET} $HAVE is newer than the vendored $WANT - keeping it (no rotate buttons until pkgbuilds/satty is updated)." | tee -a "$LOG"
+    echo "${NOTE} ${MAGENTA}satty${RESET} $HAVE is newer than the vendored $WANT - keeping it (no rotate buttons or text dragging until pkgbuilds/satty is updated)." | tee -a "$LOG"
   fi
   exit 0
 fi

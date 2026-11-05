@@ -1,0 +1,337 @@
+From 9ba543139ad7cc77b668db6c4f402ca27aabad9a Mon Sep 17 00:00:00 2001
+From: CarlosDLMC <delamorenacoco.carlos@gmail.com>
+Date: Thu, 5 Nov 2026 20:39:31 +0100
+Subject: [PATCH] feat: drag a written text to move it
+
+With the pointer or the text tool, pressing on a text that is already
+written picks it up (outlined) and dragging moves it; one undo step per
+move. The text being typed keeps its clicks; it is committed first when
+another text is picked up.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/femtovg_area/imp.rs |  53 ++++++++++++++++++---
+ src/femtovg_area/mod.rs |  28 +++++++++++
+ src/sketch_board.rs     | 102 ++++++++++++++++++++++++++++++++++------
+ src/tools/mod.rs        |   8 ++++
+ src/tools/text.rs       |  19 ++++++++
+ 5 files changed, 189 insertions(+), 21 deletions(-)
+
+diff --git a/src/femtovg_area/imp.rs b/src/femtovg_area/imp.rs
+index d29d1ed..7c8c5dd 100644
+--- a/src/femtovg_area/imp.rs
++++ b/src/femtovg_area/imp.rs
+@@ -72,6 +72,11 @@ pub struct FemtoVgAreaMut {
+ enum HistoryEntry {
+     Drawable(Box<dyn Drawable>),
+     ClearAll(Vec<Box<dyn Drawable>>),
++    // a committed drawable dragged by `delta`
++    Move {
++        index: usize,
++        delta: Vec2D,
++    },
+     // the image before (on the undo stack) or after (on the redo stack) a
+     // 90 degree rotation, with the annotations that were baked into it
+     Rotate {
+@@ -154,12 +159,12 @@ impl GLAreaImpl for FemtoVGArea {
+         if let Some((image_size, crop_size)) = size_update
+             && let Some(sender) = self.sender.borrow().as_ref()
+         {
+-            sender.emit(SketchBoardInput::Output(SketchBoardOutput::ImageSizeChanged(
+-                image_size,
+-            )));
+-            sender.emit(SketchBoardInput::Output(SketchBoardOutput::DimensionsUpdate(
+-                crop_size,
+-            )));
++            sender.emit(SketchBoardInput::Output(
++                SketchBoardOutput::ImageSizeChanged(image_size),
++            ));
++            sender.emit(SketchBoardInput::Output(
++                SketchBoardOutput::DimensionsUpdate(crop_size),
++            ));
+         }
+ 
+         // if we got requested to render a frame
+@@ -399,6 +404,11 @@ impl FemtoVgAreaMut {
+                 self.redo_stack.push(entry);
+                 true
+             }
++            Some(HistoryEntry::Move { index, delta }) => {
++                self.move_drawable(index, Vec2D::zero() - delta);
++                self.redo_stack.push(HistoryEntry::Move { index, delta });
++                true
++            }
+             None => false,
+         }
+     }
+@@ -427,6 +437,11 @@ impl FemtoVgAreaMut {
+                 self.undo_stack.push(entry);
+                 true
+             }
++            Some(HistoryEntry::Move { index, delta }) => {
++                self.move_drawable(index, delta);
++                self.undo_stack.push(HistoryEntry::Move { index, delta });
++                true
++            }
+             None => false,
+         }
+     }
+@@ -474,6 +489,32 @@ impl FemtoVgAreaMut {
+         self.active_tool = active_tool;
+     }
+ 
++    // The topmost committed drawable that can be dragged and is under `pos`.
++    pub fn movable_at(&self, pos: Vec2D) -> Option<usize> {
++        self.drawables.iter().rposition(|d| d.hit_test(pos))
++    }
++
++    pub fn move_drawable(&mut self, index: usize, delta: Vec2D) {
++        if let Some(d) = self.drawables.get_mut(index) {
++            d.translate(delta);
++        }
++    }
++
++    pub fn set_grabbed(&self, index: usize, grabbed: bool) {
++        if let Some(d) = self.drawables.get(index) {
++            d.set_grabbed(grabbed);
++        }
++    }
++
++    // A finished drag goes on the undo stack.
++    pub fn commit_move(&mut self, index: usize, delta: Vec2D) {
++        if delta.is_zero() || index >= self.drawables.len() {
++            return;
++        }
++        self.undo_stack.push(HistoryEntry::Move { index, delta });
++        self.redo_stack.clear();
++    }
++
+     pub fn request_rotation(&mut self, clockwise: bool) {
+         self.pending_rotations.push(clockwise);
+     }
+diff --git a/src/femtovg_area/mod.rs b/src/femtovg_area/mod.rs
+index 71ca17e..0b3c760 100644
+--- a/src/femtovg_area/mod.rs
++++ b/src/femtovg_area/mod.rs
+@@ -69,6 +69,34 @@ impl FemtoVGArea {
+             .expect("Did you call init before using FemtoVgArea?")
+             .redo()
+     }
++    pub fn movable_at(&self, pos: Vec2D) -> Option<usize> {
++        self.imp()
++            .inner()
++            .as_ref()
++            .expect("Did you call init before using FemtoVgArea?")
++            .movable_at(pos)
++    }
++    pub fn move_drawable(&mut self, index: usize, delta: Vec2D) {
++        self.imp()
++            .inner()
++            .as_mut()
++            .expect("Did you call init before using FemtoVgArea?")
++            .move_drawable(index, delta);
++    }
++    pub fn set_grabbed(&self, index: usize, grabbed: bool) {
++        self.imp()
++            .inner()
++            .as_ref()
++            .expect("Did you call init before using FemtoVgArea?")
++            .set_grabbed(index, grabbed);
++    }
++    pub fn commit_move(&mut self, index: usize, delta: Vec2D) {
++        self.imp()
++            .inner()
++            .as_mut()
++            .expect("Did you call init before using FemtoVgArea?")
++            .commit_move(index, delta);
++    }
+     pub fn rotate(&mut self, clockwise: bool) {
+         self.imp()
+             .inner()
+diff --git a/src/sketch_board.rs b/src/sketch_board.rs
+index 3abab87..9464182 100644
+--- a/src/sketch_board.rs
++++ b/src/sketch_board.rs
+@@ -269,7 +269,15 @@ impl InputEvent {
+     }
+ }
+ 
++// A committed text being dragged: its index among the drawables and how far
++// it has been moved so far.
++struct GrabbedDrawable {
++    index: usize,
++    moved: Vec2D,
++}
++
+ pub struct SketchBoard {
++    grabbed: Option<GrabbedDrawable>,
+     renderer: FemtoVGArea,
+     active_tool: Rc<RefCell<dyn Tool>>,
+     tool_edit_mode: bool,
+@@ -749,6 +757,65 @@ impl SketchBoard {
+         }
+     }
+ 
++    // With the pointer or the text tool, a press on a committed text picks
++    // it up and dragging moves it (one undo step). The text being typed
++    // keeps its own clicks (cursor, selection); it is committed first when
++    // another text is picked up.
++    fn handle_grab(&mut self, ie: &InputEvent) -> Option<ToolUpdateResult> {
++        let InputEvent::Mouse(me) = ie else {
++            return None;
++        };
++        if me.button != MouseButton::Primary {
++            return None;
++        }
++        match me.type_ {
++            MouseEventType::Click | MouseEventType::BeginDrag => {
++                // the press arrives from both the click and the drag gesture
++                if self.grabbed.is_some() {
++                    return Some(ToolUpdateResult::StopPropagation);
++                }
++                if !matches!(self.active_tool_type(), Tools::Pointer | Tools::Text) {
++                    return None;
++                }
++                if self
++                    .active_tool
++                    .borrow()
++                    .get_drawable()
++                    .is_some_and(|d| d.hit_test(me.pos))
++                {
++                    return None;
++                }
++                let index = self.renderer.movable_at(me.pos)?;
++                self.deactivate_active_tool();
++                self.renderer.set_grabbed(index, true);
++                self.grabbed = Some(GrabbedDrawable {
++                    index,
++                    moved: Vec2D::zero(),
++                });
++                Some(ToolUpdateResult::Redraw)
++            }
++            MouseEventType::UpdateDrag | MouseEventType::EndDrag => {
++                let g = self.grabbed.as_mut()?;
++                // drag positions are relative to where it started
++                let step = me.pos - g.moved;
++                g.moved = me.pos;
++                let (index, moved) = (g.index, g.moved);
++                self.renderer.move_drawable(index, step);
++                if me.type_ == MouseEventType::EndDrag {
++                    self.renderer.set_grabbed(index, false);
++                    self.renderer.commit_move(index, moved);
++                    self.grabbed = None;
++                }
++                Some(ToolUpdateResult::Redraw)
++            }
++            MouseEventType::Release => self
++                .grabbed
++                .as_ref()
++                .map(|_| ToolUpdateResult::StopPropagation),
++            _ => None,
++        }
++    }
++
+     fn handle_rotate(&mut self, clockwise: bool) -> ToolUpdateResult {
+         // commit a drawing in progress so it is rotated with the image
+         self.deactivate_active_tool();
+@@ -1248,21 +1315,25 @@ impl Component for SketchBoard {
+                     }
+ 
+                     ie.handle_event_mouse_input(&self.renderer);
+-                    let active_tool_result = self
+-                        .active_tool
+-                        .borrow_mut()
+-                        .handle_event(ToolEvent::Input(ie.clone()));
+-
+-                    // eprintln!("active_tool_result={:?}", active_tool_result);
+-
+-                    match active_tool_result {
+-                        ToolUpdateResult::StopPropagation
+-                        | ToolUpdateResult::RedrawAndStopPropagation => active_tool_result,
+-                        _ => {
+-                            if let Some(result) = ie.handle_mouse_event(&self.renderer) {
+-                                result
+-                            } else {
+-                                active_tool_result
++                    if let Some(result) = self.handle_grab(&ie) {
++                        result
++                    } else {
++                        let active_tool_result = self
++                            .active_tool
++                            .borrow_mut()
++                            .handle_event(ToolEvent::Input(ie.clone()));
++
++                        // eprintln!("active_tool_result={:?}", active_tool_result);
++
++                        match active_tool_result {
++                            ToolUpdateResult::StopPropagation
++                            | ToolUpdateResult::RedrawAndStopPropagation => active_tool_result,
++                            _ => {
++                                if let Some(result) = ie.handle_mouse_event(&self.renderer) {
++                                    result
++                                } else {
++                                    active_tool_result
++                                }
+                             }
+                         }
+                     }
+@@ -1355,6 +1426,7 @@ impl Component for SketchBoard {
+         let im_context = gtk::IMMulticontext::new();
+ 
+         let mut model = Self {
++            grabbed: None,
+             renderer: FemtoVGArea::default(),
+             active_tool: tools.get(&config.initial_tool()),
+             tool_edit_mode: false,
+diff --git a/src/tools/mod.rs b/src/tools/mod.rs
+index 73b4f50..9e44454 100644
+--- a/src/tools/mod.rs
++++ b/src/tools/mod.rs
+@@ -157,6 +157,14 @@ pub trait Drawable: DrawableClone + Debug {
+     -> Result<()>;
+     fn handle_undo(&mut self) {}
+     fn handle_redo(&mut self) {}
++    // Drawables that can be picked up and dragged after they are committed
++    // (text) answer whether `pos`, in image coordinates, is on them.
++    fn hit_test(&self, _pos: Vec2D) -> bool {
++        false
++    }
++    fn translate(&mut self, _delta: Vec2D) {}
++    // outline it while it is being dragged
++    fn set_grabbed(&self, _grabbed: bool) {}
+ }
+ 
+ #[derive(Debug)]
+diff --git a/src/tools/text.rs b/src/tools/text.rs
+index 07208e9..3246b50 100644
+--- a/src/tools/text.rs
++++ b/src/tools/text.rs
+@@ -224,6 +224,25 @@ impl Text {
+ }
+ 
+ impl Drawable for Text {
++    fn hit_test(&self, pos: Vec2D) -> bool {
++        // a few pixels of slack around thin text
++        const SLACK: f32 = 4.0;
++        let r = self.rect.borrow();
++        r.width() > 0
++            && pos.x >= r.x() as f32 - SLACK
++            && pos.x <= (r.x() + r.width()) as f32 + SLACK
++            && pos.y >= r.y() as f32 - SLACK
++            && pos.y <= (r.y() + r.height()) as f32 + SLACK
++    }
++
++    fn translate(&mut self, delta: Vec2D) {
++        self.pos += delta;
++    }
++
++    fn set_grabbed(&self, grabbed: bool) {
++        *self.draw_rect.borrow_mut() = grabbed;
++    }
++
+     fn draw(
+         &self,
+         canvas: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
+-- 
+2.56.0
+
