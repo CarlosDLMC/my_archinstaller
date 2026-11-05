@@ -12,6 +12,11 @@
 # already written and drag it to move it (outlined while held; one undo step
 # per move). Stock satty could only delete a written text.
 #
+# move-any.patch: the pointer tool picks up anything drawn - arrows, lines,
+# rectangles, ellipses, markers, brush strokes, highlights, blurs - and drags
+# it the same way (on the stroke, or inside when filled). A blur re-blurs
+# what is under it after any move.
+#
 # install-scripts/satty-patched.sh builds this with makepkg and puts satty in
 # IgnorePkg. pkgrel is above the repos' (Arch 1, CachyOS 1.1) as well. To follow
 # a new satty, set pkgver and the tarball's sha256 and re-apply the patches
@@ -25,8 +30,8 @@
 
 pkgname=satty
 pkgver=0.22.0
-pkgrel=3
-pkgdesc="Modern screenshot annotation tool, inspired by Swappy and Flameshot (rotate and drag-text patches)"
+pkgrel=4
+pkgdesc="Modern screenshot annotation tool, inspired by Swappy and Flameshot (rotate, drag-text and move-any patches)"
 arch=(x86_64)
 url="https://github.com/gabm/satty"
 license=(MPL-2.0)
@@ -44,10 +49,12 @@ depends=(
 makedepends=(cargo)
 source=("${pkgname}-${pkgver}.tar.gz::https://github.com/gabm/satty/archive/refs/tags/v${pkgver}.tar.gz"
         'rotate.patch'
-        'drag-text.patch')
+        'drag-text.patch'
+        'move-any.patch')
 sha256sums=('eee18b5f9eabf164da69c7e6e916c98afb78dd296d83e28bb96d9f9636a5fe36'
             '47c1a0e22c387ab3f3c4c1dc658fcbae910b9a43993494206c2a90647911f64d'
-            '10f9783e025f8e588e1530ad61ada93dd461a6c2c57ed469b6ee067ffb6c359e')
+            '10f9783e025f8e588e1530ad61ada93dd461a6c2c57ed469b6ee067ffb6c359e'
+            'b3acaa344e34c3140c7b5b2be506a5d99871be0566209a270664b95c17f9e3a2')
 
 _srcname="Satty-${pkgver}"
 
@@ -55,6 +62,7 @@ prepare() {
   cd "$_srcname"
   patch -Np1 -i "${srcdir}/rotate.patch"
   patch -Np1 -i "${srcdir}/drag-text.patch"
+  patch -Np1 -i "${srcdir}/move-any.patch"
   cargo fetch --locked --target "$(rustc --print host-tuple)"
 }
 

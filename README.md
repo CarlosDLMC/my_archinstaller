@@ -440,8 +440,8 @@ first prompt.
 - mpv, pavucontrol
 - satty (screenshot annotation editor) - built from `pkgbuilds/satty` by
   `install-scripts/satty-patched.sh`: Arch's satty plus rotate left/right buttons
-  (Ctrl-Shift-R / Ctrl-R) that turn the image and what is drawn on it, and written
-  text that can be dragged to a new place. If the build
+  (Ctrl-Shift-R / Ctrl-R) that turn the image and what is drawn on it, and anything
+  drawn (text, arrows, shapes...) can be dragged to a new place with the pointer. If the build
   fails, the repo's stock satty stays
 - Handy (offline speech-to-text — Parakeet V3, auto-detects 25 languages)
 - Herdr (terminal workspace manager for AI coding agents — a static binary from

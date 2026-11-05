@@ -1,0 +1,688 @@
+From eda903a0f0336c62f9f54f4eb6df7b1a875bdbd0 Mon Sep 17 00:00:00 2001
+From: CarlosDLMC <delamorenacoco.carlos@gmail.com>
+Date: Thu, 5 Nov 2026 20:49:10 +0100
+Subject: [PATCH] feat: drag anything drawn with the pointer tool
+
+Arrows, lines, rectangles, ellipses, markers, brush strokes, highlights
+and blurs can be picked up and dragged with the pointer tool, as texts
+already could; the text tool still picks up texts only. Each drawing
+answers a hit test (on the stroke, or inside when filled) and is
+outlined while held. A blur re-blurs what is under it after any move.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/femtovg_area/imp.rs | 45 +++++++++++++++++++++++++++++-----
+ src/femtovg_area/mod.rs | 10 ++++----
+ src/math.rs             | 51 +++++++++++++++++++++++++++++++++++++++
+ src/sketch_board.rs     | 22 +++++++++--------
+ src/tools/arrow.rs      | 33 +++++++++++++++++++++++++
+ src/tools/blur.rs       | 21 ++++++++++++++++
+ src/tools/brush.rs      | 35 +++++++++++++++++++++++++++
+ src/tools/ellipse.rs    | 37 ++++++++++++++++++++++++++++
+ src/tools/highlight.rs  | 53 +++++++++++++++++++++++++++++++++++++++++
+ src/tools/line.rs       | 26 ++++++++++++++++++++
+ src/tools/marker.rs     | 23 ++++++++++++++++++
+ src/tools/mod.rs        | 15 +++++++++---
+ src/tools/rectangle.rs  | 27 +++++++++++++++++++++
+ src/tools/text.rs       | 14 +++++++++--
+ 14 files changed, 386 insertions(+), 26 deletions(-)
+
+diff --git a/src/femtovg_area/imp.rs b/src/femtovg_area/imp.rs
+index 7c8c5dd..3917ff1 100644
+--- a/src/femtovg_area/imp.rs
++++ b/src/femtovg_area/imp.rs
+@@ -67,6 +67,8 @@ pub struct FemtoVgAreaMut {
+     stale_images: Vec<ImageId>,
+     // the image changed size (rotation, or its undo/redo): refit the view
+     size_changed: bool,
++    // the drawable being dragged, outlined on screen
++    grabbed: Option<usize>,
+ }
+ 
+ enum HistoryEntry {
+@@ -234,6 +236,7 @@ impl FemtoVGArea {
+             pending_rotations: Vec::new(),
+             stale_images: Vec::new(),
+             size_changed: false,
++            grabbed: None,
+         });
+         self.sender.borrow_mut().replace(sender);
+     }
+@@ -406,6 +409,7 @@ impl FemtoVgAreaMut {
+             }
+             Some(HistoryEntry::Move { index, delta }) => {
+                 self.move_drawable(index, Vec2D::zero() - delta);
++                self.drawables_moved();
+                 self.redo_stack.push(HistoryEntry::Move { index, delta });
+                 true
+             }
+@@ -439,6 +443,7 @@ impl FemtoVgAreaMut {
+             }
+             Some(HistoryEntry::Move { index, delta }) => {
+                 self.move_drawable(index, delta);
++                self.drawables_moved();
+                 self.undo_stack.push(HistoryEntry::Move { index, delta });
+                 true
+             }
+@@ -490,8 +495,16 @@ impl FemtoVgAreaMut {
+     }
+ 
+     // The topmost committed drawable that can be dragged and is under `pos`.
+-    pub fn movable_at(&self, pos: Vec2D) -> Option<usize> {
+-        self.drawables.iter().rposition(|d| d.hit_test(pos))
++    pub fn movable_at(&self, pos: Vec2D, texts_only: bool) -> Option<usize> {
++        self.drawables
++            .iter()
++            .rposition(|d| (!texts_only || d.is_text()) && d.hit_test(pos))
++    }
++
++    fn drawables_moved(&mut self) {
++        for d in &mut self.drawables {
++            d.scene_changed();
++        }
+     }
+ 
+     pub fn move_drawable(&mut self, index: usize, delta: Vec2D) {
+@@ -500,10 +513,8 @@ impl FemtoVgAreaMut {
+         }
+     }
+ 
+-    pub fn set_grabbed(&self, index: usize, grabbed: bool) {
+-        if let Some(d) = self.drawables.get(index) {
+-            d.set_grabbed(grabbed);
+-        }
++    pub fn set_grabbed(&mut self, index: Option<usize>) {
++        self.grabbed = index;
+     }
+ 
+     // A finished drag goes on the undo stack.
+@@ -511,6 +522,7 @@ impl FemtoVgAreaMut {
+         if delta.is_zero() || index >= self.drawables.len() {
+             return;
+         }
++        self.drawables_moved();
+         self.undo_stack.push(HistoryEntry::Move { index, delta });
+         self.redo_stack.clear();
+     }
+@@ -734,6 +746,27 @@ impl FemtoVgAreaMut {
+             d.draw(canvas, font, bounds)?;
+         }
+ 
++        // outline the drawable being dragged (on screen only)
++        if render_crop
++            && let Some((tl, br)) = self
++                .grabbed
++                .and_then(|i| self.drawables.get(i))
++                .and_then(|d| d.bounds())
++        {
++            let scale = canvas.transform().average_scale();
++            let mut path = Path::new();
++            let pad = 3.0 / scale;
++            path.rect(
++                tl.x - pad,
++                tl.y - pad,
++                br.x - tl.x + 2.0 * pad,
++                br.y - tl.y + 2.0 * pad,
++            );
++            let paint = Paint::color(femtovg::Color::rgbaf(1.0, 0.5, 0.3, 0.9))
++                .with_line_width(2.0 / scale);
++            canvas.stroke_path(&path, &paint);
++        }
++
+         // render crop tool
+         if render_crop && let Some(c) = self.crop_tool.borrow().get_crop() {
+             c.draw(canvas, font, bounds)?;
+diff --git a/src/femtovg_area/mod.rs b/src/femtovg_area/mod.rs
+index 0b3c760..efc2a92 100644
+--- a/src/femtovg_area/mod.rs
++++ b/src/femtovg_area/mod.rs
+@@ -69,12 +69,12 @@ impl FemtoVGArea {
+             .expect("Did you call init before using FemtoVgArea?")
+             .redo()
+     }
+-    pub fn movable_at(&self, pos: Vec2D) -> Option<usize> {
++    pub fn movable_at(&self, pos: Vec2D, texts_only: bool) -> Option<usize> {
+         self.imp()
+             .inner()
+             .as_ref()
+             .expect("Did you call init before using FemtoVgArea?")
+-            .movable_at(pos)
++            .movable_at(pos, texts_only)
+     }
+     pub fn move_drawable(&mut self, index: usize, delta: Vec2D) {
+         self.imp()
+@@ -83,12 +83,12 @@ impl FemtoVGArea {
+             .expect("Did you call init before using FemtoVgArea?")
+             .move_drawable(index, delta);
+     }
+-    pub fn set_grabbed(&self, index: usize, grabbed: bool) {
++    pub fn set_grabbed(&self, index: Option<usize>) {
+         self.imp()
+             .inner()
+-            .as_ref()
++            .as_mut()
+             .expect("Did you call init before using FemtoVgArea?")
+-            .set_grabbed(index, grabbed);
++            .set_grabbed(index);
+     }
+     pub fn commit_move(&mut self, index: usize, delta: Vec2D) {
+         self.imp()
+diff --git a/src/math.rs b/src/math.rs
+index 3a31363..1becd23 100644
+--- a/src/math.rs
++++ b/src/math.rs
+@@ -214,3 +214,54 @@ pub fn rect_round(rect: (Vec2D, Vec2D)) -> (Vec2D, Vec2D) {
+ 
+     (pos, size)
+ }
++
++// How far (image pixels) a press may miss a drawing and still pick it up.
++pub const GRAB_SLACK: f32 = 6.0;
++
++pub fn distance_to_segment(p: Vec2D, a: Vec2D, b: Vec2D) -> f32 {
++    let ab = b - a;
++    let len2 = ab.norm2();
++    if len2 == 0.0 {
++        return p.distance_to(&a);
++    }
++    let t = (((p.x - a.x) * ab.x + (p.y - a.y) * ab.y) / len2).clamp(0.0, 1.0);
++    p.distance_to(&(a + ab * t))
++}
++
++// Whether `p` is within `tol` of the line through `points`.
++pub fn near_polyline(p: Vec2D, points: &[Vec2D], tol: f32) -> bool {
++    match points {
++        [] => false,
++        [only] => p.distance_to(only) <= tol,
++        _ => points
++            .windows(2)
++            .any(|w| distance_to_segment(p, w[0], w[1]) <= tol),
++    }
++}
++
++// Whether `p` is on a rectangle: anywhere inside when filled, else within
++// `tol` of its border.
++pub fn rect_hit(p: Vec2D, top_left: Vec2D, size: Vec2D, tol: f32, filled: bool) -> bool {
++    let (tl, size) = rect_ensure_positive_size(top_left, size);
++    let br = tl + size;
++    let inside = |m: f32| p.x >= tl.x - m && p.x <= br.x + m && p.y >= tl.y - m && p.y <= br.y + m;
++    if filled {
++        inside(tol)
++    } else {
++        inside(tol) && !(size.x > 2.0 * tol && size.y > 2.0 * tol && inside(-tol))
++    }
++}
++
++// (top left, bottom right) of some points, grown by `margin`.
++pub fn bounds_of(points: &[Vec2D], margin: f32) -> Option<(Vec2D, Vec2D)> {
++    let first = points.first()?;
++    let (mut min, mut max) = (*first, *first);
++    for p in points {
++        min = Vec2D::new(min.x.min(p.x), min.y.min(p.y));
++        max = Vec2D::new(max.x.max(p.x), max.y.max(p.y));
++    }
++    Some((
++        min - Vec2D::new(margin, margin),
++        max + Vec2D::new(margin, margin),
++    ))
++}
+diff --git a/src/sketch_board.rs b/src/sketch_board.rs
+index 9464182..482caf2 100644
+--- a/src/sketch_board.rs
++++ b/src/sketch_board.rs
+@@ -757,10 +757,10 @@ impl SketchBoard {
+         }
+     }
+ 
+-    // With the pointer or the text tool, a press on a committed text picks
+-    // it up and dragging moves it (one undo step). The text being typed
+-    // keeps its own clicks (cursor, selection); it is committed first when
+-    // another text is picked up.
++    // With the pointer tool a press on anything already drawn picks it up
++    // and dragging moves it (one undo step); the text tool picks up texts.
++    // The text being typed keeps its own clicks (cursor, selection); it is
++    // committed first when another text is picked up.
+     fn handle_grab(&mut self, ie: &InputEvent) -> Option<ToolUpdateResult> {
+         let InputEvent::Mouse(me) = ie else {
+             return None;
+@@ -774,9 +774,11 @@ impl SketchBoard {
+                 if self.grabbed.is_some() {
+                     return Some(ToolUpdateResult::StopPropagation);
+                 }
+-                if !matches!(self.active_tool_type(), Tools::Pointer | Tools::Text) {
+-                    return None;
+-                }
++                let texts_only = match self.active_tool_type() {
++                    Tools::Pointer => false,
++                    Tools::Text => true,
++                    _ => return None,
++                };
+                 if self
+                     .active_tool
+                     .borrow()
+@@ -785,9 +787,9 @@ impl SketchBoard {
+                 {
+                     return None;
+                 }
+-                let index = self.renderer.movable_at(me.pos)?;
++                let index = self.renderer.movable_at(me.pos, texts_only)?;
+                 self.deactivate_active_tool();
+-                self.renderer.set_grabbed(index, true);
++                self.renderer.set_grabbed(Some(index));
+                 self.grabbed = Some(GrabbedDrawable {
+                     index,
+                     moved: Vec2D::zero(),
+@@ -802,7 +804,7 @@ impl SketchBoard {
+                 let (index, moved) = (g.index, g.moved);
+                 self.renderer.move_drawable(index, step);
+                 if me.type_ == MouseEventType::EndDrag {
+-                    self.renderer.set_grabbed(index, false);
++                    self.renderer.set_grabbed(None);
+                     self.renderer.commit_move(index, moved);
+                     self.grabbed = None;
+                 }
+diff --git a/src/tools/arrow.rs b/src/tools/arrow.rs
+index c09a2e8..5a4fa00 100644
+--- a/src/tools/arrow.rs
++++ b/src/tools/arrow.rs
+@@ -136,7 +136,40 @@ impl Tool for ArrowTool {
+     }
+ }
+ 
++impl Arrow {
++    // half the widest part (tail or head) plus slack
++    fn grab_reach(&self) -> f32 {
++        let f = self.style.annotation_size_factor;
++        let s = self.style.size;
++        s.to_line_width(f)
++            .max(s.to_arrow_tail_width(f))
++            .max(s.to_arrow_head_length(f) * 0.6)
++            / 2.0
++            + crate::math::GRAB_SLACK
++    }
++}
++
+ impl Drawable for Arrow {
++    fn hit_test(&self, pos: Vec2D) -> bool {
++        let Some(end) = self.end else {
++            return false;
++        };
++        let f = self.style.annotation_size_factor;
++        crate::math::distance_to_segment(pos, self.start, end) <= self.grab_reach()
++            || pos.distance_to(&end) <= self.style.size.to_arrow_head_length(f) * 0.7
++    }
++
++    fn translate(&mut self, delta: Vec2D) {
++        self.start += delta;
++        if let Some(e) = &mut self.end {
++            *e += delta;
++        }
++    }
++
++    fn bounds(&self) -> Option<(Vec2D, Vec2D)> {
++        crate::math::bounds_of(&[self.start, self.end?], self.grab_reach())
++    }
++
+     fn draw(
+         &self,
+         canvas: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
+diff --git a/src/tools/blur.rs b/src/tools/blur.rs
+index edfc3e8..b0ba7cb 100644
+--- a/src/tools/blur.rs
++++ b/src/tools/blur.rs
+@@ -80,6 +80,27 @@ impl Blur {
+ }
+ 
+ impl Drawable for Blur {
++    fn hit_test(&self, pos: Vec2D) -> bool {
++        self.size
++            .is_some_and(|size| math::rect_hit(pos, self.top_left, size, math::GRAB_SLACK, true))
++    }
++
++    fn translate(&mut self, delta: Vec2D) {
++        self.top_left += delta;
++        self.origin += delta;
++    }
++
++    fn scene_changed(&mut self) {
++        // blur what is under it now (a fresh cell: clones in the undo
++        // history keep theirs)
++        self.cached_image = RefCell::new(None);
++    }
++
++    fn bounds(&self) -> Option<(Vec2D, Vec2D)> {
++        let size = self.size?;
++        math::bounds_of(&[self.top_left, self.top_left + size], 0.0)
++    }
++
+     fn draw(
+         &self,
+         canvas: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
+diff --git a/src/tools/brush.rs b/src/tools/brush.rs
+index a9c2cf9..53c4bef 100644
+--- a/src/tools/brush.rs
++++ b/src/tools/brush.rs
+@@ -36,7 +36,42 @@ impl BrushDrawable {
+     }
+ }
+ 
++impl BrushDrawable {
++    fn absolute_points(&self) -> Vec<Vec2D> {
++        let Some(start) = self.start_point else {
++            return Vec::new();
++        };
++        std::iter::once(start)
++            .chain(self.points.iter().skip(1).map(|p| start + *p))
++            .collect()
++    }
++}
++
+ impl Drawable for BrushDrawable {
++    fn hit_test(&self, pos: Vec2D) -> bool {
++        let tol = self
++            .style
++            .size
++            .to_line_width(self.style.annotation_size_factor)
++            / 2.0
++            + crate::math::GRAB_SLACK;
++        crate::math::near_polyline(pos, &self.absolute_points(), tol)
++    }
++
++    fn translate(&mut self, delta: Vec2D) {
++        if let Some(s) = &mut self.start_point {
++            *s += delta;
++        }
++    }
++
++    fn bounds(&self) -> Option<(Vec2D, Vec2D)> {
++        let w = self
++            .style
++            .size
++            .to_line_width(self.style.annotation_size_factor);
++        crate::math::bounds_of(&self.absolute_points(), w / 2.0)
++    }
++
+     fn draw(
+         &self,
+         canvas: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
+diff --git a/src/tools/ellipse.rs b/src/tools/ellipse.rs
+index 48a3fe9..a4cdb08 100644
+--- a/src/tools/ellipse.rs
++++ b/src/tools/ellipse.rs
+@@ -24,6 +24,43 @@ pub struct Ellipse {
+ }
+ 
+ impl Drawable for Ellipse {
++    fn hit_test(&self, pos: Vec2D) -> bool {
++        let Some(radii) = self.radii else {
++            return false;
++        };
++        let (rx, ry) = (radii.x.abs().max(1.0), radii.y.abs().max(1.0));
++        let tol = self
++            .style
++            .size
++            .to_line_width(self.style.annotation_size_factor)
++            / 2.0
++            + crate::math::GRAB_SLACK;
++        let (dx, dy) = (pos.x - self.middle.x, pos.y - self.middle.y);
++        // 1 on the outline, scaled back to pixels along the smaller radius
++        let d = ((dx / rx).powi(2) + (dy / ry).powi(2)).sqrt();
++        let r = rx.min(ry);
++        if self.style.fill {
++            (d - 1.0) * r <= tol
++        } else {
++            ((d - 1.0) * r).abs() <= tol
++        }
++    }
++
++    fn translate(&mut self, delta: Vec2D) {
++        self.middle += delta;
++        self.origin += delta;
++    }
++
++    fn bounds(&self) -> Option<(Vec2D, Vec2D)> {
++        let r = self.radii?;
++        let r = Vec2D::new(r.x.abs(), r.y.abs());
++        let w = self
++            .style
++            .size
++            .to_line_width(self.style.annotation_size_factor);
++        crate::math::bounds_of(&[self.middle - r, self.middle + r], w)
++    }
++
+     fn draw(
+         &self,
+         canvas: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
+diff --git a/src/tools/highlight.rs b/src/tools/highlight.rs
+index 6bbbd8f..4a62939 100644
+--- a/src/tools/highlight.rs
++++ b/src/tools/highlight.rs
+@@ -160,7 +160,60 @@ pub struct HighlightTool {
+     sender: Option<Sender<SketchBoardInput>>,
+ }
+ 
++impl Highlighter<FreehandHighlight> {
++    fn absolute_points(&self) -> Vec<Vec2D> {
++        let Some(first) = self.data.points.first() else {
++            return Vec::new();
++        };
++        std::iter::once(*first)
++            .chain(self.data.points.iter().skip(1).map(|p| *first + *p))
++            .collect()
++    }
++
++    fn half_width(&self) -> f32 {
++        self.style
++            .size
++            .to_highlight_width(self.style.annotation_size_factor)
++            / 2.0
++    }
++}
++
+ impl Drawable for HighlightKind {
++    fn hit_test(&self, pos: Vec2D) -> bool {
++        match self {
++            HighlightKind::Block(h) => h.data.size.is_some_and(|size| {
++                math::rect_hit(pos, h.data.top_left, size, math::GRAB_SLACK, true)
++            }),
++            HighlightKind::Freehand(h) => {
++                math::near_polyline(pos, &h.absolute_points(), h.half_width() + math::GRAB_SLACK)
++            }
++        }
++    }
++
++    fn translate(&mut self, delta: Vec2D) {
++        match self {
++            HighlightKind::Block(h) => {
++                h.data.top_left += delta;
++                h.data.origin += delta;
++            }
++            HighlightKind::Freehand(h) => {
++                if let Some(first) = h.data.points.first_mut() {
++                    *first += delta;
++                }
++            }
++        }
++    }
++
++    fn bounds(&self) -> Option<(Vec2D, Vec2D)> {
++        match self {
++            HighlightKind::Block(h) => {
++                let size = h.data.size?;
++                math::bounds_of(&[h.data.top_left, h.data.top_left + size], 0.0)
++            }
++            HighlightKind::Freehand(h) => math::bounds_of(&h.absolute_points(), h.half_width()),
++        }
++    }
++
+     fn draw(
+         &self,
+         canvas: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
+diff --git a/src/tools/line.rs b/src/tools/line.rs
+index 38a373d..c8301f9 100644
+--- a/src/tools/line.rs
++++ b/src/tools/line.rs
+@@ -29,6 +29,32 @@ pub struct Line {
+ }
+ 
+ impl Drawable for Line {
++    fn hit_test(&self, pos: Vec2D) -> bool {
++        let Some(d) = self.direction else {
++            return false;
++        };
++        let tol = self
++            .style
++            .size
++            .to_line_width(self.style.annotation_size_factor)
++            / 2.0
++            + crate::math::GRAB_SLACK;
++        crate::math::distance_to_segment(pos, self.start, self.start + d) <= tol
++    }
++
++    fn translate(&mut self, delta: Vec2D) {
++        self.start += delta;
++    }
++
++    fn bounds(&self) -> Option<(Vec2D, Vec2D)> {
++        let d = self.direction?;
++        let w = self
++            .style
++            .size
++            .to_line_width(self.style.annotation_size_factor);
++        crate::math::bounds_of(&[self.start, self.start + d], w)
++    }
++
+     fn draw(
+         &self,
+         canvas: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
+diff --git a/src/tools/marker.rs b/src/tools/marker.rs
+index 74940ad..5553b0c 100644
+--- a/src/tools/marker.rs
++++ b/src/tools/marker.rs
+@@ -38,7 +38,30 @@ impl Marker {
+     }
+ }
+ 
++impl Marker {
++    // about the drawn circle: "77" is ~1.1 font sizes wide
++    fn grab_radius(&self) -> f32 {
++        let font = self
++            .style
++            .size
++            .to_text_size(self.style.annotation_size_factor) as f32;
++        font * 0.6 + self.get_line_width() * 2.5
++    }
++}
++
+ impl Drawable for Marker {
++    fn hit_test(&self, pos: Vec2D) -> bool {
++        pos.distance_to(&self.pos) <= self.grab_radius() + crate::math::GRAB_SLACK
++    }
++
++    fn translate(&mut self, delta: Vec2D) {
++        self.pos += delta;
++    }
++
++    fn bounds(&self) -> Option<(Vec2D, Vec2D)> {
++        crate::math::bounds_of(&[self.pos], self.grab_radius())
++    }
++
+     fn draw(
+         &self,
+         canvas: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
+diff --git a/src/tools/mod.rs b/src/tools/mod.rs
+index 9e44454..a2ca2ff 100644
+--- a/src/tools/mod.rs
++++ b/src/tools/mod.rs
+@@ -158,13 +158,22 @@ pub trait Drawable: DrawableClone + Debug {
+     fn handle_undo(&mut self) {}
+     fn handle_redo(&mut self) {}
+     // Drawables that can be picked up and dragged after they are committed
+-    // (text) answer whether `pos`, in image coordinates, is on them.
++    // answer whether `pos`, in image coordinates, is on them.
+     fn hit_test(&self, _pos: Vec2D) -> bool {
+         false
+     }
+     fn translate(&mut self, _delta: Vec2D) {}
+-    // outline it while it is being dragged
+-    fn set_grabbed(&self, _grabbed: bool) {}
++    // a drawing moved (a drag ended, or was undone or redone): what lies
++    // under this one may have changed
++    fn scene_changed(&mut self) {}
++    // (top left, bottom right), outlined while it is dragged
++    fn bounds(&self) -> Option<(Vec2D, Vec2D)> {
++        None
++    }
++    // the text tool picks up texts only
++    fn is_text(&self) -> bool {
++        false
++    }
+ }
+ 
+ #[derive(Debug)]
+diff --git a/src/tools/rectangle.rs b/src/tools/rectangle.rs
+index 44e4ab1..9197429 100644
+--- a/src/tools/rectangle.rs
++++ b/src/tools/rectangle.rs
+@@ -25,6 +25,33 @@ pub struct Rectangle {
+ }
+ 
+ impl Drawable for Rectangle {
++    fn hit_test(&self, pos: Vec2D) -> bool {
++        let Some(size) = self.size else {
++            return false;
++        };
++        let tol = self
++            .style
++            .size
++            .to_line_width(self.style.annotation_size_factor)
++            / 2.0
++            + crate::math::GRAB_SLACK;
++        crate::math::rect_hit(pos, self.top_left, size, tol, self.style.fill)
++    }
++
++    fn translate(&mut self, delta: Vec2D) {
++        self.top_left += delta;
++        self.origin += delta;
++    }
++
++    fn bounds(&self) -> Option<(Vec2D, Vec2D)> {
++        let size = self.size?;
++        let w = self
++            .style
++            .size
++            .to_line_width(self.style.annotation_size_factor);
++        crate::math::bounds_of(&[self.top_left, self.top_left + size], w)
++    }
++
+     fn draw(
+         &self,
+         canvas: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
+diff --git a/src/tools/text.rs b/src/tools/text.rs
+index 3246b50..ac8dff5 100644
+--- a/src/tools/text.rs
++++ b/src/tools/text.rs
+@@ -239,8 +239,18 @@ impl Drawable for Text {
+         self.pos += delta;
+     }
+ 
+-    fn set_grabbed(&self, grabbed: bool) {
+-        *self.draw_rect.borrow_mut() = grabbed;
++    fn bounds(&self) -> Option<(Vec2D, Vec2D)> {
++        let r = self.rect.borrow();
++        (r.width() > 0).then(|| {
++            (
++                Vec2D::new(r.x() as f32, r.y() as f32),
++                Vec2D::new((r.x() + r.width()) as f32, (r.y() + r.height()) as f32),
++            )
++        })
++    }
++
++    fn is_text(&self) -> bool {
++        true
+     }
+ 
+     fn draw(
+-- 
+2.56.0
+
