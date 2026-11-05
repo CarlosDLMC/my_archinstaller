@@ -17,6 +17,11 @@
 # it the same way (on the stroke, or inside when filled). A blur re-blurs
 # what is under it after any move.
 #
+# edit-text.patch: a click (no drag) on a written text reopens it in the text
+# tool, its colour, size and size factor shown in the toolbars so they edit
+# it. Enter or a click elsewhere puts the edit in place of the original (one
+# undo step), Escape leaves it as it was, emptying it deletes it.
+#
 # install-scripts/satty-patched.sh builds this with makepkg and puts satty in
 # IgnorePkg. pkgrel is above the repos' (Arch 1, CachyOS 1.1) as well. To follow
 # a new satty, set pkgver and the tarball's sha256 and re-apply the patches
@@ -30,8 +35,8 @@
 
 pkgname=satty
 pkgver=0.22.0
-pkgrel=4
-pkgdesc="Modern screenshot annotation tool, inspired by Swappy and Flameshot (rotate, drag-text and move-any patches)"
+pkgrel=5
+pkgdesc="Modern screenshot annotation tool, inspired by Swappy and Flameshot (rotate, drag-text, move-any and edit-text patches)"
 arch=(x86_64)
 url="https://github.com/gabm/satty"
 license=(MPL-2.0)
@@ -50,11 +55,13 @@ makedepends=(cargo)
 source=("${pkgname}-${pkgver}.tar.gz::https://github.com/gabm/satty/archive/refs/tags/v${pkgver}.tar.gz"
         'rotate.patch'
         'drag-text.patch'
-        'move-any.patch')
+        'move-any.patch'
+        'edit-text.patch')
 sha256sums=('eee18b5f9eabf164da69c7e6e916c98afb78dd296d83e28bb96d9f9636a5fe36'
             '47c1a0e22c387ab3f3c4c1dc658fcbae910b9a43993494206c2a90647911f64d'
             '10f9783e025f8e588e1530ad61ada93dd461a6c2c57ed469b6ee067ffb6c359e'
-            'b3acaa344e34c3140c7b5b2be506a5d99871be0566209a270664b95c17f9e3a2')
+            'b3acaa344e34c3140c7b5b2be506a5d99871be0566209a270664b95c17f9e3a2'
+            'd254a728ef4b448540818bfaac262fb2f53618ae06f98d0db41f41de0fb4cc0c')
 
 _srcname="Satty-${pkgver}"
 
@@ -63,6 +70,7 @@ prepare() {
   patch -Np1 -i "${srcdir}/rotate.patch"
   patch -Np1 -i "${srcdir}/drag-text.patch"
   patch -Np1 -i "${srcdir}/move-any.patch"
+  patch -Np1 -i "${srcdir}/edit-text.patch"
   cargo fetch --locked --target "$(rustc --print host-tuple)"
 }
 
