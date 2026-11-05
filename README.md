@@ -2603,8 +2603,8 @@ anything was installed. Run it on the old machine before you clone on the new on
 ## Notes
 
 - The installation backs up existing configs to `~/.config/<app>.backup-<YYYYMMDD-HHMMSS>`
-  (one per run, never overwritten). `environment.d`, `fontconfig`, `Kvantum` and
-  `MangoHud` are deployed file by file instead, since other files belong in them
+  (one per run, never overwritten). `environment.d`, `fontconfig`, `Kvantum`,
+  `MangoHud`, `pipewire` and `wireplumber` are deployed file by file instead, since other files belong in them
   too (an `environment.d/*.conf` of your own, an installed Kvantum theme): those
   stay, and only a repo file you changed is kept beside it as
   `<file>.backup-<stamp>`. Single files it replaces get the same

@@ -485,6 +485,11 @@ dropin_dirs=(
     # and installs the plugin). A drop-in dir because ~/.config/pipewire is
     # where every other PipeWire/WirePlumber tweak of the user's lives too.
     "pipewire"
+    # wireplumber.conf.d/51-usb-amp-soft-volume.conf: the XY-C50H amplifier's
+    # USB sound card (JieLi BR21) has a fake hardware volume (0 dB..0 dB) its
+    # firmware ignores, so volume is done in software for it, and it is shown
+    # as S30_CCCP. Matches only that card; inert on machines without it.
+    "wireplumber"
 )
 
 # Where each directory's backup ended up, keyed by directory name. The wallust
