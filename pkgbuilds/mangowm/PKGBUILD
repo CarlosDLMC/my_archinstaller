@@ -1,7 +1,7 @@
 # Vendored from Arch's mangowm package:
 #   https://gitlab.archlinux.org/archlinux/packaging/packages/mangowm
 # built from our fork of mango, https://github.com/CarlosDLMC/mango (branch
-# patched: mango 0.18.3 plus sixteen commits, one per change below, that make
+# patched: mango 0.18.5 plus sixteen commits, one per change below, that make
 # mango look and behave like the Hyprland setup this desktop came from). Every
 # one is an option (or a new dispatcher) that is off by default - stock
 # behaviour stays until the config turns it on; the config in
@@ -42,6 +42,21 @@
 #    focus, as Hyprland does; a hidden group tab gets its workspace shown and
 #    its tab brought forward.
 #
+# Then fixes, one commit each and no option, from a review of the whole code
+# (2026-11): no crash when a window's title bar is a subsurface above its top
+# edge (native content asked scenefx for a negative box and mango aborted),
+# nor on SUPER+Tab or at the end of a drag with every output off; a refused
+# window capture answers with an inert source; setoption no longer leaks;
+# a reload keeps the cursor a client has set and the keymap when its xkb names
+# did not change, and a config file written while a reload runs is reloaded
+# too; a mouse move or floating resize follows the pointer once per frame (a
+# resize ends exactly under it); no repeat configure for a size already asked
+# for; the IPC status goes out once per event loop pass and not when nothing
+# changed, the same title set again does nothing, and tab titles are cut by
+# bisection and redrawn only when the cut moves; a window that auto-joins a
+# group no longer halves the tab it joins, and the special workspace's border
+# and shadow fade with it.
+#
 # install-scripts/mango-patched.sh builds this with makepkg and puts mangowm
 # in pacman's IgnorePkg: a stock mango from the repos would not know the
 # options and binds the config uses. depends names the scenefx and wlroots
@@ -56,7 +71,7 @@
 
 pkgname=mangowm
 _pkgname=mango
-pkgver=0.18.3
+pkgver=0.18.5
 pkgrel=2
 _tag="${pkgver}-patched.${pkgrel}"
 pkgdesc="Lightweight, feature rich modern wayland compositor (patched to match a Hyprland setup)"
@@ -69,7 +84,7 @@ depends=('glibc' 'wayland-protocols' 'pango' 'wayland' 'libinput' 'libdrm' 'cair
          'cjson' 'xcb-util-wm')
 makedepends=('meson' 'wlroots0.20' 'scenefx')
 source=("${pkgname}-${_tag}.tar.gz::https://github.com/CarlosDLMC/mango/archive/refs/tags/${_tag}.tar.gz")
-sha256sums=('ea5c190b6f0e8c088fc3ca00d8693d8c09c6754b90b7ccd9522a9a8759b58b45')
+sha256sums=('3bedaa858b9641fa2c2339d5be28401888e084f47b6b5b89a4ec9355aa7ad083')
 
 build() {
 	arch-meson "${_pkgname}-${_tag}" build

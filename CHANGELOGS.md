@@ -1,5 +1,30 @@
 ## CHANGELOGS
 
+## November 2026
+
+Changed (2026-11-06) - mango 0.18.5 (mangowm 0.18.5-2, tag
+`0.18.5-patched.2`): the fork's patches are rebased onto upstream's 0.18.5 and
+the three commits after it (a touch-cancel crash fix, minimized windows
+restored last-in first-out), and fourteen fixes from a review of the whole
+code are on top, one commit each:
+
+- Crashes: a window whose title bar is a subsurface above its top edge
+  (libdecor or GLFW client-side decorations) made mango abort as soon as it
+  opened, ending the session; SUPER+Tab or the end of a window drag with every
+  output off crashed too.
+- Reloads (every wallpaper change): the cursor a client has set stays (no
+  arrow over a fullscreen video), the keymap is rebuilt and sent to every app
+  only when the xkb settings changed, a config file written while a reload
+  runs is reloaded too, and setoption no longer leaks memory.
+- Less CPU: the bar gets one status update per action instead of three to
+  six; an app gets one configure per layout change instead of one per frame
+  it draws while it has not answered; a mouse drag moves the window once per
+  frame (a resize ends exactly under the pointer); a title set again unchanged
+  does nothing; long tab titles cost about 40% less during animations.
+- Group tabs: a window that auto-joins a group no longer makes the hidden tab
+  shrink to half width; the special workspace's border and shadow fade with
+  it.
+
 ## October 2026
 
 Changed (2026-10-29) - the bar is `rust-bar`, a rewrite of the quickshell bar

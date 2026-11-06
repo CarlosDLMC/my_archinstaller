@@ -109,8 +109,8 @@ cards and the overview (SUPER+A), tab groups, the window and workspace
 animations, the lock screen, and the wallust theming that follows the
 wallpaper. Where stock mango behaved differently, it is patched:
 `pkgbuilds/mangowm` is Arch's mango package built from our fork,
-[CarlosDLMC/mango](https://github.com/CarlosDLMC/mango) (mango 0.18.3 plus
-sixteen commits), by `install-scripts/mango-patched.sh`; each change is an
+[CarlosDLMC/mango](https://github.com/CarlosDLMC/mango) (mango 0.18.5 plus
+sixteen changes and fifteen fixes), by `install-scripts/mango-patched.sh`; each change is an
 option the config turns on:
 
 - windows keep their content at native size while they move or resize (no
@@ -356,7 +356,7 @@ first prompt.
 ### Core System
 - mango (mangowm), hypridle, hyprlock. mango is built from `pkgbuilds/mangowm` by
   `install-scripts/mango-patched.sh` - no stock mangowm is installed first, makepkg
-  pulls its libraries from the repos - our fork of mango 0.18.3 (sixteen changes) that
+  pulls its libraries from the repos - our fork of mango 0.18.5 (sixteen changes, plus fixes) whose changes
   make it behave like the Hyprland setup this desktop came from - windows keep their
   content at native size while they move (no stretch), only the volume, brightness
   and resize binds repeat when held, reloads keep the keyboard layout, Hyprland's tab
