@@ -24,6 +24,9 @@ code are on top, one commit each:
 - Group tabs: a window that auto-joins a group no longer makes the hidden tab
   shrink to half width; the special workspace's border and shadow fade with
   it.
+- Measured before/after in the README ("The mango fork's review fixes:
+  measured"): a config reload costs mango 44% less and the open apps 95%
+  less, a setoption 85-100% less.
 
 ## October 2026
 

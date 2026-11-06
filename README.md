@@ -203,6 +203,59 @@ the bar entirely would save ~25 MB, and the VRAM bookkeeping only exists on a
 GPU with a lot of VRAM (it serves GPU compute, ROCm/OpenCL). A machine with a
 smaller or integrated GPU idles lower.
 
+### The mango fork's review fixes: measured
+
+mangowm 0.18.5-2 (tag `0.18.5-patched.2`) is the fork rebased onto mango 0.18.5
+plus fourteen fixes from a review of the whole code (see CHANGELOGS, November
+2026). Measured on 6 November 2026 against the same fork without those fixes
+(0.18.5-1): both ran the same scripts in the same sandbox desktop - mango
+headless at 2560x1440, 60 Hz, rendering on the RX 6700 XT, with the real bar
+(rust-bar) and foot terminals - alternating, four runs each (three for the
+keyboard rows), median shown. CPU is each process's own time over all its
+threads; "four terminals" is the four foot processes together.
+
+| Measure | without the fixes | 0.18.5-2 | Change |
+|---|---:|---:|---:|
+| **20 config reloads** (what a wallpaper change triggers) | | | |
+| mango | 241 ms | 134 ms | -44% |
+| bar | 25 ms | 8 ms | -68% |
+| four terminals | 214 ms | 10 ms | **-95%** |
+| **50 `setoption` calls** (RofiPreviewMode, MoveWorkspaceWindows) | | | |
+| mango | 344 ms | 53 ms | **-85%** |
+| bar | 59 ms | 15 ms | -75% |
+| four terminals | 562 ms | 0 ms | **-100%** |
+| mango's heap growth | +2.4 MB | +16 KB | leak gone |
+| **A focused tab setting the same title 1000 times** (200 a second, as some web pages do) | | | |
+| mango | 70 ms | 10 ms | **-86%** |
+| bar | 23 ms | 0 ms | -100% |
+| **Long tab titles while their group shrinks and grows** (three tabs, a window opening and closing beside them 4 times) | | | |
+| mango | 321 ms | 204 ms | -37% |
+| **10 window actions** (open a window, switch workspace away and back, close it) | | | |
+| status messages the bar receives | 150 | 40 | -73% |
+| bar | 24 ms | 20 ms | -15% |
+| mango | 601 ms | 610 ms | same (drawing the animations is the cost) |
+| **A window opening and closing beside four terminals, 10 times** | | | |
+| bar | 11 ms | 8 ms | -24% |
+| four terminals | 25 ms | 25 ms | same |
+| **Mouse, 3000 events at 2000 a second** | | | |
+| dragging a floating window, mango | 31 ms | 28 ms | -10% |
+| resizing it by its corner, mango | 45 ms | 44 ms | same (it now ends exactly under the pointer) |
+| **Idle 30 s** (bar, five terminals, a group) | | | |
+| mango | 3 ms | 1.5 ms | both negligible |
+| mango's own memory (8 windows open) | 25 MB | 25 MB | same |
+
+Why the reload rows fall so far: every reload compiled the keyboard map again
+and sent it to every app, and each app re-parsed it - 2.5-3 ms per terminal per
+reload here. On a real session every open app with a keyboard does the same
+(the browser, Telegram, Slack, Xwayland's apps), so the saving grows with what
+is open. The keymap is now rebuilt only when the xkb settings change.
+
+Not in the table because they are counts, not time: an app that is slow to
+answer a resize got one configure per frame it drew in the meantime - a test
+client that draws every 16 ms and answers 50 ms late got 425 configures over
+six layout changes, and now gets 8 (one per change). And a window that
+auto-joins a group no longer makes the hidden tab redraw at half width.
+
 ## Quick Install (Fresh Arch System)
 
 ### Prerequisites
