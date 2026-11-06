@@ -1,0 +1,286 @@
+From ba6a07e9efc1b5b857745fcf3174b4bf43ab45f3 Mon Sep 17 00:00:00 2001
+From: CarlosDLMC <delamorenacoco.carlos@gmail.com>
+Date: Fri, 6 Nov 2026 12:54:02 +0100
+Subject: [PATCH] feat: Delete removes the picked item, arrows move it
+
+The item last picked up with the pointer is selected (outlined). Delete
+removes just it (undo puts it back); with none selected Delete still clears
+everything. Arrow keys move it 1 px, Shift 10, one undo step per run.
+---
+ src/femtovg_area/imp.rs | 78 +++++++++++++++++++++++++++++++++++++++++
+ src/femtovg_area/mod.rs | 28 +++++++++++++++
+ src/sketch_board.rs     | 39 +++++++++++++++++++--
+ 3 files changed, 143 insertions(+), 2 deletions(-)
+
+diff --git a/src/femtovg_area/imp.rs b/src/femtovg_area/imp.rs
+index 2c62f8c..305023a 100644
+--- a/src/femtovg_area/imp.rs
++++ b/src/femtovg_area/imp.rs
+@@ -69,6 +69,8 @@ pub struct FemtoVgAreaMut {
+     size_changed: bool,
+     // the drawable being dragged, outlined on screen
+     grabbed: Option<usize>,
++    // the drawable last picked up: outlined, and what Delete removes
++    selected: Option<usize>,
+     // the drawable reopened in its tool: hidden, and the next commit
+     // replaces it
+     editing: Option<usize>,
+@@ -82,6 +84,12 @@ enum HistoryEntry {
+         index: usize,
+         drawable: Box<dyn Drawable>,
+     },
++    // a committed drawable deleted with Delete; undo puts it back at `index`
++    // (on the redo stack it holds the drawable's place, removal is replayed)
++    Remove {
++        index: usize,
++        drawable: Box<dyn Drawable>,
++    },
+     // a committed drawable dragged by `delta`
+     Move {
+         index: usize,
+@@ -245,6 +253,7 @@ impl FemtoVGArea {
+             stale_images: Vec::new(),
+             size_changed: false,
+             grabbed: None,
++            selected: None,
+             editing: None,
+         });
+         self.sender.borrow_mut().replace(sender);
+@@ -387,6 +396,7 @@ impl FemtoVGArea {
+ 
+ impl FemtoVgAreaMut {
+     pub fn commit(&mut self, drawable: Box<dyn Drawable>) {
++        self.selected = None;
+         if let Some(index) = self.editing.take()
+             && index < self.drawables.len()
+         {
+@@ -405,6 +415,7 @@ impl FemtoVgAreaMut {
+     }
+ 
+     pub fn undo(&mut self) -> bool {
++        self.selected = None;
+         match self.undo_stack.pop() {
+             Some(HistoryEntry::Drawable(history_drawable)) => {
+                 let mut drawable = self.drawables.pop().unwrap_or(history_drawable);
+@@ -432,6 +443,17 @@ impl FemtoVgAreaMut {
+                 self.redo_stack.push(entry);
+                 true
+             }
++            Some(HistoryEntry::Remove { index, mut drawable }) => {
++                drawable.handle_redo();
++                let index = index.min(self.drawables.len());
++                self.redo_stack.push(HistoryEntry::Remove {
++                    index,
++                    drawable: drawable.clone_box(),
++                });
++                self.drawables.insert(index, drawable);
++                self.drawables_moved();
++                true
++            }
+             Some(HistoryEntry::Move { index, delta }) => {
+                 self.move_drawable(index, Vec2D::zero() - delta);
+                 self.drawables_moved();
+@@ -443,6 +465,7 @@ impl FemtoVgAreaMut {
+     }
+ 
+     pub fn redo(&mut self) -> bool {
++        self.selected = None;
+         match self.redo_stack.pop() {
+             Some(HistoryEntry::Drawable(mut drawable)) => {
+                 drawable.handle_redo();
+@@ -471,6 +494,15 @@ impl FemtoVgAreaMut {
+                 self.undo_stack.push(entry);
+                 true
+             }
++            Some(HistoryEntry::Remove { index, mut drawable }) => {
++                if index < self.drawables.len() {
++                    self.drawables.remove(index);
++                }
++                drawable.handle_undo();
++                self.undo_stack.push(HistoryEntry::Remove { index, drawable });
++                self.drawables_moved();
++                true
++            }
+             Some(HistoryEntry::Move { index, delta }) => {
+                 self.move_drawable(index, delta);
+                 self.drawables_moved();
+@@ -482,6 +514,7 @@ impl FemtoVgAreaMut {
+     }
+ 
+     pub fn clear_all(&mut self) -> bool {
++        self.selected = None;
+         if self.drawables.is_empty() {
+             return false;
+         }
+@@ -581,6 +614,50 @@ impl FemtoVgAreaMut {
+         self.grabbed = index;
+     }
+ 
++    pub fn set_selected(&mut self, index: Option<usize>) {
++        self.selected = index.filter(|i| *i < self.drawables.len());
++    }
++
++    // Move the selected drawable by `delta` (arrow keys). Presses in a row on
++    // the same drawable are one undo step. False when none is selected.
++    pub fn nudge_selected(&mut self, delta: Vec2D) -> bool {
++        let Some(index) = self.selected else {
++            return false;
++        };
++        if index >= self.drawables.len() || self.editing.is_some() {
++            return false;
++        }
++        self.move_drawable(index, delta);
++        self.drawables_moved();
++        match self.undo_stack.last_mut() {
++            Some(HistoryEntry::Move { index: i, delta: d }) if *i == index => {
++                *d = *d + delta;
++            }
++            _ => self.undo_stack.push(HistoryEntry::Move { index, delta }),
++        }
++        self.redo_stack.clear();
++        true
++    }
++
++    pub fn has_selected(&self) -> bool {
++        self.selected.is_some()
++    }
++
++    // Delete the drawable last picked up (one undo step). False when none is.
++    pub fn remove_selected(&mut self) -> bool {
++        let Some(index) = self.selected.take() else {
++            return false;
++        };
++        if index >= self.drawables.len() || self.editing.is_some() {
++            return false;
++        }
++        let drawable = self.drawables.remove(index);
++        self.undo_stack.push(HistoryEntry::Remove { index, drawable });
++        self.redo_stack.clear();
++        self.drawables_moved();
++        true
++    }
++
+     // A finished drag goes on the undo stack.
+     pub fn commit_move(&mut self, index: usize, delta: Vec2D) {
+         if delta.is_zero() || index >= self.drawables.len() {
+@@ -817,6 +894,7 @@ impl FemtoVgAreaMut {
+         if render_crop
+             && let Some((tl, br)) = self
+                 .grabbed
++                .or(self.selected)
+                 .and_then(|i| self.drawables.get(i))
+                 .and_then(|d| d.bounds())
+         {
+diff --git a/src/femtovg_area/mod.rs b/src/femtovg_area/mod.rs
+index efb5dd8..7b29485 100644
+--- a/src/femtovg_area/mod.rs
++++ b/src/femtovg_area/mod.rs
+@@ -90,6 +90,34 @@ impl FemtoVGArea {
+             .expect("Did you call init before using FemtoVgArea?")
+             .set_grabbed(index);
+     }
++    pub fn set_selected(&self, index: Option<usize>) {
++        self.imp()
++            .inner()
++            .as_mut()
++            .expect("Did you call init before using FemtoVgArea?")
++            .set_selected(index);
++    }
++    pub fn nudge_selected(&mut self, delta: Vec2D) -> bool {
++        self.imp()
++            .inner()
++            .as_mut()
++            .expect("Did you call init before using FemtoVgArea?")
++            .nudge_selected(delta)
++    }
++    pub fn has_selected(&self) -> bool {
++        self.imp()
++            .inner()
++            .as_ref()
++            .expect("Did you call init before using FemtoVgArea?")
++            .has_selected()
++    }
++    pub fn remove_selected(&mut self) -> bool {
++        self.imp()
++            .inner()
++            .as_mut()
++            .expect("Did you call init before using FemtoVgArea?")
++            .remove_selected()
++    }
+     pub fn commit_move(&mut self, index: usize, delta: Vec2D) {
+         self.imp()
+             .inner()
+diff --git a/src/sketch_board.rs b/src/sketch_board.rs
+index 1697e7a..577259b 100644
+--- a/src/sketch_board.rs
++++ b/src/sketch_board.rs
+@@ -827,7 +827,14 @@ impl SketchBoard {
+                 {
+                     return None;
+                 }
+-                let index = self.renderer.movable_at(me.pos, texts_only)?;
++                let Some(index) = self.renderer.movable_at(me.pos, texts_only) else {
++                    // a press on nothing drops the selection (and its outline)
++                    if self.renderer.has_selected() {
++                        self.renderer.set_selected(None);
++                        self.renderer.request_render(&[]);
++                    }
++                    return None;
++                };
+                 self.deactivate_active_tool();
+                 self.renderer.set_grabbed(Some(index));
+                 self.grabbed = Some(GrabbedDrawable {
+@@ -846,6 +853,8 @@ impl SketchBoard {
+                 if me.type_ == MouseEventType::EndDrag {
+                     self.renderer.set_grabbed(None);
+                     self.grabbed = None;
++                    // what was last picked up is what Delete removes
++                    self.renderer.set_selected(Some(index));
+                     // a click (no real drag) on a text opens it for editing
+                     if moved.norm() < 2.0 && self.renderer.is_text(index) {
+                         self.renderer.move_drawable(index, Vec2D::zero() - moved);
+@@ -1305,6 +1314,26 @@ impl Component for SketchBoard {
+                                  */
+                                 gtk::Window::set_interactive_debugging(true);
+                                 ToolUpdateResult::Unmodified
++                            } else if (ke.is_one_of(Key::leftarrow, KeyMappingId::ArrowLeft)
++                                || ke.is_one_of(Key::rightarrow, KeyMappingId::ArrowRight)
++                                || ke.is_one_of(Key::uparrow, KeyMappingId::ArrowUp)
++                                || ke.is_one_of(Key::downarrow, KeyMappingId::ArrowDown))
++                                && (ke.modifier.is_empty() || ke.modifier == ModifierType::SHIFT_MASK)
++                                && self.renderer.has_selected()
++                            {
++                                // the selected item moves 1 px, 10 with Shift
++                                let step = if ke.modifier.is_empty() { 1.0 } else { 10.0 };
++                                let delta = match ke.key {
++                                    Key::Left => Vec2D::new(-step, 0.),
++                                    Key::Right => Vec2D::new(step, 0.),
++                                    Key::Up => Vec2D::new(0., -step),
++                                    _ => Vec2D::new(0., step),
++                                };
++                                if self.renderer.nudge_selected(delta) {
++                                    ToolUpdateResult::Redraw
++                                } else {
++                                    ToolUpdateResult::Unmodified
++                                }
+                             } else if (ke.is_one_of(Key::leftarrow, KeyMappingId::ArrowLeft)
+                                 || ke.is_one_of(Key::rightarrow, KeyMappingId::ArrowRight)
+                                 || ke.is_one_of(Key::uparrow, KeyMappingId::ArrowUp)
+@@ -1332,7 +1361,13 @@ impl Component for SketchBoard {
+                                 self.renderer.request_render(&[]);
+                                 ToolUpdateResult::Unmodified
+                             } else if ke.modifier.is_empty() && ke.key == Key::Delete {
+-                                self.handle_clear_all()
++                                // the item last picked up goes alone; with none
++                                // picked up Delete still clears everything
++                                if self.renderer.remove_selected() {
++                                    ToolUpdateResult::Redraw
++                                } else {
++                                    self.handle_clear_all()
++                                }
+                             } else if ke.modifier.is_empty()
+                                 && (ke.key == Key::Escape
+                                     || ke.key == Key::Return
+-- 
+2.56.0
+

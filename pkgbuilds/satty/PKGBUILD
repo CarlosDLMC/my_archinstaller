@@ -22,6 +22,11 @@
 # it. Enter or a click elsewhere puts the edit in place of the original (one
 # undo step), Escape leaves it as it was, emptying it deletes it.
 #
+# select-delete-nudge.patch: the item last picked up with the pointer stays
+# selected (outlined) until a click on empty canvas. Delete removes just it
+# (one undo step; with none selected Delete still clears everything) and the
+# arrow keys move it 1 px, Shift+arrow 10 (a run of presses is one undo step).
+#
 # install-scripts/satty-patched.sh builds this with makepkg and puts satty in
 # IgnorePkg. pkgrel is above the repos' (Arch 1, CachyOS 1.1) as well. To follow
 # a new satty, set pkgver and the tarball's sha256 and re-apply the patches
@@ -35,8 +40,8 @@
 
 pkgname=satty
 pkgver=0.22.0
-pkgrel=5
-pkgdesc="Modern screenshot annotation tool, inspired by Swappy and Flameshot (rotate, drag-text, move-any and edit-text patches)"
+pkgrel=6
+pkgdesc="Modern screenshot annotation tool, inspired by Swappy and Flameshot (rotate, drag-text, move-any, edit-text and select-delete-nudge patches)"
 arch=(x86_64)
 url="https://github.com/gabm/satty"
 license=(MPL-2.0)
@@ -56,12 +61,14 @@ source=("${pkgname}-${pkgver}.tar.gz::https://github.com/gabm/satty/archive/refs
         'rotate.patch'
         'drag-text.patch'
         'move-any.patch'
-        'edit-text.patch')
+        'edit-text.patch'
+        'select-delete-nudge.patch')
 sha256sums=('eee18b5f9eabf164da69c7e6e916c98afb78dd296d83e28bb96d9f9636a5fe36'
             '47c1a0e22c387ab3f3c4c1dc658fcbae910b9a43993494206c2a90647911f64d'
             '10f9783e025f8e588e1530ad61ada93dd461a6c2c57ed469b6ee067ffb6c359e'
             'b3acaa344e34c3140c7b5b2be506a5d99871be0566209a270664b95c17f9e3a2'
-            'd254a728ef4b448540818bfaac262fb2f53618ae06f98d0db41f41de0fb4cc0c')
+            'd254a728ef4b448540818bfaac262fb2f53618ae06f98d0db41f41de0fb4cc0c'
+            '4ac8714b8d4f37013bbc841c9d179acf9c05559ece71499644a1a13e70dcd7bc')
 
 _srcname="Satty-${pkgver}"
 
@@ -71,6 +78,7 @@ prepare() {
   patch -Np1 -i "${srcdir}/drag-text.patch"
   patch -Np1 -i "${srcdir}/move-any.patch"
   patch -Np1 -i "${srcdir}/edit-text.patch"
+  patch -Np1 -i "${srcdir}/select-delete-nudge.patch"
   cargo fetch --locked --target "$(rustc --print host-tuple)"
 }
 

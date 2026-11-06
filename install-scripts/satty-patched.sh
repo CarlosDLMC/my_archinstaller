@@ -5,7 +5,7 @@
 # PKGBUILD is Arch's satty plus one patch per change: rotate.patch adds rotate
 # left/right buttons (Ctrl-Shift-R / Ctrl-R), drag-text.patch lets a written
 # text be dragged to a new place, move-any.patch lets the pointer tool drag
-# anything drawn, edit-text.patch reopens a clicked text for editing. See pkgbuilds/satty/PKGBUILD.
+# anything drawn, edit-text.patch reopens a clicked text for editing, select-delete-nudge.patch makes Delete remove just the picked item and the arrows move it. See pkgbuilds/satty/PKGBUILD.
 #
 # Runs after 01-desktop-pkgs.sh, which installs the stock satty. If this build
 # fails, that stock satty stays and screenshots work without the patches, so a
