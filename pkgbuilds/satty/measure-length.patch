@@ -1,0 +1,156 @@
+From 428f962d0262fb7debc2bdc4a6daa6a92695ab9e Mon Sep 17 00:00:00 2001
+From: CarlosDLMC <delamorenacoco.carlos@gmail.com>
+Date: Sun, 15 Nov 2026 21:50:23 +0100
+Subject: [PATCH] feat: label an arrow's or line's length on screen
+
+---
+ src/femtovg_area/imp.rs | 80 +++++++++++++++++++++++++++++++++++++++++
+ src/tools/arrow.rs      |  4 +++
+ src/tools/line.rs       |  4 +++
+ src/tools/mod.rs        |  5 +++
+ 4 files changed, 93 insertions(+)
+
+diff --git a/src/femtovg_area/imp.rs b/src/femtovg_area/imp.rs
+index 305023a..6692ad0 100644
+--- a/src/femtovg_area/imp.rs
++++ b/src/femtovg_area/imp.rs
+@@ -912,6 +912,24 @@ impl FemtoVgAreaMut {
+             canvas.stroke_path(&path, &paint);
+         }
+ 
++        // label the length of the arrow or line being drawn, dragged or
++        // picked (on screen only)
++        if render_crop {
++            let tool_measure = self
++                .active_tool
++                .borrow()
++                .get_drawable()
++                .and_then(|d| d.measure());
++            let picked_measure = self
++                .grabbed
++                .or(self.selected)
++                .and_then(|i| self.drawables.get(i))
++                .and_then(|d| d.measure());
++            for (start, end) in tool_measure.into_iter().chain(picked_measure) {
++                draw_length_label(canvas, font, start, end, bounds)?;
++            }
++        }
++
+         // render crop tool
+         if render_crop && let Some(c) = self.crop_tool.borrow().get_crop() {
+             c.draw(canvas, font, bounds)?;
+@@ -1199,3 +1217,65 @@ impl FemtoVgAreaMut {
+         self.is_drag = is_drag;
+     }
+ }
++
++// A tag past the tip of a straight drawing: its length and its horizontal
++// and vertical extent, in image pixels. Sized in screen pixels, kept inside
++// the image.
++fn draw_length_label(
++    canvas: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
++    font: FontId,
++    start: Vec2D,
++    end: Vec2D,
++    bounds: (Vec2D, Vec2D),
++) -> Result<()> {
++    let delta = end - start;
++    let length = delta.norm();
++    if length < 1.0 {
++        return Ok(());
++    }
++    let text = format!(
++        "{} px  \u{394}x {}  \u{394}y {}",
++        length.round() as i64,
++        delta.x.abs().round() as i64,
++        delta.y.abs().round() as i64
++    );
++
++    let scale = canvas.transform().average_scale();
++    let mut paint = Paint::color(femtovg::Color::rgbf(1.0, 1.0, 1.0));
++    let fonts = font_stack();
++    if fonts.is_empty() {
++        paint.set_font(&[font]);
++    } else {
++        paint.set_font(fonts);
++    }
++    paint.set_font_size(26.0 / scale);
++    paint.set_text_align(femtovg::Align::Center);
++    paint.set_text_baseline(femtovg::Baseline::Middle);
++    let metrics = canvas.measure_text(0.0, 0.0, &text, &paint)?;
++
++    let pad = 12.0 / scale;
++    let w = metrics.width() + 2.0 * pad;
++    let h = 26.0 * 1.6 / scale;
++
++    // just past the tip, pushed outward along the drawing's direction
++    let dir = delta * (1.0 / length);
++    let anchor = end + dir * (16.0 / scale);
++    let mut cx = anchor.x + dir.x * w / 2.0;
++    let mut cy = anchor.y + dir.y * h / 2.0;
++    let (lo, hi) = bounds;
++    cx = cx.min(hi.x - w / 2.0).max(lo.x + w / 2.0);
++    cy = cy.min(hi.y - h / 2.0).max(lo.y + h / 2.0);
++
++    let mut box_path = Path::new();
++    box_path.rounded_rect(cx - w / 2.0, cy - h / 2.0, w, h, 6.0 / scale);
++    canvas.fill_path(
++        &box_path,
++        &Paint::color(femtovg::Color::rgbaf(0.08, 0.08, 0.08, 0.85)),
++    );
++    canvas.stroke_path(
++        &box_path,
++        &Paint::color(femtovg::Color::rgbaf(1.0, 0.5, 0.3, 0.9)).with_line_width(1.0 / scale),
++    );
++    canvas.fill_text(cx, cy, &text, &paint)?;
++    Ok(())
++}
+diff --git a/src/tools/arrow.rs b/src/tools/arrow.rs
+index 5a4fa00..3efd2a7 100644
+--- a/src/tools/arrow.rs
++++ b/src/tools/arrow.rs
+@@ -170,6 +170,10 @@ impl Drawable for Arrow {
+         crate::math::bounds_of(&[self.start, self.end?], self.grab_reach())
+     }
+ 
++    fn measure(&self) -> Option<(Vec2D, Vec2D)> {
++        Some((self.start, self.end?))
++    }
++
+     fn draw(
+         &self,
+         canvas: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
+diff --git a/src/tools/line.rs b/src/tools/line.rs
+index c8301f9..b128ac5 100644
+--- a/src/tools/line.rs
++++ b/src/tools/line.rs
+@@ -55,6 +55,10 @@ impl Drawable for Line {
+         crate::math::bounds_of(&[self.start, self.start + d], w)
+     }
+ 
++    fn measure(&self) -> Option<(Vec2D, Vec2D)> {
++        Some((self.start, self.start + self.direction?))
++    }
++
+     fn draw(
+         &self,
+         canvas: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
+diff --git a/src/tools/mod.rs b/src/tools/mod.rs
+index 1e96b26..ebb354b 100644
+--- a/src/tools/mod.rs
++++ b/src/tools/mod.rs
+@@ -181,6 +181,11 @@ pub trait Drawable: DrawableClone + Debug {
+     fn bounds(&self) -> Option<(Vec2D, Vec2D)> {
+         None
+     }
++    // (start, end) of a straight drawing (arrow, line), labelled with its
++    // length on screen
++    fn measure(&self) -> Option<(Vec2D, Vec2D)> {
++        None
++    }
+     // the text tool picks up texts only
+     fn is_text(&self) -> bool {
+         false
+-- 
+2.56.1
+
