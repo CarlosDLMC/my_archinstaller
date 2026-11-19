@@ -1,0 +1,36 @@
+#!/bin/bash
+# rofi, with the compact copy of its configs on a screen with big pixels.
+#
+# Installed as /usr/local/bin/rofi (ahead of /usr/bin in PATH) by
+# install-scripts/rofi-compact.sh. While ~/.cache/rofi-compact/.on exists -
+# DisplayDensity.sh's compact profile sets it through RofiCompact.sh - every
+# config path under ~/.config/rofi in the arguments is replaced by the same
+# file in ~/.cache/rofi-compact, where the pixel and font sizes are at 80%,
+# and a call with no -config gets the copy's config.rasi. The copy is built
+# again first when a file in ~/.config/rofi is newer than it. Without the
+# switch this is plain rofi.
+
+real=/usr/bin/rofi
+src="$HOME/.config/rofi"
+dst="$HOME/.cache/rofi-compact"
+
+[[ -e $dst/.on ]] || exec "$real" "$@"
+
+if [[ -n $(find "$src" -path "$src/wallust" -prune -o -newer "$dst/.stamp" -print -quit 2>/dev/null) ]]; then
+  "$HOME/.config/hypr/scripts/RofiCompact.sh" build
+fi
+[[ -f $dst/config.rasi ]] || exec "$real" "$@"
+
+args=()
+has_config=0
+for a in "$@"; do
+  case $a in
+    -config | -theme) has_config=1 ;;
+    "$src"/wallust/* | "~/.config/rofi/wallust/"*) ;;
+    "$src"/*) a="$dst/${a#"$src"/}" ;;
+    "~/.config/rofi/"*) a="$dst/${a#"~/.config/rofi/"}" ;;
+  esac
+  args+=("$a")
+done
+(( has_config )) || args=(-config "$dst/config.rasi" "${args[@]}")
+exec "$real" "${args[@]}"

@@ -1215,6 +1215,10 @@ echo "${INFO} Installing the ${SKY_BLUE}WireGuard killswitch helpers...${RESET}"
 sleep 1
 execute_script "vpn_tools.sh"
 
+echo "${INFO} Installing the ${SKY_BLUE}rofi wrapper${RESET} for screens with big pixels..." | tee -a "$LOG"
+sleep 1
+execute_script "rofi-compact.sh"
+
 echo "${INFO} Installing ${SKY_BLUE}necessary fonts...${RESET}" | tee -a "$LOG"
 sleep 1
 execute_script "fonts.sh"

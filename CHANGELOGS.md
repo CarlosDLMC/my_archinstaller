@@ -9,6 +9,14 @@ GTK text scaling 0.8, Qt fonts 11/10, rofi 13 and dunst 13; otherwise the
 normal 1.0, 14/12, 16 and 16 the repo ships. The monitor scale never goes
 below 1 - 0.8 made text uneven. foot is not touched: it is DPI-aware.
 
+- The compact profile is 80% for the notifications and the rofi menus too,
+  not only their body font. Notifications: a drop-in generated from `dunstrc`
+  (`dunst/dunstrc.d/90-display-density.conf`) with the card's width, paddings
+  and every font scaled. rofi: `RofiCompact.sh` keeps a copy of
+  `~/.config/rofi` in `~/.cache/rofi-compact` with every pixel and font size
+  scaled, and a wrapper, `/usr/local/bin/rofi` (`install-scripts/rofi-compact.sh`),
+  sends rofi to it while the profile is on. `dunstrc` and the rofi files
+  themselves are no longer edited.
 - Screens with small pixels get a monitor scale from it: the one of 1, 1.25,
   1.5, 1.75, 2 that brings the screen closest to 123 PPI (155 for a laptop
   panel) - a 27" 4K gets 1.25, a 24" 4K 1.5, a 14" 4K laptop 2. It writes them
