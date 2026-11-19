@@ -38,6 +38,9 @@ hypr_package=(
   # The outputs as JSON for the bar's capture dialogs (rust-bar/src/capture.rs):
   # wlr-randr replaces `hyprctl monitors` there.
   wlr-randr
+  # The screensaver on the other monitors: a live copy of the one it is drawn
+  # on (Screensaver.sh). Without it they keep showing the desktop.
+  wl-mirror
   # The polkit agent is the bar (rust-bar's polkit.rs); Polkit.sh starts this one
   # only when the bar is not there to answer.
   hyprpolkitagent

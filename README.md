@@ -520,6 +520,7 @@ first prompt.
   filter is missing; the raw microphone keeps working
 - ttfx (terminal text effects, the screensaver's animations — AUR, built without
   its tests, see [Screensaver](#screensaver-ascii-art))
+- wl-mirror (the screensaver's live copy on the other monitors)
 
 ## Configuration
 
@@ -2176,6 +2177,10 @@ picked by hand (decrypt, burn, rain, fireworks, vhstape...) — until you come b
 
 `CTRL + ALT + L` still locks straight away, without the screensaver.
 
+- With more than one monitor it is drawn once, on the focused one, and every other
+  monitor shows a live copy of that screen (`wl-mirror`, on the GPU) - a terminal per
+  monitor would cost the CPU once each. The mouse over a copy ends it within half a
+  second.
 - Any key, mouse movement or click, or the window losing focus ends it.
 - With `--lock` it locks first and closes second: its last frame stays up until the
   lock screen has started (at most 3 s), so the desktop never shows in between. With

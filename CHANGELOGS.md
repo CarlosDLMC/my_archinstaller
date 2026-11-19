@@ -2,6 +2,12 @@
 
 ## November 2026
 
+Changed (2026-11-19) - the screensaver covers every monitor. It ran on the
+focused one only and the others kept showing the desktop. `Screensaver.sh`
+still draws it once; every other monitor shows a live copy of that screen
+(`wl-mirror`, new in `01-desktop-pkgs.sh`; window rule in `mango/rules.conf`).
+The launcher now stays behind the windows and ends them all.
+
 Added (2026-11-19) - the interface size follows the screen's pixel density.
 `DisplayDensity.sh` runs at login and from Quick Settings > «Размер
 интерфейса»: on a main screen below 100 PPI (a 27" 1920x1080 is ~81) it sets
