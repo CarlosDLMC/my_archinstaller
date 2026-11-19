@@ -97,6 +97,12 @@ pub struct Scene {
     pub clip: [f32; 4],
     pub sclip: [f32; 4],
     pub opacity: f32,
+    /// The zoom of a zoomed window (Win::zoom), 0 for none: under exactly that
+    /// scale (not while something animates a scale of its own), rectangles, holes
+    /// and images go onto whole device pixels (snapped), so a 1 px line at
+    /// zoom 0.8 is one pixel and not 0.8 of one that lights or not by where
+    /// it falls. clear() turns it off.
+    pub snap: f32,
     stack: Vec<(Xf, [f32; 4], [f32; 4], f32)>,
     atlas_size: (f32, f32),
 }
@@ -137,6 +143,7 @@ impl Scene {
             clip: [0.0, 0.0, width, height],
             sclip: NO_SKEW_CLIP,
             opacity: 1.0,
+            snap: 0.0,
             stack: Vec::new(),
             atlas_size: (1.0, 1.0),
         }
@@ -149,6 +156,7 @@ impl Scene {
         self.clip = [0.0, 0.0, width, height];
         self.sclip = NO_SKEW_CLIP;
         self.opacity = 1.0;
+        self.snap = 0.0;
         self.stack.clear();
     }
 
@@ -233,11 +241,33 @@ impl Scene {
         if fill.a <= 0.0 && (border <= 0.0 || border_color.a <= 0.0) {
             return;
         }
-        let mut i = self.base(x, y, w, h);
+        let (mut i, radius, border) = match self.snapped(x, y, w, h) {
+            // A border is whole pixels too, and at least one.
+            Some((r, z)) => (self.base_device(r), radius * z, if border > 0.0 { (border * z).round().max(1.0) } else { 0.0 }),
+            None => (self.base(x, y, w, h), radius, border),
+        };
         i.color = fill.premul(self.opacity);
         i.color2 = border_color.premul(self.opacity);
         i.p0 = [radius, border, if aa { 1.0 } else { 0.0 }, 0.0];
         self.push(Pipe::Rect, i);
+    }
+
+    /// The rectangle in device pixels with its edges on whole pixels (never
+    /// thinner than one), and the zoom - when the scene snaps and this draw
+    /// is under exactly the window's zoom.
+    fn snapped(&self, x: f32, y: f32, w: f32, h: f32) -> Option<([f32; 4], f32)> {
+        let (z, xf) = (self.snap, &self.xf);
+        if z <= 0.0 || xf.b != 0.0 || xf.c != 0.0 || (xf.a - z).abs() > 1e-4 || (xf.d - z).abs() > 1e-4 {
+            return None;
+        }
+        let (x0, y0) = ((z * x + xf.tx).round(), (z * y + xf.ty).round());
+        let (x1, y1) = ((z * (x + w) + xf.tx).round().max(x0 + 1.0), (z * (y + h) + xf.ty).round().max(y0 + 1.0));
+        Some(([x0, y0, x1 - x0, y1 - y0], z))
+    }
+
+    /// base() for a rectangle that is in device pixels already.
+    fn base_device(&self, r: [f32; 4]) -> Inst {
+        Inst { rect: r, xf0: [1.0, 0.0, 0.0], xf1: [0.0, 1.0, 0.0], clip: self.clip, sclip: self.sclip, ..Default::default() }
     }
 
     /// A transparent hole in what is drawn so far, whole pixels by the fill
@@ -246,7 +276,10 @@ impl Scene {
         if w <= 0.0 || h <= 0.0 {
             return;
         }
-        let i = self.base(x, y, w, h);
+        let i = match self.snapped(x, y, w, h) {
+            Some((r, _)) => self.base_device(r),
+            None => self.base(x, y, w, h),
+        };
         self.push(Pipe::Clear, i);
     }
 
@@ -394,7 +427,10 @@ impl Scene {
         if self.opacity <= 0.0 {
             return;
         }
-        let mut i = self.base(x, y, w, h);
+        let mut i = match self.snapped(x, y, w, h) {
+            Some((r, _)) => self.base_device(r),
+            None => self.base(x, y, w, h),
+        };
         i.uv = uv;
         i.p0 = [self.opacity, 0.0, 0.0, 0.0];
         self.push(Pipe::Image(id), i);

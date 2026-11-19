@@ -306,10 +306,7 @@ fn reshow(app: &mut App) {
         let (sw, sh) = o.screen;
         if (o.panel.2 - pw).abs() >= 0.5 || (o.panel.3 - ph).abs() >= 0.5 {
             o.panel = (0.0, 0.0, pw, ph);
-            o.win.width = pw.ceil() as u32;
-            o.win.height = ph.ceil() as u32;
-            o.win.layer.set_size(pw.ceil() as u32, ph.ceil() as u32);
-            o.win.layer.set_margin(ac(sh, ph) as i32, 0, 0, ac(sw, pw) as i32);
+            o.win.resize(pw.ceil() as u32, ph.ceil() as u32, Some((ac(sh, ph) as i32, ac(sw, pw) as i32)));
             o.win.layer.commit();
         }
         o.win.dirty = true;

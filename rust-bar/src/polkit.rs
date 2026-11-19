@@ -683,12 +683,10 @@ fn reshow(app: &mut App) {
     if (o.panel.3 - h).abs() >= 0.5 {
         use smithay_client_toolkit::shell::WaylandSurface;
         o.panel.3 = h;
-        o.win.height = h.ceil() as u32;
-        o.win.layer.set_size(m.card_w as u32, h.ceil() as u32);
         // anchors.centerIn on the dialog's own screen (not the focused one,
         // which may have changed since it opened).
         let (sw, sh) = o.screen;
-        o.win.layer.set_margin(ac(sh, h) as i32, 0, 0, ac(sw, m.card_w) as i32);
+        o.win.resize(m.card_w as u32, h.ceil() as u32, Some((ac(sh, h) as i32, ac(sw, m.card_w) as i32)));
         o.win.layer.commit();
     }
 }

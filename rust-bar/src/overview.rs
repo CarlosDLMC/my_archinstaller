@@ -163,7 +163,7 @@ pub fn open(app: &mut App) {
     app.svc.overview.open = true;
     app.svc.overview.shots_pending = true;
     app.svc.overview_screens = app.strips.iter().map(|s| s.name.clone()).collect();
-    let outputs: Vec<_> = app.strips.iter().map(|s| (s.output.clone(), s.screen_width, s.screen_height)).collect();
+    let outputs: Vec<_> = app.strips.iter().map(|s| (s.output.clone(), s.layout_screen().0, s.layout_screen().1)).collect();
     for (i, out) in outputs.into_iter().enumerate() {
         osd::show(app, OpenParams { kind: OsdKind::Overview(i as u8), size: (0, 0), panel: (0.0, 0.0, 0.0, 0.0), dim: None, keyboard: true, namespace: "rust-bar:overview", fade_ms: 0, min_scale: 1.0, fade_easing: Easing::Linear, pos: None, fill: true, output: Some(out) });
     }

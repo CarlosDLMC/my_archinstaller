@@ -97,8 +97,17 @@ pub struct Win {
     /// wl_surface it presents to (create_surface_unsafe's contract).
     gpu: Option<(wgpu::Surface<'static>, wgpu::SurfaceConfiguration)>,
     pub layer: LayerSurface,
+    /// The size its content is laid out in. With zoom 1 these are the
+    /// surface's pixels; a zoomed window lays out in a screen 1 / zoom the
+    /// size and draw() scales the whole scene.
     pub width: u32,
     pub height: u32,
+    /// The surface's own size, in the compositor's pixels: (width, height) * zoom.
+    pub real: (u32, u32),
+    /// bar::density of its screen for a card or an overlay (they are smaller
+    /// on a screen with big pixels), 1 for the rest. Pointer positions are
+    /// divided by it on the way in, sizes and margins multiplied on the way out.
+    pub zoom: f32,
     pub configured: bool,
     pub dirty: bool,
     frame_pending: bool,
@@ -107,7 +116,33 @@ pub struct Win {
 
 impl Win {
     pub fn new(layer: LayerSurface, width: u32, height: u32) -> Win {
-        Win { layer, gpu: None, width, height, configured: false, dirty: true, frame_pending: false, scene: Scene::new(1.0, 1.0) }
+        Win { layer, gpu: None, width, height, real: (width, height), zoom: 1.0, configured: false, dirty: true, frame_pending: false, scene: Scene::new(1.0, 1.0) }
+    }
+
+    /// A window laid out at width x height and shown at `zoom` of that.
+    pub fn zoomed(layer: LayerSurface, width: u32, height: u32, zoom: f32) -> Win {
+        Win { real: real_size(width, height, zoom), zoom, ..Win::new(layer, width, height) }
+    }
+
+    /// A new layout size, and a new place (top, left margins) with it: the
+    /// surface is asked for both at the window's zoom. The caller commits.
+    pub fn resize(&mut self, width: u32, height: u32, at: Option<(i32, i32)>) {
+        (self.width, self.height) = (width, height);
+        self.real = real_size(width, height, self.zoom);
+        self.layer.set_size(self.real.0, self.real.1);
+        if let Some((top, left)) = at {
+            let z = |v: i32| (v as f32 * self.zoom).round() as i32;
+            self.layer.set_margin(z(top), 0, 0, z(left));
+        }
+    }
+}
+
+/// A layout size as surface pixels at `zoom`.
+pub fn real_size(width: u32, height: u32, zoom: f32) -> (u32, u32) {
+    if zoom == 1.0 {
+        (width, height)
+    } else {
+        ((width as f32 * zoom).ceil() as u32, (height as f32 * zoom).ceil() as u32)
     }
 }
 
@@ -123,6 +158,14 @@ pub struct Strip {
     pub pointer: Option<(f32, f32)>,
     /// Which plain Texts have changed (see TextMemo).
     pub texts: crate::text::TextMemo,
+}
+
+impl Strip {
+    /// The screen as this output's cards and overlays lay out in it: its
+    /// size / density (Win::zoom) - a 27" 1920x1080 is a 2400x1350 one to them.
+    pub fn layout_screen(&self) -> (f32, f32) {
+        ((self.screen_width / self.density).round(), (self.screen_height / self.density).round())
+    }
 }
 
 /// The modifiers held (Qt's event.modifiers).
@@ -407,7 +450,7 @@ impl App {
             self.gpu = Some(Gpu::new(Some(&surface), instance));
         }
         let win = self.win_mut(w).unwrap();
-        let (width, height) = (win.width, win.height);
+        let (width, height) = win.real;
         let config = surface_config(self.gpu.as_ref().unwrap(), &surface, width, height);
         self.win_mut(w).unwrap().gpu = Some((surface, config));
     }
@@ -464,8 +507,15 @@ impl App {
         self.ensure_gpu(w);
         let Some(win) = self.win_mut(w) else { return };
         let (width, height) = (win.width, win.height);
+        let (real, zoom) = (win.real, win.zoom);
         let mut scene = std::mem::replace(&mut win.scene, Scene::new(1.0, 1.0));
-        scene.clear(width as f32, height as f32);
+        scene.clear(real.0 as f32, real.1 as f32);
+        if zoom != 1.0 {
+            // The whole window through the zoom, its rectangles on whole
+            // pixels (Scene::snap): a 1 px line is 0.8 px wide otherwise.
+            scene.scale(zoom, zoom);
+            scene.snap = zoom;
+        }
         let animating = match w {
             WinRef::Strip(i) => {
                 let mut memo = std::mem::take(&mut self.strips[i].texts);
@@ -519,6 +569,7 @@ impl App {
         let device = self.gpu.as_ref().unwrap().device.clone();
         let win = self.win_mut(w).unwrap();
         let (surface, config) = win.gpu.as_mut().unwrap();
+        let (width, height) = real;
         if config.width != width.max(1) || config.height != height.max(1) {
             config.width = width.max(1);
             config.height = height.max(1);
@@ -559,7 +610,9 @@ impl App {
         if card.kind != cards::CardKind::Audio {
             return;
         }
-        if card.meter_win.is_none() && card.meter_at.is_some() {
+        // On a zoomed card the card draws the meter itself: a surface of its
+        // own would have to sit on the very pixels the zoomed hole snaps to.
+        if card.meter_win.is_none() && card.meter_at.is_some() && card.win.zoom == 1.0 {
             let parent = card.win.layer.wl_surface().clone();
             let m = crate::audio_card::MeterWin::new(self, &parent);
             self.card.as_mut().unwrap().meter_win = m;
@@ -889,11 +942,20 @@ impl LayerShellHandler for App {
             return;
         };
         let win = self.win_mut(w).unwrap();
+        // The size it asked for keeps its layout size; another one (a
+        // surface anchored to the screen's edges) is that size / zoom.
+        let asked = real_size(win.width, win.height, win.zoom);
         if c.new_size.0 > 0 {
-            win.width = c.new_size.0;
+            win.real.0 = c.new_size.0;
+            if c.new_size.0 != asked.0 {
+                win.width = (c.new_size.0 as f32 / win.zoom).round() as u32;
+            }
         }
         if c.new_size.1 > 0 {
-            win.height = c.new_size.1;
+            win.real.1 = c.new_size.1;
+            if c.new_size.1 != asked.1 {
+                win.height = (c.new_size.1 as f32 / win.zoom).round() as u32;
+            }
         }
         win.configured = true;
         win.dirty = true;
@@ -978,7 +1040,8 @@ impl PointerHandler for App {
                 // eaten; the pointer is not over the card there. (A drag that
                 // started on the card keeps going.) Only the left, right and
                 // middle buttons dismiss: a side button reaches nothing.
-                let (x, y) = (e.position.0 as f32, e.position.1 as f32);
+                let zoom = self.card.as_ref().map_or(1.0, |c| c.win.zoom);
+                let (x, y) = (e.position.0 as f32 / zoom, e.position.1 as f32 / zoom);
                 if !matches!(e.kind, PointerEventKind::Leave { .. }) && !cards::inside(self, x, y) {
                     match e.kind {
                         PointerEventKind::Press { button: BTN_LEFT | BTN_RIGHT | BTN_MIDDLE, .. } => cards::close(self),
@@ -1020,8 +1083,10 @@ impl PointerHandler for App {
                 continue;
             }
             let Some(w) = self.win_of(&e.surface) else { continue };
+            // The pointer in the window's layout coordinates.
+            let zoom = self.win_mut(w).map_or(1.0, |win| win.zoom);
+            let (x, y) = (e.position.0 as f32 / zoom, e.position.1 as f32 / zoom);
             if let WinRef::Osd(k) = w {
-                let (x, y) = (e.position.0 as f32, e.position.1 as f32);
                 if let PointerEventKind::Enter { serial } = e.kind {
                     self.enter_serial = serial;
                 }
@@ -1039,7 +1104,6 @@ impl PointerHandler for App {
                 }
                 continue;
             }
-            let (x, y) = (e.position.0 as f32, e.position.1 as f32);
             match e.kind {
                 PointerEventKind::Enter { serial } => {
                     if let WinRef::Osd(k) = w {

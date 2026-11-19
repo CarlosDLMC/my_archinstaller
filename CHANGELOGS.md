@@ -15,10 +15,13 @@ below 1 - 0.8 made text uneven. foot is not touched: it is DPI-aware.
   to `mango/monitors.conf` between two marker lines, only while that file has
   no rules of its own. `DisplayDensity.sh --plan [FILE]` prints the decisions
   and changes nothing.
-- The bar's strip draws at 80% on a screen below 100 PPI (`bar.rs` `density`,
-  from the output's physical size): on a 27" 1920x1080 it was almost twice
-  the size it has on a 14" one. The cards are not scaled yet, and the bar
-  does not render at the monitor scale, so above scale 1 it is stretched.
+- The bar draws at 80% on a screen below 100 PPI (`bar.rs` `density`, from
+  the output's physical size): on a 27" 1920x1080 it was almost twice the
+  size it has on a 14" one. The strip scales itself; the cards and the
+  overlays are laid out in a screen 1/0.8 the size and drawn through a zoom
+  (`Win::zoom`), their rectangles snapped to whole pixels (`Scene::snap`) so
+  a 1 px line stays one pixel. The bar does not render at the monitor scale
+  yet, so above scale 1 it is stretched.
 
 - `SUPER+CTRL+ALT+R` (`DisplaySafeMode.sh`): a monitor showing "out of range"
   gets 1920x1080 at 60 Hz for the session; it works blind and while locked.

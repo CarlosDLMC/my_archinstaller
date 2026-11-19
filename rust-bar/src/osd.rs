@@ -186,11 +186,13 @@ impl App {
     }
 }
 
-/// The output the focused mango monitor is on (the strips know the names).
+/// The output the focused mango monitor is on (the strips know the names),
+/// and its size as an overlay lays out in it (Strip::layout_screen).
 pub fn focused_output(app: &App) -> Option<(WlOutput, f32, f32)> {
     let name = app.svc.mango.focused().map(|m| m.name.clone()).unwrap_or_default();
     let s = app.strips.iter().find(|s| s.name == name).or(app.strips.first())?;
-    Some((s.output.clone(), s.screen_width, s.screen_height))
+    let (w, h) = s.layout_screen();
+    Some((s.output.clone(), w, h))
 }
 
 /// The focused monitor changed, or an open dialog's screen went away. An
@@ -270,15 +272,21 @@ pub fn show(app: &mut App, p: OpenParams) {
     });
     let surface = app.compositor.create_surface(&app.qh);
     let layer = app.layer_shell.create_layer_surface(&app.qh, surface, Layer::Overlay, Some(p.namespace), Some(&output));
+    // The overlay is laid out in its screen's layout size and shown at the
+    // screen's zoom (Win::zoom): its place, size and input region go to the
+    // compositor in the screen's own pixels.
+    let zoom = app.strips.iter().find(|s| s.output == output).map_or(1.0, |s| s.density);
+    let z = |v: f32| v * zoom;
     // No anchors: the compositor centres it.
     if let Some((x, y)) = p.pos {
         layer.set_anchor(Anchor::TOP | Anchor::LEFT);
-        layer.set_margin(y, 0, 0, x);
+        layer.set_margin(z(y as f32).round() as i32, 0, 0, z(x as f32).round() as i32);
     }
     if p.fill {
         layer.set_anchor(Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT);
     }
-    layer.set_size(p.size.0, p.size.1);
+    let real = crate::app::real_size(p.size.0, p.size.1, zoom);
+    layer.set_size(real.0, real.1);
     layer.set_exclusive_zone(-1);
     layer.set_keyboard_interactivity(if p.keyboard { KeyboardInteractivity::Exclusive } else { KeyboardInteractivity::None });
     // An input region of the panel: clicks outside the panel go through. A
@@ -289,7 +297,7 @@ pub fn show(app: &mut App, p: OpenParams) {
     let whole = x <= 0.0 && y <= 0.0 && w.ceil() as u32 >= p.size.0 && h.ceil() as u32 >= p.size.1;
     if !p.fill && !whole {
         if let Ok(region) = smithay_client_toolkit::compositor::Region::new(&app.compositor) {
-            region.add(x.floor() as i32, y.floor() as i32, w.ceil() as i32, h.ceil() as i32);
+            region.add(z(x).floor() as i32, z(y).floor() as i32, z(w).ceil() as i32, z(h).ceil() as i32);
             layer.wl_surface().set_input_region(Some(region.wl_region()));
         }
     }
@@ -302,7 +310,7 @@ pub fn show(app: &mut App, p: OpenParams) {
         kind: p.kind,
         output,
         screen: (sw, sh),
-        win: Win::new(layer, p.size.0, p.size.1),
+        win: Win::zoomed(layer, p.size.0, p.size.1, zoom),
         dim,
         dim_color: p.dim.unwrap_or(Color::TRANSPARENT),
         st: OsdState::default(),

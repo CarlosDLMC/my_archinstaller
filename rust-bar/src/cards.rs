@@ -676,7 +676,7 @@ pub fn wifi_details(app: &mut App, strip: usize, icon: &Hit) {
         Some((CardKind::Network, s)) if s == strip => close(app),
         Some((CardKind::Wifi, s)) if s == strip => {
             let w = geometry(CardKind::Network).0;
-            let screen_h = app.strips.get(strip).map_or(1440.0, |s| s.screen_height);
+            let screen_h = app.strips.get(strip).map_or(1440.0, |s| s.layout_screen().1);
             let card = app.card.as_mut().unwrap();
             card.kind = CardKind::Network;
             card.focus = None;
@@ -692,7 +692,7 @@ pub fn wifi_details(app: &mut App, strip: usize, icon: &Hit) {
             card.texts = Default::default();
             crate::network_card::opened(app);
             let h = crate::network_card::card_height(&mut app.fonts, &app.svc, w, screen_h);
-            let screen_w = app.strips.get(strip).map_or(2560.0, |s| s.screen_width);
+            let screen_w = app.strips.get(strip).map_or(2560.0, |s| s.layout_screen().0);
             let card = app.card.as_mut().unwrap();
             let x = (card.icon_center - w / 2.0).min(screen_w - w).max(0.0).round();
             card.width = w;
@@ -717,7 +717,7 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
     }
     let mut content_h = 0.0;
     if kind == CardKind::Network {
-        let screen_h = app.strips[strip].screen_height;
+        let screen_h = app.strips[strip].layout_screen().1;
         content_h = crate::network_card::content_height(&mut app.fonts, &app.svc, w);
         h = crate::network_card::card_height(&mut app.fonts, &app.svc, w, screen_h);
     }
@@ -753,15 +753,16 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
     }
     if kind == CardKind::Agent {
         content_h = crate::agent::content_height(&mut app.fonts, &app.svc, w, false);
-        h = 160f32.max((content_h.ceil() + 30.0).min(s.screen_height * 0.85));
+        h = 160f32.max((content_h.ceil() + 30.0).min(s.layout_screen().1 * 0.85));
     }
     // The card's x: from the icon's centre on the screen.
-    let (icon_center, stem_w, card_x) = anchor(kind, icon, w, ui);
-    let x = card_x.min(s.screen_width - w).max(0.0);
-    let y = crate::bar::strip_height(s.screen_width, s.density) as f32 + 2.0;
+    let (icon_center, stem_w, card_x) = anchor(kind, icon, w, ui, s.density);
+    let x = card_x.min(s.layout_screen().0 - w).max(0.0);
+    let y = (crate::bar::strip_height(s.screen_width, s.density) as f32 / s.density).ceil() + 2.0;
     let stem_cx = stem_center(stem, w, stem_w);
     let output = s.output.clone();
-    let (screen_w, screen_h) = (s.screen_width as u32, s.screen_height as u32);
+    let zoom = s.density;
+    let (screen_w, screen_h) = (s.layout_screen().0 as u32, s.layout_screen().1 as u32);
     let today = crate::cal::today();
     // The first control takes the focus once, right after the card is
     // built, before the process the opening starts has answered: the Wi-Fi
@@ -786,7 +787,7 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
     app.card = Some(OpenCard {
         kind,
         strip,
-        win: Win::new(layer, screen_w, screen_h),
+        win: Win::zoomed(layer, screen_w, screen_h, zoom),
         hits: Vec::new(),
         pointer: None,
         shift: false,
@@ -911,7 +912,7 @@ pub fn update_height(app: &mut App) {
             let card = app.card.as_mut().unwrap();
             if (w - card.width).abs() >= 0.5 {
                 // The width changed: the centred card moves with it.
-                let screen_w = app.strips.get(card.strip).map_or(2560.0, |s| s.screen_width);
+                let screen_w = app.strips.get(card.strip).map_or(2560.0, |s| s.layout_screen().0);
                 let x = (card.icon_center - w / 2.0).min(screen_w - w).max(0.0).round();
                 card.width = w;
                 card.stem_cx = w / 2.0;
@@ -923,7 +924,7 @@ pub fn update_height(app: &mut App) {
         CardKind::Agent => {
             let busy = app.is_running("agent-usage");
             let w = app.card.as_ref().unwrap().width;
-            let screen_h = app.strips.get(app.card.as_ref().unwrap().strip).map_or(1440.0, |s| s.screen_height);
+            let screen_h = app.strips.get(app.card.as_ref().unwrap().strip).map_or(1440.0, |s| s.layout_screen().1);
             let content = crate::agent::content_height(&mut app.fonts, &app.svc, w, busy);
             if let Some(c) = app.card.as_mut() {
                 c.content_h = content;
@@ -932,7 +933,7 @@ pub fn update_height(app: &mut App) {
         }
         CardKind::Network => {
             let w = app.card.as_ref().unwrap().width;
-            let screen_h = app.strips.get(app.card.as_ref().unwrap().strip).map_or(1440.0, |s| s.screen_height);
+            let screen_h = app.strips.get(app.card.as_ref().unwrap().strip).map_or(1440.0, |s| s.layout_screen().1);
             let content = crate::network_card::content_height(&mut app.fonts, &app.svc, w);
             if let Some(c) = app.card.as_mut() {
                 c.content_h = content;
@@ -997,9 +998,11 @@ pub(crate) fn icon_action(kind: CardKind) -> Action {
 /// calendar: a fixed 60 px stem, x = the icon's centre (int) - 200; the
 /// weather card: the stem is the pill's width (int), the card centred on
 /// the pill.
-fn anchor(kind: CardKind, icon: &Hit, w: f32, ui: f32) -> (f32, f32, f32) {
+fn anchor(kind: CardKind, icon: &Hit, w: f32, ui: f32, zoom: f32) -> (f32, f32, f32) {
     let icon_w = icon.w / ui;
-    let center = icon.x + icon.w / 2.0;
+    // The strip draws in the screen's pixels, the card in its layout
+    // (Win::zoom).
+    let center = (icon.x + icon.w / 2.0) / zoom;
     match kind {
         CardKind::Calendar => (center, 60.0, center.trunc() - 200.0),
         CardKind::Weather => (center, icon_w.trunc(), center - w / 2.0),
@@ -1036,9 +1039,9 @@ pub fn follow_strip(app: &mut App) {
     let action = icon_action(card.kind);
     let Some(icon) = s.hits.iter().find(|h| h.action == action) else { return };
     let (w, stem) = (card.width, geometry(card.kind).2);
-    let (center, stem_w, card_x) = anchor(card.kind, icon, w, crate::bar::ui_scale(s.screen_width, s.density));
-    let left = card_x.min(s.screen_width - w).max(0.0).round();
-    let top = (crate::bar::strip_height(s.screen_width, s.density) as f32 + 2.0).round();
+    let (center, stem_w, card_x) = anchor(card.kind, icon, w, crate::bar::ui_scale(s.screen_width, s.density), s.density);
+    let left = card_x.min(s.layout_screen().0 - w).max(0.0).round();
+    let top = ((crate::bar::strip_height(s.screen_width, s.density) as f32 / s.density).ceil() + 2.0).round();
     let card = app.card.as_mut().unwrap();
     card.icon_center = center;
     if (left, top, stem_w) == (card.left, card.top, card.stem_w) {
