@@ -17,6 +17,9 @@ below 1 - 0.8 made text uneven. foot is not touched: it is DPI-aware.
   scaled, and a wrapper, `/usr/local/bin/rofi` (`install-scripts/rofi-compact.sh`),
   sends rofi to it while the profile is on. `dunstrc` and the rofi files
   themselves are no longer edited.
+- The compact profile covers the group tabs (SUPER G) too: `mango/state/density.conf`,
+  generated from `settings.conf` with the tab height, gap, padding and fonts at
+  80% and sourced by `config.conf`. mango has one tab size for all screens.
 - Screens with small pixels get a monitor scale from it: the one of 1, 1.25,
   1.5, 1.75, 2 that brings the screen closest to 123 PPI (155 for a laptop
   panel) - a 27" 4K gets 1.25, a 24" 4K 1.5, a 14" 4K laptop 2. It writes them
