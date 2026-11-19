@@ -2,6 +2,20 @@
 
 ## November 2026
 
+Added (2026-11-19) - the interface size follows the screen's pixel density.
+`DisplayDensity.sh` runs at login and from Quick Settings > «Размер
+интерфейса»: on a main screen below 100 PPI (a 27" 1920x1080 is ~81) it sets
+GTK text scaling 0.8, Qt fonts 11/10, rofi 13 and dunst 13; otherwise the
+normal 1.0, 14/12, 16 and 16 the repo ships. The monitor scale stays 1 -
+0.8 made text uneven. foot and the bar are not touched: foot is DPI-aware and
+the bar sizes itself by screen width.
+
+- `SUPER+CTRL+ALT+R` (`DisplaySafeMode.sh`): a monitor showing "out of range"
+  gets 1920x1080 at 60 Hz for the session; it works blind and while locked.
+- `EdidOverride.sh check` warns at login if the kernel still has a
+  `drm.edid_firmware=` override (it forces one monitor's modes on every
+  monitor on that port); `EdidOverride.sh remove` takes it out with backups.
+
 Changed (2026-11-06) - mango 0.18.5 (mangowm 0.18.5-2, tag
 `0.18.5-patched.2`): the fork's patches are rebased onto upstream's 0.18.5 and
 the three commits after it (a touch-cancel crash fix, minimized windows

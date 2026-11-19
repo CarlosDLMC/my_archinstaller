@@ -1522,10 +1522,12 @@ These are machine-specific, so a fresh install starts without them:
 
 - **`~/.config/zsh/secrets.zsh`** — API keys and tokens. See installation step 4.
 - **`~/.config/mango/monitors.conf`** — the repo ships a generic catch-all
-  (every output at its preferred mode, VRR on). This machine's setup also
-  carries a patched EDID for a 2560x1440@75 Samsung over HDMI, which needs a
-  blob in `/usr/lib/firmware/edid/`, a `FILES=` entry in `/etc/mkinitcpio.conf`
-  and a `drm.edid_firmware=` kernel parameter — none of which live under `~`.
+  (every output at its preferred mode, VRR on). Never force a monitor's EDID
+  with a `drm.edid_firmware=` kernel parameter: it applies to the *port*, so
+  every other monitor plugged into that port gets the forced modes and shows
+  "out of range". The laptop once carried one for a 2560x1440@75 Samsung over
+  HDMI and it was removed on 2026-11-19; `EdidOverride.sh check` warns at login
+  if one is still set and `EdidOverride.sh remove` takes it out.
   Lay out whatever monitors the new machine has as `monitor_rule` lines in that
   file (try a layout live with `wdisplays` first; `wlr-randr` lists names and
   modes - the file has examples). A re-run of the installer keeps it: `copy.sh`

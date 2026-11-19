@@ -46,6 +46,7 @@ Qt-приложения (qt6ct)
 Qt-приложения (qt5ct)
 Пресеты анимаций
 Профиль мониторов
+Размер интерфейса
 Тема rofi
 Поиск сочетаний клавиш
 Игровой режим вкл/выкл
@@ -94,6 +95,7 @@ main() {
             qt5ct ;;
         "Пресеты анимаций") $scriptsDir/Animations.sh ;;
         "Профиль мониторов") $scriptsDir/MonitorProfiles.sh ;;
+        "Размер интерфейса") $scriptsDir/DisplayDensity.sh ;;
         "Тема rofi") $scriptsDir/RofiThemeSelector.sh ;;
         "Поиск сочетаний клавиш") $scriptsDir/KeyBinds.sh ;;
         "Игровой режим вкл/выкл") $scriptsDir/GameMode.sh ;;
