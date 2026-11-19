@@ -11,13 +11,32 @@ use crate::theme::{self, Theme, FONT_SIZE};
 const REFERENCE_WIDTH: f32 = 2560.0;
 const MIN_SCALE: f32 = 0.90;
 const DESIGN_HEIGHT: f32 = 34.0;
+/// Below this many (logical) pixels per inch a screen has big pixels - a 27"
+/// 1920x1080 is ~81 - and the strip draws at COMPACT of its size there: the
+/// same pixel size was almost twice as large on it as on a 14" 1920x1080
+/// (~157). DisplayDensity.sh uses the same limit and factor for the fonts.
+const COMPACT_BELOW_PPI: f32 = 100.0;
+const COMPACT: f32 = 0.8;
 
-pub fn ui_scale(screen_width: f32) -> f32 {
-    MIN_SCALE.max((screen_width / REFERENCE_WIDTH).min(1.0))
+/// 1.0, or COMPACT on a screen with big pixels. `logical` is the output's
+/// size in logical pixels and `mm` its physical size; the longer side of
+/// each, so a rotated screen gives the same answer. A screen that reports no
+/// size (some TVs, projectors) gets 1.0.
+pub fn density(logical: (f32, f32), mm: (i32, i32)) -> f32 {
+    let (px, mm) = (logical.0.max(logical.1), mm.0.max(mm.1) as f32);
+    if mm > 0.0 && px / (mm / 25.4) < COMPACT_BELOW_PPI {
+        COMPACT
+    } else {
+        1.0
+    }
 }
 
-pub fn strip_height(screen_width: f32) -> u32 {
-    (DESIGN_HEIGHT * ui_scale(screen_width)).round() as u32
+pub fn ui_scale(screen_width: f32, density: f32) -> f32 {
+    MIN_SCALE.max((screen_width / REFERENCE_WIDTH).min(1.0)) * density
+}
+
+pub fn strip_height(screen_width: f32, density: f32) -> u32 {
+    (DESIGN_HEIGHT * ui_scale(screen_width, density)).round() as u32
 }
 
 /// The strip reserves 12 px less than its height (mango's outer gap fills
@@ -91,6 +110,8 @@ impl Hit {
 pub struct Ctx<'a> {
     pub width: f32,
     pub screen_width: f32,
+    /// bar::density of this screen.
+    pub density: f32,
     pub name: &'a str,
     pub pointer: Option<(f32, f32)>,
     /// The card open on this strip, if any.
@@ -206,7 +227,7 @@ fn layout_label(raw: &str) -> String {
 /// Draws the strip; returns its click areas and whether it is animating.
 pub fn draw(scene: &mut Scene, fonts: &mut Fonts, theme: &Theme, svc: &Services, ctx: &Ctx, memo: &mut crate::text::TextMemo) -> (Vec<Hit>, bool) {
     memo.begin_frame();
-    let ui = ui_scale(ctx.screen_width);
+    let ui = ui_scale(ctx.screen_width, ctx.density);
     let dw = ctx.width / ui;
     // The strip's background: the wash under the compositor blur.
     scene.fill(0.0, 0.0, ctx.width, (DESIGN_HEIGHT * ui).round(), theme.col_bg_wash);

@@ -117,6 +117,8 @@ pub struct Strip {
     pub win: Win,
     pub screen_width: f32,
     pub screen_height: f32,
+    /// bar::density: the strip is smaller on a screen with big pixels.
+    pub density: f32,
     pub hits: Vec<Hit>,
     pub pointer: Option<(f32, f32)>,
     /// Which plain Texts have changed (see TextMemo).
@@ -331,7 +333,8 @@ impl App {
         let (sw, sh) = logical.or(current).map(|(w, h)| (w as f32, h as f32)).unwrap_or((2560.0, 1440.0));
         let surface = self.compositor.create_surface(&self.qh);
         let layer = self.layer_shell.create_layer_surface(&self.qh, surface, Layer::Top, Some("rust-bar:bar"), Some(&output));
-        let height = bar::strip_height(sw);
+        let density = bar::density((sw, sh), info.as_ref().map_or((0, 0), |i| i.physical_size));
+        let height = bar::strip_height(sw, density);
         layer.set_anchor(Anchor::TOP | Anchor::LEFT | Anchor::RIGHT);
         layer.set_size(0, height);
         layer.set_exclusive_zone(bar::exclusive_zone(height, self.svc.mango.game_mode));
@@ -343,6 +346,7 @@ impl App {
             win: Win::new(layer, 0, height),
             screen_width: sw,
             screen_height: sh,
+            density,
             hits: Vec::new(),
             pointer: None,
             texts: Default::default(),
@@ -469,6 +473,7 @@ impl App {
                 let ctx = bar::Ctx {
                     width: width as f32,
                     screen_width: s.screen_width,
+                    density: s.density,
                     name: &s.name,
                     pointer: s.pointer,
                     open: self.card.as_ref().filter(|c| c.strip == i).map(|c| c.kind),
@@ -808,9 +813,11 @@ impl OutputHandler for App {
                 }
                 s.screen_width = w as f32;
                 s.screen_height = h as f32;
-                // The height and the exclusive zone follow the width
-                // (bar::ui_scale) - a new mode or scale resizes the strip.
-                let height = bar::strip_height(s.screen_width);
+                s.density = bar::density((w as f32, h as f32), info.as_ref().map_or((0, 0), |i| i.physical_size));
+                // The height and the exclusive zone follow the width and the
+                // pixel density (bar::ui_scale) - a new mode or scale resizes
+                // the strip.
+                let height = bar::strip_height(s.screen_width, s.density);
                 if height != s.win.height {
                     s.win.layer.set_size(0, height);
                     s.win.layer.set_exclusive_zone(bar::exclusive_zone(height, game_mode));

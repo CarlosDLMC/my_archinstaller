@@ -727,7 +727,7 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
         h = crate::battery::card_height(&mut app.fonts, &app.svc, w);
     }
     let s = &app.strips[strip];
-    let ui = crate::bar::ui_scale(s.screen_width);
+    let ui = crate::bar::ui_scale(s.screen_width, s.density);
     if kind == CardKind::Weather {
         h = weather_height(&mut app.fonts, &app.svc, w);
     }
@@ -758,7 +758,7 @@ fn open(app: &mut App, strip: usize, kind: CardKind, icon: &Hit, keyboard: bool)
     // The card's x: from the icon's centre on the screen.
     let (icon_center, stem_w, card_x) = anchor(kind, icon, w, ui);
     let x = card_x.min(s.screen_width - w).max(0.0);
-    let y = crate::bar::strip_height(s.screen_width) as f32 + 2.0;
+    let y = crate::bar::strip_height(s.screen_width, s.density) as f32 + 2.0;
     let stem_cx = stem_center(stem, w, stem_w);
     let output = s.output.clone();
     let (screen_w, screen_h) = (s.screen_width as u32, s.screen_height as u32);
@@ -1036,9 +1036,9 @@ pub fn follow_strip(app: &mut App) {
     let action = icon_action(card.kind);
     let Some(icon) = s.hits.iter().find(|h| h.action == action) else { return };
     let (w, stem) = (card.width, geometry(card.kind).2);
-    let (center, stem_w, card_x) = anchor(card.kind, icon, w, crate::bar::ui_scale(s.screen_width));
+    let (center, stem_w, card_x) = anchor(card.kind, icon, w, crate::bar::ui_scale(s.screen_width, s.density));
     let left = card_x.min(s.screen_width - w).max(0.0).round();
-    let top = (crate::bar::strip_height(s.screen_width) as f32 + 2.0).round();
+    let top = (crate::bar::strip_height(s.screen_width, s.density) as f32 + 2.0).round();
     let card = app.card.as_mut().unwrap();
     card.icon_center = center;
     if (left, top, stem_w) == (card.left, card.top, card.stem_w) {

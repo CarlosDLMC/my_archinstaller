@@ -6,9 +6,19 @@ Added (2026-11-19) - the interface size follows the screen's pixel density.
 `DisplayDensity.sh` runs at login and from Quick Settings > «Размер
 интерфейса»: on a main screen below 100 PPI (a 27" 1920x1080 is ~81) it sets
 GTK text scaling 0.8, Qt fonts 11/10, rofi 13 and dunst 13; otherwise the
-normal 1.0, 14/12, 16 and 16 the repo ships. The monitor scale stays 1 -
-0.8 made text uneven. foot and the bar are not touched: foot is DPI-aware and
-the bar sizes itself by screen width.
+normal 1.0, 14/12, 16 and 16 the repo ships. The monitor scale never goes
+below 1 - 0.8 made text uneven. foot is not touched: it is DPI-aware.
+
+- Screens with small pixels get a monitor scale from it: the one of 1, 1.25,
+  1.5, 1.75, 2 that brings the screen closest to 123 PPI (155 for a laptop
+  panel) - a 27" 4K gets 1.25, a 24" 4K 1.5, a 14" 4K laptop 2. It writes them
+  to `mango/monitors.conf` between two marker lines, only while that file has
+  no rules of its own. `DisplayDensity.sh --plan [FILE]` prints the decisions
+  and changes nothing.
+- The bar's strip draws at 80% on a screen below 100 PPI (`bar.rs` `density`,
+  from the output's physical size): on a 27" 1920x1080 it was almost twice
+  the size it has on a 14" one. The cards are not scaled yet, and the bar
+  does not render at the monitor scale, so above scale 1 it is stretched.
 
 - `SUPER+CTRL+ALT+R` (`DisplaySafeMode.sh`): a monitor showing "out of range"
   gets 1920x1080 at 60 Hz for the session; it works blind and while locked.
