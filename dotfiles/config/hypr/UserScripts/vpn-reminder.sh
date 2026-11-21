@@ -4,12 +4,13 @@
 #
 # Critical urgency, so dunst's [critical_never_expires] rule keeps the card on
 # screen with the red ТРЕВОГА stamp until it is clicked away. It only says so
-# while it is true: nothing is sent when a WireGuard tunnel is already up, and a
+# while it is true: nothing is sent when a tunnel is already up (WireGuard,
+# AmneziaWG or sing-box - vpn-ctl.sh tells), and a
 # tunnel that comes up while the card is showing - NetworkManager autoconnecting
 # a WireGuard profile, or a pick in the bar's VPN menu - turns it into a short
 # confirmation instead.
 
-tunnel_up() { [ -n "$(ip -br link show type wireguard 2>/dev/null)" ]; }
+tunnel_up() { [ -n "$("$HOME/.config/rust-bar/scripts/vpn-ctl.sh" active 2>/dev/null)" ]; }
 
 # dunst is started at login next to this (mango/startup.conf) and may not own the
 # notification bus yet. A notification sent before it does makes D-Bus start

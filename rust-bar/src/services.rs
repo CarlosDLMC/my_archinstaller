@@ -1056,11 +1056,16 @@ fn vpn_poll(app: &mut App) {
     let first = !app.svc.vpn_checked;
     app.svc.vpn_checked = true;
     // Interfaces of this network namespace (/proc/net/dev), the ones whose
-    // sysfs entry says WireGuard - what `wg show interfaces` lists, unprivileged.
+    // sysfs entry says WireGuard - what `wg show interfaces` lists,
+    // unprivileged - or a TUN device, which is what an AmneziaWG or sing-box
+    // tunnel comes up as (tun_flags bit 0; a virtual machine's TAP card has
+    // bit 1). The same test as `vpn-ctl.sh active`.
     let mut active = String::new();
     let devs = std::fs::read_to_string("/proc/net/dev").unwrap_or_default();
     for name in devs.lines().skip(2).filter_map(|l| l.split(':').next()).map(str::trim) {
-        if std::fs::read_to_string(format!("/sys/class/net/{name}/uevent")).unwrap_or_default().contains("DEVTYPE=wireguard") {
+        let wireguard = std::fs::read_to_string(format!("/sys/class/net/{name}/uevent")).unwrap_or_default().contains("DEVTYPE=wireguard");
+        let tun = std::fs::read_to_string(format!("/sys/class/net/{name}/tun_flags")).ok().and_then(|f| u32::from_str_radix(f.trim().trim_start_matches("0x"), 16).ok()).map_or(false, |f| f & 1 == 1);
+        if wireguard || tun {
             active = name.to_string();
             break;
         }

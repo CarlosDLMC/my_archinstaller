@@ -2,6 +2,17 @@
 
 ## November 2026
 
+Added (2026-11-22) - the bar's VPN card lists AmneziaWG and sing-box tunnels
+next to the WireGuard configs. A new `rust-bar/scripts/vpn-ctl.sh`
+(`list | active | up | down`) knows the three kinds by where the config is:
+`/etc/wireguard/<name>.conf` (wg-quick), `/etc/amnezia/amneziawg/<name>.conf`
+(`awg-quick@<name>.service`) and `/etc/sing-box/<name>.json` with a TUN
+inbound named like the file (`sing-box@<name>.service`). The card, the
+switch without a killswitch gap (`vpn-switch.sh`), the login reminder and the
+weather's "is a tunnel up" test all go through it, and a TUN interface now
+counts as a tunnel for the shield. Names starting with `home-` show a house
+instead of a flag. Neither AmneziaWG nor sing-box is installed by this repo.
+
 Changed (2026-11-19) - the screensaver covers every monitor. It ran on the
 focused one only and the others kept showing the desktop. `Screensaver.sh`
 still draws it once; every other monitor shows a live copy of that screen

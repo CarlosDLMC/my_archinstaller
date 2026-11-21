@@ -1577,6 +1577,18 @@ dropdown is empty until you copy your configs over. `/etc/wireguard` is
 `root:root 0700` and the `.conf` files hold private keys — treat them like
 secrets, and never put them in this repo.
 
+Two more kinds of tunnel show up next to the WireGuard ones when they exist
+(`dotfiles/config/rust-bar/scripts/vpn-ctl.sh` tells them apart by where the
+config is; neither is installed by this repo):
+
+- **AmneziaWG** — `/etc/amnezia/amneziawg/<name>.conf`, brought up and down
+  through `awg-quick@<name>.service`.
+- **sing-box** — `/etc/sing-box/<name>.json` with a TUN inbound whose
+  `interface_name` is `<name>`, through `sing-box@<name>.service`.
+
+A name that starts with `home-` (a tunnel to your own house) gets a house
+instead of a country flag.
+
 The configs are not tied to a machine (a provider config carries a key pair the
 provider registered to your account), so the same files work on every computer
 you copy them to.
@@ -1694,7 +1706,8 @@ every time it opens. (To restart the bar anyway, use SUPER+CTRL+B. A
 that terminal, which takes it down when it closes.)
 
 **This needs passwordless sudo.** The bar's VPN card (`rust-bar/src/vpn.rs`)
-runs `sudo find` and `sudo wg-quick up|down`, and its sync script
+runs `vpn-ctl.sh`, which calls `sudo find`, `sudo wg-quick up|down` and
+`sudo systemctl start|stop`, and its sync script
 `sudo timedatectl set-timezone`, as processes with no terminal to prompt on — with stock sudoers those calls fail
 silently and the dropdown does nothing at all. That is what the
 `nopasswd_sudo` preset option installs (`install-scripts/sudoers_nopasswd.sh`

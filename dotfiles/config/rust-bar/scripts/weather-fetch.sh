@@ -32,7 +32,7 @@ fi
 
 # No city preference. If a tunnel is up, IP geolocation would answer with the
 # exit node, so prefer the home coordinates saved before the first departure.
-if [ -n "$(wg show interfaces 2>/dev/null)" ] && [ -s "$HOME_FILE" ]; then
+if [ -n "$("$SCRIPT_DIR/vpn-ctl.sh" active 2>/dev/null)" ] && [ -s "$HOME_FILE" ]; then
     IFS=$'\t' read -r HOME_LAT HOME_LON HOME_NAME < "$HOME_FILE"
     if [ -n "$HOME_LAT" ] && [ -n "$HOME_LON" ]; then
         echo "Fetching weather for home: $HOME_NAME ($HOME_LAT,$HOME_LON)" >&2

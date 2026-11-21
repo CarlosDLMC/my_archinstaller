@@ -1,5 +1,6 @@
 //! The VPN widget's card: the tunnel, the time/weather sync keys and the
-//! WireGuard configs, through the helper scripts.
+//! tunnels to pick from (WireGuard, AmneziaWG, sing-box), through the helper
+//! scripts.
 
 use std::time::{Duration, Instant};
 
@@ -41,9 +42,11 @@ pub fn weather_busy(app: &App) -> bool {
     app.is_running("vpn-weather") || app.svc.vpn_card.weather_floor.map_or(false, |t| t.elapsed() < FLOOR)
 }
 
-/// The card opened: the configs, as root can list them.
+/// The card opened: the tunnels, as root can list them (vpn-ctl.sh: the
+/// WireGuard and AmneziaWG configs and the sing-box tunnels).
 pub fn opened(app: &mut App) {
-    app.spawn("vpn-list", &["sh", "-c", "sudo find /etc/wireguard -name '*.conf' -exec basename {} .conf \\; 2>/dev/null | sort"], |app, d| {
+    let cmd = format!("{}/vpn-ctl.sh list", scripts());
+    app.spawn("vpn-list", &["sh", "-c", &cmd], |app, d| {
         let list: Vec<String> = d.stdout.lines().map(str::trim).filter(|l| !l.is_empty()).map(String::from).collect();
         if !list.is_empty() {
             app.svc.vpn_card.configs = list;
@@ -53,6 +56,10 @@ pub fn opened(app: &mut App) {
 }
 
 fn flag(name: &str) -> &'static str {
+    // A tunnel to one's own home (home-wg, home-awg, ...) is no country's.
+    if name.starts_with("home-") {
+        return "🏠";
+    }
     match name.get(..2).unwrap_or("").to_lowercase().as_str() {
         "de" => "🇩🇪",
         "pl" => "🇵🇱",
@@ -193,9 +200,12 @@ fn tunnel(app: &mut App, to: Option<String>) {
         return;
     }
     let active = app.svc.vpn.clone();
+    // vpn-ctl.sh knows what a name is made of (wg-quick, or the service of
+    // an AmneziaWG or sing-box tunnel).
+    let ctl = format!("{}/vpn-ctl.sh", scripts());
     match to {
         None if active.is_empty() => {}
-        None => app.spawn("vpn-action", &["sudo", "wg-quick", "down", &active], |app, _| {
+        None => app.spawn("vpn-action", &[&ctl, "down", &active], |app, _| {
             // A disconnect clears the active tunnel at once - the strip's
             // icon goes grey now; the check below finds "" == "".
             if !app.svc.vpn.is_empty() {
@@ -206,7 +216,7 @@ fn tunnel(app: &mut App, to: Option<String>) {
             tunnel_done(app);
         }),
         Some(to) if to == active => {}
-        Some(to) if active.is_empty() => app.spawn("vpn-action", &["sudo", "wg-quick", "up", &to], |app, _| tunnel_done(app)),
+        Some(to) if active.is_empty() => app.spawn("vpn-action", &[&ctl, "up", &to], |app, _| tunnel_done(app)),
         Some(to) => {
             let cmd = format!("{}/vpn-switch.sh \"$1\" \"$2\"", scripts());
             app.spawn("vpn-action", &["sh", "-c", &cmd, "sh", &active, &to], |app, _| tunnel_done(app));

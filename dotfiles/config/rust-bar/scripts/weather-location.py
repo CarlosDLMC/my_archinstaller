@@ -213,7 +213,7 @@ def get_location():
 
 
 def tunnel_up():
-    """True if a WireGuard tunnel is up.
+    """True if a tunnel is up (vpn-ctl.sh: WireGuard, AmneziaWG or sing-box).
 
     An IP reading taken through a tunnel describes the exit node, not this
     machine, so `source: "ip"` alone is not enough to call a reading home -
@@ -222,7 +222,8 @@ def tunnel_up():
     """
     try:
         out = subprocess.run(
-            ["wg", "show", "interfaces"], capture_output=True, text=True, timeout=3
+            [os.path.join(os.path.dirname(os.path.realpath(__file__)), "vpn-ctl.sh"), "active"],
+            capture_output=True, text=True, timeout=3,
         )
         return bool(out.stdout.strip())
     except Exception:
