@@ -10,7 +10,7 @@ next to the WireGuard configs. A new `rust-bar/scripts/vpn-ctl.sh`
 inbound named like the file (`sing-box@<name>.service`). The card, the
 switch without a killswitch gap (`vpn-switch.sh`), the login reminder and the
 weather's "is a tunnel up" test all go through it, and a TUN interface now
-counts as a tunnel for the shield. Names starting with `home-` show a house
+counts as a tunnel for the shield. Names starting with `ho` (`home-wg`) show a house
 instead of a flag. Neither AmneziaWG nor sing-box is installed by this repo.
 
 Changed (2026-11-19) - the screensaver covers every monitor. It ran on the

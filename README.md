@@ -1586,8 +1586,8 @@ config is; neither is installed by this repo):
 - **sing-box** — `/etc/sing-box/<name>.json` with a TUN inbound whose
   `interface_name` is `<name>`, through `sing-box@<name>.service`.
 
-A name that starts with `home-` (a tunnel to your own house) gets a house
-instead of a country flag.
+The icon comes from the first two letters of the name: a country code gets
+its flag, and `ho` (`home-wg`, a tunnel to your own house) gets a house.
 
 The configs are not tied to a machine (a provider config carries a key pair the
 provider registered to your account), so the same files work on every computer

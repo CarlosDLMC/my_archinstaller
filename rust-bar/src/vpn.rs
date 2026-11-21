@@ -56,11 +56,9 @@ pub fn opened(app: &mut App) {
 }
 
 fn flag(name: &str) -> &'static str {
-    // A tunnel to one's own home (home-wg, home-awg, ...) is no country's.
-    if name.starts_with("home-") {
-        return "🏠";
-    }
     match name.get(..2).unwrap_or("").to_lowercase().as_str() {
+        // A tunnel to one's own home (home-wg, home-awg, ...) is no country's.
+        "ho" => "🏠",
         "de" => "🇩🇪",
         "pl" => "🇵🇱",
         "ge" => "🇬🇪",
