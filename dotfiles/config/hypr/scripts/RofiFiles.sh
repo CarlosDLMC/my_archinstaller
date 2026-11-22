@@ -30,8 +30,9 @@ excludes=(
     '**/.config/Slack' '**/.config/chromium' '**/.config/JetBrains'
 )
 # Kernel and runtime pseudo-filesystems plus btrfs snapshots, which would
-# repeat the whole system. Only used when searching /.
-root_excludes=(/proc /sys /dev /run /tmp /.snapshots)
+# repeat the whole system, and docker/containerd image layers (~720k entries,
+# copies of other distros' filesystems). Only used when searching /.
+root_excludes=(/proc /sys /dev /run /tmp /.snapshots /var/lib/docker /var/lib/containerd)
 
 # ROFI_DATA is "<share>;<root>", handed back by rofi on every call.
 # The "+ .local/share" switch on the first screen searches .local/share too
@@ -69,14 +70,24 @@ list_roots() {
     printf '[%s] + .local/share\0info\x1fshare\x1fpermanent\x1ftrue\n' "$mark"
 }
 
+# A message for what a key could not do (root-only places), shown in rofi's
+# message bar in place of the usual one until the next key. In rofi, not a
+# notification: it stays on screen, and works with notifications off.
+notice=
+
 # The options of a file list, everything but its rows.
 tree_header() {
     header
     # rofi reads keep-filter from the list on screen when a key is pressed:
     # set here, the typed filter outlives a reload of the list.
     printf '\0keep-filter\x1ftrue\n'
-    if preview_here; then
-        printf '\0message\x1f%s%s  ·  ПРОСМОТР  ·  Shift+Enter выключает\n' \
+    if [[ $notice ]]; then
+        # Pango markup: the path is escaped, the rest is plain text.
+        notice=${notice//&/&amp;}; notice=${notice//</&lt;}; notice=${notice//>/&gt;}
+        printf '\0message\x1f<span foreground="#C42B1C"><b>ТОЛЬКО ДЛЯ ROOT</b></span>  ·  %s\n' \
+            "$notice"
+    elif preview_here; then
+        printf '\0message\x1f%s%s  ·  ПРОСМОТР  ·  Shift+Enter выключает  ·  файлы root не просматриваются\n' \
             "${root/#$HOME/\~}" "${share:+ + .local/share}"
     else
         printf '\0message\x1f%s%s  ·  *часть* или *.pdf  ·  Enter открывает\n' \
@@ -95,14 +106,19 @@ list_tree() {
     if [[ $root == / ]]; then
         for x in "${root_excludes[@]}"; do args+=(--exclude "$x"); done
     fi
+    # / is listed as root (passwordless sudo), so root-only places like
+    # /etc/wireguard, /root and /etc/NetworkManager show up too. Falls back to
+    # your own view if sudo would ask for a password.
+    local as=()
+    [[ $root == / ]] && sudo -n true 2>/dev/null && as=(sudo -n)
     tree_header
     [[ $2 ]] && printf '%s\n' "$2"
     printf '..   НАЗАД\0info\x1fback\n'
     # Paths under home are shown as ~/..., shorter to read and to type.
     if [[ -z $2 ]]; then
-        fd "${args[@]}" . "$root" 2>/dev/null | sed "s|^$HOME/|~/|"
+        "${as[@]}" fd "${args[@]}" . "$root" 2>/dev/null | sed "s|^$HOME/|~/|"
     else
-        fd "${args[@]}" . "$root" 2>/dev/null | sed "s|^$HOME/|~/|" |
+        "${as[@]}" fd "${args[@]}" . "$root" 2>/dev/null | sed "s|^$HOME/|~/|" |
             LC_ALL=C grep -vxF -- "$2"
     fi
 }
@@ -160,11 +176,33 @@ is_code() {
     fi
 }
 
+# A path only root can get at: a file you cannot read, or one inside a folder
+# you cannot open (then even -e fails for you, but not for sudo).
+root_only_file() {
+    [[ -r $1 ]] && return 1
+    sudo -n test -f "$1" 2>/dev/null
+}
+
+# A folder only root can open (list or enter). Unlike a file, Thunar, imv,
+# mpv and the rest cannot work around that, so they get an alert instead.
+root_only_dir() {
+    if [[ -d $1 ]]; then
+        [[ -r $1 && -x $1 ]] && return 1
+        return 0
+    fi
+    [[ -e $1 ]] && return 1
+    sudo -n test -d "$1" 2>/dev/null
+}
+
 open_path() {
     local p
     p=$(path_of "$1")
     # setsid keeps the app alive after rofi exits.
-    if is_code "$p"; then
+    if root_only_file "$p"; then
+        # sudoedit: nvim runs as you on a temp copy, written back as root on
+        # save, so no root nvim and no change to the file's permissions.
+        setsid -f foot env SUDO_EDITOR=nvim sudoedit -- "$p" >/dev/null 2>&1
+    elif is_code "$p"; then
         setsid -f foot nvim -- "$p" >/dev/null 2>&1
     else
         setsid -f xdg-open "$p" >/dev/null 2>&1
@@ -294,7 +332,11 @@ toggle_preview() {
         rm -f "$PV.last"
         "$HOME/.config/hypr/scripts/RofiPreviewMode.sh" on "$ROFI_OUTSIDE"
         p=$(path_of "$1")
-        [[ -f $p ]] && preview_open "$p"
+        if [[ -f $p ]]; then
+            preview_open "$p"
+        elif root_only_file "$p"; then
+            notice="${p##*/}: просмотр невозможен. Enter откроет его в nvim через sudoedit."
+        fi
     fi
 }
 
@@ -307,7 +349,10 @@ hover() {
     [[ $pid && $(cat "/proc/$pid/comm" 2>/dev/null) == rofi ]] || return
     p=$(path_of "$1")
     # Only files: not folders, "..", the first screen's rows or app names.
-    [[ $p == /* && -f $p ]] || return
+    [[ $p == /* ]] || return
+    # Root-only files are not previewed: this hook runs outside rofi and
+    # cannot change its message, so preview mode's message says so up front.
+    [[ -f $p ]] || return
     # Holding an arrow key runs through many rows; only the one the cursor
     # rests on for 250 ms is opened.
     printf '%s' "$p" > "$PV.hover"
@@ -340,6 +385,11 @@ case ${ROFI_RETV:-0} in
                     # Shift+Enter: preview mode on/off, list left as it is.
                     toggle_preview "$1"
                     keep_tree "$1"
+                elif root_only_dir "$(path_of "$1")"; then
+                    # Thunar runs as you and cannot open it: rofi stays open
+                    # with the reason in its message bar.
+                    notice="$(path_of "$1"): файловый менеджер не откроет эту папку. Файлы внутри открываются из списка (Enter → nvim через sudoedit)."
+                    keep_tree "$1"
                 else
                     # Enter: no output, which closes rofi (and with it the
                     # preview).
@@ -348,7 +398,18 @@ case ${ROFI_RETV:-0} in
                 ;;
         esac
         ;;
-    15) if [[ $ROFI_INFO ]]; then relist; else show_in_folder "$1"; fi ;;
+    15)
+        if [[ $ROFI_INFO ]]; then
+            relist
+        elif p=$(path_of "$1") && root_only_dir "${p%/*}"; then
+            # Thunar can show a root-only item in a folder you can open
+            # (/etc/shadow in /etc), but cannot open a root-only folder.
+            notice="${p%/*}: Thunar не откроет эту папку. Ctrl+C копирует путь."
+            keep_tree "$1"
+        else
+            show_in_folder "$1"
+        fi
+        ;;
     19) if [[ $ROFI_INFO ]]; then relist; else copy_path "$1"; fi ;;
     0)
         # A new launcher: preview mode left by an earlier one is gone with it.
