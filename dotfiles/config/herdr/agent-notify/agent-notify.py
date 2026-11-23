@@ -128,14 +128,26 @@ def go_to(pane):
         # of a group to the front.
         run(["mmsg", "dispatch", "focusid", "client,%s" % addr])
         time.sleep(0.3)
+    # `agent focus` marks the agent seen and moves the server's focus, but the
+    # attached herdr client does not follow it: the window title changed, the
+    # screen kept showing the old pane (herdr 0.9.0, checked with screenshots).
+    # `tab focus` does move the client, so it goes last.
     run([HERDR, "agent", "focus", pane])
+    tab = pane_tab(pane)
+    if tab:
+        run([HERDR, "tab", "focus", tab])
+    else:
+        log("no tab found for pane %s" % pane)
+
+
+def pane_tab(pane):
+    """The tab id holding this pane, or None."""
     try:
-        time.sleep(0.3)
         snap = json.loads(subprocess.run([HERDR, "api", "snapshot"], capture_output=True,
                                          text=True, timeout=5).stdout)["result"]["snapshot"]
-        log("herdr now shows pane %s" % snap.get("focused_pane_id"))
     except (OSError, ValueError, KeyError, subprocess.SubprocessError):
-        pass
+        return None
+    return next((p.get("tab_id") for p in snap["panes"] if p["pane_id"] == pane), None)
 
 
 def where(snap, pane_id):
